@@ -1,0 +1,20 @@
+{
+	"name": "thinkrank/mcp-runtime",
+	"description": "Bundled WordPress Abilities API shipped with ThinkRank — the tool catalog for ThinkRank's self-hosted MCP server (includes/mcp/). Loaded via the Jetpack Autoloader for conflict-free coexistence with other plugins (and future WordPress core).",
+	"type": "project",
+	"license": "GPL-2.0-or-later",
+	"require": {
+		"php": ">=8.0",
+		"automattic/jetpack-autoloader": "^5.0",
+		"wordpress/abilities-api": "^0.4"
+	},
+	"config": {
+		"allow-plugins": {
+			"automattic/jetpack-autoloader": true
+		},
+		"optimize-autoloader": true,
+		"sort-packages": true
+	},
+	"minimum-stability": "stable",
+	"prefer-stable": true
+}

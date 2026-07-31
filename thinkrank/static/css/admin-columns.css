@@ -1,0 +1,319 @@
+/**
+ * ThinkRank Post List Column Styles
+ *
+ * Styles for the SEO Overview column in WordPress post list (edit.php).
+ * This file lives in static/ to survive webpack builds.
+ *
+ * @package ThinkRank
+ * @since 1.0.0
+ */
+
+.column-thinkrank_seo_overview {
+    width: 220px;
+    box-sizing: border-box;
+}
+
+/*
+ * Row-layout safety net.
+ *
+ * WordPress list tables use auto table layout: a column with an explicit width
+ * (ours) reserves its space first, and any shortfall is taken out of the
+ * flexible, no-width primary Title column. When several plugins each add a
+ * column (e.g. BetterLinks "Auto Share" + two chart columns alongside this SEO
+ * Overview column), the Title column can be squeezed below its minimum, and
+ * because core applies `word-wrap: break-word` to cells the title then wraps
+ * one character per line (a vertical sliver of text).
+ *
+ * Give the primary column a floor so it can never collapse that far, and let
+ * our own column shrink toward a sensible minimum before the row overflows.
+ * This file is only enqueued on edit.php (post-list) screens, so these rules
+ * stay scoped there. Guarded to the desktop table view — below 783px WordPress
+ * switches to its stacked single-column layout.
+ */
+@media screen and (min-width: 783px) {
+    .wp-list-table .column-title,
+    .wp-list-table .column-name {
+        min-width: 160px;
+    }
+
+    .column-thinkrank_seo_overview {
+        min-width: 180px;
+    }
+}
+
+.thinkrank-seo-overview {
+    font-size: 13px;
+    line-height: 1.4;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.thinkrank-seo-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.thinkrank-seo-separator {
+    margin: 0 6px;
+    color: #c3c4c7;
+    font-size: 10px;
+}
+
+/* Top Row: Badges */
+.thinkrank-seo-badge {
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-weight: 600;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    position: relative;
+}
+
+.thinkrank-seo-badge::after,
+.thinkrank-seo-metric::after {
+	content: attr(title);
+	position: absolute;
+	bottom: calc(100% + 11px);
+	left: 50%;
+	transform: translateX(-50%);
+	background: #00043D;
+	border-radius: 8px;
+	padding: 4px 8px;
+	color: #fff;
+	font-weight: 400;
+	box-shadow: 0 1px 2px rgba(17, 17, 17, 0.1);
+	visibility: hidden;
+	white-space: nowrap;
+    z-index: 20;
+}
+
+.thinkrank-seo-badge::before,
+.thinkrank-seo-metric::before {
+	content: "";
+	position: absolute;
+	bottom: calc(100% + 7px);
+	left: calc(50% - 5px);
+	transform: rotate(45deg);
+	background: #00043D;
+	width: 10px;
+	height: 10px;
+	border-radius: 2px;
+	box-shadow: 0 1px 2px rgba(17, 17, 17, 0.1);
+	visibility: hidden;
+    z-index: 19;
+}
+
+.thinkrank-seo-badge:hover::before,
+.thinkrank-seo-badge:hover::after {
+	visibility: visible;
+}
+
+/* Apply Z-Index for metric too */
+.thinkrank-seo-metric:hover::before,
+.thinkrank-seo-metric:hover::after {
+    visibility: visible;
+}
+
+.thinkrank-score-great {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.thinkrank-score-good {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+.thinkrank-score-medium {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.thinkrank-score-poor {
+    background-color: #fee2e2;
+    color: #b91c1c;
+}
+
+.thinkrank-status-good {
+    background-color: #E5FFF6;
+    color: #117953;
+}
+
+.thinkrank-status-ok {
+	background-color: #EBF0FF;
+	color: #1B42C2;
+}
+
+.thinkrank-status-not-analyzed,
+.thinkrank-seo-badge.thinkrank-not-set {
+    background-color: #E5EBF0;
+    color: #58677D;
+    border-radius: 12px;
+    padding: 2px 8px;
+}
+
+.thinkrank-status-needs-improvement {
+    background-color: #FFF7EB;
+    color: #865A13;
+}
+
+.thinkrank-status-no-content {
+    background-color: #FFEBEE;
+    color: #EC113A;
+}
+
+.thinkrank-pillar-icon {
+    background-color: #F0F0F1;
+    color: #2271b1;
+    padding: 4px;
+    line-height: 20px;
+}
+
+/* Middle Row: Focus Keyword */
+.thinkrank-focus-keyword-item {
+    width: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    background-color: #ECEEEE;
+    border-radius: 4px;
+    border: 1px solid #E4E6EC;
+    padding: 0 8px;
+    min-height: 24px;
+}
+
+.thinkrank-focus-keyword-display {
+    cursor: pointer;
+    flex-grow: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #1d2327;
+    font-weight: 500;
+}
+
+.thinkrank-focus-keyword-display.thinkrank-not-set {
+    color: #646970;
+    font-style: italic;
+}
+
+.thinkrank-edit-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    pointer-events: none;
+    position: absolute;
+    right: 8px;
+    
+    path {
+    	stroke: #A5AAAC;
+    }
+}
+
+.thinkrank-focus-keyword-item .thinkrank-success-icon {
+	position: absolute;
+    right: 8px;
+	visibility: hidden;
+}
+
+.thinkrank-focus-keyword-item:hover .thinkrank-edit-icon path {
+    stroke: #4451FF;
+}
+
+.thinkrank-focus-keyword-input[type="text"] {
+    width: 100%;
+    padding: 0 8px;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    margin: 0;
+    min-height: 24px;
+    line-height: normal;
+}
+
+.thinkrank-focus-keyword-item.is-editing {
+    padding: 0;
+    background: transparent;
+    border-color: #5C91FE;
+}
+
+.thinkrank-focus-keyword-item.is-editing .thinkrank-focus-keyword-display,
+.thinkrank-focus-keyword-item.is-editing .thinkrank-edit-icon {
+    display: none;
+}
+
+.thinkrank-focus-keyword-item.is-editing .thinkrank-success-icon {
+	visibility: visible;
+}
+
+.thinkrank-focus-keyword-item.is-editing.is-saving .thinkrank-success-icon {
+	visibility: hidden;
+}
+
+/* Bottom Row: Metrics */
+.thinkrank-seo-metric {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #646970;
+    font-size: 12px;
+    line-height: 20px;
+    position: relative;
+}
+
+.thinkrank-seo-metric:hover::before,
+.thinkrank-seo-metric:hover::after {
+	visibility: visible;
+}
+
+.thinkrank-metric-value {
+    white-space: nowrap;
+    color: #505272;
+}
+
+/* Animations */
+.thinkrank-focus-keyword-display.thinkrank-feedback-success {
+    animation: thinkrank-success-flash 0.5s ease-in-out;
+}
+
+.thinkrank-focus-keyword-display.thinkrank-feedback-error {
+    animation: thinkrank-error-flash 0.5s ease-in-out;
+}
+
+@keyframes thinkrank-success-flash {
+    0%, 100% { background-color: transparent; }
+    50% { background-color: #d1fae5; }
+}
+
+@keyframes thinkrank-error-flash {
+    0%, 100% { background-color: transparent; }
+    50% { background-color: #fee2e2; }
+}
+
+.thinkrank-inline-error {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 10;
+    color: #fff;
+    font-size: 11px;
+    margin-top: 4px;
+    padding: 4px 8px;
+    background-color: #d63638;
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.thinkrank-inline-error::after {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 10px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent transparent #d63638 transparent;
+}

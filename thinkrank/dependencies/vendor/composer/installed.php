@@ -1,0 +1,41 @@
+<?php return array(
+    'root' => array(
+        'name' => 'thinkrank/mcp-runtime',
+        'pretty_version' => 'v1.23.0',
+        'version' => '1.23.0.0',
+        'reference' => 'b35863876a4c5ca4032e49bee34e6cf13f237109',
+        'type' => 'project',
+        'install_path' => __DIR__ . '/../../',
+        'aliases' => array(),
+        'dev' => false,
+    ),
+    'versions' => array(
+        'automattic/jetpack-autoloader' => array(
+            'pretty_version' => 'v5.0.20',
+            'version' => '5.0.20.0',
+            'reference' => 'b6abf43a9ea638d6a0edc02f0dd7575703f9c2a1',
+            'type' => 'composer-plugin',
+            'install_path' => __DIR__ . '/../automattic/jetpack-autoloader',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'thinkrank/mcp-runtime' => array(
+            'pretty_version' => 'v1.23.0',
+            'version' => '1.23.0.0',
+            'reference' => 'b35863876a4c5ca4032e49bee34e6cf13f237109',
+            'type' => 'project',
+            'install_path' => __DIR__ . '/../../',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'wordpress/abilities-api' => array(
+            'pretty_version' => 'v0.4.0',
+            'version' => '0.4.0.0',
+            'reference' => '0759075aed37c4247adbf273bdebec096d52e825',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../wordpress/abilities-api',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+    ),
+);

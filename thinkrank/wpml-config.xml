@@ -1,0 +1,78 @@
+<wpml-config>
+    <!--
+        Declares how ThinkRank's per-post and per-term SEO meta should behave
+        when WPML creates a translation. Without this file the fields never
+        reach the WPML Translation Editor, so translators have to open every
+        language's post editor and retype them by hand.
+
+        Actions:
+          translate - editable per language, shown in the Translation Editor.
+          copy      - mirrored from the original; the same value in every language.
+          ignore    - left alone entirely; each language keeps its own value.
+    -->
+    <custom-fields>
+        <!-- User-facing copy: must differ per language. -->
+        <custom-field action="translate">_thinkrank_seo_title</custom-field>
+        <custom-field action="translate">_thinkrank_meta_description</custom-field>
+        <custom-field action="translate">_thinkrank_og_title</custom-field>
+        <custom-field action="translate">_thinkrank_og_description</custom-field>
+        <custom-field action="translate">_thinkrank_twitter_title</custom-field>
+        <custom-field action="translate">_thinkrank_twitter_description</custom-field>
+        <custom-field action="translate">_thinkrank_focus_keyword</custom-field>
+
+        <!-- Indexing intent: normally identical across languages. -->
+        <custom-field action="copy">_thinkrank_robots_meta</custom-field>
+        <custom-field action="copy">_thinkrank_robots_meta_enabled</custom-field>
+        <custom-field action="copy">_thinkrank_advanced_robots_meta</custom-field>
+
+        <!-- Social imagery: WPML media translation remaps these when enabled. -->
+        <custom-field action="copy">_thinkrank_og_image</custom-field>
+        <custom-field action="copy">_thinkrank_twitter_image</custom-field>
+
+        <!--
+            Deliberately NOT copied. A canonical copied onto a translation would
+            point it at the source language and can deindex the translated page.
+            Left empty, ThinkRank derives the canonical from the translated
+            post's own permalink, which is already language-correct.
+        -->
+        <custom-field action="ignore">_thinkrank_canonical_url</custom-field>
+
+        <!--
+            Serialized values WPML cannot meaningfully diff into translatable
+            strings. Left untouched so each language sets its own; the legacy
+            singular _thinkrank_focus_keyword above is what the Translation
+            Editor exposes, and Focus_Keywords falls back to it.
+        -->
+        <custom-field action="ignore">_thinkrank_focus_keywords</custom-field>
+        <custom-field action="ignore">_thinkrank_focus_keywords_overflow</custom-field>
+        <custom-field action="ignore">_thinkrank_schema_form_data</custom-field>
+        <custom-field action="ignore">_thinkrank_additional_schemas</custom-field>
+
+        <!-- Structural / derived values, meaningless to translate. -->
+        <custom-field action="copy">_thinkrank_selected_schema_type</custom-field>
+        <custom-field action="copy">_thinkrank_pillar_content</custom-field>
+        <custom-field action="ignore">_thinkrank_primary_category</custom-field>
+        <custom-field action="ignore">_thinkrank_seo_score</custom-field>
+        <custom-field action="ignore">_thinkrank_generated_at</custom-field>
+        <custom-field action="ignore">_thinkrank_last_updated</custom-field>
+        <custom-field action="ignore">_thinkrank_imported_from</custom-field>
+    </custom-fields>
+
+    <custom-term-fields>
+        <custom-term-field action="translate">_thinkrank_seo_title</custom-term-field>
+        <custom-term-field action="translate">_thinkrank_meta_description</custom-term-field>
+        <custom-term-field action="translate">_thinkrank_og_title</custom-term-field>
+        <custom-term-field action="translate">_thinkrank_og_description</custom-term-field>
+        <custom-term-field action="translate">_thinkrank_twitter_title</custom-term-field>
+        <custom-term-field action="translate">_thinkrank_twitter_description</custom-term-field>
+        <custom-term-field action="translate">_thinkrank_focus_keyword</custom-term-field>
+
+        <custom-term-field action="copy">_thinkrank_robots_meta</custom-term-field>
+        <custom-term-field action="copy">_thinkrank_robots_meta_enabled</custom-term-field>
+        <custom-term-field action="copy">_thinkrank_advanced_robots_meta</custom-term-field>
+        <custom-term-field action="copy">_thinkrank_og_image</custom-term-field>
+        <custom-term-field action="copy">_thinkrank_twitter_image</custom-term-field>
+
+        <custom-term-field action="ignore">_thinkrank_canonical_url</custom-term-field>
+    </custom-term-fields>
+</wpml-config>

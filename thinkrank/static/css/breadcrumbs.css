@@ -1,0 +1,34 @@
+/**
+ * ThinkRank Breadcrumb Styles
+ *
+ * Frontend styles for breadcrumb navigation.
+ * This file lives in static/ to survive webpack builds.
+ *
+ * @package ThinkRank
+ * @since 1.0.0
+ */
+
+.thinkrank-breadcrumbs {
+    padding: 0.75rem 0;
+    font-size: 0.875rem;
+    color: #666;
+}
+
+.thinkrank-breadcrumbs a {
+    color: #2271b1;
+    text-decoration: none;
+}
+
+.thinkrank-breadcrumbs a:hover {
+    text-decoration: underline;
+}
+
+.thinkrank-breadcrumbs .breadcrumb-current {
+    color: #1d2327;
+    font-weight: 500;
+}
+
+.thinkrank-breadcrumbs .breadcrumb-separator {
+    margin: 0 0.5rem;
+    color: #999;
+}
