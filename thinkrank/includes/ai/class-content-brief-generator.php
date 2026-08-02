@@ -38,6 +38,17 @@ class Content_Brief_Generator {
     private const AI_REQUEST_TIMEOUT = 120;
 
     /**
+     * AI request timeout (seconds) for OpenAI specifically.
+     *
+     * OpenAI's reasoning models (GPT-5 / o-series) burn reasoning tokens before
+     * emitting any content, and briefs request ~95% of the model's completion
+     * limit — so the call frequently runs past the 120s the other providers
+     * need. PHP execution time is covered by raise_request_time_limit()
+     * (timeout+45); the web server's own read timeout still caps the maximum.
+     */
+    private const OPENAI_REQUEST_TIMEOUT = 300;
+
+    /**
      * Settings instance
      *
      * @var Settings
@@ -80,7 +91,7 @@ class Content_Brief_Generator {
             $api_key = $this->settings->get('openai_api_key');
             if ($api_key) {
                 $model = $this->settings->get('openai_model', 'gpt-5-nano');
-                $this->ai_client = new OpenAI_Client($api_key, $model, self::AI_REQUEST_TIMEOUT);
+                $this->ai_client = new OpenAI_Client($api_key, $model, self::OPENAI_REQUEST_TIMEOUT);
             }
         } elseif ($provider === 'claude') {
             $api_key = $this->settings->get('claude_api_key');
@@ -459,6 +470,7 @@ class Content_Brief_Generator {
             'competitor_gaps' => $json_data['competitor_analysis']['content_gaps'] ?? [],
             'call_to_actions' => $json_data['call_to_actions'] ?? [],
             'writing_guidelines' => $json_data['writing_guidelines'] ?? [],
+            'content_body' => $json_data['content_body'] ?? '',
             'estimated_word_count' => $this->get_word_count_estimate($original_params['content_length'] ?? 'medium'),
             'raw_response' => '', // Will be retrieved from ai_usage table
             'generation_params' => $original_params,
@@ -512,6 +524,7 @@ class Content_Brief_Generator {
             'competitor_gaps' => [],
             'call_to_actions' => [],
             'writing_guidelines' => [],
+            'content_body' => '',
             'estimated_word_count' => $this->get_word_count_estimate($original_params['content_length'] ?? 'medium'),
             'raw_response' => $ai_response, // Store raw response in error case
             'generation_params' => $original_params,

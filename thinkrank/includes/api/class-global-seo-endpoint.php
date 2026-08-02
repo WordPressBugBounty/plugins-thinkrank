@@ -184,8 +184,15 @@ class Global_SEO_Endpoint extends WP_REST_Controller {
         // Get all settings
         $all_settings = get_option(self::OPTION_NAME, []);
 
-        // Get settings for specific post type or return defaults
-        $settings = $all_settings[$post_type] ?? $this->get_default_settings($post_type);
+        // Merge any saved values for this post type over the per-post-type
+        // defaults. A plain `?? defaults` fallback is all-or-nothing: once a
+        // partial record exists for the post type (e.g. one written without a
+        // description template, or by an importer/another feature), every field
+        // it omits — including the default `%excerpt%` description — would come
+        // back blank in the settings UI. Merging keeps saved values authoritative
+        // while restoring defaults for any keys the saved record doesn't set.
+        $saved    = is_array($all_settings[$post_type] ?? null) ? $all_settings[$post_type] : [];
+        $settings = array_merge($this->get_default_settings($post_type), $saved);
 
         return new WP_REST_Response([
             'success' => true,

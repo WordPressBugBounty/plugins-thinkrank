@@ -68,6 +68,13 @@ class Post_List_Filters {
         unset($post_types['elementor_library']);
         unset($post_types['oceanwp_library']);
         unset($post_types['ae_global_templates']);
+        // Divi library + Theme Builder templates.
+        unset($post_types['et_pb_layout']);
+        unset($post_types['et_theme_builder']);
+        unset($post_types['et_template']);
+        unset($post_types['et_header_layout']);
+        unset($post_types['et_body_layout']);
+        unset($post_types['et_footer_layout']);
 
         // Filter based on Global SEO settings
         $settings = get_option('thinkrank_global_seo_settings', []);

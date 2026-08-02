@@ -531,41 +531,91 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             }
         }
 
-        // Validate platform-specific settings
-
-        // Validate Instagram verification
-        if (isset($settings['instagram_verification']) && !empty($settings['instagram_verification'])) {
-            if (!preg_match('/^[a-zA-Z0-9_-]{20,}$/', $settings['instagram_verification'])) {
-                $validation['errors'][] = 'instagram_verification must be at least 20 characters (letters, numbers, underscore, dash)';
-                $validation['valid'] = false;
-            }
-        }
-
-        // Validate TikTok verification
-        if (isset($settings['tiktok_verification']) && !empty($settings['tiktok_verification'])) {
-            if (!preg_match('/^[a-zA-Z0-9_-]{20,}$/', $settings['tiktok_verification'])) {
-                $validation['errors'][] = 'tiktok_verification must be at least 20 characters (letters, numbers, underscore, dash)';
-                $validation['valid'] = false;
-            }
-        }
-
-        // Validate YouTube Channel ID
-        if (isset($settings['youtube_channel_id']) && !empty($settings['youtube_channel_id'])) {
-            if (!preg_match('/^UC[a-zA-Z0-9_-]{22}$/', $settings['youtube_channel_id'])) {
-                $validation['errors'][] = 'youtube_channel_id must start with "UC" followed by 22 characters';
-                $validation['valid'] = false;
-            }
-        }
-
-        // Validate WhatsApp Business ID
-        if (isset($settings['whatsapp_business_id']) && !empty($settings['whatsapp_business_id'])) {
-            if (!preg_match('/^[0-9]{10,15}$/', $settings['whatsapp_business_id'])) {
-                $validation['errors'][] = 'whatsapp_business_id must be 10-15 digits';
-                $validation['valid'] = false;
+        // Validate platform verification codes / IDs (Instagram, TikTok, YouTube,
+        // WhatsApp, Facebook App ID, Pinterest) against the shared format rules.
+        // Single source of truth — also enforced on the Social Platforms REST save
+        // path via self::validate_platform_field(). See get_platform_field_validation_rules().
+        foreach (self::get_platform_field_validation_rules() as $field_key => $rule) {
+            if (isset($settings[$field_key]) && $settings[$field_key] !== '') {
+                $error = self::validate_platform_field($field_key, $settings[$field_key]);
+                if ($error !== null) {
+                    $validation['errors'][] = $error;
+                    $validation['valid'] = false;
+                }
             }
         }
 
         return $validation;
+    }
+
+    /**
+     * Format-validation rules for social platform verification codes / IDs.
+     *
+     * Single source of truth for the per-field format constraints, shared by
+     * validate_settings() and the Social Platforms REST endpoint
+     * (ThinkRank\API\Social_Platforms_Endpoint) so a value that is accepted on
+     * one path is accepted on the other. These mirror the `pattern` entries in
+     * get_settings_schema(); sanitization strips unsafe characters but does not
+     * enforce shape, so these rules back it with real validation.
+     *
+     * @since 1.14.0
+     *
+     * @return array<string, array{pattern: string, message: string}> Map of field key => rule.
+     */
+    public static function get_platform_field_validation_rules(): array {
+        return [
+            'facebook_app_id' => [
+                'pattern' => '/^[0-9]+$/',
+                'message' => 'Facebook App ID must contain digits only.',
+            ],
+            'pinterest_site_verification' => [
+                'pattern' => '/^[a-f0-9]{32}$/',
+                'message' => 'Pinterest site verification must be a 32-character hexadecimal string.',
+            ],
+            'instagram_verification' => [
+                'pattern' => '/^[a-zA-Z0-9_-]{20,}$/',
+                'message' => 'Instagram verification must be at least 20 characters (letters, numbers, underscore, dash).',
+            ],
+            'tiktok_verification' => [
+                'pattern' => '/^[a-zA-Z0-9_-]{20,}$/',
+                'message' => 'TikTok verification must be at least 20 characters (letters, numbers, underscore, dash).',
+            ],
+            'youtube_channel_id' => [
+                'pattern' => '/^UC[a-zA-Z0-9_-]{22}$/',
+                'message' => 'YouTube channel ID must start with "UC" followed by 22 characters (letters, numbers, underscore, dash).',
+            ],
+            'whatsapp_business_id' => [
+                'pattern' => '/^[0-9]{10,15}$/',
+                'message' => 'WhatsApp Business ID must be 10-15 digits.',
+            ],
+        ];
+    }
+
+    /**
+     * Validate a single social platform field value against its shared format rule.
+     *
+     * Returns null for fields with no format rule (e.g. facebook_admins) and for
+     * empty values, so callers can validate an arbitrary settings map and only
+     * act on genuine format violations.
+     *
+     * @since 1.14.0
+     *
+     * @param string $key   Field key.
+     * @param mixed  $value Field value.
+     * @return string|null  Error message when the value violates the format, null otherwise.
+     */
+    public static function validate_platform_field(string $key, $value): ?string {
+        $rules = self::get_platform_field_validation_rules();
+
+        if (!isset($rules[$key]) || $value === '' || $value === null) {
+            return null;
+        }
+
+        if (!preg_match($rules[$key]['pattern'], (string) $value)) {
+            return $rules[$key]['message'];
+        }
+
+        return null;
     }
 
     /**
@@ -1312,10 +1362,30 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         ];
 
         if ($context_type === 'site') {
-            // Site-wide data with Social Media tab settings priority
-            $data['title'] = $settings['og_site_name'] ?? get_bloginfo('name');
+            // Site-wide data with Social Media tab settings priority.
+            //
+            // og:title priority: an explicitly-configured OG Site Name wins;
+            // otherwise mirror the effective SEO <title> (what search shows),
+            // then the blogname. og_site_name is always present because it is
+            // merged from a default equal to the blogname, so a value matching
+            // the blogname is treated as "not explicitly overridden" and we fall
+            // through to the passed effective SEO title. (og:site_name itself is
+            // set separately from og_site_name and is unaffected.)
+            $blogname     = get_bloginfo('name');
+            $og_site_name = $settings['og_site_name'] ?? '';
+            if ($og_site_name !== '' && $og_site_name !== $blogname) {
+                $data['title'] = $og_site_name;
+            } elseif ($fallback_title !== null && $fallback_title !== '') {
+                $data['title'] = $fallback_title;
+            } else {
+                $data['title'] = $blogname;
+            }
             $data['description'] = $settings['og_description'] ?? get_bloginfo('description');
-            $data['url'] = home_url();
+            // Use home_url('/') so og:url matches the homepage canonical
+            // (class-seo-manager.php) and the WebSite schema, which both include
+            // the trailing slash. A bare home_url() would key a different URL in
+            // social caches than the canonical.
+            $data['url'] = home_url('/');
             $data['type'] = $settings['og_type'] ?? 'website';
             $data['locale'] = $settings['og_locale'] ?? null;
 
@@ -1430,7 +1500,14 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             return $settings['default_image'];
         }
 
-        return '';
+        // Last-resort fallback to the site logo / site icon. Resolving it here
+        // (rather than late inside generate_og_tags()) writes it back to the
+        // shared $data['image'], so generate_twitter_tags() and
+        // determine_twitter_card_type() see the same image: twitter:image is
+        // emitted and the card is promoted to summary_large_image, and the
+        // image is routed through optimize_image_for_platform() so
+        // og:image:width/height/type/alt companions are produced.
+        return $this->get_default_social_image();
     }
 
     /**

@@ -318,6 +318,18 @@ final class Mcp_Manager {
 			]
 		);
 
+		// Live round-trip diagnostic for the MCP page (see #189). Admin-only;
+		// exercises the endpoint the way an external client would.
+		register_rest_route(
+			self::NS,
+			'/mcp/self-test',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'rest_self_test' ],
+				'permission_callback' => [ $this, 'admin_permission' ],
+			]
+		);
+
 		// --- OAuth 2.1 authorization server (the "paste a URL only" path) -
 		// Discovery, dynamic client registration, and the token endpoint are
 		// all public (permission enforced inside): a client must reach them
@@ -411,6 +423,15 @@ final class Mcp_Manager {
 	 */
 	public function rest_disconnect(): \WP_REST_Response {
 		return rest_ensure_response( Mcp_Pairing::disconnect() );
+	}
+
+	/**
+	 * POST /mcp/self-test — run the live round-trip diagnostic (see #189).
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function rest_self_test(): \WP_REST_Response {
+		return rest_ensure_response( Mcp_Self_Test::run() );
 	}
 
 	// -- OAuth 2.1 handlers ------------------------------------------------

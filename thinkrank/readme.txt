@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, llms.txt
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.23.0
+Stable tag: 1.24.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -279,6 +279,25 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 9. AI Content Brief Generator with competitor analysis and content gaps.
 
 == Changelog ==
+
+= 1.24.0 =
+Release Date: 2026-08-02
+
+- New: Website Insights dashboard widget — see your last 30 days of Google Search Console traffic, top queries and headline metrics right on the WordPress dashboard
+- New: ThinkRank now works inside the Oxygen/Breakdance and Divi visual builders — a launcher button in the builder's top bar opens the full ThinkRank panel without leaving the canvas
+- New: Content briefs can now generate a complete article draft, not just an outline, in a cleaner tabbed layout
+- New: MCP Server screen has a connection health card and a "Test connection" button that makes a real call and tells you exactly which step failed — HTTPS, authentication, permissions or ability discovery
+- New: Connected AI assistants can preview an SEO import as a dry run before anything is written, and score and save many posts in a single request
+- Improved: ThinkRank's abilities are now always registered, so any AI connector can discover the plugin — the MCP switch now only controls the MCP server itself
+- Improved: Redesigned Settings page with tabs and independent saving per tab, and a card-based AI provider picker
+- Improved: Content briefs on OpenAI reasoning models no longer time out before finishing
+- Fixed: Pages built with Oxygen, Breakdance, Divi or Elementor were scored as having no content at all — a client reported published pages with over 1,000 words scoring in the 40s. ThinkRank now reads the real page content everywhere: bulk optimization, the post list SEO column, cron reports, AI assistants and the live analysis panel in the editor
+- Fixed: The SEO score shown by AI assistants is now saved, so the post list no longer keeps saying "Not Analyzed"
+- Fixed: Social profile fields accepted invalid values (like a malformed YouTube channel ID) and published them as broken verification tags — invalid values are now rejected with a clear message
+- Fixed: Homepage social sharing — the share title now matches your SEO title, your logo is used as the share image with a large card, and the share URL matches your canonical URL
+- Fixed: Search Console errors on the dashboard widget now explain what to fix instead of showing raw Google error text
+- Fixed: Divi's layout library and Theme Builder templates no longer appear in SEO screens
+- Few minor bug fixes & improvements
 
 = 1.23.0 =
 Release Date: 2026-07-29
@@ -589,6 +608,9 @@ Release Date: 2025-07-07
 - WordPress 6.0+ compatibility
 
 == Upgrade Notice ==
+
+= 1.24.0 =
+Fixes page-builder pages (Oxygen, Breakdance, Divi, Elementor) being scored as empty everywhere outside the editor. Adds a Search Console dashboard widget, builder-native editing panels, and full-article content briefs. Recommended for all sites, especially page-builder sites.
 
 = 1.23.0 =
 Adds WPML and Polylang support. Fixes SEOPress import, which never imported settings at all, and several All in One SEO import defects that dropped keywords, primary categories and site-wide settings. Recommended for anyone migrating from another SEO plugin or running a multilingual site.

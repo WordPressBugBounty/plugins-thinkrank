@@ -319,6 +319,162 @@ class Snapshot_Migrator {
     }
 
     /**
+     * Dry-run a snapshot chunk: classify what a migrate WOULD do without
+     * writing anything. Mirrors migrate_chunk()'s per-field decision (skip
+     * empty values, never overwrite existing ThinkRank data) so the counts
+     * match what a real migrate would produce.
+     *
+     * Each object-meta record lands in exactly one bucket:
+     * - `unmatched`   — the referenced post/term/user no longer exists here.
+     * - `would_write` — at least one field would be written (target empty).
+     * - `conflicts`   — no writes, but the source differs from an existing
+     *                   ThinkRank value that migrate would NOT overwrite.
+     * - `skipped`     — matched, but nothing to write and nothing conflicting
+     *                   (empty data, or values already identical).
+     *
+     * Only object-meta types (postmeta/termmeta/usermeta) are previewed;
+     * settings/redirections/404 logs are migrated wholesale and return zeros.
+     *
+     * @param string $plugin Source plugin slug.
+     * @param string $type   Snapshot data type.
+     * @param int    $page   1-based chunk page.
+     * @return array<string,mixed>
+     */
+    public function preview_chunk(string $plugin, string $type, int $page): array {
+        $summary = [
+            'type'        => $type,
+            'page'        => $page,
+            'records'     => 0,
+            'unmatched'   => 0,
+            'would_write' => 0,
+            'conflicts'   => 0,
+            'skipped'     => 0,
+            'has_more'    => false,
+            'samples'     => ['unmatched' => [], 'would_write' => [], 'conflicts' => []],
+        ];
+
+        $manifest = Snapshot_Store::get_manifest($plugin);
+        if (!$manifest || ($manifest['status'] ?? '') !== 'complete') {
+            $summary['error'] = 'Snapshot is not complete. Run export first.';
+            return $summary;
+        }
+
+        if (!in_array($type, ['postmeta', 'termmeta', 'usermeta'], true)) {
+            return $summary;
+        }
+
+        $chunk = Snapshot_Store::read_chunk($plugin, $type, $page);
+        if ($chunk === null || empty($chunk)) {
+            return $summary;
+        }
+
+        foreach ($chunk as $record) {
+            $summary['records']++;
+
+            $object_id = (int) ($record['object_id'] ?? 0);
+            $object_type = $record['object_type'] ?? '';
+            $data = $record['data'] ?? [];
+
+            if (!$object_id || empty($data)) {
+                $summary['skipped']++;
+                continue;
+            }
+
+            if (!$this->object_exists($object_type, $object_id)) {
+                $summary['unmatched']++;
+                if (count($summary['samples']['unmatched']) < 10) {
+                    $summary['samples']['unmatched'][] = ['object_id' => $object_id, 'object_type' => $object_type];
+                }
+                continue;
+            }
+
+            $writes = [];
+            $conflicts = [];
+
+            foreach ($data as $canonical_key => $value) {
+                if (!isset(self::META_MAP[$canonical_key])) {
+                    continue;
+                }
+                if ($value === '' || $value === null) {
+                    continue;
+                }
+                if ($value === 0 && in_array($canonical_key, ['primary_category'], true)) {
+                    continue;
+                }
+
+                $existing = $this->get_object_meta($object_type, $object_id, self::META_MAP[$canonical_key]);
+                if ($existing === '' || $existing === false || $existing === null) {
+                    $writes[] = $canonical_key;
+                } else {
+                    $source = is_scalar($value) ? (string) $value : (string) wp_json_encode($value);
+                    if ((string) $existing !== $source) {
+                        $conflicts[] = $canonical_key;
+                    }
+                }
+            }
+
+            if (!empty($writes)) {
+                $summary['would_write']++;
+                if (count($summary['samples']['would_write']) < 10) {
+                    $summary['samples']['would_write'][] = ['object_id' => $object_id, 'fields' => $writes];
+                }
+            } elseif (!empty($conflicts)) {
+                $summary['conflicts']++;
+                if (count($summary['samples']['conflicts']) < 10) {
+                    $summary['samples']['conflicts'][] = ['object_id' => $object_id, 'fields' => $conflicts];
+                }
+            } else {
+                $summary['skipped']++;
+            }
+        }
+
+        $type_info = $manifest['types'][$type] ?? [];
+        $total_chunks = $type_info['total_chunks'] ?? 0;
+        $summary['has_more'] = $page < $total_chunks;
+
+        return $summary;
+    }
+
+    /**
+     * Whether the referenced object still exists on this site.
+     *
+     * @param string $object_type One of post|term|user.
+     * @param int    $object_id   Object id.
+     * @return bool
+     */
+    private function object_exists(string $object_type, int $object_id): bool {
+        switch ($object_type) {
+            case 'post':
+                return (bool) get_post($object_id);
+            case 'term':
+                return (bool) get_term($object_id);
+            case 'user':
+                return (bool) get_userdata($object_id);
+        }
+        return false;
+    }
+
+    /**
+     * Read a single meta value for post|term|user.
+     *
+     * @param string $object_type One of post|term|user.
+     * @param int    $object_id   Object id.
+     * @param string $key         Meta key.
+     * @return mixed
+     */
+    private function get_object_meta(string $object_type, int $object_id, string $key) {
+        switch ($object_type) {
+            case 'post':
+                return get_post_meta($object_id, $key, true);
+            case 'term':
+                return get_term_meta($object_id, $key, true);
+            case 'user':
+                return get_user_meta($object_id, $key, true);
+        }
+        return '';
+    }
+
+    /**
      * Lazily instantiated SEO score calculator.
      *
      * @var \ThinkRank\AI\SEOScoreCalculator|null
@@ -344,54 +500,126 @@ class Snapshot_Migrator {
             return 0;
         }
 
+        // Delegate to the shared scoring loop (also used by the
+        // bulk-analyze-and-save ability); migration only needs the count.
+        $summary = $this->score_posts($post_ids);
+
+        return $summary['scored'];
+    }
+
+    /**
+     * Score and persist SEO scores for a set of posts, returning per-post
+     * results plus totals. This is the shared bulk-scoring loop used both by
+     * migration (via analyze_posts()) and the bulk-analyze-and-save ability.
+     *
+     * The scorer is purely local/algorithmic (no external AI calls), so it is
+     * safe to run synchronously in bulk. A per-post failure is captured, never
+     * thrown, so one bad post cannot abort the batch. Fires
+     * `thinkrank_seo_score_updated` once when any score was written so cached
+     * SEO Overview / usage-analytics responses are invalidated.
+     *
+     * @param int[] $post_ids Post IDs to score (de-duplicated internally).
+     * @param bool  $rescore  When false (default), posts that already carry a
+     *                        stored score are left untouched (idempotent). When
+     *                        true, every post is re-scored and re-saved.
+     * @return array{results:array<int,array<string,mixed>>,scored:int,skipped:int,failed:int,total:int}
+     */
+    public function score_posts(array $post_ids, bool $rescore = false): array {
+        $post_ids = array_values(array_unique(array_map('intval', $post_ids)));
+
         $calculator = $this->get_score_calculator();
         $user_id = get_current_user_id();
-        $analyzed = 0;
+
+        $results = [];
+        $scored = 0;
+        $skipped = 0;
+        $failed = 0;
 
         foreach ($post_ids as $post_id) {
-            $post_id = (int) $post_id;
+            $result = $this->score_single_post($calculator, $user_id, $post_id, $rescore);
+            $results[] = $result;
 
-            // Skip posts that were already scored (e.g. re-running migration).
-            if ($calculator->get_latest_score($post_id) !== null) {
-                continue;
-            }
-
-            try {
-                $content_data = $calculator->analyze_post_content($post_id);
-                if (empty($content_data)) {
-                    continue;
-                }
-
-                $metadata = [
-                    'title'       => get_post_meta($post_id, '_thinkrank_seo_title', true) ?: ($content_data['title'] ?? ''),
-                    'description' => get_post_meta($post_id, '_thinkrank_meta_description', true) ?: '',
-                ];
-
-                // Score against all focus keywords; the calculator uses the
-                // highest-scoring keyword as the final score.
-                $target_keywords = Focus_Keywords::get($post_id);
-
-                $score_data = $calculator->calculate_score(
-                    $content_data,
-                    $metadata,
-                    ['target_keywords' => $target_keywords]
-                );
-
-                if ($calculator->save_score($post_id, $user_id, $score_data)) {
-                    $analyzed++;
-                }
-            } catch (\Throwable $e) {
-                // Never let a single post abort the migration chunk.
-                continue;
+            if ($result['status'] === 'scored') {
+                $scored++;
+            } elseif ($result['status'] === 'error') {
+                $failed++;
+            } else {
+                $skipped++;
             }
         }
 
-        if ($analyzed > 0) {
+        if ($scored > 0) {
             // Invalidate cached analytics / SEO Overview responses.
             do_action('thinkrank_seo_score_updated');
         }
 
-        return $analyzed;
+        return [
+            'results' => $results,
+            'scored'  => $scored,
+            'skipped' => $skipped,
+            'failed'  => $failed,
+            'total'   => count($results),
+        ];
+    }
+
+    /**
+     * Score and persist a single post. Returns a structured per-post result:
+     * status is one of `scored`, `skipped_existing`, `not_found`,
+     * `no_content`, or `error`.
+     *
+     * @param \ThinkRank\AI\SEOScoreCalculator $calculator Shared calculator.
+     * @param int                              $user_id    Acting user id.
+     * @param int                              $post_id    Post to score.
+     * @param bool                             $rescore    Re-score even if scored.
+     * @return array<string,mixed>
+     */
+    private function score_single_post(\ThinkRank\AI\SEOScoreCalculator $calculator, int $user_id, int $post_id, bool $rescore): array {
+        $base = ['post_id' => $post_id, 'status' => '', 'score' => null, 'score_id' => null];
+
+        if (!$rescore && $calculator->get_latest_score($post_id) !== null) {
+            return array_merge($base, ['status' => 'skipped_existing']);
+        }
+
+        if (!get_post($post_id)) {
+            return array_merge($base, ['status' => 'not_found']);
+        }
+
+        try {
+            $content_data = $calculator->analyze_post_content($post_id);
+            if (empty($content_data)) {
+                return array_merge($base, ['status' => 'no_content']);
+            }
+
+            $metadata = [
+                'title'       => get_post_meta($post_id, '_thinkrank_seo_title', true) ?: ($content_data['title'] ?? ''),
+                'description' => get_post_meta($post_id, '_thinkrank_meta_description', true) ?: '',
+            ];
+
+            // Score against all focus keywords; the calculator uses the
+            // highest-scoring keyword as the final score.
+            $target_keywords = Focus_Keywords::get($post_id);
+
+            $score_data = $calculator->calculate_score(
+                $content_data,
+                $metadata,
+                ['target_keywords' => $target_keywords]
+            );
+
+            $score_id = $calculator->save_score($post_id, $user_id, $score_data);
+            if ($score_id === false) {
+                return array_merge($base, ['status' => 'error']);
+            }
+
+            return [
+                'post_id'  => $post_id,
+                'status'   => 'scored',
+                'score'    => isset($score_data['overall_score']) ? (int) $score_data['overall_score'] : null,
+                'score_id' => (int) $score_id,
+            ];
+        } catch (\Throwable $e) {
+            // Never let a single post abort the batch.
+            return array_merge($base, ['status' => 'error']);
+        }
     }
 
     /**

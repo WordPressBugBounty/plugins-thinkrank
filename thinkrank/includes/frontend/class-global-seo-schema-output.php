@@ -199,6 +199,26 @@ class Global_SEO_Schema_Output {
     }
 
     /**
+     * Whether ThinkRank would emit structured data for a given post type.
+     *
+     * Reflects the exact decision `output_global_seo_schema()` makes for
+     * singular views: schema is emitted when a `schema_type` resolves for the
+     * post type — either an explicit saved value or the built-in per-post-type
+     * default. Exposed so the Site SEO Analyzer can ask the output layer
+     * directly instead of re-reading a legacy option, keeping the audit and the
+     * rendered page from ever disagreeing about whether schema is configured.
+     *
+     * @since 1.23.1
+     * @param string $post_type Post type slug.
+     * @return bool True when structured data would be output for this post type.
+     */
+    public function would_output_schema(string $post_type): bool {
+        $settings = $this->get_global_seo_settings($post_type);
+
+        return !empty($settings['schema_type']);
+    }
+
+    /**
      * Get Global SEO settings for a specific post type
      *
      * @since 1.0.0

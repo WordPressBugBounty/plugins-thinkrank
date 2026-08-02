@@ -115,6 +115,16 @@ class Manager {
             'permission_callback' => [$this, 'check_basic_permissions'],
         ]);
 
+        // Integration health check for MCP/Abilities clients (see #188). This
+        // route is intentionally gated only by the admin capability, NOT by the
+        // `enable_mcp` toggle, so it stays reachable as a diagnostic even when
+        // the MCP server is off or abilities failed to register.
+        register_rest_route(self::NAMESPACE, '/connection-status', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_connection_status'],
+            'permission_callback' => [$this, 'check_admin_permissions'],
+        ]);
+
         // Settings endpoints
         register_rest_route(self::NAMESPACE, '/settings', [
             'methods' => 'GET',
@@ -702,6 +712,19 @@ class Manager {
             'php_version' => PHP_VERSION,
             'wp_version' => get_bloginfo('version'),
         ]);
+    }
+
+    /**
+     * Get ThinkRank integration health for MCP/Abilities clients (see #188).
+     *
+     * Admin-gated diagnostic; never returns secret material. Delegates to the
+     * shared reporter so the ability and this route stay in lock-step.
+     *
+     * @param \WP_REST_Request $request Request object
+     * @return \WP_REST_Response Response object
+     */
+    public function get_connection_status(\WP_REST_Request $request): \WP_REST_Response {
+        return new \WP_REST_Response(\ThinkRank\Diagnostics\Connection_Status::report());
     }
 
 

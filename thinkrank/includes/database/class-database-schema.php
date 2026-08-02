@@ -321,6 +321,17 @@ class Database_Schema {
     }
 
     /**
+     * The schema version this plugin build expects (the target of needs_update).
+     *
+     * @since 1.23.0
+     *
+     * @return string Expected schema version, e.g. "1.2.0".
+     */
+    public function get_schema_version(): string {
+        return $this->db_version;
+    }
+
+    /**
      * Get database status and information
      *
      * @since 1.0.0

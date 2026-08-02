@@ -76,6 +76,13 @@ class Post_List_Columns {
         unset($post_types['elementor_library']);
         unset($post_types['oceanwp_library']);
         unset($post_types['ae_global_templates']);
+        // Divi library + Theme Builder templates.
+        unset($post_types['et_pb_layout']);
+        unset($post_types['et_theme_builder']);
+        unset($post_types['et_template']);
+        unset($post_types['et_header_layout']);
+        unset($post_types['et_body_layout']);
+        unset($post_types['et_footer_layout']);
 
         /**
          * Filter supported post types for ThinkRank SEO Overview column

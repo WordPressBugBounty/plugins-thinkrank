@@ -38,7 +38,8 @@ class Get_Seo_Score extends Ability_Base {
 	 */
 	public function get_annotations() {
 		return [
-			'readonly'      => true,
+			// Not strictly read-only: with save_score the result is persisted.
+			'readonly'      => false,
 			'destructive'   => false,
 			'idempotent'    => true,
 			'priority'      => 1.0,
@@ -56,9 +57,13 @@ class Get_Seo_Score extends Ability_Base {
 			'type'                 => 'object',
 			'additionalProperties' => false,
 			'properties'           => [
-				'post_id' => [
+				'post_id'    => [
 					'type'        => 'integer',
 					'description' => __( 'The ID of the post to score.', 'thinkrank' ),
+				],
+				'save_score' => [
+					'type'        => 'boolean',
+					'description' => __( 'Persist the calculated score so it appears in the post list SEO column and score history. Defaults to false, which only reports the score.', 'thinkrank' ),
 				],
 			],
 			'required'             => [ 'post_id' ],
@@ -74,11 +79,13 @@ class Get_Seo_Score extends Ability_Base {
 		return [
 			'type'       => 'object',
 			'properties' => [
-				'post_id' => [ 'type' => 'integer' ],
-				'score'   => [
+				'post_id'  => [ 'type' => 'integer' ],
+				'score'    => [
 					'type'                 => 'object',
 					'additionalProperties' => true,
 				],
+				'saved'    => [ 'type' => 'boolean' ],
+				'score_id' => [ 'type' => [ 'integer', 'null' ] ],
 			],
 		];
 	}
@@ -121,9 +128,21 @@ class Get_Seo_Score extends Ability_Base {
 
 		$score = $calc->calculate_score( $content, $metadata );
 
+		// Without this the score was calculated and thrown away, so the post
+		// list kept reporting "Not Analyzed" until a separate saved run
+		// happened. Opt-in so a plain read stays a plain read.
+		$saved    = false;
+		$score_id = null;
+		if ( ! empty( $input['save_score'] ) ) {
+			$score_id = $calc->save_score( $post_id, get_current_user_id(), $score );
+			$saved    = false !== $score_id;
+		}
+
 		return [
-			'post_id' => $post_id,
-			'score'   => $score,
+			'post_id'  => $post_id,
+			'score'    => $score,
+			'saved'    => $saved,
+			'score_id' => $saved ? (int) $score_id : null,
 		];
 	}
 }

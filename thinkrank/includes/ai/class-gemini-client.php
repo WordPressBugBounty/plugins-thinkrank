@@ -387,7 +387,9 @@ class Gemini_Client {
      */
     public function get_recommended_tokens(string $use_case): int {
         $recommendations = [
-            'content_brief' => 8192,
+            // Higher budget: the brief now also returns a full article body,
+            // so the reply is much longer than the structured fields alone.
+            'content_brief' => 16384,
             'seo_metadata'  => 800,
             'analysis'      => 1500,
             'llms_txt'      => 2000,

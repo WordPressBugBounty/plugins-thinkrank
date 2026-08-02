@@ -1117,7 +1117,14 @@ JS;
             $content .= $post->post_excerpt . "\n\n";
         }
 
-        $content .= $post->post_content;
+        // Resolve through Builder_Content: a page builder keeps its words
+        // outside post_content (Oxygen empties it entirely), and the editor
+        // cannot reach postmeta, so without this the preview handed to the
+        // browser is just the title and the live panel reports "No content".
+        if (!class_exists('\\ThinkRank\\SEO\\Builder_Content')) {
+            require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-builder-content.php';
+        }
+        $content .= \ThinkRank\SEO\Builder_Content::resolve($post);
 
         // Clean and limit content
         $content = wp_strip_all_tags($content);

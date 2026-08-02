@@ -2076,14 +2076,27 @@ class SEO_Manager {
             $schema_settings = $this->schema_manager->get_settings('site', null);
         }
 
-        // Determine organization name (Schema Manager > Site Identity > WordPress default)
-        $org_name = $schema_settings['organization_name'] ?? $settings['site_name'] ?? get_bloginfo('name');
+        // Determine organization values (Schema Manager > Site Identity > WordPress default).
+        // Use first_non_empty() rather than ??: these settings keys are always present
+        // and default to an empty string, so a ?? chain would stop dead on '' and never
+        // reach the WordPress fallback.
+        $org_name = $this->first_non_empty(
+            $schema_settings['organization_name'] ?? null,
+            $settings['site_name'] ?? null,
+            get_bloginfo('name')
+        );
 
-        // Determine organization URL (Schema Manager > Site Identity > WordPress default)
-        $org_url = $schema_settings['organization_url'] ?? $settings['site_url'] ?? home_url();
+        $org_url = $this->first_non_empty(
+            $schema_settings['organization_url'] ?? null,
+            $settings['site_url'] ?? null,
+            home_url()
+        );
 
-        // Determine organization description (Schema Manager > Site Identity > WordPress default)
-        $org_description = $schema_settings['organization_description'] ?? $settings['site_description'] ?? get_bloginfo('description');
+        $org_description = $this->first_non_empty(
+            $schema_settings['organization_description'] ?? null,
+            $settings['site_description'] ?? null,
+            get_bloginfo('description')
+        );
 
         if (empty($org_name)) {
             return null;
@@ -2210,6 +2223,27 @@ class SEO_Manager {
         }
 
         return $schema;
+    }
+
+    /**
+     * Return the first value that is a non-empty (after trim) string.
+     *
+     * Settings keys such as organization_url are always present and default to
+     * an empty string, so the null-coalescing operator (??) cannot be used to
+     * build a fallback chain: '' is not null and would short-circuit the chain.
+     * This helper skips empty strings and returns the first real value, falling
+     * back to '' when none qualify.
+     *
+     * @param string|null ...$values Candidate values in priority order.
+     * @return string First non-empty value, or '' if none.
+     */
+    private function first_non_empty(...$values): string {
+        foreach ($values as $value) {
+            if (is_string($value) && trim($value) !== '') {
+                return $value;
+            }
+        }
+        return '';
     }
 
     /**

@@ -610,12 +610,11 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
             }
 
             // Use Analytics Manager to access the initialized client with decrypted credentials
-            $search_console = $this->analytics_manager->get_search_console_client();
-            $site_url = $this->analytics_manager->get_property_url();
-
-            if (!$search_console) {
-                return new WP_Error('no_client', 'Search Console client not available', ['status' => 500]);
+            $context = $this->resolve_search_console();
+            if (is_wp_error($context)) {
+                return $context;
             }
+            [$search_console, $site_url] = $context;
 
             // Cache the live GSC call (3h TTL, site-wide) keyed by the date range.
             $response = $this->cached_response(
@@ -632,11 +631,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
 
             return new WP_REST_Response($response, 200);
         } catch (\Exception $e) {
-            return new WP_Error(
-                'search_totals_failed',
-                'Failed to retrieve search totals: ' . $e->getMessage(),
-                ['status' => 500]
-            );
+            return $this->google_error_to_wp_error($e, 'search_totals_failed');
         }
     }
 
@@ -664,12 +659,11 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
             $end_date   = gmdate('Y-m-d');
             $start_date = gmdate('Y-m-d', strtotime('-' . ($days - 1) . ' days'));
 
-            $search_console = $this->analytics_manager->get_search_console_client();
-            $site_url       = $this->analytics_manager->get_property_url();
-
-            if (!$search_console) {
-                return new WP_Error('no_client', 'Search Console client not available', ['status' => 500]);
+            $context = $this->resolve_search_console();
+            if (is_wp_error($context)) {
+                return $context;
             }
+            [$search_console, $site_url] = $context;
 
             // Cache the live GSC call (3h TTL, site-wide) keyed by the date range.
             $response = $this->cached_response(
@@ -729,11 +723,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
 
             return new WP_REST_Response($response, 200);
         } catch (\Exception $e) {
-            return new WP_Error(
-                'search_daily_failed',
-                'Failed to retrieve daily search data: ' . $e->getMessage(),
-                ['status' => 500]
-            );
+            return $this->google_error_to_wp_error($e, 'search_daily_failed');
         }
     }
 
@@ -753,12 +743,11 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
             $date_range = $request->get_param('date_range') ?: '30d';
             $brand_name = $request->get_param('brand_name') ?: '';
 
-            $search_console = $this->analytics_manager->get_search_console_client();
-            $site_url       = $this->analytics_manager->get_property_url();
-
-            if (!$search_console) {
-                return new WP_Error('no_client', 'Search Console client not available', ['status' => 500]);
+            $context = $this->resolve_search_console();
+            if (is_wp_error($context)) {
+                return $context;
             }
+            [$search_console, $site_url] = $context;
 
             // Cache the (double) live GSC call (3h TTL, site-wide) keyed by
             // date range + brand terms.
@@ -776,11 +765,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
 
             return new WP_REST_Response($response, 200);
         } catch (\Exception $e) {
-            return new WP_Error(
-                'branded_failed',
-                'Failed to retrieve branded data: ' . $e->getMessage(),
-                ['status' => 500]
-            );
+            return $this->google_error_to_wp_error($e, 'branded_failed');
         }
     }
 
@@ -797,12 +782,11 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
         try {
             $date_range = $request->get_param('date_range') ?: '30d';
 
-            $search_console = $this->analytics_manager->get_search_console_client();
-            $site_url       = $this->analytics_manager->get_property_url();
-
-            if (!$search_console) {
-                return new WP_Error('no_client', 'Search Console client not available', ['status' => 500]);
+            $context = $this->resolve_search_console();
+            if (is_wp_error($context)) {
+                return $context;
             }
+            [$search_console, $site_url] = $context;
 
             // Cache the live GSC call (3h TTL, site-wide) keyed by the date range.
             $response = $this->cached_response(
@@ -819,12 +803,106 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
 
             return new WP_REST_Response($response, 200);
         } catch (\Exception $e) {
+            return $this->google_error_to_wp_error($e, 'countries_failed');
+        }
+    }
+
+    /**
+     * Resolve the Search Console client + property URL for the live GSC routes.
+     *
+     * Both failure modes are configuration problems the site owner can fix, so
+     * they return an actionable error instead of letting the request reach
+     * Google and bounce back as raw API text — an unselected property, for
+     * example, otherwise surfaces as
+     * "Google API error (400): 'http://' is not a valid Search Console site URL".
+     *
+     * @since 1.0.0
+     * @return array{0: \ThinkRank\Integrations\Google_Search_Console_Client, 1: string}|WP_Error
+     */
+    private function resolve_search_console(): array|WP_Error {
+        $client = $this->analytics_manager->get_search_console_client();
+
+        if (!$client) {
             return new WP_Error(
-                'countries_failed',
-                'Failed to retrieve country data: ' . $e->getMessage(),
-                ['status' => 500]
+                'google_not_connected',
+                __('Google Search Console is not connected yet. Connect your Google account to see search data here.', 'thinkrank'),
+                ['status' => 400, 'reason' => 'not_connected']
             );
         }
+
+        $site_url = trim((string) $this->analytics_manager->get_property_url());
+
+        // Accept only the two formats Search Console recognises: a URL-prefix
+        // property (https://example.com/) or a domain property
+        // (sc-domain:example.com). Anything else — most often an empty setting —
+        // means no verified property has been picked yet.
+        if (!preg_match('#^(sc-domain:\S+|https?://\S+)$#i', $site_url)) {
+            return new WP_Error(
+                'no_search_console_property',
+                __('No Search Console property is selected for this site. Choose your verified property to start loading search data.', 'thinkrank'),
+                ['status' => 400, 'reason' => 'no_property']
+            );
+        }
+
+        return [$client, $site_url];
+    }
+
+    /**
+     * Turn a Google API exception into an error a site owner can act on.
+     *
+     * Google's own wording ("'http://' is not a valid Search Console site URL",
+     * bare 401/403s) tells an admin nothing about what to fix, so map the common
+     * statuses to plain-language messages plus a `reason` the UI turns into the
+     * matching call to action. The raw text is preserved in `details` for
+     * debugging — these routes are already admin-gated.
+     *
+     * @since 1.0.0
+     * @param \Exception $e    Exception thrown by the Google client.
+     * @param string     $code WP_Error code for the failing route.
+     * @return WP_Error Actionable error.
+     */
+    private function google_error_to_wp_error(\Exception $e, string $code): WP_Error {
+        $status = (int) $e->getCode();
+        // The Google client escapes the API's message before wrapping it in the
+        // exception, so decode it back for display — the UI renders `details` as
+        // plain text, where entities would show up literally ("&#039;").
+        $raw = html_entity_decode($e->getMessage(), ENT_QUOTES, 'UTF-8');
+
+        if (stripos($raw, 'valid Search Console site URL') !== false || $status === 404) {
+            $reason      = 'no_property';
+            $message     = __('The Search Console property for this site is missing or no longer valid. Select your verified property again to restore search data.', 'thinkrank');
+            $http_status = 400;
+        } elseif ($status === 401) {
+            $reason      = 'reconnect';
+            $message     = __('Your Google connection has expired. Reconnect your Google account to load Search Console data.', 'thinkrank');
+            $http_status = 401;
+        } elseif ($status === 403) {
+            $reason      = 'permission';
+            $message     = __('Your Google account does not have access to this Search Console property. Verify ownership in Search Console, or select a property you own.', 'thinkrank');
+            $http_status = 403;
+        } elseif ($status === 429) {
+            $reason      = 'quota';
+            $message     = __('Google is rate limiting requests right now. Search data will load again shortly.', 'thinkrank');
+            $http_status = 429;
+        } elseif ($status >= 500) {
+            $reason      = 'google_down';
+            $message     = __('Google Search Console is temporarily unavailable. Please try again in a few minutes.', 'thinkrank');
+            $http_status = 502;
+        } else {
+            $reason      = 'unknown';
+            $message     = __('Search Console data could not be loaded right now. Please try again.', 'thinkrank');
+            $http_status = 502;
+        }
+
+        return new WP_Error(
+            $code,
+            $message,
+            [
+                'status'  => $http_status,
+                'reason'  => $reason,
+                'details' => $raw,
+            ]
+        );
     }
 
     /**

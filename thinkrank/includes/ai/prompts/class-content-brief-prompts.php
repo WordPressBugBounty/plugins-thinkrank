@@ -148,6 +148,12 @@ class Content_Brief_Prompts {
         $prompt .= "   - Key messages to emphasize\n";
         $prompt .= "   - Content format suggestions (lists, tables, etc.)\n\n";
 
+        $prompt .= "8. FULL ARTICLE DRAFT:\n";
+        $prompt .= "   Write the complete, publish-ready article body ({$word_count_map[$content_length]}) that follows the outline above.\n";
+        $prompt .= "   - Format as clean HTML using <h2>/<h3> headings, <p>, <ul>/<ol>, and <blockquote>. Do NOT include an <h1> (the post title is the H1).\n";
+        $prompt .= "   - Write in a {$tone} tone for a {$target_audience} audience, naturally weaving in the target and related keywords.\n";
+        $prompt .= "   - Cover every outline section with real prose (no placeholders) and finish with a relevant call to action.\n\n";
+
         $prompt .= "IMPORTANT: Respond with a valid JSON object using this exact structure:\n\n";
         $prompt .= "{\n";
         $prompt .= "  \"title_suggestions\": [\"Title 1\", \"Title 2\", \"Title 3\", \"Title 4\", \"Title 5\"],\n";
@@ -209,7 +215,8 @@ class Content_Brief_Prompts {
         $prompt .= "    \"tone_recommendations\": [\"Professional\", \"Informative\", \"Actionable\"],\n";
         $prompt .= "    \"key_messages\": [\"Message 1\", \"Message 2\"],\n";
         $prompt .= "    \"format_suggestions\": [\"Bullet points\", \"Short paragraphs\", \"Clear headings\"]\n";
-        $prompt .= "  }\n";
+        $prompt .= "  },\n";
+        $prompt .= "  \"content_body\": \"<h2>Section heading</h2><p>The complete article written out in clean HTML, following the outline...</p>\"\n";
         $prompt .= "}\n\n";
         $prompt .= "Respond ONLY with valid JSON. Do not include any text before or after the JSON object.";
 

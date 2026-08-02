@@ -1208,13 +1208,49 @@ class SEOScoreCalculator {
             ],
         ];
     }
+    /**
+     * Resolve a post's content into something worth analyzing.
+     *
+     * Delegates to Builder_Content, which knows where each page builder keeps
+     * its text. Kept as the historical entry point for existing callers.
+     *
+     * @since 1.23.0
+     *
+     * @param \WP_Post $post Post being analyzed.
+     * @return string Content to analyze.
+     */
+    public static function resolve_analyzable_content(\WP_Post $post): string {
+        if (!class_exists('\ThinkRank\SEO\Builder_Content')) {
+            require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-builder-content.php';
+        }
+
+        return \ThinkRank\SEO\Builder_Content::resolve($post);
+    }
+
+    /**
+     * Resolve editor-supplied live content into something worth analyzing.
+     *
+     * @since 1.23.0
+     *
+     * @param string   $live_content Markup supplied by the editor.
+     * @param \WP_Post $post         Post the markup belongs to.
+     * @return string Content to analyze.
+     */
+    public static function resolve_live_content(string $live_content, \WP_Post $post): string {
+        if (!class_exists('\ThinkRank\SEO\Builder_Content')) {
+            require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-builder-content.php';
+        }
+
+        return \ThinkRank\SEO\Builder_Content::resolve_markup($live_content, $post);
+    }
+
     public function analyze_post_content(int $post_id): array {
         $post = get_post($post_id);
         if (!$post) {
             return [];
         }
 
-        $content = $post->post_content;
+        $content = self::resolve_analyzable_content($post);
         $title = $post->post_title;
 
         // Extract headings from content
@@ -1807,7 +1843,13 @@ class SEOScoreCalculator {
             return [];
         }
 
-        $content = $live_content; // Use live content instead of $post->post_content
+        // Resolve the live string the same way stored content is resolved. On a
+        // builder page the editor hands over raw builder markup (the block
+        // editor cannot render blocks it has no client-side registration for),
+        // which analyzed as-is reads as zero words — the reason a Divi page
+        // could show a correct saved score beside a live panel still claiming
+        // "No content".
+        $content = self::resolve_live_content($live_content, $post);
         $title = $post->post_title;
 
         // Extract headings from content

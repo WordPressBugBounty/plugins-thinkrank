@@ -19,6 +19,8 @@ use ThinkRank\Core\Plan_Config;
 use ThinkRank\Core\Capability_Manager;
 use ThinkRank\Admin\Metabox_Manager;
 use ThinkRank\Admin\Elementor_Metabox;
+use ThinkRank\Admin\Oxygen_Metabox;
+use ThinkRank\Admin\Divi_Metabox;
 use ThinkRank\Admin\Bulk_Action_Manager;
 use ThinkRank\Admin\Post_List_Filters;
 
@@ -63,6 +65,20 @@ class Manager {
      * @var Elementor_Metabox
      */
     private Elementor_Metabox $elementor_metabox;
+
+    /**
+     * Oxygen / Breakdance editor metabox integration instance
+     *
+     * @var Oxygen_Metabox
+     */
+    private Oxygen_Metabox $oxygen_metabox;
+
+    /**
+     * Divi Visual Builder metabox integration instance
+     *
+     * @var Divi_Metabox
+     */
+    private Divi_Metabox $divi_metabox;
 
     /**
      * Post list columns instance
@@ -110,6 +126,8 @@ class Manager {
         $this->database = $database ?? new Database();
         $this->metabox_manager = new Metabox_Manager($this->settings);
         $this->elementor_metabox = new Elementor_Metabox($this->metabox_manager);
+        $this->oxygen_metabox = new Oxygen_Metabox($this->metabox_manager);
+        $this->divi_metabox = new Divi_Metabox($this->metabox_manager);
         $this->post_list_columns = new Post_List_Columns();
         $this->focus_keyword_ajax = new Focus_Keyword_Ajax();
         $this->bulk_action_manager = new Bulk_Action_Manager();
@@ -138,6 +156,14 @@ class Manager {
         // Initialize Elementor editor integration (hooks no-op without Elementor)
         $this->elementor_metabox->init();
 
+        // Initialize Oxygen / Breakdance editor integration (hooks gate on the
+        // builder request, so they no-op without Oxygen)
+        $this->oxygen_metabox->init();
+
+        // Initialize Divi Visual Builder integration (hooks gate on the VB
+        // request, so they no-op without Divi)
+        $this->divi_metabox->init();
+
         // Initialize post list columns
         $this->post_list_columns->init();
 
@@ -152,6 +178,9 @@ class Manager {
 
         // Initialize Setup Wizard (onboarding) controller
         (new Setup_Wizard())->init();
+
+        // Initialize the wp-admin Dashboard widget (ThinkRank Website Insights)
+        (new Dashboard_Widget())->init();
     }
 
     /**

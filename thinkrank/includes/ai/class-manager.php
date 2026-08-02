@@ -99,8 +99,11 @@ class Manager {
                         if (empty($model)) {
                             $model = 'gpt-5-nano';
                         }
-                        // Use 120-second timeout for complex AI operations
-                        $timeout = 120;
+                        // OpenAI's reasoning models (GPT-5/o-series) spend a long
+                        // time on reasoning tokens before emitting content, so
+                        // large completions (content briefs) regularly outlive the
+                        // 120s used for the other providers. Give them 300s.
+                        $timeout = 300;
                         $this->client = new OpenAI_Client($api_key, $model, $timeout);
 
                         // OpenAI client created successfully

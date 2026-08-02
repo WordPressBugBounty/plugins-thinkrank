@@ -23,6 +23,7 @@ use ThinkRank\Abilities\Content\Update_Pillar_Content;
 use ThinkRank\Abilities\Import\Detect_Import_Sources;
 use ThinkRank\Abilities\Import\Get_Import_Status;
 use ThinkRank\Abilities\Import\Run_Seo_Import;
+use ThinkRank\Abilities\Import\Preview_Seo_Import;
 use ThinkRank\Abilities\Settings\Get_Global_Settings;
 use ThinkRank\Abilities\Settings\Get_Robots_Txt;
 use ThinkRank\Abilities\Settings\Get_Sitemap_Settings;
@@ -63,6 +64,8 @@ use ThinkRank\Abilities\Analysis\Get_Seo_Analyzer;
 use ThinkRank\Abilities\Analysis\Run_Seo_Analyzer;
 use ThinkRank\Abilities\Analysis\Get_Performance_Data;
 use ThinkRank\Abilities\Analysis\Get_Integrations_Status;
+use ThinkRank\Abilities\Analysis\Get_Connection_Status;
+use ThinkRank\Abilities\Analysis\Bulk_Analyze_And_Save;
 use ThinkRank\Core\Settings;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -72,11 +75,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Registers ThinkRank abilities with the WordPress Abilities API.
  *
- * A single admin toggle (`enable_mcp`) gates the abilities registration. The
- * abilities are served to AI clients by ThinkRank's own MCP server
- * ({@see \ThinkRank\Mcp\Mcp_Server}), which reads the abilities registry as
- * its tool catalog — the bundled MCP Adapter is no longer used. The Abilities
- * API itself ships in `dependencies/` and no-ops gracefully when missing.
+ * Abilities are **always** registered when the Abilities API is available —
+ * registration is decoupled from the `enable_mcp` toggle (see #187). Each
+ * ability is a permission-checked read/write surface (its own
+ * `current_user_can()` callback runs on every call), so registration alone
+ * exposes nothing; it only makes ThinkRank discoverable to generic WordPress
+ * Abilities clients (e.g. an external connector) the same way WordPress core
+ * abilities are. The `enable_mcp` toggle gates only ThinkRank's own MCP server
+ * ({@see \ThinkRank\Mcp\Mcp_Manager}) — the endpoint, discovery documents, and
+ * OAuth surface. The MCP server reads this abilities registry as its tool
+ * catalog. The Abilities API itself ships in `dependencies/` and no-ops
+ * gracefully when missing.
+ *
+ * A kill switch remains available via the `thinkrank_abilities_api_enabled`
+ * filter (defaults to `true`; see {@see Ability_Base::abilities_enabled()}).
  */
 class Abilities_Registrar {
 
@@ -90,23 +102,8 @@ class Abilities_Registrar {
 			return;
 		}
 
-		// Single admin toggle (enable_mcp) gates the abilities registration.
-		add_filter( 'thinkrank_abilities_api_enabled', [ $this, 'is_mcp_enabled' ] );
-
 		add_action( 'wp_abilities_api_categories_init', [ $this, 'register_category' ] );
 		add_action( 'wp_abilities_api_init', [ $this, 'register_abilities' ] );
-	}
-
-	/**
-	 * Whether the MCP integration is enabled via the admin setting.
-	 *
-	 * Used as the callback for the `thinkrank_abilities_api_enabled` filter so
-	 * the same toggle controls the abilities registration and the MCP server.
-	 *
-	 * @return bool
-	 */
-	public function is_mcp_enabled() {
-		return (bool) Settings::instance()->get( 'enable_mcp', false );
 	}
 
 	/**
@@ -189,12 +186,15 @@ class Abilities_Registrar {
 			new Run_Seo_Analyzer(),
 			new Get_Performance_Data(),
 			new Get_Integrations_Status(),
+			new Get_Connection_Status(),
+			new Bulk_Analyze_And_Save(),
 			new Generate_Content_Brief(),
 			new Get_Pillar_Content(),
 			new Update_Pillar_Content(),
 			new Detect_Import_Sources(),
 			new Get_Import_Status(),
 			new Run_Seo_Import(),
+			new Preview_Seo_Import(),
 		];
 
 		$abilities = apply_filters( 'thinkrank_register_abilities', $abilities );

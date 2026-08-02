@@ -429,32 +429,68 @@ class SEO_Analyzer {
      * @return array
      */
     public function check_schema(): array {
-        $settings = get_option('thinkrank_global_seo_settings', []);
-        $has_schema = false;
+        $label = __('Structured data configured', 'thinkrank');
 
-        if (is_array($settings)) {
-            foreach ($settings as $per_type) {
-                if (is_array($per_type) && !empty($per_type['schema_type'])) {
-                    $has_schema = true;
-                    break;
-                }
-            }
-        }
-
-        if (!$has_schema) {
+        if ($this->schema_is_output()) {
             return [
-                'label'      => __('Structured data configured', 'thinkrank'),
-                'status'     => self::WARNING,
-                'message'    => __('No schema/structured data is configured. Schema powers rich results in search.', 'thinkrank'),
-                'how_to_fix' => __('Choose a default schema type for each post type under Essential SEO → Bulk SEO Optimization.', 'thinkrank'),
+                'label'   => $label,
+                'status'  => self::PASSED,
+                'message' => __('Structured data is configured for your content.', 'thinkrank'),
             ];
         }
 
         return [
-            'label'   => __('Structured data configured', 'thinkrank'),
-            'status'  => self::PASSED,
-            'message' => __('Structured data is configured for your content.', 'thinkrank'),
+            'label'      => $label,
+            'status'     => self::WARNING,
+            'message'    => __('No schema/structured data is configured. Schema powers rich results in search.', 'thinkrank'),
+            'how_to_fix' => __('Choose a default schema type for each post type under Essential SEO → Bulk SEO Optimization.', 'thinkrank'),
         ];
+    }
+
+    /**
+     * Whether ThinkRank actually emits structured data for this site.
+     *
+     * The audit must reflect what is rendered, not a single legacy option.
+     * ThinkRank outputs schema from two current sources, so this check consults
+     * both rather than the deprecated thinkrank_global_seo_settings['schema_type']
+     * opt-in (which most sites never set even though schema is emitted):
+     *
+     *   1. The Schema Management System — its configuration lives in the
+     *      thinkrank_seo_settings table (context "schema_management_system"),
+     *      read through the manager's settings abstraction.
+     *   2. The Global SEO output layer — an explicit saved schema_type OR the
+     *      built-in per-post-type default both cause JSON-LD to be emitted on
+     *      the frontend. We ask that layer directly (would_output_schema) so the
+     *      audit and the rendered page can never diverge.
+     *
+     * @return bool True when structured data is emitted for the site's content.
+     */
+    private function schema_is_output(): bool {
+        // 1) Newer Schema Management System (thinkrank_seo_settings table).
+        if (class_exists('ThinkRank\\SEO\\Schema_Management_System')) {
+            $settings = (new Schema_Management_System())->get_settings('schema_management_system');
+            if (is_array($settings)) {
+                if (!empty($settings['enabled_schema_types']) && is_array($settings['enabled_schema_types'])) {
+                    return true;
+                }
+                if (!empty($settings['auto_generate_schema'])) {
+                    return true;
+                }
+            }
+        }
+
+        // 2) Global SEO output layer — explicit schema_type or per-post-type
+        //    default. Reuse the output layer's own decision so audit == output.
+        if (class_exists('ThinkRank\\Frontend\\Global_SEO_Schema_Output')) {
+            $output = new \ThinkRank\Frontend\Global_SEO_Schema_Output();
+            foreach (get_post_types(['public' => true], 'names') as $post_type) {
+                if ($output->would_output_schema((string) $post_type)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -504,19 +540,21 @@ class SEO_Analyzer {
             ];
         }
 
-        global $wpdb;
-        $placeholders = implode(',', array_fill(0, $total, '%d'));
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one bounded COUNT over sampled ids; results are cached at the analysis level
-        $with_description = (int) $wpdb->get_var(
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders string is built from %d only
-            $wpdb->prepare(
-                "SELECT COUNT(DISTINCT post_id) FROM {$wpdb->postmeta}
-                 WHERE meta_key = '_thinkrank_meta_description'
-                   AND meta_value != ''
-                   AND post_id IN ({$placeholders})",
-                $post_ids
-            )
-        );
+        // Count posts with an *effective* meta description, the same way the
+        // frontend resolves it: a custom _thinkrank_meta_description when set,
+        // otherwise the global SEO pattern fallback (Pattern_Resolver). Counting
+        // only the custom post-meta produced false negatives — posts that output
+        // a valid description via the pattern fallback were wrongly reported as
+        // missing. The sample is bounded (CONTENT_SAMPLE_SIZE) so the per-post
+        // resolution stays cheap, and the whole analysis is cached for an hour.
+        $with_description = 0;
+        foreach ($post_ids as $post_id) {
+            $custom   = (string) get_post_meta($post_id, '_thinkrank_meta_description', true);
+            $resolved = '' !== $custom ? $custom : Pattern_Resolver::description((int) $post_id);
+            if ('' !== trim($resolved)) {
+                $with_description++;
+            }
+        }
 
         $coverage = (int) round(($with_description / $total) * 100);
         $missing  = $total - $with_description;

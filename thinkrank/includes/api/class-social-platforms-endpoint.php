@@ -165,8 +165,20 @@ class Social_Platforms_Endpoint extends WP_REST_Controller {
                 ], 400);
             }
 
-            // Sanitize and save settings
+            // Sanitize input, then enforce the shared format rules before saving.
+            // Sanitization only strips unsafe characters; without this, malformed
+            // verification codes / IDs would be stored and later emitted verbatim.
             $sanitized_settings = $this->sanitize_settings($settings);
+
+            $validation_errors = $this->validate_settings_format($sanitized_settings);
+            if (!empty($validation_errors)) {
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'One or more social platform values are in an invalid format',
+                    'errors'  => $validation_errors
+                ], 400);
+            }
+
             $success = $this->save_social_platform_settings($sanitized_settings);
 
             if ($success) {
@@ -264,6 +276,31 @@ class Social_Platforms_Endpoint extends WP_REST_Controller {
         }
 
         return $sanitized;
+    }
+
+    /**
+     * Validate sanitized settings against the shared social platform format rules.
+     *
+     * Reuses Social_Meta_Manager's per-field rules (single source of truth) so the
+     * REST save path rejects malformed verification codes / IDs instead of storing
+     * them and letting them render as broken verification meta tags.
+     *
+     * @since 1.14.0
+     *
+     * @param array $settings Sanitized settings.
+     * @return array<string, string> Map of field key => error message; empty when all valid.
+     */
+    private function validate_settings_format(array $settings): array {
+        $errors = [];
+
+        foreach ($settings as $key => $value) {
+            $error = \ThinkRank\SEO\Social_Meta_Manager::validate_platform_field($key, $value);
+            if ($error !== null) {
+                $errors[$key] = $error;
+            }
+        }
+
+        return $errors;
     }
 
     /**

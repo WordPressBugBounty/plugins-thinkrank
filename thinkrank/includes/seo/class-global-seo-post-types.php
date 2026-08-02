@@ -62,6 +62,9 @@ class Global_SEO_Post_Types {
         $excluded = apply_filters('thinkrank_global_seo_excluded_post_types', [
             'elementor_library', 'oceanwp_library', 'ae_global_templates',
             'e-floating-buttons', 'elementor_component',
+            // Divi: the library plus every Theme Builder template type.
+            'et_pb_layout', 'et_theme_builder', 'et_template',
+            'et_header_layout', 'et_body_layout', 'et_footer_layout',
         ], $object);
 
         return !in_array($object->name, (array) $excluded, true);
