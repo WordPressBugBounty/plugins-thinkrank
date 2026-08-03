@@ -998,6 +998,62 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
     private array $output_data_cache = [];
 
     /**
+     * Site-wide default image keys inherited by every other context.
+     *
+     * @since 1.24.1
+     * @var string[]
+     */
+    private const INHERITED_SITE_KEYS = [
+        'default_og_image',
+        'default_twitter_image',
+        'default_image',
+    ];
+
+    /**
+     * Get settings for a context, inheriting the site-wide default images
+     *
+     * Two corrections over the generic lookup:
+     *
+     * 1. Site-wide settings are always stored with context_id 0, but the
+     *    frontend maps a homepage request to the `site` context while still
+     *    passing the queried object ID (non-zero on a static front page). That
+     *    looked up `site`/<page ID>, matched no row and silently fell back to
+     *    the schema defaults, so a configured default OG image never rendered
+     *    on a static front page. Normalize the ID away for `site`.
+     * 2. `default_og_image` / `default_twitter_image` only exist in the site
+     *    context, so post/page and archive contexts had nothing to fall back to
+     *    when a post had no featured image — og:image dropped to the site logo
+     *    or vanished entirely. Inherit those keys when the context has no value
+     *    of its own.
+     *
+     * @since 1.24.1
+     *
+     * @param string   $context_type The context type
+     * @param int|null $context_id   Optional. Context ID
+     * @return array Settings with site-wide image defaults applied
+     */
+    public function get_settings(string $context_type, ?int $context_id = null): array {
+        if ($context_type === 'site') {
+            $context_id = null;
+        }
+
+        $settings = parent::get_settings($context_type, $context_id);
+
+        if ($context_type === 'site') {
+            return $settings;
+        }
+
+        $site_settings = parent::get_settings('site', null);
+        foreach (self::INHERITED_SITE_KEYS as $key) {
+            if (empty($settings[$key]) && !empty($site_settings[$key])) {
+                $settings[$key] = $site_settings[$key];
+            }
+        }
+
+        return $settings;
+    }
+
+    /**
      * Get default settings for a context type (implements interface)
      *
      * @since 1.0.0
@@ -1464,6 +1520,14 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 // Set Twitter image with proper fallback
                 $data['twitter_image'] = $this->get_twitter_image_for_context($settings, $post);
             }
+        } else {
+            // Archive-style contexts (category, tag, author, search, date).
+            // They carry no object of their own, but the site-wide default
+            // image still applies — without this they fell through to the raw
+            // logo/site-icon fallback in generate_og_tags() and ignored a
+            // configured default OG image.
+            $data['image'] = $this->get_og_image_for_context($settings, null);
+            $data['twitter_image'] = $this->get_twitter_image_for_context($settings, null);
         }
 
         return $data;
@@ -1717,35 +1781,43 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             $mime_type = get_post_mime_type($attachment_id);
 
             if ($image_meta && isset($image_meta['width'], $image_meta['height'])) {
-                $image_data['width'] = $image_meta['width'];
-                $image_data['height'] = $image_meta['height'];
+                $width  = (int) $image_meta['width'];
+                $height = (int) $image_meta['height'];
+
                 $image_data['alt'] = $image_alt ?: '';
                 $image_data['type'] = $mime_type ?: '';
 
-                // Validate against platform requirements
-                $platform_spec = $this->supported_platforms[$platform] ?? [];
-                $min_width = $platform_spec['image_min_width'] ?? 300;
-                $min_height = $platform_spec['image_min_height'] ?? 200;
+                // SVGs and other vector uploads store 0x0 metadata. Dimension
+                // checks are meaningless there and dividing by 0 is fatal.
+                if ($width > 0 && $height > 0) {
+                    $image_data['width'] = $width;
+                    $image_data['height'] = $height;
 
-                if ($image_meta['width'] >= $min_width && $image_meta['height'] >= $min_height) {
-                    $image_data['valid'] = true;
-                } else {
-                    $image_data['warnings'][] = "Image dimensions ({$image_meta['width']}x{$image_meta['height']}) are below recommended minimum ({$min_width}x{$min_height}) for {$platform}";
-                }
+                    // Validate against platform requirements
+                    $platform_spec = $this->supported_platforms[$platform] ?? [];
+                    $min_width = $platform_spec['image_min_width'] ?? 300;
+                    $min_height = $platform_spec['image_min_height'] ?? 200;
 
-                // Check aspect ratio if specified
-                if (isset($platform_spec['image_recommended_ratio'])) {
-                    $actual_ratio = $image_meta['width'] / $image_meta['height'];
-                    $recommended_ratio = $platform_spec['image_recommended_ratio'];
-                    $ratio_tolerance = 0.1;
+                    if ($width >= $min_width && $height >= $min_height) {
+                        $image_data['valid'] = true;
+                    } else {
+                        $image_data['warnings'][] = "Image dimensions ({$width}x{$height}) are below recommended minimum ({$min_width}x{$min_height}) for {$platform}";
+                    }
 
-                    if (abs($actual_ratio - $recommended_ratio) > $ratio_tolerance) {
-                        $image_data['warnings'][] = sprintf(
-                            "Image aspect ratio (%.2f) differs from recommended ratio (%.2f) for %s",
-                            $actual_ratio,
-                            $recommended_ratio,
-                            $platform
-                        );
+                    // Check aspect ratio if specified
+                    if (isset($platform_spec['image_recommended_ratio'])) {
+                        $actual_ratio = $width / $height;
+                        $recommended_ratio = $platform_spec['image_recommended_ratio'];
+                        $ratio_tolerance = 0.1;
+
+                        if (abs($actual_ratio - $recommended_ratio) > $ratio_tolerance) {
+                            $image_data['warnings'][] = sprintf(
+                                "Image aspect ratio (%.2f) differs from recommended ratio (%.2f) for %s",
+                                $actual_ratio,
+                                $recommended_ratio,
+                                $platform
+                            );
+                        }
                     }
                 }
             }
@@ -2516,15 +2588,20 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         $attachment_id = attachment_url_to_postid($image_url);
         if ($attachment_id) {
             $image_meta = wp_get_attachment_metadata($attachment_id);
-            if ($image_meta && isset($image_meta['width'], $image_meta['height'])) {
+            $meta_width  = isset($image_meta['width']) ? (int) $image_meta['width'] : 0;
+            $meta_height = isset($image_meta['height']) ? (int) $image_meta['height'] : 0;
+
+            // SVGs and other vector uploads store 0x0 metadata — skip the
+            // dimension/ratio checks instead of dividing by 0.
+            if ($image_meta && $meta_width > 0 && $meta_height > 0) {
                 // Check minimum dimensions for major platforms
                 $min_width = 600; // Facebook minimum
                 $min_height = 315; // Facebook minimum
 
-                if ($image_meta['width'] >= $min_width && $image_meta['height'] >= $min_height) {
+                if ($meta_width >= $min_width && $meta_height >= $min_height) {
                     $validation['valid'] = true;
                 } else {
-                    $validation['warnings'][] = "Image dimensions ({$image_meta['width']}x{$image_meta['height']}) are below recommended minimum ({$min_width}x{$min_height})";
+                    $validation['warnings'][] = "Image dimensions ({$meta_width}x{$meta_height}) are below recommended minimum ({$min_width}x{$min_height})";
                 }
 
                 // Check file size
@@ -2539,7 +2616,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 }
 
                 // Check aspect ratio
-                $aspect_ratio = $image_meta['width'] / $image_meta['height'];
+                $aspect_ratio = $meta_width / $meta_height;
                 if ($aspect_ratio < 1.5 || $aspect_ratio > 2.5) {
                     $validation['suggestions'][] = 'Consider using an image with 1.91:1 aspect ratio for optimal display';
                 }

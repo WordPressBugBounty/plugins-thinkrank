@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 1.24.0
+ * Version: 1.25.0
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Requires PHP: 8.0
  * 
  * @package ThinkRank
- * @version 1.24.0
+ * @version 1.25.0
  * @since 1.0.0
  */
 
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '1.24.0');
+define('THINKRANK_VERSION', '1.25.0');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));

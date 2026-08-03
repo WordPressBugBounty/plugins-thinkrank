@@ -298,9 +298,15 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
      * {@inheritDoc}
      */
     protected function export_settings(): array {
+        // get_option()'s [] default only applies to a missing row; a row that
+        // exists but holds a scalar/false (reset, legacy, corrupted) would flow
+        // into the array-typed helpers below and throw a TypeError. Normalize.
         $wpseo = get_option('wpseo', []);
+        $wpseo = is_array($wpseo) ? $wpseo : [];
         $titles = get_option('wpseo_titles', []);
+        $titles = is_array($titles) ? $titles : [];
         $social = get_option('wpseo_social', []);
+        $social = is_array($social) ? $social : [];
 
         return [
             [
@@ -603,6 +609,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
      */
     private function get_flattened_taxonomy_meta(): array {
         $tax_meta = get_option('wpseo_taxonomy_meta', []);
+        $tax_meta = is_array($tax_meta) ? $tax_meta : [];
         if (!is_array($tax_meta)) {
             return [];
         }
@@ -816,6 +823,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
         $out = [];
 
         $news = get_option('wpseo_news', []);
+        $news = is_array($news) ? $news : [];
         if (is_array($news) && !empty($news['news_sitemap_include_post_types'])) {
             // Yoast News stores this as [post_type => 'on'] rather than a list.
             $types = $news['news_sitemap_include_post_types'];
@@ -825,6 +833,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
         }
 
         $video = get_option('wpseo_video', []);
+        $video = is_array($video) ? $video : [];
         if (is_array($video) && !empty($video['videositemap_posttypes'])) {
             $types = $video['videositemap_posttypes'];
             $out['video_post_types'] = is_array($types) && $this->is_assoc_toggle_map($types)

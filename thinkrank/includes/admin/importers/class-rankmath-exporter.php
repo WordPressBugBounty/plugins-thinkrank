@@ -405,9 +405,15 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * {@inheritDoc}
      */
     protected function export_settings(): array {
+        // get_option()'s [] default only covers a missing row; a row holding a
+        // scalar/false would flow into the array-typed helpers below and throw a
+        // TypeError. Normalize each to an array.
         $general = get_option('rank-math-options-general', []);
+        $general = is_array($general) ? $general : [];
         $titles = get_option('rank-math-options-titles', []);
+        $titles = is_array($titles) ? $titles : [];
         $sitemap = get_option('rank-math-options-sitemap', []);
+        $sitemap = is_array($sitemap) ? $sitemap : [];
 
         return [
             [

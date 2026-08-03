@@ -86,6 +86,7 @@ class Google_OAuth_Proxy {
      */
     public function init(): void {
         add_action('init', [$this, 'register_rewrites']);
+        add_action('update_option_permalink_structure', [$this, 'reset_rewrite_version']);
         add_filter('query_vars', [$this, 'register_query_var']);
         add_action('template_redirect', [$this, 'handle_callback']);
         add_action('admin_post_thinkrank_google_connect', [$this, 'handle_connect']);
@@ -114,15 +115,44 @@ class Google_OAuth_Proxy {
      * A front-end rewrite (rather than admin-ajax) keeps the return URL stable
      * and free of query args, so the proxy can append its own params safely.
      *
+     * WordPress only evaluates rewrite rules when a permalink structure is set,
+     * so on Plain-permalink sites the rule (and its flush) would be dead weight —
+     * get_redirect_uri() routes through the query var there instead.
+     *
      * @return void
      */
     public function register_rewrites(): void {
+        if ($this->is_plain_permalinks()) {
+            return;
+        }
+
         add_rewrite_rule('^thinkrank-google-auth/?$', 'index.php?thinkrank_google_auth=1', 'top');
 
         if (get_option('thinkrank_google_rewrite_version') !== self::REWRITE_VERSION) {
             flush_rewrite_rules(false);
             update_option('thinkrank_google_rewrite_version', self::REWRITE_VERSION);
         }
+    }
+
+    /**
+     * Drop the stored rewrite version when the permalink structure changes.
+     *
+     * Without this, a site switching from Plain to pretty permalinks would keep
+     * the already-current version marker and never re-register/flush our rule.
+     *
+     * @return void
+     */
+    public function reset_rewrite_version(): void {
+        delete_option('thinkrank_google_rewrite_version');
+    }
+
+    /**
+     * Whether the site runs on Plain permalinks (no rewrite rules evaluated).
+     *
+     * @return bool
+     */
+    private function is_plain_permalinks(): bool {
+        return '' === (string) get_option('permalink_structure');
     }
 
     /**
@@ -139,9 +169,18 @@ class Google_OAuth_Proxy {
     /**
      * The URL the proxy redirects the browser back to.
      *
+     * The pretty path only resolves through the registered rewrite rule, which
+     * WordPress skips entirely on Plain permalinks — so fall back to the raw
+     * query var there. The query var is registered either way, so the callback
+     * handler works unchanged.
+     *
      * @return string
      */
     public function get_redirect_uri(): string {
+        if ($this->is_plain_permalinks()) {
+            return home_url('/?thinkrank_google_auth=1');
+        }
+
         return home_url('/thinkrank-google-auth/');
     }
 
@@ -211,8 +250,19 @@ class Google_OAuth_Proxy {
      * @return void
      */
     public function handle_callback(): void {
-        if (!get_query_var('thinkrank_google_auth')) {
+        $flag = (string) get_query_var('thinkrank_google_auth');
+        if ('' === $flag) {
             return;
+        }
+
+        // With the query-var return URL, a proxy that joins its params with '?'
+        // instead of '&' folds them into this var's value. Recover them so the
+        // flow still completes rather than failing as invalid_state.
+        $separator = strpos($flag, '?');
+        if (false !== $separator) {
+            parse_str(substr($flag, $separator + 1), $recovered);
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only merge; params are verified below.
+            $_GET = array_merge($recovered, $_GET);
         }
 
         // phpcs:disable WordPress.Security.NonceVerification.Recommended -- the

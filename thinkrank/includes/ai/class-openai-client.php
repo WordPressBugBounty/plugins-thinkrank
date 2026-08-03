@@ -418,6 +418,13 @@ class OpenAI_Client {
             throw new \Exception('Invalid JSON response from OpenAI API');
         }
 
+        // A valid-but-scalar body (null/number/string from a proxy/gateway on a
+        // 2xx) would violate this method's : array return type; reject it here so
+        // it surfaces as a catchable \Exception, not an uncatchable TypeError.
+        if (!is_array($data)) {
+            throw new \Exception('Unexpected non-array response from OpenAI API');
+        }
+
         return $data;
     }
 

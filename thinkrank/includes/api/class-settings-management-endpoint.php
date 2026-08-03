@@ -458,6 +458,19 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 );
             }
 
+            // Each per-category value must be an array before it reaches the
+            // strict array-typed manager methods; reject non-array values with a
+            // 400 instead of letting them surface as an uncaught TypeError.
+            foreach ($settings as $category => $category_settings) {
+                if (!is_array($category_settings)) {
+                    return new WP_Error(
+                        'invalid_settings',
+                        "Settings for category '{$category}' must be provided as an object",
+                        ['status' => 400]
+                    );
+                }
+            }
+
             $validation_results = [];
             $update_results = [];
 
@@ -731,6 +744,9 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
     public function validate_settings(WP_REST_Request $request): WP_REST_Response {
         try {
             $settings = $request->get_param('settings');
+            if (!is_array($settings)) {
+                $settings = [];
+            }
             $categories = $request->get_param('categories') ?? array_keys($this->setting_categories);
 
             $validation_results = [];
@@ -742,6 +758,16 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 }
 
                 $category_settings = $settings[$category] ?? [];
+                if (!is_array($category_settings)) {
+                    $validation_results[$category] = [
+                        'valid' => false,
+                        'errors' => ['Settings for this category must be an object'],
+                        'warnings' => [],
+                        'suggestions' => [],
+                    ];
+                    $overall_valid = false;
+                    continue;
+                }
 
                 if ($this->has_seo_manager($category)) {
                     $validation = $this->get_seo_manager($category)->validate_settings($category_settings);
@@ -940,6 +966,26 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                     'Failed to parse import data',
                     ['status' => 400]
                 );
+            }
+
+            if (!is_array($parsed_data)) {
+                return new WP_Error(
+                    'invalid_import_data',
+                    'Import data must be an object of settings categories',
+                    ['status' => 400]
+                );
+            }
+
+            // Reject non-array per-category values before they reach the strict
+            // array-typed manager methods (avoids an uncaught TypeError).
+            foreach ($parsed_data as $category => $category_settings) {
+                if (!is_array($category_settings)) {
+                    return new WP_Error(
+                        'invalid_import_data',
+                        "Settings for category '{$category}' must be an object",
+                        ['status' => 400]
+                    );
+                }
             }
 
             $import_results = [];

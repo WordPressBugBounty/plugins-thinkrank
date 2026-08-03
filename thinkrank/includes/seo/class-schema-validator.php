@@ -203,7 +203,7 @@ class Schema_Validator {
      */
     private function validate_article_schema(array $schema, array $validation): array {
         // Check headline length (Google recommends under 110 characters)
-        if (isset($schema['headline']) && strlen($schema['headline']) > 110) {
+        if (isset($schema['headline']) && is_string($schema['headline']) && strlen($schema['headline']) > 110) {
             $validation['warnings'][] = 'Headline is longer than 110 characters, may be truncated in search results';
         }
 
@@ -407,7 +407,7 @@ class Schema_Validator {
      */
     private function validate_faq_schema(array $schema, array $validation): array {
         // Check minimum number of questions
-        if (isset($schema['mainEntity']) && count($schema['mainEntity']) < 2) {
+        if (isset($schema['mainEntity']) && is_array($schema['mainEntity']) && count($schema['mainEntity']) < 2) {
             $validation['warnings'][] = 'FAQ pages should have at least 2 questions for optimal SEO';
         }
 

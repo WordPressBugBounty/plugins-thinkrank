@@ -985,10 +985,12 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             $attachment_id = attachment_url_to_postid($logo_url);
             if ($attachment_id) {
                 $image_meta = wp_get_attachment_metadata($attachment_id);
-                if ($image_meta && isset($image_meta['width'], $image_meta['height'])) {
-                    $width = $image_meta['width'];
-                    $height = $image_meta['height'];
+                $width  = isset($image_meta['width']) ? (int) $image_meta['width'] : 0;
+                $height = isset($image_meta['height']) ? (int) $image_meta['height'] : 0;
 
+                // SVG logos store 0x0 metadata — no dimension/ratio analysis
+                // is possible (and dividing by 0 is fatal).
+                if ($image_meta && $width > 0 && $height > 0) {
                     if ($width < 112 || $height < 112) {
                         $optimization['warnings'][] = "Logo dimensions ({$width}x{$height}) are below recommended minimum (112x112)";
                         $optimization['score'] -= 10;

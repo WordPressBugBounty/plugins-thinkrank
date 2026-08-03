@@ -72,6 +72,20 @@ body:has(#thinkrank-root) .wrap > h1:first-child {
 		height: 0;
 		display: none;
 	}
+
+	/* Let WP's hover fly-out submenus escape the scroll container above.
+	   `overflow-y: auto` on #adminmenuwrap makes it clip on BOTH axes (per the
+	   CSS spec, an `auto` axis forces the other axis to clip too), which cuts
+	   off the fly-out panels WP pops out to the right for non-current top-level
+	   menu items. Promoting the hovered fly-out to `position: fixed` lifts it
+	   out of the clipping context so it renders over the page. In the normal
+	   (non-folded) menu WP does not set a viewport-relative `top` on these, so
+	   `positionAdminFlyouts()` in the admin bundle sets `top`/`left` from the
+	   hovered item's rect; the values below are only a first-paint fallback. */
+	body:has(#thinkrank-root) #adminmenu li.wp-not-current-submenu:hover .wp-submenu {
+		position: fixed;
+		left: 160px;
+	}
 }
 
 /* Ensure Inter font applies inside both admin shell and metabox */
@@ -706,6 +720,9 @@ video {
 .tr-root .tr-bottom-1\.5{
   bottom: 0.375rem;
 }
+.tr-root .tr-bottom-\[-3rem\]{
+  bottom: -3rem;
+}
 .tr-root .tr-bottom-full{
   bottom: 100%;
 }
@@ -724,6 +741,9 @@ video {
 .tr-root .tr-left-3{
   left: 0.75rem;
 }
+.tr-root .tr-left-\[6rem\]{
+  left: 6rem;
+}
 .tr-root .tr-left-full{
   left: 100%;
 }
@@ -732,6 +752,9 @@ video {
 }
 .tr-root .tr-right-3{
   right: 0.75rem;
+}
+.tr-root .tr-right-\[-2rem\]{
+  right: -2rem;
 }
 .tr-root .tr-right-full{
   right: 100%;
@@ -747,6 +770,9 @@ video {
 }
 .tr-root .tr-top-4{
   top: 1rem;
+}
+.tr-root .tr-top-\[-2\.5rem\]{
+  top: -2.5rem;
 }
 .tr-root .tr-top-full{
   top: 100%;
@@ -968,8 +994,14 @@ video {
 .tr-root .tr-h-3\.5{
   height: 0.875rem;
 }
+.tr-root .tr-h-32{
+  height: 8rem;
+}
 .tr-root .tr-h-4{
   height: 1rem;
+}
+.tr-root .tr-h-40{
+  height: 10rem;
 }
 .tr-root .tr-h-5{
   height: 1.25rem;
@@ -1045,6 +1077,9 @@ video {
 }
 .tr-root .tr-w-3\.5{
   width: 0.875rem;
+}
+.tr-root .tr-w-32{
+  width: 8rem;
 }
 .tr-root .tr-w-36{
   width: 9rem;
@@ -1337,6 +1372,9 @@ video {
 .tr-root .tr-gap-3{
   gap: 0.75rem;
 }
+.tr-root .tr-gap-3\.5{
+  gap: 0.875rem;
+}
 .tr-root .tr-gap-4{
   gap: 1rem;
 }
@@ -1533,6 +1571,10 @@ video {
   --tw-border-opacity: 1;
   border-color: rgb(254 240 138 / var(--tw-border-opacity, 1));
 }
+.tr-root .tr-border-b-\[\#E5E7EB\]{
+  --tw-border-opacity: 1;
+  border-bottom-color: rgb(229 231 235 / var(--tw-border-opacity, 1));
+}
 .tr-root .tr-border-t-transparent{
   border-top-color: transparent;
 }
@@ -1547,6 +1589,26 @@ video {
 .tr-root .tr-bg-\[\#F6F7FB\]{
   --tw-bg-opacity: 1;
   background-color: rgb(246 247 251 / var(--tw-bg-opacity, 1));
+}
+.tr-root .tr-bg-\[\#F7F8FB\]{
+  --tw-bg-opacity: 1;
+  background-color: rgb(247 248 251 / var(--tw-bg-opacity, 1));
+}
+.tr-root .tr-bg-\[\#ecfdf3\]{
+  --tw-bg-opacity: 1;
+  background-color: rgb(236 253 243 / var(--tw-bg-opacity, 1));
+}
+.tr-root .tr-bg-\[\#f2f4f7\]{
+  --tw-bg-opacity: 1;
+  background-color: rgb(242 244 247 / var(--tw-bg-opacity, 1));
+}
+.tr-root .tr-bg-\[\#fef3f2\]{
+  --tw-bg-opacity: 1;
+  background-color: rgb(254 243 242 / var(--tw-bg-opacity, 1));
+}
+.tr-root .tr-bg-\[\#fffaeb\]{
+  --tw-bg-opacity: 1;
+  background-color: rgb(255 250 235 / var(--tw-bg-opacity, 1));
 }
 .tr-root .tr-bg-\[var\(--tr-bg-subtle\)\]{
   background-color: var(--tr-bg-subtle);
@@ -1659,8 +1721,17 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
 }
+.tr-root .tr-bg-white\/10{
+  background-color: rgb(255 255 255 / 0.1);
+}
+.tr-root .tr-bg-white\/15{
+  background-color: rgb(255 255 255 / 0.15);
+}
 .tr-root .tr-bg-white\/25{
   background-color: rgb(255 255 255 / 0.25);
+}
+.tr-root .tr-bg-white\/5{
+  background-color: rgb(255 255 255 / 0.05);
 }
 .tr-root .tr-bg-yellow-100{
   --tw-bg-opacity: 1;
@@ -1669,6 +1740,9 @@ video {
 .tr-root .tr-bg-yellow-50{
   --tw-bg-opacity: 1;
   background-color: rgb(254 252 232 / var(--tw-bg-opacity, 1));
+}
+.tr-root .tr-bg-\[linear-gradient\(90deg\,\#4c4cff_58\%\,\#3535b0_118\%\)\]{
+  background-image: linear-gradient(90deg,#4c4cff 58%,#3535b0 118%);
 }
 .tr-root .tr-object-cover{
   object-fit: cover;
@@ -1864,9 +1938,6 @@ video {
 }
 .tr-root .tr-pt-2{
   padding-top: 0.5rem;
-}
-.tr-root .tr-pt-3{
-  padding-top: 0.75rem;
 }
 .tr-root .tr-pt-4{
   padding-top: 1rem;
@@ -2177,6 +2248,11 @@ video {
   outline: 2px solid transparent;
   outline-offset: 2px;
 }
+.tr-root .tr-ring-1{
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
 .tr-root .tr-ring-2{
   --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
   --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
@@ -2185,6 +2261,13 @@ video {
 .tr-root .tr-ring-white{
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(255 255 255 / var(--tw-ring-opacity, 1));
+}
+.tr-root .tr-ring-white\/25{
+  --tw-ring-color: rgb(255 255 255 / 0.25);
+}
+.tr-root .tr-blur-2xl{
+  --tw-blur: blur(40px);
+  filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
 }
 .tr-root .tr-backdrop-blur-sm{
   --tw-backdrop-blur: blur(4px);
@@ -2207,6 +2290,11 @@ video {
 }
 .tr-root .tr-transition-opacity{
   transition-property: opacity;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+.tr-root .tr-transition-shadow{
+  transition-property: box-shadow;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
@@ -2420,9 +2508,9 @@ video {
   border-color: rgb(68 81 255 / var(--tw-border-opacity, 1));
 }
 
-.tr-root .hover\:tr-border-brand:hover{
+.tr-root .hover\:tr-border-\[\#A9AEC0\]:hover{
   --tw-border-opacity: 1;
-  border-color: rgb(68 81 255 / var(--tw-border-opacity, 1));
+  border-color: rgb(169 174 192 / var(--tw-border-opacity, 1));
 }
 
 .tr-root .hover\:tr-border-danger:hover{
@@ -2438,6 +2526,11 @@ video {
 .tr-root .hover\:tr-bg-\[\#3641D9\]:hover{
   --tw-bg-opacity: 1;
   background-color: rgb(54 65 217 / var(--tw-bg-opacity, 1));
+}
+
+.tr-root .hover\:tr-bg-\[\#F7F8FB\]:hover{
+  --tw-bg-opacity: 1;
+  background-color: rgb(247 248 251 / var(--tw-bg-opacity, 1));
 }
 
 .tr-root .hover\:tr-bg-brand:hover{
@@ -2474,6 +2567,11 @@ video {
   background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
 }
 
+.tr-root .hover\:tr-text-\[\#3641D9\]:hover{
+  --tw-text-opacity: 1;
+  color: rgb(54 65 217 / var(--tw-text-opacity, 1));
+}
+
 .tr-root .hover\:tr-text-blue-800:hover{
   --tw-text-opacity: 1;
   color: rgb(30 64 175 / var(--tw-text-opacity, 1));
@@ -2482,11 +2580,6 @@ video {
 .tr-root .hover\:tr-text-brand:hover{
   --tw-text-opacity: 1;
   color: rgb(68 81 255 / var(--tw-text-opacity, 1));
-}
-
-.tr-root .hover\:tr-text-danger:hover{
-  --tw-text-opacity: 1;
-  color: rgb(146 28 19 / var(--tw-text-opacity, 1));
 }
 
 .tr-root .hover\:tr-text-primary:hover{
@@ -2526,6 +2619,11 @@ video {
   --tw-shadow: 0 4px 6px -1px rgba(0,0,0,.10), 0 2px 4px -1px rgba(0,0,0,.06);
   --tw-shadow-colored: 0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -1px var(--tw-shadow-color);
   box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+
+.tr-root .hover\:tr-brightness-110:hover{
+  --tw-brightness: brightness(1.1);
+  filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
 }
 
 .tr-root .focus\:tr-border-brand:focus{
@@ -2621,6 +2719,10 @@ video {
 
   .tr-root .sm\:tr-block{
     display: block;
+  }
+
+  .tr-root .sm\:tr-flex-1{
+    flex: 1 1 0%;
   }
 
   .tr-root .sm\:tr-grid-cols-2{

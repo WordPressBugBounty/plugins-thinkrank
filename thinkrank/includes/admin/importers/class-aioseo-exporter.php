@@ -516,9 +516,11 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
             $options = [];
         }
 
-        $search_appearance = $options['searchAppearance'] ?? [];
-        $social = $options['social'] ?? [];
-        $sitemap = $options['sitemap'] ?? [];
+        // Guard against scalar sub-values (a malformed/legacy JSON blob) before
+        // they reach the array-typed extractors below.
+        $search_appearance = is_array($options['searchAppearance'] ?? null) ? $options['searchAppearance'] : [];
+        $social = is_array($options['social'] ?? null) ? $options['social'] : [];
+        $sitemap = is_array($options['sitemap'] ?? null) ? $options['sitemap'] : [];
         $archives = is_array($search_appearance['archives'] ?? null) ? $search_appearance['archives'] : [];
 
         // AIOSEO Pro add-on settings (news/video sitemaps, image SEO, local
@@ -592,7 +594,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
                     // title_formats, resolved by a different renderer.
                     'post_type_settings' => $this->extract_aioseo_post_type_settings($dynamic_sa),
                     'author_archives'    => $this->extract_aioseo_author_archives($archives),
-                    'breadcrumb_settings' => $this->extract_aioseo_breadcrumbs($options['breadcrumbs'] ?? []),
+                    'breadcrumb_settings' => $this->extract_aioseo_breadcrumbs(is_array($options['breadcrumbs'] ?? null) ? $options['breadcrumbs'] : []),
                     // Webmaster-tools verification codes. ThinkRank only renders
                     // a Pinterest verification tag today (the migrator applies
                     // it); the rest is preserved here — this bucket is NOT in

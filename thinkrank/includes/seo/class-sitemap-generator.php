@@ -15,6 +15,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\SEO;
 
+use InvalidArgumentException;
+
 // Prevent direct access.
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -1372,7 +1374,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             $this->get_primary_sitemap_filename($settings),
         ];
 
-        foreach ($settings['sitemap_urls'] ?? [] as $config) {
+        foreach ((is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : []) as $config) {
             if (empty($config['url'])) {
                 continue;
             }
@@ -1439,7 +1441,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // flat urlset misnamed sitemap_index.xml.
         $settings = $this->maybe_promote_to_index($settings);
 
-        if (!empty($settings['use_sitemap_index']) || count($settings['sitemap_urls'] ?? []) > 1) {
+        if (!empty($settings['use_sitemap_index']) || count((is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : [])) > 1) {
             $results = $this->generate_multiple_sitemaps($settings);
             $written = !empty($results['success']);
         } else {
@@ -1472,7 +1474,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return array Possibly-updated settings.
      */
     public function maybe_promote_to_index(array $settings): array {
-        $has_children = count($settings['sitemap_urls'] ?? []) > 1;
+        $has_children = count((is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : [])) > 1;
 
         // Inclusion flags may be absent from a partial payload (e.g. the manual
         // generate endpoint) — fall back to saved settings so synthesized child
@@ -1539,7 +1541,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     public function get_primary_sitemap_filename(array $settings): string {
         $use_index = !empty($settings['use_sitemap_index']);
 
-        foreach ($settings['sitemap_urls'] ?? [] as $config) {
+        foreach ((is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : []) as $config) {
             if (empty($config['enabled']) || empty($config['url'])) {
                 continue;
             }
@@ -1691,7 +1693,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             'total_urls' => 0
         ];
 
-        $sitemap_urls = $settings['sitemap_urls'] ?? [];
+        $sitemap_urls = (is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : []);
 
         if (empty($sitemap_urls)) {
             $results['success'] = false;

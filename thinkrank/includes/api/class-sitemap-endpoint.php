@@ -372,6 +372,15 @@ class Sitemap_Endpoint extends WP_REST_Controller {
             }
 
             $options = $request->get_param('options') ?? [];
+            if (!is_array($options)) {
+                $options = [];
+            }
+            // sitemap_urls must be an array wherever it is counted/iterated below
+            // (and in the generator); drop a wrong-typed value so a malformed
+            // request yields normal output instead of an uncaught TypeError.
+            if (isset($options['sitemap_urls']) && !is_array($options['sitemap_urls'])) {
+                unset($options['sitemap_urls']);
+            }
 
             // Resolve index-vs-single mode from the use_sitemap_index toggle
             // (synthesizing child sitemaps when the toggle is on but none are

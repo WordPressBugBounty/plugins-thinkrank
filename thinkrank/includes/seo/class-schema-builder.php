@@ -778,9 +778,11 @@ class Schema_Builder {
         $attachment_id = attachment_url_to_postid($image_url);
         if ($attachment_id) {
             $image_data = wp_get_attachment_image_src($attachment_id, 'full');
-            if ($image_data) {
-                $image_schema['width'] = $image_data[1];
-                $image_schema['height'] = $image_data[2];
+            // SVGs report 0x0 — omit the dimensions rather than emitting
+            // zeroes, which invalidate the ImageObject.
+            if ($image_data && (int) $image_data[1] > 0 && (int) $image_data[2] > 0) {
+                $image_schema['width'] = (int) $image_data[1];
+                $image_schema['height'] = (int) $image_data[2];
             }
         }
 
@@ -1595,7 +1597,10 @@ class Schema_Builder {
         ];
 
         foreach ($business_hours as $day => $hours) {
-            $day_code = $day_mapping[strtolower($day)] ?? $day;
+            // $day may be an int key when business_hours is a numerically-indexed
+            // list (e.g. from an import/API); cast before strtolower() so it does
+            // not throw a TypeError under strict_types.
+            $day_code = $day_mapping[strtolower((string) $day)] ?? $day;
             if (!empty($hours['open']) && !empty($hours['close'])) {
                 $opening_hours[] = "{$day_code} {$hours['open']}-{$hours['close']}";
             }

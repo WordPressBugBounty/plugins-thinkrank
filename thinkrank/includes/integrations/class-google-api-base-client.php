@@ -134,6 +134,13 @@ abstract class Google_API_Base_Client {
             throw new \Exception('Invalid JSON response from Google API');
         }
 
+        // A valid-but-scalar body (null/number/string from a proxy/WAF/CDN on a
+        // 2xx) would violate this method's : array return type; reject it here so
+        // it surfaces as a catchable \Exception, not an uncatchable TypeError.
+        if (!is_array($data)) {
+            throw new \Exception('Unexpected non-array response from Google API');
+        }
+
         // Update rate limit tracking after successful request
         $this->update_rate_limit();
 

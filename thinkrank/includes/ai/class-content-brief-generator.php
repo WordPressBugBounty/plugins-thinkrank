@@ -1058,6 +1058,12 @@ class Content_Brief_Generator {
             ARRAY_A
         );
 
+        // $wpdb->get_results() returns null on a DB error; this method's return
+        // type is : array, so normalize before iterating/returning.
+        if (!is_array($results)) {
+            return [];
+        }
+
         // Decode JSON data and normalize for React compatibility
         foreach ($results as &$brief) {
             $brief = $this->hydrate_brief_row($brief);

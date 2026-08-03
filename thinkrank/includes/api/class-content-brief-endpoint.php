@@ -368,7 +368,18 @@ class Content_Brief_Endpoint {
      * @param array $keywords Keywords to validate
      * @return bool|WP_Error Validation result
      */
-    public function validate_keywords(array $keywords): bool|WP_Error {
+    public function validate_keywords($keywords): bool|WP_Error {
+        // A custom validate_callback replaces WP's array type-coercion, so the
+        // raw param arrives here as-is; reject non-arrays instead of letting a
+        // strict array type hint throw an uncaught TypeError during dispatch.
+        if (!is_array($keywords)) {
+            return new WP_Error(
+                'invalid_keywords',
+                'Keywords must be provided as an array',
+                ['status' => 400]
+            );
+        }
+
         if (empty($keywords)) {
             return new WP_Error(
                 'invalid_keywords',

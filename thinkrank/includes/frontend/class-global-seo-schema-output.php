@@ -690,8 +690,9 @@ class Global_SEO_Schema_Output {
                 return [
                     '@type' => 'ImageObject',
                     'url' => $image_url,
-                    'width' => $image_meta['width'] ?? null,
-                    'height' => $image_meta['height'] ?? null,
+                    // SVGs report 0x0 — send null rather than a zero dimension.
+                    'width' => !empty($image_meta['width']) ? (int) $image_meta['width'] : null,
+                    'height' => !empty($image_meta['height']) ? (int) $image_meta['height'] : null,
                 ];
             }
         }
