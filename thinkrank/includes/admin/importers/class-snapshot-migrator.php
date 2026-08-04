@@ -23,6 +23,7 @@ declare(strict_types=1);
 namespace ThinkRank\Admin\Importers;
 
 use ThinkRank\SEO\Focus_Keywords;
+use ThinkRank\SEO\Pattern_Resolver;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -590,9 +591,15 @@ class Snapshot_Migrator {
                 return array_merge($base, ['status' => 'no_content']);
             }
 
+            // Score against the effective title/description (custom value, else
+            // the resolved Global pattern) so posts that inherit their title or
+            // description from a global pattern are scored the same as in the
+            // editor and on the frontend, instead of as if those fields were
+            // empty. Pattern_Resolver::title() already falls back through the
+            // WordPress post title, so the previous post_title fallback is covered.
             $metadata = [
-                'title'       => get_post_meta($post_id, '_thinkrank_seo_title', true) ?: ($content_data['title'] ?? ''),
-                'description' => get_post_meta($post_id, '_thinkrank_meta_description', true) ?: '',
+                'title'       => Pattern_Resolver::effective_title($post_id),
+                'description' => Pattern_Resolver::effective_description($post_id),
             ];
 
             // Score against all focus keywords; the calculator uses the

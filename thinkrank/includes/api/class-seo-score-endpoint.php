@@ -102,6 +102,24 @@ class SEOScoreEndpoint {
                     'type' => 'string',
                     'sanitize_callback' => 'wp_kses_post',
                 ],
+                // Unsaved SEO title/description straight from the editor. Both
+                // are scored factors, and without them an "Apply" that changes
+                // the title scores against the stale saved value — the score
+                // only moved once the post was saved, which read as the score
+                // updating minutes later on its own. Omitted (null) means "use
+                // what's saved"; an empty string means the user cleared the
+                // field, which must fall back to the rendered pattern exactly
+                // as an empty stored value does.
+                'live_title' => [
+                    'required' => false,
+                    'type' => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'live_description' => [
+                    'required' => false,
+                    'type' => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
                 'readability_score' => [
                     'required' => false,
                     'type' => 'string',
@@ -200,15 +218,22 @@ class SEOScoreEndpoint {
             // description — resolve any variable tags in a custom value, and fall
             // back to the rendered Global/Bulk pattern when the field is empty, so
             // the length-based scoring matches what the frontend actually outputs.
-            $raw_title = get_post_meta($post_id, '_thinkrank_seo_title', true);
-            $raw_description = get_post_meta($post_id, '_thinkrank_meta_description', true);
+            // Prefer the editor's live values when the request carried them, so
+            // an unsaved title/description edit scores immediately instead of
+            // waiting for the post to be saved. `null` means the request said
+            // nothing about the field, which keeps the saved value.
+            $live_title       = $request->get_param('live_title');
+            $live_description = $request->get_param('live_description');
+
+            $raw_title = $live_title !== null
+                ? (string) $live_title
+                : get_post_meta($post_id, '_thinkrank_seo_title', true);
+            $raw_description = $live_description !== null
+                ? (string) $live_description
+                : get_post_meta($post_id, '_thinkrank_meta_description', true);
             $metadata = [
-                'title' => $raw_title !== ''
-                    ? \ThinkRank\SEO\Pattern_Resolver::resolve_value($raw_title, $post_id)
-                    : \ThinkRank\SEO\Pattern_Resolver::title($post_id),
-                'description' => $raw_description !== ''
-                    ? \ThinkRank\SEO\Pattern_Resolver::resolve_value($raw_description, $post_id)
-                    : \ThinkRank\SEO\Pattern_Resolver::description($post_id),
+                'title' => \ThinkRank\SEO\Pattern_Resolver::effective_value($raw_title, $post_id, 'title'),
+                'description' => \ThinkRank\SEO\Pattern_Resolver::effective_value($raw_description, $post_id, 'description'),
                 // Fallback source for the scorer when the request carries no
                 // keyword (e.g. a plain "score this post" call). An explicit
                 // request keyword still wins, so the editor keeps scoring

@@ -2,14 +2,14 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 1.25.0\n"
+"Project-Id-Version: ThinkRank 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-03T12:14:45+00:00\n"
+"POT-Creation-Date: 2026-08-04T10:59:42+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
@@ -131,23 +131,23 @@ msgstr ""
 msgid "The device profile to report."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-post-seo-checks.php:30
+#: includes/abilities/analysis/class-get-post-seo-checks.php:31
 msgid "Get ThinkRank Post SEO Checks"
 msgstr ""
 
-#: includes/abilities/analysis/class-get-post-seo-checks.php:31
+#: includes/abilities/analysis/class-get-post-seo-checks.php:32
 msgid "Run ThinkRank SEO score analysis for one or more posts, pages, or custom post type items."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-post-seo-checks.php:61
+#: includes/abilities/analysis/class-get-post-seo-checks.php:62
 msgid "One or more post IDs to inspect."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-post-seo-checks.php:107
+#: includes/abilities/analysis/class-get-post-seo-checks.php:108
 msgid "At least one valid post ID is required."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-post-seo-checks.php:135
+#: includes/abilities/analysis/class-get-post-seo-checks.php:145
 msgid "SEO checks generated."
 msgstr ""
 
@@ -189,30 +189,30 @@ msgstr ""
 msgid "Retrieve ThinkRank SEO opportunities (e.g. striking-distance keywords). Requires Google Search Console to be connected; returns empty data otherwise."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-seo-score.php:30
+#: includes/abilities/analysis/class-get-seo-score.php:31
 msgid "Get ThinkRank SEO Score"
 msgstr ""
 
-#: includes/abilities/analysis/class-get-seo-score.php:31
+#: includes/abilities/analysis/class-get-seo-score.php:32
 msgid "Calculate the ThinkRank SEO score for a single post, analyzing its content against its configured title and meta description."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-seo-score.php:62
+#: includes/abilities/analysis/class-get-seo-score.php:63
 msgid "The ID of the post to score."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-seo-score.php:66
+#: includes/abilities/analysis/class-get-seo-score.php:67
 msgid "Persist the calculated score so it appears in the post list SEO column and score history. Defaults to false, which only reports the score."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-seo-score.php:105
+#: includes/abilities/analysis/class-get-seo-score.php:106
 #: includes/abilities/content/class-get-pillar-content.php:105
 #: includes/abilities/content/class-get-post-seo.php:96
 #: includes/abilities/content/class-update-pillar-content.php:88
 msgid "A valid post ID is required."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-seo-score.php:116
+#: includes/abilities/analysis/class-get-seo-score.php:117
 msgid "Unable to analyze the content for this post."
 msgstr ""
 
@@ -1321,17 +1321,17 @@ msgstr ""
 
 #: includes/admin/class-manager.php:580
 #: includes/admin/class-metabox-manager.php:391
-#: src/divi/index.js:253
-#: src/divi/index.js:254
-#: src/elementor/index.js:38
+#: src/divi/index.js:160
+#: src/divi/index.js:161
+#: src/elementor/index.js:39
 #: src/metabox/components/MetaboxDrawer.js:97
 #: src/metabox/components/MetaboxDrawer.js:149
 #: src/metabox/components/MetaboxDrawer.js:150
 #: src/metabox/components/MetaboxDrawer.js:155
 #: src/metabox/components/MetaboxDrawer.js:178
 #: src/metabox/HeaderButton.js:139
-#: src/oxygen/index.js:242
-#: src/oxygen/index.js:243
+#: src/oxygen/index.js:149
+#: src/oxygen/index.js:150
 msgid "ThinkRank SEO"
 msgstr ""
 
@@ -1351,11 +1351,11 @@ msgstr ""
 #: includes/admin/class-manager.php:670
 #: includes/admin/class-seo-notice.php:102
 #: src/admin/components/essential-seo/email-reporting/PassiveHints.js:125
-#: src/admin/components/essential-seo/SearchConsoleSettings.js:338
+#: src/admin/components/essential-seo/SearchConsoleSettings.js:340
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:320
 #: src/admin/components/essential-seo/SiteIdentityTab.js:920
-#: src/admin/components/seo/ImprovementSuggestions.js:516
-#: src/admin/components/seo/SEOScoreCalculator.js:959
+#: src/admin/components/seo/ImprovementSuggestions.js:547
+#: src/admin/components/seo/SEOScoreCalculator.js:1024
 #: src/admin/setup-wizard/steps/Step2Migration.js:145
 msgid "Dismiss"
 msgstr ""
@@ -1379,7 +1379,7 @@ msgstr ""
 
 #: includes/admin/class-manager.php:828
 #: src/admin/components/import-export/ConfirmationDialog.js:51
-#: src/admin/components/seo/SEOScoreCalculator.js:951
+#: src/admin/components/seo/SEOScoreCalculator.js:1016
 #: src/metabox/components/metabox-schema-tab/ImportSection.js:416
 msgid "Cancel"
 msgstr ""
@@ -1392,7 +1392,7 @@ msgstr ""
 #: includes/admin/class-manager.php:878
 #: src/admin/components/content-brief/ContentStructure.js:1435
 #: src/admin/components/pages/UsageAnalytics.js:18
-#: src/admin/components/seo/SEOScoreCalculator.js:658
+#: src/admin/components/seo/SEOScoreCalculator.js:720
 msgid "Overview"
 msgstr ""
 
@@ -1420,6 +1420,7 @@ msgid "Optimize this content for search & AI with ThinkRank."
 msgstr ""
 
 #: includes/admin/class-metabox-manager.php:442
+#: src/metabox/components/MetaboxApp.js:1057
 #: src/metabox/components/MetaboxDrawer.js:169
 msgid "Open ThinkRank SEO"
 msgstr ""
@@ -1462,9 +1463,7 @@ msgid "Insufficient permissions"
 msgstr ""
 
 #: includes/admin/class-metabox-manager.php:1198
-#: src/divi/index.js:226
-#: src/elementor/index.js:237
-#: src/oxygen/index.js:215
+#: src/metabox/utils/persistSeoFields.js:117
 msgid "SEO settings saved successfully!"
 msgstr ""
 
@@ -1515,7 +1514,7 @@ msgstr ""
 
 #: includes/admin/class-post-list-columns.php:363
 #: src/admin/components/ai/MetadataGenerator.js:554
-#: src/metabox/components/panels/GeneralPanel.js:114
+#: src/metabox/components/panels/GeneralPanel.js:115
 msgid "Meta Description"
 msgstr ""
 
@@ -1582,7 +1581,7 @@ msgstr ""
 msgid "The snapshot still holds data ThinkRank has not applied yet: %s. It stays preserved in the snapshot (cleanup never deletes the snapshot), but the source plugin's copy will be removed. Pass force=true to proceed."
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:2094
+#: includes/admin/importers/class-snapshot-migrator.php:2101
 #: src/admin/components/essential-seo/SidebarNavigation.js:180
 #: src/admin/components/import-export/ExportProgress.js:17
 #: src/admin/components/import-export/PluginImportCard.js:35
@@ -1591,7 +1590,7 @@ msgstr ""
 msgid "Redirections"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:2103
+#: includes/admin/importers/class-snapshot-migrator.php:2110
 #: src/admin/components/import-export/ExportProgress.js:18
 #: src/admin/components/import-export/PluginImportCard.js:36
 #: src/admin/components/import-export/PluginImportCard.js:46
@@ -1874,11 +1873,11 @@ msgstr ""
 msgid "You do not have permission to run the site SEO analyzer."
 msgstr ""
 
-#: includes/api/class-seo-score-endpoint.php:290
+#: includes/api/class-seo-score-endpoint.php:315
 msgid "Existing SEO score retrieved successfully"
 msgstr ""
 
-#: includes/api/class-seo-score-endpoint.php:296
+#: includes/api/class-seo-score-endpoint.php:321
 msgid "No existing SEO analysis found"
 msgstr ""
 
@@ -1922,8 +1921,8 @@ msgstr ""
 #: src/blocks/faq-block/edit.js:80
 #: src/blocks/howto-block/edit.js:96
 #: src/blocks/toc-block/edit.js:103
-#: src/metabox/components/MetaboxApp.js:231
-#: src/metabox/components/panels/GeneralPanel.js:69
+#: src/metabox/components/MetaboxApp.js:256
+#: src/metabox/components/panels/GeneralPanel.js:70
 msgid "General"
 msgstr ""
 
@@ -2349,7 +2348,7 @@ msgstr ""
 
 #: includes/editor/elementor/class-howto-widget.php:126
 #: src/admin/components/content-brief/ContentStructure.js:1465
-#: src/metabox/components/MetaboxApp.js:235
+#: src/metabox/components/MetaboxApp.js:260
 msgid "Schema"
 msgstr ""
 
@@ -3392,7 +3391,7 @@ msgid "Generated SEO Metadata"
 msgstr ""
 
 #: src/admin/components/ai/MetadataGenerator.js:533
-#: src/metabox/components/panels/GeneralPanel.js:77
+#: src/metabox/components/panels/GeneralPanel.js:78
 msgid "SEO Title"
 msgstr ""
 
@@ -3422,52 +3421,52 @@ msgstr ""
 msgid "Use This Variation"
 msgstr ""
 
-#: src/admin/components/ai/SerpPreview.js:128
+#: src/admin/components/ai/SerpPreview.js:129
 #: src/admin/components/essential-seo/GlobalSEOTab.js:435
 #: src/metabox/components/SerpPreview.js:43
 msgid "Search Engine Preview"
 msgstr ""
 
-#: src/admin/components/ai/SerpPreview.js:131
+#: src/admin/components/ai/SerpPreview.js:132
 msgid "How your page will appear on Google search results"
 msgstr ""
 
-#: src/admin/components/ai/SerpPreview.js:178
+#: src/admin/components/ai/SerpPreview.js:179
 msgid "Your SEO Title Will Appear Here"
 msgstr ""
 
-#: src/admin/components/ai/SerpPreview.js:187
+#: src/admin/components/ai/SerpPreview.js:188
 msgid "Your meta description will appear here. Make it compelling to encourage clicks from search results."
 msgstr ""
 
-#: src/admin/components/ai/SerpPreview.js:197
+#: src/admin/components/ai/SerpPreview.js:198
 msgid "Title Length"
 msgstr ""
 
-#: src/admin/components/ai/SerpPreview.js:202
+#: src/admin/components/ai/SerpPreview.js:203
 msgid "Description Length"
 msgstr ""
 
-#: src/admin/components/ai/SerpPreview.js:245
+#: src/admin/components/ai/SerpPreview.js:246
 msgid "Mobile Search Preview"
 msgstr ""
 
-#: src/admin/components/ai/SerpPreview.js:264
+#: src/admin/components/ai/SerpPreview.js:265
 #: src/metabox/components/SerpPreview.js:9
 msgid "Your SEO Title"
 msgstr ""
 
-#: src/admin/components/ai/SerpPreview.js:268
+#: src/admin/components/ai/SerpPreview.js:269
 msgid "Your meta description for mobile…"
 msgstr ""
 
-#: src/admin/components/ai/SerpPreview.js:300
+#: src/admin/components/ai/SerpPreview.js:301
 #: src/admin/components/essential-seo/performance/CWVSection.js:247
 #: src/admin/components/essential-seo/performance/CWVSection.js:308
 msgid "Desktop"
 msgstr ""
 
-#: src/admin/components/ai/SerpPreview.js:306
+#: src/admin/components/ai/SerpPreview.js:307
 #: src/admin/components/essential-seo/performance/CWVSection.js:246
 #: src/admin/components/essential-seo/performance/CWVSection.js:279
 msgid "Mobile"
@@ -3522,7 +3521,7 @@ msgstr ""
 #: src/admin/components/common/BreadcrumbPreview.js:18
 #: src/admin/components/essential-seo/GlobalSEOTab.js:88
 #: src/admin/components/essential-seo/schema/forms/SchemaReviewForm.js:31
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:152
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:156
 #: src/metabox/components/panels/AnalysisPanel.js:19
 msgid "Product"
 msgstr ""
@@ -3672,7 +3671,7 @@ msgid "Validating…"
 msgstr ""
 
 #: src/admin/components/common/OptimizationButton.js:32
-#: src/admin/components/essential-seo/SearchConsoleSettings.js:260
+#: src/admin/components/essential-seo/SearchConsoleSettings.js:262
 #: src/admin/components/pages/Settings.js:1251
 msgid "Test Connection"
 msgstr ""
@@ -4015,8 +4014,8 @@ msgstr ""
 #: src/admin/components/essential-seo/GlobalSEOTab.js:85
 #: src/admin/components/essential-seo/GlobalSEOTab.js:93
 #: src/admin/components/essential-seo/SocialMediaTab.js:1153
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:124
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:144
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:128
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:148
 msgid "Article"
 msgstr ""
 
@@ -4274,7 +4273,7 @@ msgid "SEO"
 msgstr ""
 
 #: src/admin/components/content-brief/ContentStructure.js:1460
-#: src/metabox/components/MetaboxApp.js:236
+#: src/metabox/components/MetaboxApp.js:261
 msgid "Social"
 msgstr ""
 
@@ -4716,7 +4715,7 @@ msgstr ""
 #: src/admin/components/essential-seo/GlobalSEOTab.js:670
 #: src/admin/components/essential-seo/ImageSEOTab.js:852
 #: src/admin/components/essential-seo/schema-tab/SchemaTab.js:483
-#: src/admin/components/essential-seo/SearchConsoleSettings.js:375
+#: src/admin/components/essential-seo/SearchConsoleSettings.js:373
 #: src/admin/components/essential-seo/SiteIdentityTab.js:937
 #: src/admin/components/essential-seo/SocialMediaTab.js:1579
 #: src/admin/components/pages/Settings.js:1243
@@ -4774,7 +4773,7 @@ msgstr ""
 #: src/admin/components/essential-seo/analytics/DashboardSection.js:1933
 #: src/admin/components/essential-seo/analytics/DashboardSection.js:2609
 #: src/admin/components/essential-seo/analytics/DashboardSection.js:2887
-#: src/admin/components/essential-seo/SearchConsoleSettings.js:207
+#: src/admin/components/essential-seo/SearchConsoleSettings.js:209
 msgid "Search Console"
 msgstr ""
 
@@ -8032,12 +8031,12 @@ msgid "Failed to open Rich Results Test. Please try again."
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/api.js:471
-#: src/metabox/components/metabox-schema-tab/api.js:286
+#: src/metabox/components/metabox-schema-tab/api.js:338
 msgid "Schema markup generated successfully!"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/api.js:481
-#: src/metabox/components/metabox-schema-tab/api.js:297
+#: src/metabox/components/metabox-schema-tab/api.js:349
 msgid "Schema generation failed. Please try again."
 msgstr ""
 
@@ -8054,17 +8053,17 @@ msgid "Schema validation failed. Please try again."
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/api.js:658
-#: src/metabox/components/metabox-schema-tab/api.js:365
+#: src/metabox/components/metabox-schema-tab/api.js:417
 msgid "No schema markup to deploy. Please generate schema first."
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/api.js:683
-#: src/metabox/components/metabox-schema-tab/api.js:398
+#: src/metabox/components/metabox-schema-tab/api.js:450
 msgid "Schema markup deployed successfully!"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/api.js:696
-#: src/metabox/components/metabox-schema-tab/api.js:411
+#: src/metabox/components/metabox-schema-tab/api.js:463
 msgid "Schema deployment failed. Please try again."
 msgstr ""
 
@@ -8549,7 +8548,7 @@ msgid "Intermediate"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaHowToForm.js:53
-#: src/metabox/components/MetaboxApp.js:239
+#: src/metabox/components/MetaboxApp.js:264
 #: src/metabox/components/panels/AdvancedPanel.js:24
 msgid "Advanced"
 msgstr ""
@@ -9205,7 +9204,7 @@ msgid "Course"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaReviewForm.js:37
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:149
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:153
 msgid "Software Application"
 msgstr ""
 
@@ -9896,27 +9895,27 @@ msgstr ""
 msgid "Google session expired. Please reconnect your account in the Integrations tab."
 msgstr ""
 
-#: src/admin/components/essential-seo/SearchConsoleSettings.js:231
+#: src/admin/components/essential-seo/SearchConsoleSettings.js:233
 #: src/admin/components/pages/Settings.js:1125
 #: src/admin/setup-wizard/steps/Step4Analytics.js:31
 msgid "Connected"
 msgstr ""
 
-#: src/admin/components/essential-seo/SearchConsoleSettings.js:275
+#: src/admin/components/essential-seo/SearchConsoleSettings.js:277
 msgid "Reconnect"
 msgstr ""
 
-#: src/admin/components/essential-seo/SearchConsoleSettings.js:290
+#: src/admin/components/essential-seo/SearchConsoleSettings.js:292
 #: src/admin/components/pages/MCPConnectionConfig.js:467
 msgid "Disconnect"
 msgstr ""
 
-#: src/admin/components/essential-seo/SearchConsoleSettings.js:346
+#: src/admin/components/essential-seo/SearchConsoleSettings.js:348
 msgid "Property"
 msgstr ""
 
-#: src/admin/components/essential-seo/SearchConsoleSettings.js:349
-msgid "Select a site…"
+#: src/admin/components/essential-seo/SearchConsoleSettings.js:350
+msgid "Search or select a site…"
 msgstr ""
 
 #: src/admin/components/essential-seo/SidebarNavigation.js:62
@@ -12256,67 +12255,79 @@ msgstr ""
 msgid "total records"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:319
-#: src/admin/components/seo/SEOScoreCalculator.js:871
+#: src/admin/components/seo/ImprovementSuggestions.js:321
+#: src/admin/components/seo/SEOScoreCalculator.js:936
 msgid "Excellent Work!"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:322
-#: src/admin/components/seo/SEOScoreCalculator.js:874
+#: src/admin/components/seo/ImprovementSuggestions.js:324
+#: src/admin/components/seo/SEOScoreCalculator.js:939
 msgid "No immediate SEO improvements needed. Your content is well optimized!"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:345
+#: src/admin/components/seo/ImprovementSuggestions.js:347
 msgid "High priority"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:350
+#: src/admin/components/seo/ImprovementSuggestions.js:352
 msgid "Medium priority"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:355
+#: src/admin/components/seo/ImprovementSuggestions.js:357
 msgid "Low priority"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:368
+#: src/admin/components/seo/ImprovementSuggestions.js:370
 msgid "Improvement Suggestions"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:374
-#: src/admin/components/seo/ImprovementSuggestions.js:531
+#: src/admin/components/seo/ImprovementSuggestions.js:376
+#: src/admin/components/seo/ImprovementSuggestions.js:562
 msgid "suggestion"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:375
-#: src/admin/components/seo/ImprovementSuggestions.js:532
+#: src/admin/components/seo/ImprovementSuggestions.js:377
+#: src/admin/components/seo/ImprovementSuggestions.js:563
 msgid "suggestions"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:440
+#: src/admin/components/seo/ImprovementSuggestions.js:451
 msgid "Asking AI why this matters…"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:462
+#: src/admin/components/seo/ImprovementSuggestions.js:471
+msgid "Shows step-by-step guidance — you make this change yourself"
+msgstr ""
+
+#: src/admin/components/seo/ImprovementSuggestions.js:475
+msgid "ThinkRank makes this change for you"
+msgstr ""
+
+#: src/admin/components/seo/ImprovementSuggestions.js:488
 msgid "Applying…"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:466
-msgid "Apply"
+#: src/admin/components/seo/ImprovementSuggestions.js:493
+msgid "How to fix"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:482
+#: src/admin/components/seo/ImprovementSuggestions.js:497
+msgid "Apply with AI"
+msgstr ""
+
+#: src/admin/components/seo/ImprovementSuggestions.js:513
 msgid "Connect an AI provider in ThinkRank → Settings to enable AI explanations"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:496
+#: src/admin/components/seo/ImprovementSuggestions.js:527
 msgid "Hide"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:500
+#: src/admin/components/seo/ImprovementSuggestions.js:531
 msgid "Explain with AI"
 msgstr ""
 
-#: src/admin/components/seo/ImprovementSuggestions.js:533
+#: src/admin/components/seo/ImprovementSuggestions.js:564
 msgid "dismissed"
 msgstr ""
 
@@ -12447,7 +12458,7 @@ msgid "Poor SEO - requires significant work"
 msgstr ""
 
 #: src/admin/components/seo/ScoreBreakdown.js:401
-#: src/admin/components/seo/SEOScoreCalculator.js:662
+#: src/admin/components/seo/SEOScoreCalculator.js:724
 msgid "Suggestions"
 msgstr ""
 
@@ -12455,202 +12466,202 @@ msgstr ""
 msgid "Details"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:171
+#: src/admin/components/seo/SEOScoreCalculator.js:226
 msgid "No post ID provided"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:220
+#: src/admin/components/seo/SEOScoreCalculator.js:281
 msgid "Failed to calculate SEO score"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:227
+#: src/admin/components/seo/SEOScoreCalculator.js:288
 msgid "An error occurred while calculating SEO score"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:334
-#: src/admin/components/seo/SEOScoreCalculator.js:342
+#: src/admin/components/seo/SEOScoreCalculator.js:395
+#: src/admin/components/seo/SEOScoreCalculator.js:403
 msgid "Failed to generate an explanation"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:366
+#: src/admin/components/seo/SEOScoreCalculator.js:443
 msgid "Applied a new SEO title:"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:367
+#: src/admin/components/seo/SEOScoreCalculator.js:444
 msgid "Failed to generate an improved title"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:387
+#: src/admin/components/seo/SEOScoreCalculator.js:464
 msgid "Applied a new meta description:"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:388
+#: src/admin/components/seo/SEOScoreCalculator.js:465
 msgid "Failed to generate a meta description"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:411
+#: src/admin/components/seo/SEOScoreCalculator.js:484
 msgid "Added an authoritative source link:"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:412
+#: src/admin/components/seo/SEOScoreCalculator.js:485
 msgid "Failed to add a source link"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:451
+#: src/admin/components/seo/SEOScoreCalculator.js:513
 msgid "Added a keyword-rich closing paragraph —"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:455
+#: src/admin/components/seo/SEOScoreCalculator.js:517
 msgid "Failed to add a paragraph"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:458
-#: src/admin/components/seo/SEOScoreCalculator.js:459
+#: src/admin/components/seo/SEOScoreCalculator.js:520
+#: src/admin/components/seo/SEOScoreCalculator.js:521
 msgid "keyword density is now"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:458
+#: src/admin/components/seo/SEOScoreCalculator.js:520
 msgid "within range"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:459
+#: src/admin/components/seo/SEOScoreCalculator.js:521
 msgid "apply again or weave the keyword into the body to reach 0.5%"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:480
+#: src/admin/components/seo/SEOScoreCalculator.js:542
 msgid "Enabled ThinkRank structured data —"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:485
+#: src/admin/components/seo/SEOScoreCalculator.js:547
 msgid "already on; recalculate the score"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:489
+#: src/admin/components/seo/SEOScoreCalculator.js:551
 msgid "schema; recalculate the score"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:496
-#: src/admin/components/seo/SEOScoreCalculator.js:502
+#: src/admin/components/seo/SEOScoreCalculator.js:558
+#: src/admin/components/seo/SEOScoreCalculator.js:564
 msgid "Failed to enable schema"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:525
+#: src/admin/components/seo/SEOScoreCalculator.js:587
 msgid "🔒 This is a server setting, not content. Install an SSL certificate with your host (most offer free Let’s Encrypt SSL) and serve the whole site over HTTPS. It can’t be fixed from the editor."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:530
+#: src/admin/components/seo/SEOScoreCalculator.js:592
 msgid "📱 Mobile-friendliness comes from your theme, not this post. Use a responsive theme and test with Google’s Mobile-Friendly Test. There’s nothing to auto-apply to the content here."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:535
+#: src/admin/components/seo/SEOScoreCalculator.js:597
 msgid "⚡ Core Web Vitals (LCP, INP, CLS) are runtime performance metrics driven by hosting, theme, images and scripts. Measure with PageSpeed Insights and optimize there — they can’t be set from post content."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:543
+#: src/admin/components/seo/SEOScoreCalculator.js:605
 msgid "👤 Reinforce E-E-A-T by adding an author bio with credentials, citing reputable sources in the article, and providing contact/about info on your site. This is editorial work, not an auto-applied change."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:548
+#: src/admin/components/seo/SEOScoreCalculator.js:610
 msgid "📝 Improve readability manually: split long paragraphs, shorten sentences, and add H2/H3 subheadings to break up the content into scannable sections."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:554
+#: src/admin/components/seo/SEOScoreCalculator.js:616
 msgid "💡 Scroll down to the meta description field and update it with compelling, keyword-rich content."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:559
+#: src/admin/components/seo/SEOScoreCalculator.js:621
 msgid "💡 Update your post title or add relevant headings (H2, H3) to your content."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:564
+#: src/admin/components/seo/SEOScoreCalculator.js:626
 msgid "💡 Review your content and naturally incorporate your target keyword in key locations."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:569
+#: src/admin/components/seo/SEOScoreCalculator.js:631
 msgid "💡 Expand your content with more detailed, valuable information for your readers."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:574
+#: src/admin/components/seo/SEOScoreCalculator.js:636
 msgid "💡 Add relevant internal links to other pages on your site or quality external resources."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:579
+#: src/admin/components/seo/SEOScoreCalculator.js:641
 msgid "💡 Add relevant images with descriptive alt text to enhance your content."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:583
+#: src/admin/components/seo/SEOScoreCalculator.js:645
 msgid "💡 Review the suggestion and make the recommended changes to improve your SEO."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:650
+#: src/admin/components/seo/SEOScoreCalculator.js:712
 msgid "Calculate Score"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:652
+#: src/admin/components/seo/SEOScoreCalculator.js:714
 msgid "Calculating…"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:654
+#: src/admin/components/seo/SEOScoreCalculator.js:716
 msgid "Recalculate"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:659
+#: src/admin/components/seo/SEOScoreCalculator.js:721
 msgid "Scoring Factors"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:678
+#: src/admin/components/seo/SEOScoreCalculator.js:740
 msgid "SEO Score Analysis"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:691
+#: src/admin/components/seo/SEOScoreCalculator.js:753
 msgid "Last calculated"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:692
+#: src/admin/components/seo/SEOScoreCalculator.js:754
 msgid "Not analyzed yet"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:702
+#: src/admin/components/seo/SEOScoreCalculator.js:764
 msgid "Add a post title before calculating the SEO score"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:735
+#: src/admin/components/seo/SEOScoreCalculator.js:797
 msgid "Remember to save the post to keep it."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:755
+#: src/admin/components/seo/SEOScoreCalculator.js:817
 msgid "Analyzing your content for SEO optimization…"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:767
+#: src/admin/components/seo/SEOScoreCalculator.js:829
 msgid "No SEO Analysis Yet"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:768
+#: src/admin/components/seo/SEOScoreCalculator.js:830
 msgid "Click \"Calculate SEO Score\" to analyze your content and get optimization recommendations."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:891
+#: src/admin/components/seo/SEOScoreCalculator.js:956
 msgid "SEO Improvement Guidance"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:892
+#: src/admin/components/seo/SEOScoreCalculator.js:957
 msgid "Dismiss SEO Suggestion"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:907
+#: src/admin/components/seo/SEOScoreCalculator.js:972
 msgid "Use this guidance to manually improve your content. The suggestions are recommendations to help you optimize your SEO."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:917
+#: src/admin/components/seo/SEOScoreCalculator.js:982
 msgid "Dismiss this suggestion?"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:927
+#: src/admin/components/seo/SEOScoreCalculator.js:992
 msgid "You can always recalculate your SEO score to see suggestions again."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:942
+#: src/admin/components/seo/SEOScoreCalculator.js:1007
 msgid "Got it"
 msgstr ""
 
@@ -12708,6 +12719,14 @@ msgstr ""
 
 #: src/admin/components/ui/AIButton.js:65
 msgid "Processing…"
+msgstr ""
+
+#: src/admin/components/ui/SearchableSelect.js:161
+msgid "Clear selection"
+msgstr ""
+
+#: src/admin/components/ui/SearchableSelect.js:222
+msgid "No matches found"
 msgstr ""
 
 #: src/admin/config/schema-settings-config.js:150
@@ -13994,15 +14013,6 @@ msgstr ""
 msgid "anchor"
 msgstr ""
 
-#: src/divi/index.js:231
-#: src/divi/index.js:236
-#: src/elementor/index.js:242
-#: src/elementor/index.js:247
-#: src/oxygen/index.js:220
-#: src/oxygen/index.js:225
-msgid "Failed to save SEO settings."
-msgstr ""
-
 #: src/metabox/components/ErrorBoundary.js:90
 msgid "This component encountered an error and could not be displayed."
 msgstr ""
@@ -14019,49 +14029,49 @@ msgstr ""
 msgid "Error Details (Development Only)"
 msgstr ""
 
-#: src/metabox/components/FocusKeywordsInput.js:81
+#: src/metabox/components/FocusKeywordsInput.js:103
 msgid "Focus Keywords"
 msgstr ""
 
-#: src/metabox/components/FocusKeywordsInput.js:100
+#: src/metabox/components/FocusKeywordsInput.js:122
 msgid "Primary keyword"
 msgstr ""
 
 #. translators: %s: keyword
-#: src/metabox/components/FocusKeywordsInput.js:110
+#: src/metabox/components/FocusKeywordsInput.js:132
 #, js-format
 msgid "Remove %s"
 msgstr ""
 
-#: src/metabox/components/FocusKeywordsInput.js:132
+#: src/metabox/components/FocusKeywordsInput.js:154
 msgid "Add another keyword…"
 msgstr ""
 
-#: src/metabox/components/FocusKeywordsInput.js:133
+#: src/metabox/components/FocusKeywordsInput.js:155
 msgid "e.g., WordPress SEO"
 msgstr ""
 
 #. translators: %d: free keyword limit
-#: src/metabox/components/FocusKeywordsInput.js:145
+#: src/metabox/components/FocusKeywordsInput.js:167
 #, js-format
 msgid "Free includes up to %d focus keywords. "
 msgstr ""
 
-#: src/metabox/components/FocusKeywordsInput.js:157
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:47
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:66
+#: src/metabox/components/FocusKeywordsInput.js:179
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:48
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:67
 msgid "Upgrade to ThinkRank Pro"
 msgstr ""
 
-#: src/metabox/components/FocusKeywordsInput.js:159
+#: src/metabox/components/FocusKeywordsInput.js:181
 msgid " to add more."
 msgstr ""
 
-#: src/metabox/components/FocusKeywordsInput.js:165
+#: src/metabox/components/FocusKeywordsInput.js:187
 msgid "The first keyword is primary."
 msgstr ""
 
-#: src/metabox/components/FocusKeywordsInput.js:166
+#: src/metabox/components/FocusKeywordsInput.js:188
 msgid "Press Enter or comma to add. The first keyword is primary."
 msgstr ""
 
@@ -14085,39 +14095,39 @@ msgstr ""
 msgid "Failed to load deployed schemas"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:232
+#: src/metabox/components/metabox-schema-tab/api.js:284
 msgid "Failed to save schema list."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:245
+#: src/metabox/components/metabox-schema-tab/api.js:297
 msgid "Post ID is required for schema generation"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:291
+#: src/metabox/components/metabox-schema-tab/api.js:343
 msgid "Schema generation failed"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:312
+#: src/metabox/components/metabox-schema-tab/api.js:364
 msgid "Post ID is required for schema deployment"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:405
+#: src/metabox/components/metabox-schema-tab/api.js:457
 msgid "Schema deployment failed"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:426
+#: src/metabox/components/metabox-schema-tab/api.js:478
 msgid "Please enter a URL to import from."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:450
+#: src/metabox/components/metabox-schema-tab/api.js:502
 msgid "Schema imported successfully! Please review and apply the data below."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:458
+#: src/metabox/components/metabox-schema-tab/api.js:510
 msgid "Failed to import schema."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:465
+#: src/metabox/components/metabox-schema-tab/api.js:517
 msgid "An error occurred while importing schema."
 msgstr ""
 
@@ -14200,115 +14210,115 @@ msgstr ""
 msgid "Save to Saved Schemas"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:41
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:42
 msgid "Raw Code import is a Pro feature. "
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:49
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:50
 msgid " to paste and save raw JSON-LD schema code."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:60
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:61
 msgid "File Upload import is a Pro feature. "
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:68
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:69
 msgid " to upload and import JSON-LD schema files."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:125
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:129
 msgid "Blog Posting"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:127
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:131
 msgid "Technical Article"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:130
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:134
 msgid "News Article"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:132
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:136
 msgid "Scholarly Article"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:135
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:139
 msgid "Report"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:136
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:145
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:140
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:149
 msgid "How-To Guide"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:137
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:146
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:141
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:150
 msgid "FAQ Page"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:138
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:153
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:142
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:157
 msgid "Review"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:139
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:154
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:143
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:158
 msgid "Video"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:147
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:151
 msgid "Event"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:164
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:168
 msgid "URL / Online Page"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:170
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:174
 msgid "Raw Code"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:171
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:175
 msgid "Raw Code (Pro)"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:177
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:181
 msgid "File Upload"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:178
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:182
 msgid "File Upload (Pro)"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:235
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:239
 msgid "Switching schema type will replace your current configuration. Your current data will be backed up in case you want to switch back. Continue?"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:299
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:304
 msgid "Schema activated. Only one schema can be active in the free version — the previous one was deactivated. Upgrade to ThinkRank Pro for multiple active schemas."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:307
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:312
 msgid "Schema activated. Update the deployment to apply changes."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:322
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:327
 msgid "activated"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:323
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:328
 msgid "deactivated"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:404
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:431
 msgid "Loading schema data…"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:418
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:445
 msgid "Updating schema data…"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:488
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:515
 msgid "Are you sure you want to delete this schema?"
 msgstr ""
 
@@ -14397,27 +14407,39 @@ msgstr ""
 msgid "Generate Schema"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:234
+#: src/metabox/components/MetaboxApp.js:259
 msgid "Analysis"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:911
+#: src/metabox/components/MetaboxApp.js:1030
+msgid "Optimize this content for search & AI"
+msgstr ""
+
+#: src/metabox/components/MetaboxApp.js:1036
+msgid "Titles, meta description, focus keywords, schema and social previews."
+msgstr ""
+
+#: src/metabox/components/MetaboxApp.js:1046
+msgid "Current SEO score"
+msgstr ""
+
+#: src/metabox/components/MetaboxApp.js:1126
 msgid "The General tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:933
+#: src/metabox/components/MetaboxApp.js:1151
 msgid "The Analysis tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:960
+#: src/metabox/components/MetaboxApp.js:1178
 msgid "The Schema tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:976
+#: src/metabox/components/MetaboxApp.js:1194
 msgid "The Social tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:994
+#: src/metabox/components/MetaboxApp.js:1212
 msgid "The Advanced tab encountered an error."
 msgstr ""
 
@@ -14501,31 +14523,31 @@ msgstr ""
 msgid "Add an AI provider API key in ThinkRank → Settings to enable AI generation."
 msgstr ""
 
-#: src/metabox/components/panels/GeneralPanel.js:70
+#: src/metabox/components/panels/GeneralPanel.js:71
 msgid "How this content appears in search results."
 msgstr ""
 
-#: src/metabox/components/panels/GeneralPanel.js:82
+#: src/metabox/components/panels/GeneralPanel.js:83
 msgid "Keep it under 60 characters for best results."
 msgstr ""
 
-#: src/metabox/components/panels/GeneralPanel.js:96
+#: src/metabox/components/panels/GeneralPanel.js:97
 msgid "Enter SEO title or generate with AI"
 msgstr ""
 
-#: src/metabox/components/panels/GeneralPanel.js:136
+#: src/metabox/components/panels/GeneralPanel.js:137
 msgid "Enter meta description or generate with AI"
 msgstr ""
 
-#: src/metabox/components/panels/GeneralPanel.js:154
+#: src/metabox/components/panels/GeneralPanel.js:155
 msgid "Permalink"
 msgstr ""
 
-#: src/metabox/components/panels/GeneralPanel.js:162
+#: src/metabox/components/panels/GeneralPanel.js:163
 msgid "The URL slug for this content. Leave blank to keep the auto-generated slug."
 msgstr ""
 
-#: src/metabox/components/panels/GeneralPanel.js:179
+#: src/metabox/components/panels/GeneralPanel.js:180
 msgid "your-post-slug"
 msgstr ""
 
@@ -14653,6 +14675,10 @@ msgstr ""
 msgid "Preview:"
 msgstr ""
 
-#: src/metabox/index.js:106
+#: src/metabox/index.js:110
 msgid "Failed to load ThinkRank metabox. Please refresh the page."
+msgstr ""
+
+#: src/metabox/utils/persistSeoFields.js:99
+msgid "Failed to save SEO settings."
 msgstr ""

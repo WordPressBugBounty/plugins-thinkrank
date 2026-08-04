@@ -1,16 +1,16 @@
 <?php
 /**
- * Multilingual (WPML / Polylang) integration.
+ * Multilingual (WPML / Polylang / TranslatePress) integration.
  *
  * Auto-enables when a supported multilingual plugin is active and fills the
  * gaps ThinkRank leaves on a translated site:
  *
- *  - `og:locale:alternate` for every translated language. Neither WPML nor
- *    Polylang emits Open Graph locale alternates, so without this the social
- *    crawlers see a single-language site.
+ *  - `og:locale:alternate` for every translated language. None of the three
+ *    supported plugins emits Open Graph locale alternates, so without this the
+ *    social crawlers see a single-language site.
  *  - `hreflang` alternates, but ONLY when the active multilingual plugin did
- *    not already print them for this request. WPML and Polylang both ship
- *    their own hreflang output, so emitting ours unconditionally would produce
+ *    not already print them for this request. All three ship their own
+ *    hreflang output, so emitting ours unconditionally would produce
  *    duplicate, competing alternates — worse than the gap it set out to fix.
  *    WPML in particular registers its callback unconditionally and then gates
  *    the actual output behind internal `must_render()` checks, so "the setting
@@ -19,6 +19,14 @@
  *  - Language-aware sitemaps, via the sitemap query filters. What this needs
  *    in practice was measured rather than assumed — see the two filter methods
  *    at the bottom of this class.
+ *
+ * A note on TranslatePress, which is architecturally unlike the other two: it
+ * does not create a post per language. One post is rendered and its output is
+ * translated on the way out, so there is nothing extra for the sitemap to find
+ * and no per-language post meta to reconcile — the whole sitemap side is a
+ * no-op there. What it does need is `og:locale`, which TranslatePress never
+ * touches at all: without this integration every translated URL advertises the
+ * site's default locale to social crawlers.
  *
  * @package ThinkRank\Integrations
  * @since 1.23.0
@@ -38,7 +46,8 @@ if (!defined('ABSPATH')) {
 class Multilingual_Manager {
 
     /**
-     * Active provider: 'wpml', 'polylang' or '' when the site is monolingual.
+     * Active provider: 'wpml', 'polylang', 'translatepress', or '' when the
+     * site is monolingual.
      *
      * @var string
      */
@@ -136,7 +145,10 @@ class Multilingual_Manager {
     /**
      * Which multilingual plugin is running.
      *
-     * @return string 'wpml', 'polylang', or '' when none is active.
+     * Checked in order of specificity. A site running two of these at once is
+     * already broken, so first match wins rather than trying to merge them.
+     *
+     * @return string 'wpml', 'polylang', 'translatepress', or '' when none is active.
      */
     private function detect_provider(): string {
         if (defined('ICL_SITEPRESS_VERSION') && has_filter('wpml_active_languages')) {
@@ -145,6 +157,12 @@ class Multilingual_Manager {
 
         if (function_exists('pll_the_languages') && function_exists('pll_default_language')) {
             return 'polylang';
+        }
+
+        // TranslatePress. The constant alone isn't enough — the instance is what
+        // we actually read languages and URLs from, so require the class too.
+        if (defined('TRP_PLUGIN_VERSION') && class_exists('\TRP_Translate_Press')) {
+            return 'translatepress';
         }
 
         return '';
@@ -260,7 +278,11 @@ class Multilingual_Manager {
         }
 
         // Polylang prints hreflang alternates on the front end with no setting
-        // to turn them off, so never double up.
+        // to turn them off. TranslatePress hooks its own
+        // TRP_Url_Converter::add_hreflang_to_head() onto wp_head
+        // unconditionally, and emits region-independent variants and x-default
+        // on top — a second set from us would compete with all of it. Never
+        // double up on either.
         return true;
     }
 
@@ -270,9 +292,19 @@ class Multilingual_Manager {
      * @return array<int, array{code: string, locale: string, url: string, is_default: bool}>
      */
     private function get_alternates(): array {
-        $alternates = $this->provider === 'wpml'
-            ? $this->get_wpml_alternates()
-            : $this->get_polylang_alternates();
+        switch ($this->provider) {
+            case 'wpml':
+                $alternates = $this->get_wpml_alternates();
+                break;
+            case 'polylang':
+                $alternates = $this->get_polylang_alternates();
+                break;
+            case 'translatepress':
+                $alternates = $this->get_translatepress_alternates();
+                break;
+            default:
+                $alternates = [];
+        }
 
         /**
          * Filter the resolved language alternates before output.
@@ -369,6 +401,96 @@ class Multilingual_Manager {
     }
 
     /**
+     * Resolve alternates from TranslatePress.
+     *
+     * TranslatePress has no public helper for "every published language and its
+     * URL", so this reads the two components it exposes through its singleton:
+     * `settings` for the published-language list, `url_converter` for the URL of
+     * the current request in a given language.
+     *
+     * Its language codes are already locales (`en_US`, `de_DE`), which is why
+     * `locale` and `code` carry the same value here — unlike Polylang, where the
+     * slug and locale differ.
+     *
+     * @return array<int, array{code: string, locale: string, url: string, is_default: bool}>
+     */
+    private function get_translatepress_alternates(): array {
+        if (!class_exists('\TRP_Translate_Press')) {
+            return [];
+        }
+
+        $trp = \TRP_Translate_Press::get_trp_instance();
+        if (!is_object($trp) || !method_exists($trp, 'get_component')) {
+            return [];
+        }
+
+        $settings_component = $trp->get_component('settings');
+        $url_converter      = $trp->get_component('url_converter');
+
+        if (!is_object($settings_component)
+            || !is_object($url_converter)
+            || !method_exists($settings_component, 'get_settings')
+            || !method_exists($url_converter, 'get_url_for_language')
+        ) {
+            return [];
+        }
+
+        $settings  = (array) $settings_component->get_settings();
+        $languages = $settings['publish-languages'] ?? [];
+
+        if (!is_array($languages) || empty($languages)) {
+            return [];
+        }
+
+        $default = (string) ($settings['default-language'] ?? '');
+
+        // TranslatePress tracks the language being rendered on a global rather
+        // than through an accessor.
+        global $TRP_LANGUAGE;
+        $current = is_string($TRP_LANGUAGE) ? $TRP_LANGUAGE : '';
+
+        $out = [];
+
+        foreach ($languages as $language) {
+            $language = (string) $language;
+            if ($language === '') {
+                continue;
+            }
+
+            // get_url_for_language() tags its return value so TranslatePress can
+            // tell already-processed links apart during output rewriting. That
+            // marker is internal and must never reach a href.
+            $url = str_replace(
+                '#TRPLINKPROCESSED',
+                '',
+                (string) $url_converter->get_url_for_language($language)
+            );
+
+            if ($url === '') {
+                continue;
+            }
+
+            // `de_DE_formal` is a TranslatePress formality variant, not a real
+            // locale — Open Graph and hreflang both reject it, and both formal
+            // and informal resolve to the same language anyway.
+            $locale = str_replace(['_formal', '_informal'], '', $language);
+
+            $out[] = [
+                'code'       => $language,
+                // No admin-configurable hreflang tag; to_hreflang_code() falls
+                // through to the locale, which is what TranslatePress prints.
+                'tag'        => '',
+                'locale'     => $locale,
+                'url'        => $url,
+                'is_default' => $language === $default,
+                'is_current' => $language === $current,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * Print hreflang alternates plus x-default.
      *
      * @param array<int, array<string, mixed>> $languages Resolved alternates.
@@ -439,6 +561,12 @@ class Multilingual_Manager {
      * same thing: the former targets German speakers everywhere, the latter
      * only those in Germany, which would strand Austrian and Swiss readers.
      *
+     * Formality suffixes are stripped first. `de_DE_formal` is a real WordPress
+     * locale, and it is shaped just like a valid subtag sequence — so without
+     * this it sailed through validation as `de-de-formal`, which is not a
+     * language tag and which search engines discard. This affects every
+     * provider, not just the one that surfaced it.
+     *
      * @param array<string, mixed> $language Resolved language row.
      * @return string Normalized hreflang value, or '' when unusable.
      */
@@ -450,6 +578,7 @@ class Multilingual_Manager {
             }
 
             $value = strtolower(str_replace('_', '-', $value));
+            $value = str_replace(['-formal', '-informal'], '', $value);
 
             if (preg_match('/^[a-z]{2,3}(-[a-z0-9]{2,8})*$/', $value)) {
                 return $value;
@@ -470,6 +599,15 @@ class Multilingual_Manager {
             // Polylang filters through parse_query, which suppress_filters does
             // not bypass. An empty language disables its language clause.
             $args['lang'] = '';
+            return $args;
+        }
+
+        if ($this->provider === 'translatepress') {
+            // Nothing to widen. TranslatePress translates rendered output
+            // rather than creating a post per language, so the query already
+            // returns every piece of content exactly once — and forcing WPML's
+            // suppress_filters here would only override a caller's intent for
+            // no benefit.
             return $args;
         }
 
@@ -499,7 +637,8 @@ class Multilingual_Manager {
 
         // WPML does not language-filter get_terms() in the contexts the sitemap
         // runs in (verified against WPML 4.9.5), and it ignores 'lang' => 'all',
-        // so there is nothing to add for it here.
+        // so there is nothing to add for it here. TranslatePress does not
+        // duplicate terms per language at all, so likewise nothing to do.
         return $args;
     }
 

@@ -1,9 +1,9 @@
 <?php return array(
     'root' => array(
         'name' => 'thinkrank/mcp-runtime',
-        'pretty_version' => 'v1.25.0',
-        'version' => '1.25.0.0',
-        'reference' => '97f743edf30c4369720a0186e7a02eea3ccddf4c',
+        'pretty_version' => 'v1.26.0',
+        'version' => '1.26.0.0',
+        'reference' => 'fee85cec6874aa491d06a2006fbaa161983440d9',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -20,9 +20,9 @@
             'dev_requirement' => false,
         ),
         'thinkrank/mcp-runtime' => array(
-            'pretty_version' => 'v1.25.0',
-            'version' => '1.25.0.0',
-            'reference' => '97f743edf30c4369720a0186e7a02eea3ccddf4c',
+            'pretty_version' => 'v1.26.0',
+            'version' => '1.26.0.0',
+            'reference' => 'fee85cec6874aa491d06a2006fbaa161983440d9',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

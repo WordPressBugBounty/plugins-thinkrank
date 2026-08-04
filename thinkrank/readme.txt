@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, llms.txt
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.25.0
+Stable tag: 1.26.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -361,6 +361,21 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 
 == Changelog ==
 
+= 1.26.0 =
+Release Date: 2026-08-04
+
+- New: Search Console's Property field is now searchable — type to filter instead of scrolling a long site list
+- New: TranslatePress support — translated URLs now advertise their own language to social networks instead of the site's default
+- Improved: SEO scoring now uses the title and description your site actually outputs, so posts that inherit the Global or Bulk pattern are no longer scored as if they had no title or description
+- Improved: Suggestions that only offer guidance now read "How to fix" instead of "Apply", so a button never promises an edit it will not make
+- Fixed: Saving from the ThinkRank panel silently did nothing on posts with no other edits — SEO fields were never written and no error was shown
+- Fixed: The SEO score kept showing the old value for several minutes after changing the title or description, then appeared to update on its own
+- Fixed: The "ThinkRank SEO" metabox rendered empty — it now shows the current score with a way into the panel
+- Fixed: Schema edits could be lost when navigating away right after editing
+- Fixed: A focus keyword typed but not yet added was lost when saving, and the typed text lingered in the box after it was added
+- Fixed: Sites in a formal locale (such as German formal) emitted an invalid hreflang language code that search engines discard
+
+
 = 1.25.0 =
 Release Date: 2026-08-03
 
@@ -703,6 +718,9 @@ Release Date: 2025-07-07
 - WordPress 6.0+ compatibility
 
 == Upgrade Notice ==
+
+= 1.26.0 =
+Fixes saving from the ThinkRank panel silently doing nothing on posts with no other edits, and SEO scores that stayed stale for minutes after a title or description change. Also scores inherited titles and descriptions correctly and adds TranslatePress support. Recommended for all sites.
 
 = 1.24.0 =
 Fixes page-builder pages (Oxygen, Breakdance, Divi, Elementor) being scored as empty everywhere outside the editor. Adds a Search Console dashboard widget, builder-native editing panels, and full-article content briefs. Recommended for all sites, especially page-builder sites.

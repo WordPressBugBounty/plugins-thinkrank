@@ -13,6 +13,7 @@ use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\Admin\Metabox_Manager;
 use ThinkRank\AI\SEOScoreCalculator;
 use ThinkRank\Core\Database;
+use ThinkRank\SEO\Pattern_Resolver;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -116,7 +117,16 @@ class Get_Post_Seo_Checks extends Ability_Base {
 		foreach ( $post_ids as $post_id ) {
 			try {
 				$content = $calculator->analyze_post_content( $post_id );
-				$score   = $calculator->calculate_score( $content, $metabox->get_post_metadata( $post_id ) );
+
+				// Override the raw per-post title/description with their effective
+				// values (custom value, else the resolved Global pattern) so an
+				// inherited title or description is scored as present — matching
+				// the editor and frontend — instead of counting as missing.
+				$metadata                = $metabox->get_post_metadata( $post_id );
+				$metadata['title']       = Pattern_Resolver::effective_title( $post_id );
+				$metadata['description'] = Pattern_Resolver::effective_description( $post_id );
+
+				$score = $calculator->calculate_score( $content, $metadata );
 
 				$data[] = [
 					'post_id' => $post_id,

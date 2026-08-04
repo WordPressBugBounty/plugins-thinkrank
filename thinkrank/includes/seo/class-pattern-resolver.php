@@ -43,6 +43,16 @@ class Pattern_Resolver {
     private const DEFAULT_DESCRIPTION = '%excerpt%';
 
     /**
+     * Post meta key holding the per-post SEO title.
+     */
+    private const META_TITLE = '_thinkrank_seo_title';
+
+    /**
+     * Post meta key holding the per-post meta description.
+     */
+    private const META_DESCRIPTION = '_thinkrank_meta_description';
+
+    /**
      * Resolve the SEO title pattern for a post.
      *
      * @param int $post_id Post ID.
@@ -105,6 +115,65 @@ class Pattern_Resolver {
         }
 
         return $description;
+    }
+
+    /**
+     * Effective SEO title for a post: the per-post custom value (with any
+     * variable tags resolved) when set, otherwise the rendered Global/Bulk
+     * title pattern. This is the value the frontend actually outputs.
+     *
+     * Scoring MUST use this rather than the raw `_thinkrank_seo_title` meta —
+     * an empty meta means "inherit the global pattern", not "no title", so the
+     * raw value would make an inherited-title post score as if it had none.
+     *
+     * @param int $post_id Post ID.
+     * @return string Effective title.
+     */
+    public static function effective_title(int $post_id): string {
+        return self::effective_value(
+            (string) get_post_meta($post_id, self::META_TITLE, true),
+            $post_id,
+            'title'
+        );
+    }
+
+    /**
+     * Effective meta description for a post: the per-post custom value (with any
+     * variable tags resolved) when set, otherwise the rendered Global/Bulk
+     * description pattern. Counterpart to {@see self::effective_title()}.
+     *
+     * @param int $post_id Post ID.
+     * @return string Effective description.
+     */
+    public static function effective_description(int $post_id): string {
+        return self::effective_value(
+            (string) get_post_meta($post_id, self::META_DESCRIPTION, true),
+            $post_id,
+            'description'
+        );
+    }
+
+    /**
+     * Resolve a raw per-post field to its effective value.
+     *
+     * When the raw value is non-empty its variable tags are resolved; when it is
+     * empty the field falls back to the rendered Global/Bulk pattern. Exposed so
+     * callers that already hold a raw value (e.g. the SEO score endpoint scoring
+     * unsaved editor input) can route through the same fallback logic.
+     *
+     * @param string $raw     Raw per-post field value (may hold variable tags).
+     * @param int    $post_id Post ID.
+     * @param string $field   Which pattern to fall back to: 'title' or 'description'.
+     * @return string Effective value.
+     */
+    public static function effective_value(string $raw, int $post_id, string $field): string {
+        if ($raw !== '') {
+            return self::resolve_value($raw, $post_id);
+        }
+
+        return 'description' === $field
+            ? self::description($post_id)
+            : self::title($post_id);
     }
 
     /**

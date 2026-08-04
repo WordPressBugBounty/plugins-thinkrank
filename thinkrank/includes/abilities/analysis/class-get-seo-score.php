@@ -13,6 +13,7 @@ use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\AI\SEOScoreCalculator;
 use ThinkRank\Core\Database;
 use ThinkRank\SEO\Focus_Keywords;
+use ThinkRank\SEO\Pattern_Resolver;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -120,9 +121,13 @@ class Get_Seo_Score extends Ability_Base {
 
 		// Carry the stored focus keywords so keyword-dependent factors are
 		// actually measured instead of scoring as "no focus keyword set".
+		// Score against the FINAL effective title/description (custom value, else
+		// the resolved Global pattern), so a post that inherits its title or
+		// description from a global pattern scores the same here as in the editor
+		// and on the frontend — not as if those fields were missing.
 		$metadata = [
-			'title'          => get_post_meta( $post_id, '_thinkrank_seo_title', true ),
-			'description'    => get_post_meta( $post_id, '_thinkrank_meta_description', true ),
+			'title'          => Pattern_Resolver::effective_title( $post_id ),
+			'description'    => Pattern_Resolver::effective_description( $post_id ),
 			'focus_keywords' => Focus_Keywords::get( $post_id ),
 		];
 

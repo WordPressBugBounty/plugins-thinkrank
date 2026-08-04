@@ -572,6 +572,9 @@ video {
 .tr-root .tr-right-3{
   right: 0.75rem;
 }
+.tr-root .tr-right-8{
+  right: 2rem;
+}
 .tr-root .tr-right-\[-2rem\]{
   right: -2rem;
 }
@@ -1736,6 +1739,9 @@ video {
 }
 .tr-root .tr-pr-14{
   padding-right: 3.5rem;
+}
+.tr-root .tr-pr-16{
+  padding-right: 4rem;
 }
 .tr-root .tr-pr-2{
   padding-right: 0.5rem;
