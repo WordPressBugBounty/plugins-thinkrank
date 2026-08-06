@@ -11,6 +11,11 @@
  * (transient-backed). At/after the threshold the IP is locked out for the
  * window; a SUCCESSFUL auth clears the counter immediately.
  *
+ * "Failed" means a credential was PRESENTED and rejected. A request with no
+ * Authorization header never reaches the counter — that is the first step of
+ * the OAuth handshake (client asks for the RFC 9728 challenge), so counting it
+ * would lock out every OAuth client during normal discovery.
+ *
  * Threshold + window are overridable via the THINKRANK_MCP_MAX_FAILS /
  * THINKRANK_MCP_LOCKOUT_SECONDS constants and the `thinkrank_mcp_rate_limit`
  * filter ( [ max_fails, lockout_seconds ] ).
@@ -59,15 +64,39 @@ final class Mcp_Rate_Limiter {
 
 	/**
 	 * Record a failed auth attempt for the current client and return whether
-	 * the client is now locked out. Extends the rolling window on each fail.
+	 * the client is now locked out.
+	 *
+	 * The window is FIXED from the first failure — recording a failure never
+	 * extends it. The previous behaviour reset the transient's expiry on every
+	 * increment, so a stranded client that retried every few minutes (exactly
+	 * what a connector configured with a rotated-away token does, and exactly
+	 * what support kept telling a customer to do) re-armed its own lockout
+	 * forever. A lockout must be escapable by simply waiting out one window.
 	 *
 	 * @return bool True if this failure crossed into a lockout.
 	 */
 	public static function record_failure(): bool {
 		list( $max, $window ) = self::limits();
-		$count                = self::attempts() + 1;
-		set_transient( self::key(), $count, $window );
-		return $count >= $max;
+
+		$key   = self::key();
+		$entry = get_transient( $key );
+
+		if ( is_array( $entry ) && isset( $entry['count'], $entry['until'] ) ) {
+			$entry['count']++;
+			// Preserve the ORIGINAL window end: TTL = remaining time only.
+			$remaining = max( 1, (int) $entry['until'] - time() );
+			set_transient( $key, $entry, $remaining );
+			return $entry['count'] >= $max;
+		}
+
+		// First failure in a window (also migrates any legacy integer entry —
+		// a stale int simply restarts as a fresh window of 1).
+		$entry = [
+			'count' => 1,
+			'until' => time() + $window,
+		];
+		set_transient( $key, $entry, $window );
+		return 1 >= $max;
 	}
 
 	/**
@@ -80,12 +109,66 @@ final class Mcp_Rate_Limiter {
 	}
 
 	/**
-	 * Seconds a locked client must wait (approximate; the window length).
+	 * Seconds until the current client's window ends. Falls back to the full
+	 * window length when no entry exists — honest now that the window is fixed,
+	 * where before this always reported the full length no matter how long the
+	 * client had already waited.
 	 *
 	 * @return int
 	 */
 	public static function retry_after(): int {
+		$entry = get_transient( self::key() );
+		if ( is_array( $entry ) && isset( $entry['until'] ) ) {
+			return max( 1, (int) $entry['until'] - time() );
+		}
 		return self::limits()[1];
+	}
+
+	/**
+	 * How many clients are currently locked out, across all IPs.
+	 *
+	 * Diagnostic for the self-test: a healthy loopback plus a locked-out remote
+	 * client is exactly the state a stranded connector (rotated-away token,
+	 * still retrying) produces, and it was invisible — support couldn't tell
+	 * "server broken" from "client walled itself off".
+	 *
+	 * Returns null when a persistent object cache is in use — transients don't
+	 * live in the options table there, so the count is unknowable and claiming
+	 * zero would be a lie.
+	 *
+	 * @return int|null Locked-out client count, or null when unknowable.
+	 */
+	public static function active_lockouts(): ?int {
+		if ( wp_using_ext_object_cache() ) {
+			return null;
+		}
+
+		global $wpdb;
+		if ( ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_col' ) ) {
+			return null;
+		}
+		list( $max ) = self::limits();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- diagnostic scan over transient rows; no core API enumerates them.
+		$rows = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s",
+				$wpdb->esc_like( '_transient_' . self::PREFIX ) . '%'
+			)
+		);
+
+		$locked = 0;
+		foreach ( (array) $rows as $row ) {
+			$entry = maybe_unserialize( $row );
+			$count = is_array( $entry ) && isset( $entry['count'] )
+				? (int) $entry['count']
+				: ( is_numeric( $entry ) ? (int) $entry : 0 );
+			if ( $count >= $max ) {
+				$locked++;
+			}
+		}
+
+		return $locked;
 	}
 
 	// -- internals --
@@ -97,6 +180,10 @@ final class Mcp_Rate_Limiter {
 	 */
 	private static function attempts(): int {
 		$v = get_transient( self::key() );
+		if ( is_array( $v ) && isset( $v['count'] ) ) {
+			return (int) $v['count'];
+		}
+		// Legacy integer entries from before the fixed-window format.
 		return is_numeric( $v ) ? (int) $v : 0;
 	}
 
@@ -132,14 +219,29 @@ final class Mcp_Rate_Limiter {
 	/**
 	 * Best-effort client IP. REMOTE_ADDR only — we deliberately do NOT trust
 	 * X-Forwarded-For (spoofable → an attacker could dodge the limit or lock
-	 * out a victim). Behind a known proxy the site should set REMOTE_ADDR
-	 * upstream.
+	 * out a victim). Behind a reverse proxy or tunnel every client shares one
+	 * REMOTE_ADDR and therefore one bucket; such a site should either set
+	 * REMOTE_ADDR upstream or opt in via the filter below, which is safe only
+	 * when the proxy is known to overwrite the forwarded header.
 	 *
 	 * @return string
 	 */
 	private static function client_ip(): string {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- used only as a rate-limit bucket key (md5'd), never output or stored raw.
 		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) wp_unslash( $_SERVER['REMOTE_ADDR'] ) : '';
+
+		/**
+		 * Filter the IP used as the MCP rate-limit bucket key.
+		 *
+		 * Opt-in escape hatch for sites behind a trusted reverse proxy, where
+		 * REMOTE_ADDR is the proxy and every client would otherwise collapse
+		 * into a single bucket. Only return a forwarded header's value when
+		 * the proxy is known to overwrite it.
+		 *
+		 * @param string $ip Resolved REMOTE_ADDR ('' when unavailable).
+		 */
+		$ip = (string) apply_filters( 'thinkrank_mcp_client_ip', $ip );
+
 		return '' !== $ip ? $ip : 'unknown';
 	}
 }

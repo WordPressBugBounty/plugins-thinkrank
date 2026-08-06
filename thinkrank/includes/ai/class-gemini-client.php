@@ -117,7 +117,8 @@ class Gemini_Client {
         $tone = $options['tone'] ?? 'professional';
 
         $prompt_builder = $this->get_prompt_builder();
-        $prompt = $prompt_builder->build_seo_prompt($content, $target_keyword, $content_type, $tone, 'gemini');
+        $language = is_string($options['language'] ?? null) ? $options['language'] : '';
+        $prompt = $prompt_builder->build_seo_prompt($content, $target_keyword, $content_type, $tone, 'gemini', $language);
         
         $response = $this->generate_completion($prompt, [
             'max_tokens' => 500,

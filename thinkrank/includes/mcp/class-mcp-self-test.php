@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\Mcp;
 
+use ThinkRank\Abilities\Abilities_Registrar;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
@@ -19,12 +21,43 @@ if ( ! defined( 'ABSPATH' ) ) {
  * authentication problem from an ability-discovery problem without leaving the
  * MCP page (see #189).
  *
- * It performs one real loopback `tools/list` call against this site's own MCP
- * endpoint using the active connection token. The staged result names the first
- * failing step: `disabled` → `not_connected` → `unreachable` → `tls` →
- * `redirect` → `auth` → `no_tools` → `ok`.
+ * Four loopback checks, each against a surface a real client actually uses:
+ *
+ *   1. `endpoint`  — the pretty URL the user pastes (/thinkrank/mcp), with the
+ *                    connection token. Depends on rewrite rules, so it fails on
+ *                    plain permalinks or an unflushed rule table.
+ *   2. `fallback`  — the always-on /wp-json/thinkrank/v1/mcp route. Works even
+ *                    when rewrites do not, which is what separates "the whole
+ *                    MCP surface is down" from "only the pretty URL is".
+ *   3. `discovery` — the RFC 9728 / RFC 8414 metadata documents.
+ *   4. `challenge` — an UNAUTHENTICATED call, which must answer 401 with a
+ *                    WWW-Authenticate header. This is the only thing an
+ *                    OAuth-only client (ChatGPT, claude.ai) has to go on: if
+ *                    the challenge is missing it reports that the server does
+ *                    not implement OAuth, no matter how healthy the rest is.
+ *
+ * Checks 3 and 4 exist because a token-pasting client can be perfectly happy
+ * while every OAuth client is refused — the earlier version of this test only
+ * exercised check 2 and so reported `ok` in exactly that situation.
+ *
+ * The staged result names the first failing step: `disabled` → `not_connected`
+ * → `unreachable` → `tls` → `redirect` → `auth` → `no_tools` → `rewrite` →
+ * `discovery` → `challenge` → `ok`.
  */
 final class Mcp_Self_Test {
+
+	/**
+	 * User agents to replay the challenge probe with, to detect a host that
+	 * filters by User-Agent. These are the shapes real MCP backends send —
+	 * none of them is a browser, which is exactly what "block bad bots" rules
+	 * key on. A site that answers WordPress's own UA but 403s these is
+	 * unreachable for every AI client while looking perfectly healthy from
+	 * inside.
+	 */
+	private const CLIENT_USER_AGENTS = [
+		'python-requests/2.32.3',
+		'node-fetch/3.3.2',
+	];
 
 	/**
 	 * Run the round-trip self-test.
@@ -32,19 +65,24 @@ final class Mcp_Self_Test {
 	 * @return array<string, mixed>
 	 */
 	public static function run(): array {
-		$endpoint = Mcp_Pairing::site_endpoint_fallback();
+		$endpoint = Mcp_Pairing::site_endpoint();
+		$fallback = Mcp_Pairing::site_endpoint_fallback();
 
 		$result = [
 			'ok'            => false,
 			'stage'         => '',
 			'message'       => '',
 			'endpoint'      => $endpoint,
+			'endpoint_rest' => $fallback,
 			'mcp_enabled'   => Mcp_Manager::is_enabled(),
 			'connected'     => Mcp_Pairing::is_connected(),
 			'http_status'   => null,
 			'redirected'    => false,
 			'authenticated' => false,
 			'tools_count'   => null,
+			'checks'        => [],
+			// url => decoded metadata (or the raw body when it isn't JSON).
+			'discovery_documents' => [],
 		];
 
 		if ( ! $result['mcp_enabled'] ) {
@@ -59,15 +97,121 @@ final class Mcp_Self_Test {
 			return $result;
 		}
 
+		$token = Mcp_Pairing::site_token();
+
+		$pretty = self::probe_jsonrpc( $endpoint, $token );
+		$rest   = self::probe_jsonrpc( $fallback, $token );
+
+		// Back-compat top-level fields describe the primary (pretty) endpoint,
+		// falling back to the REST route when the pretty URL never answered.
+		$primary                 = 'unreachable' === $pretty['stage'] ? $rest : $pretty;
+		$result['http_status']   = $primary['status'];
+		$result['redirected']    = 'redirect' === $primary['stage'];
+		$result['authenticated'] = $primary['authenticated'];
+		$result['tools_count']   = $primary['tools'];
+
+		$result['checks'][] = self::check( 'endpoint', __( 'Connection URL', 'thinkrank' ), $pretty['stage'], $pretty['detail'] );
+		$result['checks'][] = self::check( 'fallback', __( 'REST fallback URL', 'thinkrank' ), $rest['stage'], $rest['detail'] );
+
+		$discovery = self::probe_discovery();
+		// The documents themselves, so support can read what the site actually
+		// serves instead of asking the customer for screenshots.
+		$result['discovery_documents'] = $discovery['documents'];
+		$result['checks'][]            = self::check( 'discovery', __( 'OAuth discovery', 'thinkrank' ), $discovery['stage'], $discovery['detail'] );
+
+		$challenge          = self::probe_challenge( $endpoint, $fallback );
+		$result['checks'][] = self::check( 'challenge', __( 'OAuth challenge', 'thinkrank' ), $challenge['stage'], $challenge['detail'] );
+
+		// Only reported when it could actually run — claiming a pass we did
+		// not measure is the failure mode this whole test exists to avoid.
+		$user_agent = self::probe_user_agent( $endpoint );
+		if ( null !== $user_agent ) {
+			$result['checks'][] = self::check( 'user_agent', __( 'Client access', 'thinkrank' ), $user_agent['stage'], $user_agent['detail'] );
+		}
+
+		// Locked-out clients. The loopback below can pass while a REMOTE client
+		// is walled off by the failed-auth limiter — the exact state a connector
+		// still holding a rotated-away token produces. Reported only when the
+		// count is knowable (null under a persistent object cache).
+		$lockouts = Mcp_Rate_Limiter::active_lockouts();
+		$result['locked_clients'] = $lockouts;
+		if ( null !== $lockouts && $lockouts > 0 ) {
+			$result['checks'][] = self::check(
+				'lockouts',
+				__( 'Client lockouts', 'thinkrank' ),
+				'locked_clients',
+				sprintf(
+					/* translators: %d: number of currently locked-out clients. */
+					_n(
+						'%d client is currently locked out after repeated failed authentications — typically a connector still holding a rotated-away token. Remove and re-add the connector in the AI client; the lockout clears itself within 15 minutes of the retries stopping.',
+						'%d clients are currently locked out after repeated failed authentications — typically connectors still holding a rotated-away token. Remove and re-add the connector in the AI client; lockouts clear within 15 minutes of the retries stopping.',
+						$lockouts,
+						'thinkrank'
+					),
+					$lockouts
+				)
+			);
+		}
+
+		// The pretty URL failing while the fallback works is its own finding:
+		// the site is usable, but only via the REST URL.
+		if ( 'ok' !== $pretty['stage'] && 'ok' === $rest['stage'] ) {
+			$result['stage']   = 'rewrite';
+			$result['message'] = sprintf(
+				/* translators: 1: pretty MCP endpoint URL, 2: REST fallback URL. */
+				__( 'The connection URL %1$s did not answer, but the REST fallback %2$s works. Re-save Settings → Permalinks to rebuild the rewrite rules; until then, give your AI client the fallback URL.', 'thinkrank' ),
+				$endpoint,
+				$fallback
+			);
+			return $result;
+		}
+
+		// Otherwise report the first failing check in order.
+		foreach ( [ $pretty, $rest, $discovery, $challenge, $user_agent ] as $check ) {
+			if ( null === $check ) {
+				continue;
+			}
+			if ( 'ok' !== $check['stage'] ) {
+				$result['stage']   = $check['stage'];
+				$result['message'] = $check['detail'];
+				return $result;
+			}
+		}
+
+		$result['ok']      = true;
+		$result['stage']   = 'ok';
+		$result['message'] = sprintf(
+			/* translators: %d: number of MCP tools returned. */
+			_n(
+				'Connection healthy: the endpoint authenticated, offered OAuth, and returned %d tool.',
+				'Connection healthy: the endpoint authenticated, offered OAuth, and returned %d tools.',
+				(int) $result['tools_count'],
+				'thinkrank'
+			),
+			(int) $result['tools_count']
+		);
+		return $result;
+	}
+
+	// -- Probes ------------------------------------------------------------
+
+	/**
+	 * One authenticated JSON-RPC `tools/list` round trip.
+	 *
+	 * @param string $url   Endpoint to call.
+	 * @param string $token Connection token.
+	 * @return array{stage:string,status:?int,tools:?int,authenticated:bool,detail:string}
+	 */
+	private static function probe_jsonrpc( string $url, string $token ): array {
 		$response = wp_remote_post(
-			$endpoint,
+			$url,
 			[
 				'timeout'     => 10,
 				// Don't follow redirects: a 301/302 here IS the finding (the
 				// classic http<->https scheme bounce), so surface it verbatim.
 				'redirection' => 0,
 				'headers'     => [
-					'Authorization' => 'Bearer ' . Mcp_Pairing::site_token(),
+					'Authorization' => 'Bearer ' . $token,
 					'Content-Type'  => 'application/json',
 					'Accept'        => 'application/json',
 				],
@@ -81,59 +225,453 @@ final class Mcp_Self_Test {
 			]
 		);
 
+		$out = [
+			'stage'         => 'ok',
+			'status'        => null,
+			'tools'         => null,
+			'authenticated' => false,
+			'detail'        => '',
+		];
+
 		if ( is_wp_error( $response ) ) {
-			$err     = $response->get_error_message();
-			$is_tls  = false !== stripos( $err, 'ssl' ) || false !== stripos( $err, 'certificate' );
-			$result['stage']   = $is_tls ? 'tls' : 'unreachable';
-			$result['message'] = $is_tls
-				/* translators: %s: underlying transport error. */
-				? sprintf( __( 'The endpoint could not be reached over HTTPS: %s. On local/dev sites this is usually a self-signed certificate the AI client must be told to trust.', 'thinkrank' ), $err )
-				/* translators: %s: underlying transport error. */
-				: sprintf( __( 'The endpoint could not be reached: %s.', 'thinkrank' ), $err );
-			return $result;
+			$err           = $response->get_error_message();
+			$is_tls        = false !== stripos( $err, 'ssl' ) || false !== stripos( $err, 'certificate' );
+			$out['stage']  = $is_tls ? 'tls' : 'unreachable';
+			$out['detail'] = $is_tls
+				/* translators: 1: endpoint URL, 2: underlying transport error. */
+				? sprintf( __( '%1$s could not be reached over HTTPS: %2$s. On local/dev sites this is usually a self-signed certificate the AI client must be told to trust.', 'thinkrank' ), $url, $err )
+				/* translators: 1: endpoint URL, 2: underlying transport error. */
+				: sprintf( __( '%1$s could not be reached: %2$s.', 'thinkrank' ), $url, $err );
+			return $out;
 		}
 
-		$status                = (int) wp_remote_retrieve_response_code( $response );
-		$result['http_status'] = $status;
+		$status        = (int) wp_remote_retrieve_response_code( $response );
+		$out['status'] = $status;
 
 		if ( in_array( $status, [ 301, 302, 307, 308 ], true ) ) {
-			$location             = (string) wp_remote_retrieve_header( $response, 'location' );
-			$result['redirected'] = true;
-			$result['stage']      = 'redirect';
-			$result['message']    = $location
-				/* translators: %s: redirect target URL. */
-				? sprintf( __( 'The endpoint redirected to %s instead of answering. A redirect between HTTP and HTTPS usually means the site address and WordPress address schemes disagree.', 'thinkrank' ), $location )
-				: __( 'The endpoint redirected instead of answering, which usually means the site address and WordPress address schemes disagree.', 'thinkrank' );
-			return $result;
+			$location      = (string) wp_remote_retrieve_header( $response, 'location' );
+			$out['stage']  = 'redirect';
+			$out['detail'] = $location
+				/* translators: 1: endpoint URL, 2: redirect target URL. */
+				? sprintf( __( '%1$s redirected to %2$s instead of answering. A redirect between HTTP and HTTPS usually means the site address and WordPress address schemes disagree.', 'thinkrank' ), $url, $location )
+				/* translators: %s: endpoint URL. */
+				: sprintf( __( '%s redirected instead of answering, which usually means the site address and WordPress address schemes disagree.', 'thinkrank' ), $url );
+			return $out;
+		}
+
+		if ( 404 === $status ) {
+			$out['stage']  = 'rewrite';
+			$out['detail'] = sprintf(
+				/* translators: %s: endpoint URL. */
+				__( '%s returned 404 — WordPress does not know this URL. Re-save Settings → Permalinks to rebuild the rewrite rules.', 'thinkrank' ),
+				$url
+			);
+			return $out;
 		}
 
 		if ( 401 === $status || 403 === $status ) {
-			$result['stage']   = 'auth';
-			$result['message'] = __( 'The endpoint rejected the connection token (authentication failed). Rotate the token and reconnect your AI client.', 'thinkrank' );
-			return $result;
+			$out['stage']  = 'auth';
+			$out['detail'] = sprintf(
+				/* translators: %s: endpoint URL. */
+				__( '%s rejected the connection token (authentication failed). Rotate the token and reconnect your AI client.', 'thinkrank' ),
+				$url
+			);
+			return $out;
 		}
 
-		$result['authenticated'] = true;
-		$body                    = json_decode( (string) wp_remote_retrieve_body( $response ), true );
-		$tools                   = ( is_array( $body ) && isset( $body['result']['tools'] ) && is_array( $body['result']['tools'] ) )
+		if ( 429 === $status ) {
+			$out['stage']  = 'auth';
+			$out['detail'] = sprintf(
+				/* translators: %s: endpoint URL. */
+				__( '%s is rate-limiting this server after repeated failed tokens. Wait for the lockout to lapse, then rotate the token and reconnect.', 'thinkrank' ),
+				$url
+			);
+			return $out;
+		}
+
+		$out['authenticated'] = true;
+		$body                 = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		$tools                = ( is_array( $body ) && isset( $body['result']['tools'] ) && is_array( $body['result']['tools'] ) )
 			? $body['result']['tools']
 			: null;
 
-		if ( 200 !== $status || null === $tools ) {
-			$result['stage']   = 'no_tools';
-			$result['message'] = __( 'The endpoint answered but returned no tool catalog. Confirm the MCP runtime is built and abilities are registered.', 'thinkrank' );
-			$result['tools_count'] = is_array( $tools ) ? count( $tools ) : 0;
-			return $result;
+		// An EMPTY tools array counts as a failure, not a pass: that is exactly
+		// the shape of #241 — a connection an AI client reports as healthy
+		// while it has nothing to call. The abilities snapshot goes into the
+		// detail so support can tell "no ThinkRank abilities registered"
+		// (foreign Abilities API copy owns the registry) from "the runtime is
+		// missing entirely".
+		if ( 200 !== $status || null === $tools || [] === $tools ) {
+			$out['stage']  = 'no_tools';
+			$out['tools']  = is_array( $tools ) ? count( $tools ) : 0;
+			$out['detail'] = sprintf(
+				/* translators: 1: endpoint URL, 2: abilities-registry diagnostic summary. */
+				__( '%1$s answered but returned no tool catalog. Confirm the MCP runtime is built and abilities are registered. Diagnostics — %2$s', 'thinkrank' ),
+				$url,
+				Abilities_Registrar::summary()
+			);
+			return $out;
 		}
 
-		$result['ok']          = true;
-		$result['stage']       = 'ok';
-		$result['tools_count'] = count( $tools );
-		$result['message']     = sprintf(
-			/* translators: %d: number of MCP tools returned. */
-			_n( 'Connection healthy: the endpoint authenticated and returned %d tool.', 'Connection healthy: the endpoint authenticated and returned %d tools.', $result['tools_count'], 'thinkrank' ),
-			$result['tools_count']
+		$out['tools']  = count( $tools );
+		$out['detail'] = sprintf(
+			/* translators: 1: endpoint URL, 2: number of tools. */
+			__( '%1$s authenticated and returned %2$d tools.', 'thinkrank' ),
+			$url,
+			count( $tools )
 		);
-		return $result;
+		return $out;
+	}
+
+	/**
+	 * Fetch both OAuth discovery documents and confirm they are served and
+	 * well-formed. An OAuth client reads these before it holds any credential,
+	 * so a 404 here is invisible to every other check.
+	 *
+	 * @return array{stage:string,detail:string}
+	 */
+	private static function probe_discovery(): array {
+		// Each document must carry an identifier EXACTLY equal to the one we
+		// compute locally. A mere "the key exists" check passes on another
+		// plugin's metadata served from the same /.well-known/ path, which is
+		// the hijack case the rewrite rules already warn about.
+		$docs = [
+			home_url( '/.well-known/oauth-protected-resource/' . Mcp_Pairing::SITE_ENDPOINT_PATH ) => [
+				'key'      => 'resource',
+				'expected' => Mcp_Pairing::site_endpoint(),
+			],
+			home_url( '/.well-known/oauth-authorization-server/' . Mcp_Pairing::SITE_ENDPOINT_PATH ) => [
+				'key'      => 'issuer',
+				'expected' => Mcp_OAuth::issuer(),
+			],
+		];
+
+		$documents = [];
+
+		foreach ( $docs as $url => $spec ) {
+			$response = wp_remote_get(
+				$url,
+				[
+					'timeout'     => 10,
+					'redirection' => 0,
+				]
+			);
+			if ( is_wp_error( $response ) ) {
+				return [
+					'stage'     => 'discovery',
+					'documents' => $documents,
+					'detail'    => sprintf(
+						/* translators: 1: discovery document URL, 2: transport error. */
+						__( 'The OAuth discovery document %1$s could not be fetched: %2$s. Clients that connect by URL alone cannot authenticate without it.', 'thinkrank' ),
+						$url,
+						$response->get_error_message()
+					),
+				];
+			}
+			$status            = (int) wp_remote_retrieve_response_code( $response );
+			$raw               = (string) wp_remote_retrieve_body( $response );
+			$body              = json_decode( $raw, true );
+			$documents[ $url ] = is_array( $body ) ? $body : $raw;
+
+			if ( 200 !== $status || ! is_array( $body ) || ! isset( $body[ $spec['key'] ] ) ) {
+				return [
+					'stage'     => 'discovery',
+					'documents' => $documents,
+					'detail'    => sprintf(
+						/* translators: 1: discovery document URL, 2: HTTP status code. */
+						__( 'The OAuth discovery document %1$s returned %2$d instead of valid metadata. Re-save Settings → Permalinks; if it persists, another plugin may be claiming the /.well-known/ URLs.', 'thinkrank' ),
+						$url,
+						$status
+					),
+				];
+			}
+
+			$advertised = (string) $body[ $spec['key'] ];
+			if ( $advertised !== $spec['expected'] ) {
+				return [
+					'stage'     => 'discovery',
+					'documents' => $documents,
+					'detail'    => sprintf(
+						/* translators: 1: metadata field name, 2: value found in the document, 3: value it should be, 4: discovery document URL. */
+						__( 'The discovery document %4$s advertises %1$s "%2$s" but this site\'s MCP endpoint is "%3$s". RFC 9728 requires an exact match, so clients reject the metadata and report that the server does not implement OAuth. If the two differ only by scheme, a reverse proxy is terminating TLS without passing X-Forwarded-Proto; otherwise another plugin is serving this URL.', 'thinkrank' ),
+						$spec['key'],
+						$advertised,
+						$spec['expected'],
+						$url
+					),
+				];
+			}
+		}
+
+		// Both documents agree with us — but they agree on whatever home_url()
+		// says, so a site whose stored URL is http:// while it actually serves
+		// https:// is self-consistently wrong. Clients connect over https and
+		// then reject the http identifier.
+		$scheme_issue = self::probe_scheme();
+		if ( null !== $scheme_issue ) {
+			$scheme_issue['documents'] = $documents;
+			return $scheme_issue;
+		}
+
+		return [
+			'stage'     => 'ok',
+			'documents' => $documents,
+			'detail'    => __( 'Both OAuth discovery documents are served and advertise this site\'s MCP endpoint exactly.', 'thinkrank' ),
+		];
+	}
+
+	/**
+	 * Catch the reverse-proxy scheme trap: WordPress stores an http:// home
+	 * URL, so every advertised OAuth identifier is http://, while the site is
+	 * really served over https://. Everything is internally consistent, so no
+	 * comparison against our own values can see it — the only tell is that the
+	 * https:// variant of the endpoint answers too.
+	 *
+	 * @return array{stage:string,detail:string}|null Null when nothing is wrong.
+	 */
+	private static function probe_scheme(): ?array {
+		$endpoint = Mcp_Pairing::site_endpoint();
+		if ( 'https' === wp_parse_url( $endpoint, PHP_URL_SCHEME ) ) {
+			return null;
+		}
+
+		$secure = set_url_scheme( $endpoint, 'https' );
+		if ( null === self::probe_status( $secure, null ) ) {
+			// No HTTPS at all. A plain-HTTP site is its own (reported) problem,
+			// not the proxy misconfiguration this check is for.
+			return null;
+		}
+
+		return [
+			'stage'  => 'discovery',
+			'detail' => sprintf(
+				/* translators: 1: http endpoint URL advertised, 2: https endpoint URL that also answers. */
+				__( 'The discovery documents advertise %1$s, but %2$s answers as well — WordPress is storing an http:// site address behind a proxy that terminates TLS. AI clients connect over https and reject the http identifier as a mismatch. Fix the Site Address in Settings → General, or have the proxy send X-Forwarded-Proto.', 'thinkrank' ),
+				$endpoint,
+				$secure
+			),
+		];
+	}
+
+	/**
+	 * Confirm an unauthenticated call answers 401 WITH the RFC 9728
+	 * WWW-Authenticate challenge. A client that connects by URL alone has
+	 * nothing else to discover OAuth from — a bare 401, or any other status,
+	 * reads to it as "this server does not implement OAuth".
+	 *
+	 * @param string $endpoint Pretty endpoint URL.
+	 * @param string $fallback REST fallback URL.
+	 * @return array{stage:string,detail:string}
+	 */
+	private static function probe_challenge( string $endpoint, string $fallback ): array {
+		$answered = false;
+
+		foreach ( [ $endpoint, $fallback ] as $url ) {
+			$response = wp_remote_post(
+				$url,
+				[
+					'timeout'     => 10,
+					'redirection' => 0,
+					'headers'     => [
+						'Content-Type' => 'application/json',
+						'Accept'       => 'application/json',
+					],
+					'body'        => wp_json_encode(
+						[
+							'jsonrpc' => '2.0',
+							'id'      => 1,
+							'method'  => 'initialize',
+							'params'  => [],
+						]
+					),
+				]
+			);
+			if ( is_wp_error( $response ) ) {
+				continue; // Reachability is the other checks' job.
+			}
+			$answered = true;
+
+			$status    = (int) wp_remote_retrieve_response_code( $response );
+			$challenge = (string) wp_remote_retrieve_header( $response, 'www-authenticate' );
+
+			if ( 401 !== $status ) {
+				return [
+					'stage'  => 'challenge',
+					'detail' => sprintf(
+						/* translators: 1: endpoint URL, 2: HTTP status code. */
+						__( 'An unauthenticated call to %1$s answered %2$d instead of 401. Clients that connect by URL alone need the 401 challenge to start the OAuth flow.', 'thinkrank' ),
+						$url,
+						$status
+					),
+				];
+			}
+			if ( '' === $challenge ) {
+				return [
+					'stage'  => 'challenge',
+					'detail' => sprintf(
+						/* translators: %s: endpoint URL. */
+						__( '%s answered 401 but sent no WWW-Authenticate header — a security plugin or proxy is likely stripping it. Clients that connect by URL alone will report that this server does not implement OAuth.', 'thinkrank' ),
+						$url
+					),
+				];
+			}
+
+			// The challenge is only useful if the URL inside it resolves —
+			// that URL is the client's entire entry point into the flow.
+			if ( ! preg_match( '/resource_metadata="([^"]+)"/i', $challenge, $m ) ) {
+				return [
+					'stage'  => 'challenge',
+					'detail' => sprintf(
+						/* translators: 1: endpoint URL, 2: the WWW-Authenticate header value received. */
+						__( '%1$s sent a WWW-Authenticate header with no resource_metadata URL (%2$s). Clients have nowhere to look up this site\'s OAuth metadata.', 'thinkrank' ),
+						$url,
+						$challenge
+					),
+				];
+			}
+
+			$metadata_url = $m[1];
+			$metadata     = wp_remote_get(
+				$metadata_url,
+				[
+					'timeout'     => 10,
+					'redirection' => 2, // A host-level redirect to the real doc is fine.
+				]
+			);
+			$reachable    = ! is_wp_error( $metadata )
+				&& 200 === (int) wp_remote_retrieve_response_code( $metadata )
+				&& is_array( json_decode( (string) wp_remote_retrieve_body( $metadata ), true ) );
+
+			if ( ! $reachable ) {
+				return [
+					'stage'  => 'challenge',
+					'detail' => sprintf(
+						/* translators: 1: resource_metadata URL from the challenge header, 2: endpoint URL. */
+						__( 'The challenge from %2$s points at %1$s, but that URL does not return OAuth metadata. This is the first thing a client fetches, so the connection fails there. On a subdirectory install the spec-derived URL sits at the domain root, which WordPress cannot serve — a root redirect to this URL is needed.', 'thinkrank' ),
+						$metadata_url,
+						$url
+					),
+				];
+			}
+		}
+
+		// Neither URL answered at all. Reporting `ok` here would be the exact
+		// false pass this test exists to prevent — an unreachable endpoint is
+		// not a passing challenge. The other checks name the reachability
+		// failure, so this one only has to refuse to claim success.
+		if ( ! $answered ) {
+			return [
+				'stage'  => 'challenge',
+				'detail' => __( 'The OAuth challenge could not be checked because the endpoint did not answer. Fix the connection error above and re-run the test.', 'thinkrank' ),
+			];
+		}
+
+		return [
+			'stage'  => 'ok',
+			'detail' => __( 'Unauthenticated calls answer with the OAuth challenge, so URL-only clients can authenticate.', 'thinkrank' ),
+		];
+	}
+
+	/**
+	 * Detect a host that answers WordPress but refuses AI clients by
+	 * User-Agent. Replays the unauthenticated probe under the UAs a real MCP
+	 * backend sends and compares against the baseline; a 403/406/503 that the
+	 * baseline did not get is a bot filter, not a plugin problem.
+	 *
+	 * Blind spot worth stating plainly: this runs from the server's own IP,
+	 * which host firewalls usually trust, so it catches UA filtering but NOT
+	 * an IP-range block of the AI vendor. A green result here does not prove
+	 * an external client can connect.
+	 *
+	 * @param string $endpoint Pretty endpoint URL.
+	 * @return array{stage:string,detail:string}|null Null when it could not run.
+	 */
+	private static function probe_user_agent( string $endpoint ): ?array {
+		$baseline = self::probe_status( $endpoint, null );
+		if ( null === $baseline ) {
+			return null; // Endpoint unreachable — the other checks own that.
+		}
+
+		foreach ( self::CLIENT_USER_AGENTS as $agent ) {
+			$status = self::probe_status( $endpoint, $agent );
+			if ( null === $status || $status === $baseline ) {
+				continue;
+			}
+			// A different status is only damning when it is a refusal. An MCP
+			// answer (401 challenge / 200 / 202) under any UA is fine.
+			if ( in_array( $status, [ 200, 202, 401 ], true ) ) {
+				continue;
+			}
+			return [
+				'stage'  => 'ua_filter',
+				'detail' => sprintf(
+					/* translators: 1: user agent string, 2: HTTP status returned for it, 3: HTTP status returned for WordPress's own user agent. */
+					__( 'The endpoint answered %3$d for WordPress but %2$d for an AI client\'s User-Agent (%1$s). A security plugin, firewall or "block bad bots" rule is refusing non-browser clients — exempt the MCP and /.well-known/ paths, or no AI client will ever reach this site.', 'thinkrank' ),
+					$agent,
+					$status,
+					$baseline
+				),
+			];
+		}
+
+		return [
+			'stage'  => 'ok',
+			'detail' => __( 'The endpoint answers AI-client User-Agents the same way it answers WordPress, so no bot filter is blocking them. This cannot see an IP-level block of the AI vendor.', 'thinkrank' ),
+		];
+	}
+
+	// -- Helpers -----------------------------------------------------------
+
+	/**
+	 * Status code of one unauthenticated probe, or null if it never answered.
+	 *
+	 * @param string      $url   Endpoint to call.
+	 * @param string|null $agent User-Agent to send, or null for WordPress's own.
+	 * @return int|null
+	 */
+	private static function probe_status( string $url, ?string $agent ): ?int {
+		$args = [
+			'timeout'     => 10,
+			'redirection' => 0,
+			'headers'     => [
+				'Content-Type' => 'application/json',
+				'Accept'       => 'application/json',
+			],
+			'body'        => wp_json_encode(
+				[
+					'jsonrpc' => '2.0',
+					'id'      => 1,
+					'method'  => 'initialize',
+					'params'  => [],
+				]
+			),
+		];
+		if ( null !== $agent ) {
+			$args['user-agent'] = $agent;
+		}
+
+		$response = wp_remote_post( $url, $args );
+		if ( is_wp_error( $response ) ) {
+			return null;
+		}
+		return (int) wp_remote_retrieve_response_code( $response );
+	}
+
+	/**
+	 * Shape one check for the UI list.
+	 *
+	 * @param string $id     Check id.
+	 * @param string $label  Human label.
+	 * @param string $stage  Resulting stage ('ok' when it passed).
+	 * @param string $detail Explanatory line.
+	 * @return array{id:string,label:string,ok:bool,detail:string}
+	 */
+	private static function check( string $id, string $label, string $stage, string $detail ): array {
+		return [
+			'id'     => $id,
+			'label'  => $label,
+			'ok'     => 'ok' === $stage,
+			'detail' => $detail,
+		];
 	}
 }

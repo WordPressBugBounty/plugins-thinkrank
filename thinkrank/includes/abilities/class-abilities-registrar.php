@@ -93,17 +93,202 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Abilities_Registrar {
 
 	/**
+	 * Ability-name prefixes that mark an ability as ThinkRank's. The free
+	 * plugin owns `thinkrank/`; Pro registers under `thinkrank-pro/` via the
+	 * `thinkrank_register_abilities` filter.
+	 */
+	public const ABILITY_PREFIXES = [ 'thinkrank/', 'thinkrank-pro/' ];
+
+	/**
+	 * Whether the registration replay (see {@see self::ensure_registered()})
+	 * has already run this request. One attempt only — a replay that produced
+	 * nothing will not produce anything on the second try either, and the MCP
+	 * server asks for the tool list more than once per request.
+	 *
+	 * @var bool
+	 */
+	private static $replayed = false;
+
+	/**
 	 * Initialize the registrar (called by the plugin's component container).
+	 *
+	 * Deliberately does NOT bail on a missing `wp_register_ability`: the
+	 * Abilities API is a set of GLOBAL functions loaded under
+	 * `function_exists` guards, so which copy owns them — ours in
+	 * `dependencies/`, another plugin's, or core's — is decided by load order,
+	 * not by us. A copy that lands after `plugins_loaded` would have made this
+	 * an early return and left ThinkRank permanently unregistered (see #241).
+	 * The callbacks themselves are guarded instead, so hooking unconditionally
+	 * is free when no Abilities API ever shows up.
 	 *
 	 * @return void
 	 */
 	public function init() {
-		if ( ! function_exists( 'wp_register_ability' ) ) {
-			return;
-		}
-
 		add_action( 'wp_abilities_api_categories_init', [ $this, 'register_category' ] );
 		add_action( 'wp_abilities_api_init', [ $this, 'register_abilities' ] );
+	}
+
+	/**
+	 * Guarantee ThinkRank's abilities are in the registry, replaying
+	 * registration once if they are not.
+	 *
+	 * `wp_abilities_api_init` fires exactly once, from the lazy registry
+	 * singleton of whichever Abilities API copy owns the globals. If a foreign
+	 * copy owns them and fires its init under a different name or at a moment
+	 * when our hook is not attached yet, our callback never runs: the registry
+	 * is populated by everyone else and `tools/list` answers with an empty
+	 * array while auth, discovery and `initialize` all report success (#241).
+	 *
+	 * Calling `wp_get_abilities()` here forces that lazy init, so by the time
+	 * we decide to replay, `wp_abilities_api_init` has fired and
+	 * `wp_register_ability()` will accept our registrations. Registration is
+	 * idempotent (each ability is skipped when `wp_has_ability()` already
+	 * knows it), so a replay after a *successful* hook run is a no-op anyway.
+	 *
+	 * @param callable|null $replay Optional replay routine, for tests. Default
+	 *                              is this class's own category + abilities
+	 *                              registration.
+	 * @return int Number of ThinkRank abilities registered afterwards.
+	 */
+	public static function ensure_registered( ?callable $replay = null ): int {
+		if ( ! function_exists( 'wp_get_abilities' ) ) {
+			return 0;
+		}
+
+		// Forces the registry's lazy init (and with it `wp_abilities_api_init`).
+		$count = self::count_registered();
+		if ( $count > 0 || self::$replayed ) {
+			return $count;
+		}
+
+		// Before the registry has initialized, `wp_register_ability()` refuses
+		// the registration and calls `_doing_it_wrong()`. Nothing to replay yet.
+		if ( ! function_exists( 'did_action' ) || ! did_action( 'wp_abilities_api_init' ) ) {
+			return $count;
+		}
+
+		self::$replayed = true;
+
+		if ( ! Ability_Base::abilities_enabled() ) {
+			return 0;
+		}
+
+		if ( null === $replay ) {
+			$registrar = new self();
+			$replay    = static function () use ( $registrar ) {
+				$registrar->register_category();
+				$registrar->register_abilities();
+			};
+		}
+
+		$replay();
+
+		$count = self::count_registered();
+
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- WP_DEBUG-gated diagnostic.
+				'[TR-MCP] ThinkRank abilities were missing from the registry; replayed registration. ' . self::summary()
+			);
+		}
+
+		return $count;
+	}
+
+	/**
+	 * How many ThinkRank abilities the registry currently holds.
+	 *
+	 * @return int
+	 */
+	public static function count_registered(): int {
+		if ( ! function_exists( 'wp_get_abilities' ) ) {
+			return 0;
+		}
+
+		$count = 0;
+		foreach ( wp_get_abilities() as $ability ) {
+			if ( ! is_object( $ability ) || ! method_exists( $ability, 'get_name' ) ) {
+				continue;
+			}
+			foreach ( self::ABILITY_PREFIXES as $prefix ) {
+				if ( 0 === strpos( (string) $ability->get_name(), $prefix ) ) {
+					++$count;
+					break;
+				}
+			}
+		}
+
+		return $count;
+	}
+
+	/**
+	 * Which file defines the global Abilities API functions for this request.
+	 * A path outside ThinkRank's `dependencies/` means a foreign copy owns the
+	 * registry — the precondition for #241.
+	 *
+	 * @return string Absolute path, or '' when the API is absent/unresolvable.
+	 */
+	public static function owner_path(): string {
+		if ( ! function_exists( 'wp_get_abilities' ) ) {
+			return '';
+		}
+
+		try {
+			$reflection = new \ReflectionFunction( 'wp_get_abilities' );
+			return (string) $reflection->getFileName();
+		} catch ( \ReflectionException $e ) {
+			return '';
+		}
+	}
+
+	/**
+	 * Diagnostic snapshot of the Abilities API as this request sees it. Feeds
+	 * the MCP self-test and the debug log so "no tools registered" is
+	 * distinguishable from "tools filtered out" without shell access.
+	 *
+	 * @return array{api_available:bool, owner:string, foreign:bool, hook_fired:bool, total:int, thinkrank:int, replayed:bool}
+	 */
+	public static function diagnostics(): array {
+		$available = function_exists( 'wp_get_abilities' );
+		$owner     = self::owner_path();
+		$bundled   = defined( 'THINKRANK_PLUGIN_DIR' ) ? THINKRANK_PLUGIN_DIR : '';
+
+		// Read the registry BEFORE `hook_fired`: `wp_get_abilities()` forces the
+		// lazy singleton's init (which fires `wp_abilities_api_init`). Reading
+		// `did_action()` first would report `hook_fired => false` in the same
+		// snapshot that already counts registered abilities — an internally
+		// inconsistent line for the exact support scenario this feeds.
+		$total     = $available ? count( wp_get_abilities() ) : 0;
+		$thinkrank = self::count_registered();
+
+		return [
+			'api_available' => $available,
+			'owner'         => $owner,
+			'foreign'       => ( '' !== $owner && '' !== $bundled && 0 !== strpos( $owner, $bundled ) ),
+			'hook_fired'    => function_exists( 'did_action' ) ? (bool) did_action( 'wp_abilities_api_init' ) : false,
+			'total'         => $total,
+			'thinkrank'     => $thinkrank,
+			'replayed'      => self::$replayed,
+		];
+	}
+
+	/**
+	 * One-line, human-readable form of {@see self::diagnostics()}.
+	 *
+	 * @return string
+	 */
+	public static function summary(): string {
+		$d = self::diagnostics();
+
+		return sprintf(
+			'Abilities API: %s; owner: %s%s; abilities total: %d, thinkrank: %d; init fired: %s; replayed: %s',
+			$d['api_available'] ? 'present' : 'missing',
+			'' !== $d['owner'] ? $d['owner'] : 'unknown',
+			$d['foreign'] ? ' (foreign copy — not ThinkRank\'s bundled runtime)' : '',
+			$d['total'],
+			$d['thinkrank'],
+			$d['hook_fired'] ? 'yes' : 'no',
+			$d['replayed'] ? 'yes' : 'no'
+		);
 	}
 
 	/**

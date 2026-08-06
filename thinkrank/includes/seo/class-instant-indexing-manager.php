@@ -63,6 +63,16 @@ class Instant_Indexing_Manager {
         add_action('transition_post_status', [$this, 'handle_post_transition'], 10, 3);
         add_action('delete_post', [$this, 'handle_post_deletion'], 10, 2);
 
+        // Serve the IndexNow key file from PHP when no physical file exists.
+        // The key is normally written to the WordPress root, but on managed and
+        // hardened hosting that root is read-only, the write was skipped in
+        // silence, and every submission then came back 403 Forbidden — the one
+        // status IndexNow returns when it cannot read the key at the advertised
+        // keyLocation. Answering the request directly removes the filesystem
+        // from the critical path entirely. A real file on disk still wins: the
+        // web server serves it and this never runs.
+        add_action('parse_request', [$this, 'maybe_serve_key_file']);
+
         // Automatic submissions run out-of-band via WP-Cron so the editor's
         // save/publish/delete request never blocks on the IndexNow HTTP call.
         // Registered unconditionally (WP-Cron runs outside the admin context).
@@ -78,6 +88,169 @@ class Instant_Indexing_Manager {
             add_filter('page_row_actions', [$this, 'add_row_action_link'], 10, 2);
             add_action('admin_action_thinkrank_instant_index_single', [$this, 'handle_single_action_submit']);
         }
+    }
+
+    /**
+     * Serve `<key>.txt` at the site root when no physical file is present.
+     *
+     * IndexNow verifies ownership by fetching the key from `keyLocation` and
+     * comparing it to the key in the payload; anything else is a 403. Writing
+     * that file to ABSPATH fails on read-only roots, so this answers the
+     * request from PHP instead. Runs on `parse_request` (before the main query)
+     * because a missing `.txt` is routed to WordPress by the standard rewrite,
+     * and only matches the site's own current key — never an arbitrary path.
+     *
+     * @since 1.27.0
+     * @param \WP $wp Current WordPress environment instance.
+     * @return void
+     */
+    public function maybe_serve_key_file($wp): void {
+        if (is_admin()) {
+            return;
+        }
+
+        $settings = get_option($this->option_name, []);
+        if (empty($settings['enabled'])) {
+            return;
+        }
+
+        $api_key = (string) ($settings['api_key'] ?? '');
+        // The key is also a filename elsewhere, so it is always a plain hex
+        // token; refuse to match on anything else rather than compare loosely.
+        if (!preg_match('/^[a-f0-9]{8,64}$/', $api_key)) {
+            return;
+        }
+
+        $path = (string) wp_parse_url(
+            isset($_SERVER['REQUEST_URI']) ? esc_url_raw(wp_unslash($_SERVER['REQUEST_URI'])) : '',
+            PHP_URL_PATH
+        );
+
+        // Compare against the path of the advertised keyLocation, so a site in
+        // a subdirectory resolves exactly as it is announced to IndexNow.
+        $expected = (string) wp_parse_url(self::key_location($api_key), PHP_URL_PATH);
+        if ($expected === '' || untrailingslashit($path) !== untrailingslashit($expected)) {
+            return;
+        }
+
+        status_header(200);
+        header('Content-Type: text/plain; charset=utf-8');
+        header('X-Robots-Tag: noindex');
+        echo esc_html($api_key);
+        exit;
+    }
+
+    /**
+     * The public URL IndexNow is told to fetch the key from.
+     *
+     * Single source of truth: the submission payload, the settings screen and
+     * the request matcher above all derive from this, so they cannot drift.
+     *
+     * @since 1.27.0
+     * @param string $api_key Verification key.
+     * @return string Absolute key file URL.
+     */
+    public static function key_location(string $api_key): string {
+        return home_url('/' . $api_key . '.txt');
+    }
+
+    /**
+     * Actively verify that the advertised keyLocation is reachable and returns
+     * the key — the general safety net for #247.
+     *
+     * IndexNow only ever answers 403 when it cannot read a matching key at
+     * keyLocation, and that failure is otherwise silent until the first
+     * submission. On a read-only root the physical `<key>.txt` is never written,
+     * and the `parse_request` fallback only fires when the request actually
+     * reaches WordPress — which it does not on an Apache-style host running
+     * Plain permalinks. This does a one-shot loopback fetch of the exact URL we
+     * announce to IndexNow so any unreachable-key configuration (that one
+     * included) is caught on the settings screen instead of at first submit.
+     *
+     * @since 1.28.0
+     * @return array{reachable:bool,code:int,url:string,reason:string}
+     */
+    public function verify_key_reachable(): array {
+        $settings = get_option($this->option_name, []);
+        $api_key  = (string) ($settings['api_key'] ?? '');
+        $url      = $api_key !== '' ? self::key_location($api_key) : '';
+
+        $result = [
+            'reachable' => false,
+            'code'      => 0,
+            'url'       => $url,
+            'reason'    => '',
+        ];
+
+        if ($api_key === '' || !preg_match('/^[a-f0-9]{8,64}$/', $api_key)) {
+            $result['reason'] = __('No valid IndexNow key is set yet.', 'thinkrank');
+            return $result;
+        }
+
+        // Loopback fetch of our own key URL. sslverify is off because this is a
+        // self-check against this very site (a self-signed/local cert must not
+        // read as "unreachable"), mirroring how WP Site Health runs its loopback
+        // probes.
+        $response = wp_remote_get(
+            $url,
+            [
+                'timeout'   => 7,
+                'sslverify' => false,
+                // translators: this is a diagnostic self-request user agent.
+                'user-agent' => 'ThinkRank-IndexNow-KeyCheck/1.0',
+            ]
+        );
+
+        if (is_wp_error($response)) {
+            $result['reason'] = sprintf(
+                /* translators: %s: HTTP error message. */
+                __('Could not reach the key file from this server (%s). Search engines may still reach it; open it in a browser to confirm.', 'thinkrank'),
+                $response->get_error_message()
+            );
+            return $result;
+        }
+
+        $result['code'] = (int) wp_remote_retrieve_response_code($response);
+        $body           = trim((string) wp_remote_retrieve_body($response));
+
+        if ($result['code'] === 200 && hash_equals($api_key, $body)) {
+            $result['reachable'] = true;
+            return $result;
+        }
+
+        $result['reason'] = $this->key_unreachable_reason($result['code']);
+        return $result;
+    }
+
+    /**
+     * Build an actionable explanation when the key file is not reachable, naming
+     * the specific #247 combination (read-only root + Plain permalinks) so the
+     * user gets a fix instead of a silent, permanent 403.
+     *
+     * @since 1.28.0
+     * @param int $code HTTP status observed for the key URL (0 when none).
+     * @return string
+     */
+    private function key_unreachable_reason(int $code): string {
+        $root_writable = wp_is_writable(ABSPATH);
+        $pretty        = (bool) get_option('permalink_structure');
+
+        // The exact #247 trap: the file can't be written (read-only root) AND
+        // the server only routes unknown paths to WordPress under pretty
+        // permalinks, so the PHP fallback never runs either.
+        if (!$root_writable && !$pretty) {
+            return __('Your site root is read-only (so the key file can’t be written) and permalinks are set to “Plain” (so ThinkRank can’t serve the key dynamically). Fix either one: set Settings → Permalinks to any option other than “Plain”, or make the site root writable.', 'thinkrank');
+        }
+
+        if ($code === 404) {
+            return __('The key file returned 404. If your site root is read-only, set Settings → Permalinks to any option other than “Plain” so ThinkRank can serve the key.', 'thinkrank');
+        }
+
+        return sprintf(
+            /* translators: %d: HTTP status code returned by the key URL. */
+            __('The key file could not be verified (HTTP %d). Open it in a browser — it should show the key and nothing else.', 'thinkrank'),
+            $code
+        );
     }
 
     /**
@@ -359,11 +532,11 @@ class Instant_Indexing_Manager {
 
         $settings = get_option($this->option_name, []);
         $api_key = $settings['api_key'] ?? '';
-        $key_location = home_url('/' . $api_key . '.txt');
-
         if (empty($api_key)) {
             return ['success' => false, 'message' => 'API Key missing', 'submitted_count' => 0];
         }
+
+        $key_location = self::key_location($api_key);
 
         $body = [
             'host' => $host,
@@ -392,6 +565,19 @@ class Instant_Indexing_Manager {
             $response_code = (int) wp_remote_retrieve_response_code($response);
             $response_message = wp_remote_retrieve_response_message($response);
             $status = ($response_code >= 200 && $response_code < 300) ? 'success' : 'failed';
+
+            // "403 Forbidden" is IndexNow's answer for exactly one problem —
+            // it could not read a matching key at keyLocation — but the raw
+            // status reads like a permissions error against the API and sent a
+            // customer hunting through the wrong settings for days. Say what it
+            // actually means, and name the URL to check.
+            if ($response_code === 403) {
+                $response_message = sprintf(
+                    /* translators: %s: public URL of the IndexNow key file. */
+                    __('Key file could not be verified. Search engines must be able to read your key at %s — open it in a browser: it should show the key and nothing else.', 'thinkrank'),
+                    $key_location
+                );
+            }
         }
 
         // Log each URL

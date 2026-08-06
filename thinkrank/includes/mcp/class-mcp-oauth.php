@@ -67,6 +67,29 @@ final class Mcp_OAuth {
 	 */
 	private const SUPPORTED_SCOPES = [ 'mcp', 'read', 'write' ];
 
+	/**
+	 * Throttle window (seconds) for per-client last-used writes — at most one
+	 * option write per minute per client, so a busy connector can't turn every
+	 * MCP call into a database write.
+	 */
+	private const LAST_USED_THROTTLE = 60;
+
+	/**
+	 * How many registered clients to keep. RFC 7591 registration is open by
+	 * necessity — a client must register BEFORE it can hold any credential —
+	 * so without a cap anyone on the internet can grow this option without
+	 * bound, and every state() read pays for it. Clients holding a live token
+	 * are never evicted, so the cap only ever discards abandoned registrations.
+	 */
+	private const MAX_CLIENTS = 50;
+
+	/**
+	 * How long an unused client registration survives (seconds). A client that
+	 * registers and never completes the flow is abandoned; real ones exchange
+	 * a code within a minute.
+	 */
+	private const CLIENT_TTL = 86400; // 24 hours.
+
 	// -- URLs ------------------------------------------------------------
 
 	/**
@@ -190,6 +213,7 @@ final class Mcp_OAuth {
 			'name'          => $name,
 			'created'       => time(),
 		];
+		$state['clients']               = self::prune_clients( $state );
 		self::save( $state );
 
 		return [
@@ -442,8 +466,22 @@ final class Mcp_OAuth {
 		if ( (int) $entry['expires'] < time() ) {
 			return null;
 		}
+
+		// Record activity against the owning client so the "Connected AI apps"
+		// list can show a last-used date. Throttled + stored on the client
+		// record so it survives access-token rotation.
+		$client_id = (string) $entry['client_id'];
+		$now       = time();
+		if ( isset( $state['clients'][ $client_id ] ) && is_array( $state['clients'][ $client_id ] ) ) {
+			$last = isset( $state['clients'][ $client_id ]['last_used'] ) ? (int) $state['clients'][ $client_id ]['last_used'] : 0;
+			if ( $now - $last >= self::LAST_USED_THROTTLE ) {
+				$state['clients'][ $client_id ]['last_used'] = $now;
+				self::save( $state );
+			}
+		}
+
 		return [
-			'client_id' => (string) $entry['client_id'],
+			'client_id' => $client_id,
 			'scope'     => (string) $entry['scope'],
 			'user_id'   => (int) $entry['user_id'],
 		];
@@ -470,6 +508,98 @@ final class Mcp_OAuth {
 	 */
 	public static function revoke_all(): void {
 		delete_option( self::OPTION );
+	}
+
+	/**
+	 * The OAuth clients currently holding a live grant, for the "Connected AI
+	 * apps" list. A client counts as connected while it holds an unexpired
+	 * refresh token (the durable 30-day grant) or access token; a client that
+	 * only registered but never completed consent is excluded. One entry per
+	 * client_id, newest connection first.
+	 *
+	 * @return array<int,array{client_id:string,name:string,scope:string,read_only:bool,user_id:int,connected_at:int,last_used:int}>
+	 */
+	public static function connected_apps(): array {
+		$state = self::state();
+
+		// Collect the scope + approving user per active client. Refresh tokens
+		// are the durable grant, so prefer them; fall back to access tokens.
+		$active = [];
+		foreach ( [ 'refresh', 'tokens' ] as $bucket ) {
+			foreach ( $state[ $bucket ] as $entry ) {
+				$cid = isset( $entry['client_id'] ) ? (string) $entry['client_id'] : '';
+				if ( '' === $cid || isset( $active[ $cid ] ) ) {
+					continue;
+				}
+				$active[ $cid ] = [
+					'scope'   => isset( $entry['scope'] ) ? (string) $entry['scope'] : 'mcp',
+					'user_id' => isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0,
+				];
+			}
+		}
+
+		$apps = [];
+		foreach ( $active as $cid => $info ) {
+			$client = isset( $state['clients'][ $cid ] ) && is_array( $state['clients'][ $cid ] ) ? $state['clients'][ $cid ] : [];
+			$apps[] = [
+				'client_id'    => $cid,
+				'name'         => isset( $client['name'] ) ? (string) $client['name'] : __( 'MCP Client', 'thinkrank' ),
+				'scope'        => $info['scope'],
+				'read_only'    => self::scope_is_read_only( $info['scope'] ),
+				'user_id'      => $info['user_id'],
+				'connected_at' => isset( $client['created'] ) ? (int) $client['created'] : 0,
+				'last_used'    => isset( $client['last_used'] ) ? (int) $client['last_used'] : 0,
+			];
+		}
+
+		// Newest connection first.
+		usort(
+			$apps,
+			static function ( array $a, array $b ): int {
+				return $b['connected_at'] <=> $a['connected_at'];
+			}
+		);
+
+		return $apps;
+	}
+
+	/**
+	 * Revoke a single OAuth client's ACCESS — drops its access tokens, refresh
+	 * tokens, and any pending codes, cutting that one app off immediately while
+	 * leaving every other connection intact. It disappears from
+	 * connected_apps() (which keys off live tokens), so the UI shows it gone.
+	 *
+	 * The client's dynamic registration (its client_id + redirect_uris) is
+	 * intentionally KEPT: MCP clients such as ChatGPT cache the client_id from
+	 * their first registration and reuse it on reconnect, hitting /authorize
+	 * with that id rather than registering afresh. If we deleted the
+	 * registration, that reconnect would fail with "Unknown client_id". Keeping
+	 * it lets the app re-authorize — which still requires fresh admin consent
+	 * (and mints brand-new tokens), so revocation loses nothing.
+	 *
+	 * @param string $client_id The client whose access to revoke.
+	 * @return bool True if any live grant was removed.
+	 */
+	public static function revoke_client( string $client_id ): bool {
+		if ( '' === $client_id ) {
+			return false;
+		}
+		$state   = self::state();
+		$removed = false;
+
+		foreach ( [ 'tokens', 'refresh', 'codes' ] as $bucket ) {
+			foreach ( $state[ $bucket ] as $key => $entry ) {
+				if ( isset( $entry['client_id'] ) && (string) $entry['client_id'] === $client_id ) {
+					unset( $state[ $bucket ][ $key ] );
+					$removed = true;
+				}
+			}
+		}
+
+		if ( $removed ) {
+			self::save( $state );
+		}
+		return $removed;
 	}
 
 	// -- State + helpers -------------------------------------------------
@@ -541,6 +671,65 @@ final class Mcp_OAuth {
 			'name'          => isset( $c['name'] ) ? (string) $c['name'] : 'MCP Client',
 			'created'       => isset( $c['created'] ) ? (int) $c['created'] : 0,
 		];
+	}
+
+	/**
+	 * Bound the registered-client list. Drops abandoned registrations past
+	 * CLIENT_TTL first, then — if still over MAX_CLIENTS — the oldest of what
+	 * is left. A client referenced by a live code, access token, or refresh
+	 * token is NEVER dropped: evicting one would break a working connection,
+	 * so a site legitimately holding more than MAX_CLIENTS live grants keeps
+	 * them all and the cap simply stops applying to that remainder.
+	 *
+	 * @param array<string,array<string,mixed>> $state Full state (clients + grant buckets).
+	 * @return array<string,array<string,mixed>> The clients array to store.
+	 */
+	private static function prune_clients( array $state ): array {
+		$clients = $state['clients'];
+
+		$in_use = [];
+		foreach ( [ 'codes', 'tokens', 'refresh' ] as $bucket ) {
+			foreach ( $state[ $bucket ] as $entry ) {
+				if ( is_array( $entry ) && isset( $entry['client_id'] ) ) {
+					$in_use[ (string) $entry['client_id'] ] = true;
+				}
+			}
+		}
+
+		$now = time();
+		foreach ( $clients as $id => $client ) {
+			$created = isset( $client['created'] ) ? (int) $client['created'] : 0;
+			if ( ! isset( $in_use[ $id ] ) && $created + self::CLIENT_TTL < $now ) {
+				unset( $clients[ $id ] );
+			}
+		}
+
+		if ( count( $clients ) <= self::MAX_CLIENTS ) {
+			return $clients;
+		}
+
+		// Still over the cap — evict the oldest unused registrations.
+		$evictable = array_filter(
+			$clients,
+			static function ( $id ) use ( $in_use ) {
+				return ! isset( $in_use[ $id ] );
+			},
+			ARRAY_FILTER_USE_KEY
+		);
+		uasort(
+			$evictable,
+			static function ( $a, $b ) {
+				return ( isset( $a['created'] ) ? (int) $a['created'] : 0 ) <=> ( isset( $b['created'] ) ? (int) $b['created'] : 0 );
+			}
+		);
+		foreach ( array_keys( $evictable ) as $id ) {
+			if ( count( $clients ) <= self::MAX_CLIENTS ) {
+				break;
+			}
+			unset( $clients[ $id ] );
+		}
+
+		return $clients;
 	}
 
 	/**

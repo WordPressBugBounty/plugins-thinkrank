@@ -217,6 +217,9 @@ class Content_Brief_Generator {
         $tone = $params['tone'] ?? 'professional';
         $competitor_urls = $params['competitor_urls'] ?? [];
         $additional_context = $params['additional_context'] ?? '';
+        // Write the brief in the site (or related post's) language rather than
+        // defaulting to English on non-English sites (issue #234).
+        $language = \ThinkRank\AI\Language_Resolver::resolve((int) ($params['post_id'] ?? 0));
 
         // Analyze competitor URLs if provided
         $competitor_analysis = '';
@@ -234,7 +237,8 @@ class Content_Brief_Generator {
             $tone,
             $competitor_analysis,
             $additional_context,
-            $this->get_current_provider()
+            $this->get_current_provider(),
+            $language
         );
 
         try {

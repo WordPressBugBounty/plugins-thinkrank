@@ -357,6 +357,7 @@ class Manager {
         $content_type   = (string) ($options['content_type'] ?? 'blog_post');
         $tone           = (string) ($options['tone'] ?? 'professional');
         $suggestion     = (string) ($options['suggestion'] ?? '');
+        $language       = (string) ($options['language'] ?? '');
 
         // Cache identical requests (same content + inputs) to avoid duplicate calls.
         // Cap content server-side (mirror the frontend 5000-char trim) so a
@@ -390,7 +391,8 @@ class Manager {
             $suggestion,
             $provider,
             $sentiment_words,
-            $power_words
+            $power_words,
+            $language
         );
 
         $generated = $this->request_title($prompt);
@@ -508,6 +510,7 @@ class Manager {
         $content_type   = (string) ($options['content_type'] ?? 'blog_post');
         $tone           = (string) ($options['tone'] ?? 'professional');
         $suggestion     = (string) ($options['suggestion'] ?? '');
+        $language       = (string) ($options['language'] ?? '');
 
         // Cap content server-side (mirror the frontend 5000-char trim) so a
         // direct REST caller can't force oversized prompt/cache/AI work.
@@ -533,7 +536,8 @@ class Manager {
             $content_type,
             $tone,
             $suggestion,
-            $provider
+            $provider,
+            $language
         );
 
         $valid = function (string $desc) use ($needs_keyword, $target_keyword): bool {

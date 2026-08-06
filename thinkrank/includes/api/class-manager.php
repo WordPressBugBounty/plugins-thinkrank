@@ -228,6 +228,12 @@ class Manager {
                     'default' => 'professional',
                     'sanitize_callback' => 'sanitize_text_field',
                 ],
+                'post_id' => [
+                    'type' => 'integer',
+                    'required' => false,
+                    'default' => 0,
+                    'sanitize_callback' => 'absint',
+                ],
             ],
         ]);
 
@@ -263,6 +269,12 @@ class Manager {
                     'type' => 'string',
                     'sanitize_callback' => 'sanitize_text_field',
                 ],
+                'post_id' => [
+                    'type' => 'integer',
+                    'required' => false,
+                    'default' => 0,
+                    'sanitize_callback' => 'absint',
+                ],
             ],
         ]);
 
@@ -297,6 +309,12 @@ class Manager {
                 'suggestion' => [
                     'type' => 'string',
                     'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'post_id' => [
+                    'type' => 'integer',
+                    'required' => false,
+                    'default' => 0,
+                    'sanitize_callback' => 'absint',
                 ],
             ],
         ]);
@@ -809,6 +827,10 @@ class Manager {
         // Get Settings instance for proper encryption handling
         $settings = \ThinkRank\Core\Settings::instance();
 
+        // Capture the pre-save MCP state so we can detect an on/off transition
+        // below and mint/revoke the connection token to match (see #244).
+        $mcp_was_enabled = (bool) $settings->get('enable_mcp', false);
+
         // Map frontend parameter names to setting keys
         $settings_map = [
             'ai_provider' => 'ai_provider',
@@ -848,6 +870,25 @@ class Manager {
                 if (!$settings->set($setting_key, $value)) {
                     // Settings save failed, continue with other settings
                 }
+            }
+        }
+
+        // MCP is a single master switch (see #244): enabling it auto-mints a
+        // read/write connection token so the connect recipes are ready without
+        // a separate "Generate token" step.
+        //
+        // Disabling is a PAUSE, not a wipe: the switch alone already denies all
+        // access (Mcp_Server 403s and the OAuth/discovery endpoints refuse while
+        // off), so stored tokens and OAuth grants are inert. We keep them so
+        // re-enabling restores every previously connected app with no
+        // re-approval. Explicit revocation stays available per-app (the
+        // Connected AI apps trash button) and for the shared token (Reset
+        // token / rotate). Only act on an actual on->off->on transition so
+        // saving unrelated settings never touches the connection.
+        if (isset($params['enable_mcp'])) {
+            $mcp_now_enabled = (bool) $settings->get('enable_mcp', false);
+            if ($mcp_now_enabled && !$mcp_was_enabled) {
+                \ThinkRank\Mcp\Mcp_Pairing::connect();
             }
         }
 
@@ -940,6 +981,9 @@ class Manager {
             'target_keyword' => $request->get_param('target_keyword'),
             'content_type' => $request->get_param('content_type'),
             'tone' => $request->get_param('tone'),
+            // Instruct the model to write in the post/site language instead of
+            // defaulting to English on non-English sites (issue #234).
+            'language' => \ThinkRank\AI\Language_Resolver::resolve((int) $request->get_param('post_id')),
         ];
 
         // Rate limiting: per user/IP per route
@@ -993,6 +1037,7 @@ class Manager {
             'content_type' => $request->get_param('content_type'),
             'tone' => $request->get_param('tone'),
             'suggestion' => $request->get_param('suggestion'),
+            'language' => \ThinkRank\AI\Language_Resolver::resolve((int) $request->get_param('post_id')),
         ];
 
         // Rate limiting: shares the AI generation bucket.
@@ -1042,6 +1087,7 @@ class Manager {
             'content_type' => $request->get_param('content_type'),
             'tone' => $request->get_param('tone'),
             'suggestion' => $request->get_param('suggestion'),
+            'language' => \ThinkRank\AI\Language_Resolver::resolve((int) $request->get_param('post_id')),
         ];
 
         // Rate limiting: shares the AI generation bucket.

@@ -198,11 +198,43 @@ abstract class Abstract_Plugin_Exporter {
     /**
      * Convert plugin-specific template variables to literal values
      *
-     * @param string $value String potentially containing template variables
+     * Accepts mixed because the input is another plugin's stored data, over
+     * which we have no schema guarantees. Rank Math in particular can hold
+     * booleans inside its options arrays where a template string is expected,
+     * and the `?? ''` at the call sites only guards against a MISSING key —
+     * a present-but-boolean value sailed straight into a string-typed
+     * parameter and fataled the whole migration at the snapshot step.
+     * Implementations MUST start with stringify_template_value().
+     *
+     * @param mixed $value Value potentially containing template variables
      * @param int|null $post_id Post ID for context-specific variables
      * @return string Converted string
      */
-    abstract protected function convert_template_variables(string $value, ?int $post_id = null): string;
+    abstract protected function convert_template_variables(mixed $value, ?int $post_id = null): string;
+
+    /**
+     * Coerce a foreign settings/meta value into a template string.
+     *
+     * Strings pass through; ints and floats are kept as their string form (a
+     * purely numeric title is odd but meaningful); everything else — booleans,
+     * arrays, objects, null — has no sensible reading as a template, so it
+     * becomes '', which downstream already treats as "not set" and replaces
+     * with defaults. Dropping garbage beats failing the migration over it.
+     *
+     * @param mixed $value Raw value from the source plugin's storage.
+     * @return string Usable template string, possibly ''.
+     */
+    final protected function stringify_template_value(mixed $value): string {
+        if (is_string($value)) {
+            return $value;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        return '';
+    }
 
     /**
      * Export a chunk of data and write to snapshot

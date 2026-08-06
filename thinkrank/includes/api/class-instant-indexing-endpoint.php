@@ -124,6 +124,19 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
             ]
         );
 
+        // Verify the advertised key file is actually reachable (see #247).
+        register_rest_route(
+            $this->namespace,
+            '/' . $this->rest_base . '/verify-key',
+            [
+                [
+                    'methods' => 'GET',
+                    'callback' => [$this, 'verify_key'],
+                    'permission_callback' => [$this, 'check_read_permissions']
+                ]
+            ]
+        );
+
         // Get submission history
         register_rest_route(
             $this->namespace,
@@ -396,6 +409,28 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
             'success' => $result['success'],
             'message' => $result['message'],
             'count' => (int) ($result['submitted_count'] ?? 0)
+        ], 200);
+    }
+
+    /**
+     * Verify the advertised IndexNow key file is reachable and returns the key.
+     *
+     * Runs a one-shot loopback fetch of keyLocation so an unreachable-key
+     * configuration (read-only root + Plain permalinks, a CDN edge rule, etc.)
+     * surfaces on the settings screen instead of as a silent 403 at first
+     * submission (see #247).
+     *
+     * @since 1.28.0
+     *
+     * @param WP_REST_Request $request Request object
+     * @return WP_REST_Response Response object
+     */
+    public function verify_key(WP_REST_Request $request): WP_REST_Response {
+        $manager = new \ThinkRank\SEO\Instant_Indexing_Manager();
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => $manager->verify_key_reachable(),
         ], 200);
     }
 

@@ -159,7 +159,8 @@ class OpenRouter_Client {
         $tone = $options['tone'] ?? 'professional';
 
         $prompt_builder = $this->get_prompt_builder();
-        $prompt = $prompt_builder->build_seo_prompt($content, $target_keyword, $content_type, $tone, 'openrouter');
+        $language = is_string($options['language'] ?? null) ? $options['language'] : '';
+        $prompt = $prompt_builder->build_seo_prompt($content, $target_keyword, $content_type, $tone, 'openrouter', $language);
 
         $response = $this->generate_completion($prompt, [
             'max_tokens' => $this->get_recommended_tokens('seo_metadata'),

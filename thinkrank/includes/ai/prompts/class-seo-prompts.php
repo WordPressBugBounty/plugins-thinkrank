@@ -30,6 +30,27 @@ if (!defined('ABSPATH')) {
 class SEO_Prompts {
 
     /**
+     * Build the language directive block for a prompt.
+     *
+     * Injected near the top of every generation prompt so the model writes in
+     * the site/post language instead of defaulting to English — the fix for
+     * English/mixed output on non-English sites (issue #234). Empty when no
+     * language is resolved, preserving the legacy infer-from-content behavior.
+     *
+     * @since 1.27.0
+     *
+     * @param string $language Human-readable target language (may be empty).
+     * @return string Directive block, or '' when no language is given.
+     */
+    private function language_directive(string $language): string {
+        if ($language === '') {
+            return '';
+        }
+
+        return "\n\nLANGUAGE (critical): Write ALL output — every title, description, keyword and any other text — in {$language}. Match the language of the source content. Do NOT translate to English or switch languages.";
+    }
+
+    /**
      * Build SEO metadata optimization prompt
      *
      * @since 1.0.0
@@ -39,12 +60,13 @@ class SEO_Prompts {
      * @param string $content_type Type of content
      * @param string $tone Desired tone
      * @param string $provider AI provider
+     * @param string $language Target output language (empty = infer from content)
      * @return string Formatted prompt
      */
-    public function build_seo_prompt(string $content, string $target_keyword, string $content_type, string $tone, string $provider = 'openai'): string {
+    public function build_seo_prompt(string $content, string $target_keyword, string $content_type, string $tone, string $provider = 'openai', string $language = ''): string {
         $keyword_instruction = $target_keyword ? "Focus on the keyword: \"{$target_keyword}\"" : "Identify the main topic";
         
-        return "You are an expert SEO copywriter. Analyze the following {$content_type} content and generate optimized SEO metadata.
+        return "You are an expert SEO copywriter. Analyze the following {$content_type} content and generate optimized SEO metadata.{$this->language_directive($language)}
 
 {$keyword_instruction}
 
@@ -92,7 +114,7 @@ Format your response as JSON:
      * @param array  $power_words      Power words the title check rewards.
      * @return string Formatted prompt.
      */
-    public function build_title_improvement_prompt(string $content, string $current_title, string $target_keyword, string $content_type, string $tone, string $suggestion, string $provider = 'openai', array $sentiment_words = [], array $power_words = []): string {
+    public function build_title_improvement_prompt(string $content, string $current_title, string $target_keyword, string $content_type, string $tone, string $suggestion, string $provider = 'openai', array $sentiment_words = [], array $power_words = [], string $language = ''): string {
         $keyword_instruction = $target_keyword
             ? "Naturally include the focus keyword: \"{$target_keyword}\"."
             : 'Identify the main topic from the content and lead with it.';
@@ -117,7 +139,7 @@ Format your response as JSON:
             $power_line = "\n- Where natural, also include a number or ONE of these power words verbatim: {$list}.";
         }
 
-        return "You are an expert SEO copywriter. Rewrite the SEO title for the following {$content_type} so it ranks and earns clicks.
+        return "You are an expert SEO copywriter. Rewrite the SEO title for the following {$content_type} so it ranks and earns clicks.{$this->language_directive($language)}
 
 {$current_title_line}
 {$suggestion_line}
@@ -156,7 +178,7 @@ Format your response as JSON:
      * @param string $provider       AI provider.
      * @return string Formatted prompt.
      */
-    public function build_meta_description_improvement_prompt(string $content, string $current_desc, string $target_keyword, string $content_type, string $tone, string $suggestion, string $provider = 'openai'): string {
+    public function build_meta_description_improvement_prompt(string $content, string $current_desc, string $target_keyword, string $content_type, string $tone, string $suggestion, string $provider = 'openai', string $language = ''): string {
         $keyword_instruction = $target_keyword
             ? "MUST naturally include the focus keyword: \"{$target_keyword}\"."
             : 'Lead with the main topic from the content.';
@@ -167,7 +189,7 @@ Format your response as JSON:
             ? "Specifically fix this issue: \"{$suggestion}\"."
             : 'Improve the overall SEO effectiveness of the meta description.';
 
-        return "You are an expert SEO copywriter. Write the meta description for the following {$content_type} so it earns clicks from search results.
+        return "You are an expert SEO copywriter. Write the meta description for the following {$content_type} so it earns clicks from search results.{$this->language_directive($language)}
 
 {$current_desc_line}
 {$suggestion_line}

@@ -25,6 +25,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\Mcp;
 
+use ThinkRank\Abilities\Abilities_Registrar;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
@@ -211,6 +213,15 @@ final class Mcp_Tools {
 		if ( ! function_exists( 'wp_get_abilities' ) ) {
 			return [];
 		}
+
+		// Our abilities reach the registry through `wp_abilities_api_init`,
+		// which fires once from whichever Abilities API copy owns the global
+		// functions. When a foreign copy owns them our callback can be missed
+		// entirely, leaving this filter with nothing to match and the client
+		// with a connected-but-empty tool list (#241). This replays the
+		// registration once, and is a no-op on a healthy request.
+		Abilities_Registrar::ensure_registered();
+
 		$out = [];
 		foreach ( wp_get_abilities() as $ability ) {
 			if ( ! is_object( $ability ) || ! method_exists( $ability, 'get_name' ) ) {

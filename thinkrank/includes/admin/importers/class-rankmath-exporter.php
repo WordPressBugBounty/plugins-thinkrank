@@ -951,11 +951,13 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * archives before delegating to the shared variable resolver. Without this
      * the term name is stripped and titles render as "Archives  - Site".
      *
-     * @param string $value   Raw Rank Math term meta value
-     * @param int    $term_id Term ID for context
+     * @param mixed $value   Raw Rank Math term meta value
+     * @param int   $term_id Term ID for context
      * @return string Resolved value
      */
-    private function convert_term_template_variables(string $value, int $term_id): string {
+    private function convert_term_template_variables(mixed $value, int $term_id): string {
+        // Same foreign-data rule as convert_template_variables (see abstract).
+        $value = $this->stringify_template_value($value);
         if ($value === '' || strpos($value, '%') === false) {
             return $value;
         }
@@ -973,7 +975,11 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         return trim((string) preg_replace('/\s{2,}/', ' ', $this->convert_template_variables($value)));
     }
 
-    protected function convert_template_variables(string $value, ?int $post_id = null): string {
+    protected function convert_template_variables(mixed $value, ?int $post_id = null): string {
+        // Foreign data first: booleans/arrays in the source plugin's options
+        // must degrade to '' here, not fatal the migration (see abstract).
+        $value = $this->stringify_template_value($value);
+
         if (empty($value) || strpos($value, '%') === false) {
             return $value;
         }
@@ -1033,10 +1039,14 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * %page%, %pt_single%, %currentyear%) are stripped so they never render
      * literally on the frontend.
      *
-     * @param string $template Raw Rank Math template
+     * @param mixed $template Raw Rank Math template
      * @return string ThinkRank-compatible template
      */
-    private function convert_template_tokens(string $template): string {
+    private function convert_template_tokens(mixed $template): string {
+        // Foreign data first: booleans/arrays in the source plugin's options
+        // must degrade to '' here, not fatal the migration (see abstract).
+        $template = $this->stringify_template_value($template);
+
         if (empty($template) || strpos($template, '%') === false) {
             return $template;
         }
@@ -1077,7 +1087,11 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * @param string $format Raw Rank Math image format
      * @return string ThinkRank-compatible image format
      */
-    private function convert_image_tokens(string $format): string {
+    private function convert_image_tokens(mixed $format): string {
+        // Foreign data first: booleans/arrays in the source plugin's options
+        // must degrade to '' here, not fatal the migration (see abstract).
+        $format = $this->stringify_template_value($format);
+
         if ($format === '' || strpos($format, '%') === false) {
             return $format;
         }

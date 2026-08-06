@@ -52,7 +52,8 @@ class Content_Brief_Prompts {
         string $tone,
         string $competitor_analysis,
         string $additional_context,
-        string $provider = 'openai'
+        string $provider = 'openai',
+        string $language = ''
     ): string {
         $primary_keyword = $target_keywords[0] ?? '';
         $secondary_keywords = array_slice($target_keywords, 1);
@@ -64,6 +65,11 @@ class Content_Brief_Prompts {
         ];
 
         $prompt = "Generate a comprehensive content brief for a {$content_type} targeting \"{$primary_keyword}\" with these specifications:\n\n";
+        if ($language !== '') {
+            // Keep the whole brief in the site/post language instead of
+            // defaulting to English on non-English sites (issue #234).
+            $prompt .= "LANGUAGE (critical): Write the ENTIRE brief — outline, titles, descriptions, keywords and every other piece of text — in {$language}. Do NOT translate to English or switch languages.\n\n";
+        }
         $prompt .= "Target Keywords: " . implode(', ', $target_keywords) . "\n";
         $prompt .= "Content Type: {$content_type}\n";
         $prompt .= "Target Audience: {$target_audience}\n";

@@ -76,15 +76,30 @@ final class Mcp_Server {
 			return self::error_response( null, self::UNAUTHORIZED, 'MCP is disabled on this site. Enable it under ThinkRank → MCP.', 403 );
 		}
 
+		// A request carrying NO credential is the normal opening move of the
+		// OAuth flow — the client is asking for the RFC 9728 challenge, not
+		// guessing a token. Only a credential that was PRESENTED and rejected
+		// counts against the limiter, and only such a request can be locked
+		// out; otherwise every OAuth-capable client walls itself off after
+		// DEFAULT_MAX_FAILS discovery probes.
+		$presented = self::extract_token( $request );
+
 		// Lockout check first: a rate-limited IP never reaches the compare.
-		if ( Mcp_Rate_Limiter::is_locked() ) {
-			return self::error_response( null, self::UNAUTHORIZED, 'Too many failed attempts. Try again later.', 429 );
+		if ( '' !== $presented && Mcp_Rate_Limiter::is_locked() ) {
+			$response = self::error_response( null, self::UNAUTHORIZED, 'Too many failed attempts. Try again later.', 429 );
+			// Keep the challenge on the 429 too: a client that only ever sees
+			// a bare 429 concludes the server has no OAuth at all.
+			$response->header( 'WWW-Authenticate', self::challenge_header() );
+			$response->header( 'Retry-After', (string) Mcp_Rate_Limiter::retry_after() );
+			return $response;
 		}
 
 		// Authenticate: static pairing token OR an OAuth 2.1 access token
 		// (both Bearer). Either satisfies the gate.
 		if ( true !== self::authorize( $request ) ) {
-			Mcp_Rate_Limiter::record_failure();
+			if ( '' !== $presented ) {
+				Mcp_Rate_Limiter::record_failure();
+			}
 			$response = self::error_response( null, self::UNAUTHORIZED, 'Unauthorized: invalid or missing connection token.', 401 );
 			// RFC 9728 challenge: point OAuth-capable clients at the
 			// protected-resource metadata so they can start the auth flow.
@@ -163,7 +178,15 @@ final class Mcp_Server {
 				return self::result( $id, (object) [] );
 
 			case 'tools/list':
-				return self::result( $id, [ 'tools' => Mcp_Tools::list() ] );
+				$tools = Mcp_Tools::list();
+				// An empty list while MCP is enabled means the Abilities
+				// runtime never loaded (broken package) — the client sees a
+				// clean, useless connection. Leave a trail for whoever debugs
+				// it; the admin notice and self-test carry the loud version.
+				if ( empty( $tools ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					error_log( '[TR-MCP] tools/list returned 0 tools. ' . \ThinkRank\Abilities\Abilities_Registrar::summary() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- WP_DEBUG-gated diagnostic.
+				}
+				return self::result( $id, [ 'tools' => $tools ] );
 
 			case 'tools/call':
 				return self::call_tool( $id, $params );
@@ -247,7 +270,12 @@ final class Mcp_Server {
 		$stored = Mcp_Pairing::site_token();
 		if ( '' !== $stored && hash_equals( $stored, $presented ) ) {
 			Mcp_Tools::set_read_only_override( null );
-			return self::impersonate( Mcp_Pairing::user_id() );
+			if ( self::impersonate( Mcp_Pairing::user_id() ) ) {
+				// Record activity for the "Static token connections" row.
+				Mcp_Pairing::touch_last_used();
+				return true;
+			}
+			return false;
 		}
 
 		// Path 2: an OAuth 2.1 access token minted by Mcp_OAuth. Its own

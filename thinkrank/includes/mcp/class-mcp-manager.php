@@ -86,6 +86,41 @@ final class Mcp_Manager {
 		add_action( 'init', [ $this, 'add_rewrite' ] );
 		add_filter( 'query_vars', [ $this, 'register_query_var' ] );
 		add_action( 'parse_request', [ $this, 'maybe_handle_pretty_endpoint' ] );
+
+		// The one broken state the server can't see from inside a request:
+		// MCP enabled but the bundled Abilities runtime absent. Everything
+		// else still works — OAuth discovers, tokens mint, clients connect —
+		// and tools/list is an empty array served as success. Three layers
+		// each "no-op gracefully" (the is_readable() require, the registrar,
+		// the tool registry) and composed they manufacture a connector that
+		// connects and offers nothing, with no signal anywhere. Say it loudly
+		// where an admin will look.
+		add_action( 'admin_notices', [ $this, 'warn_when_runtime_missing' ] );
+	}
+
+	/**
+	 * Admin notice when MCP is enabled but the Abilities runtime is missing.
+	 *
+	 * That combination almost always means an incomplete package — a source
+	 * archive or a zip built without `dependencies/vendor/` (the bundled
+	 * Abilities API + MCP adapter). Shown to admins on every screen: the fix
+	 * is reinstalling the plugin, and a user mid-support-ticket needs to see
+	 * it without knowing which screen to visit.
+	 *
+	 * @return void
+	 */
+	public function warn_when_runtime_missing(): void {
+		if ( ! self::is_enabled() || function_exists( 'wp_register_ability' ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		printf(
+			'<div class="notice notice-error"><p><strong>%s</strong> %s</p></div>',
+			esc_html__( 'ThinkRank MCP: AI assistants will connect but see no tools.', 'thinkrank' ),
+			esc_html__( 'MCP access is enabled, but the bundled Abilities runtime (dependencies/vendor) is missing from this installation — usually a plugin package built without it. Reinstall ThinkRank from wordpress.org or an official build; until then, connected AI clients get an empty tool list.', 'thinkrank' )
+		);
 	}
 
 	/**
@@ -141,6 +176,22 @@ final class Mcp_Manager {
 			'index.php?' . self::WELLKNOWN_QUERY_VAR . '=$matches[1]',
 			'top'
 		);
+		// Suffix form: <issuer>/.well-known/... . RFC 8414 specifies the
+		// path-INSERT form above, but the older OpenID Connect Discovery
+		// convention appends instead, and clients built on an OIDC library
+		// try that shape first (sometimes only that shape). Serving both
+		// costs two rules and removes a whole class of "server does not
+		// implement OAuth" failures from clients that never fall back.
+		add_rewrite_rule(
+			'^thinkrank/mcp/\.well-known/oauth-(protected-resource|authorization-server)/?$',
+			'index.php?' . self::WELLKNOWN_QUERY_VAR . '=$matches[1]',
+			'top'
+		);
+		add_rewrite_rule(
+			'^thinkrank/mcp/\.well-known/openid-configuration/?$',
+			'index.php?' . self::WELLKNOWN_QUERY_VAR . '=authorization-server',
+			'top'
+		);
 
 		// Browser-facing OAuth consent page — served OUTSIDE REST so cookie
 		// auth (is_user_logged_in) works after the wp-login round-trip.
@@ -153,6 +204,8 @@ final class Mcp_Manager {
 			'^thinkrank/mcp/([a-f0-9]{64})/?$',
 			'^thinkrank/mcp/?$',
 			'^\.well-known/oauth-(protected-resource|authorization-server)/thinkrank/mcp/?$',
+			'^thinkrank/mcp/\.well-known/oauth-(protected-resource|authorization-server)/?$',
+			'^thinkrank/mcp/\.well-known/openid-configuration/?$',
 			'^thinkrank/authorize/?$',
 		];
 		$rules = get_option( 'rewrite_rules' );
@@ -330,6 +383,34 @@ final class Mcp_Manager {
 			]
 		);
 
+		// Connected AI apps (see #244): list the OAuth-connected clients plus a
+		// single combined row for the shared static token, and revoke either.
+		register_rest_route(
+			self::NS,
+			'/mcp/apps',
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'rest_apps' ],
+				'permission_callback' => [ $this, 'admin_permission' ],
+			]
+		);
+		register_rest_route(
+			self::NS,
+			'/mcp/apps/revoke',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'rest_revoke_app' ],
+				'permission_callback' => [ $this, 'admin_permission' ],
+				'args'                => [
+					'client_id' => [
+						'type'        => 'string',
+						'required'    => true,
+						'description' => 'The OAuth client_id to revoke.',
+					],
+				],
+			]
+		);
+
 		// --- OAuth 2.1 authorization server (the "paste a URL only" path) -
 		// Discovery, dynamic client registration, and the token endpoint are
 		// all public (permission enforced inside): a client must reach them
@@ -388,7 +469,23 @@ final class Mcp_Manager {
 	 * @return \WP_REST_Response
 	 */
 	public function rest_connection(): \WP_REST_Response {
+		$this->ensure_connected();
 		return rest_ensure_response( Mcp_Pairing::public_status() );
+	}
+
+	/**
+	 * Self-heal: whenever the admin views the MCP page with MCP enabled, make
+	 * sure a connection token exists. New sites mint on the enable toggle (see
+	 * #244), but a site that had MCP on before that behavior shipped would have
+	 * no token; minting here — idempotent, admin-gated — keeps the connect
+	 * recipes populated without a separate "Generate token" click.
+	 *
+	 * @return void
+	 */
+	private function ensure_connected(): void {
+		if ( self::is_enabled() && ! Mcp_Pairing::is_connected() ) {
+			Mcp_Pairing::connect();
+		}
 	}
 
 	/**
@@ -432,6 +529,65 @@ final class Mcp_Manager {
 	 */
 	public function rest_self_test(): \WP_REST_Response {
 		return rest_ensure_response( Mcp_Self_Test::run() );
+	}
+
+	/**
+	 * GET /mcp/apps — the "Connected AI apps" list (see #244).
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function rest_apps(): \WP_REST_Response {
+		$this->ensure_connected();
+		return rest_ensure_response( $this->apps_payload() );
+	}
+
+	/**
+	 * POST /mcp/apps/revoke — cut off a single OAuth-connected app. Returns the
+	 * refreshed app list so the UI updates in one round trip. (The shared static
+	 * token has no per-client identity, so it is not listed or revoked here — it
+	 * is rotated from the connect card via /mcp/rotate.)
+	 *
+	 * @param \WP_REST_Request $request Carries target + client_id.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function rest_revoke_app( \WP_REST_Request $request ) {
+		$client_id = (string) $request->get_param( 'client_id' );
+		if ( '' === $client_id ) {
+			return new \WP_Error(
+				'thinkrank_missing_client_id',
+				__( 'A client_id is required to revoke an OAuth app.', 'thinkrank' ),
+				[ 'status' => 400 ]
+			);
+		}
+		Mcp_OAuth::revoke_client( $client_id );
+
+		return rest_ensure_response( $this->apps_payload() );
+	}
+
+	/**
+	 * Build the "Connected AI apps" payload: the OAuth-connected clients, with
+	 * the approving admin's display name resolved. Header-based (static-token)
+	 * clients share one anonymous secret and so are not represented here.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function apps_payload(): array {
+		$oauth_apps = [];
+		foreach ( Mcp_OAuth::connected_apps() as $app ) {
+			$user         = $app['user_id'] > 0 ? get_userdata( $app['user_id'] ) : false;
+			$oauth_apps[] = [
+				'client_id'    => $app['client_id'],
+				'name'         => $app['name'],
+				'read_only'    => $app['read_only'],
+				'approved_by'  => $user ? $user->display_name : __( 'Unknown user', 'thinkrank' ),
+				'connected_at' => $app['connected_at'],
+				'last_used'    => $app['last_used'],
+			];
+		}
+
+		return [
+			'oauth_apps' => $oauth_apps,
+		];
 	}
 
 	// -- OAuth 2.1 handlers ------------------------------------------------
@@ -789,7 +945,10 @@ final class Mcp_Manager {
 		// Forward any headers the handler set (notably WWW-Authenticate on a
 		// 401, which drives the OAuth discovery flow).
 		foreach ( $response->get_headers() as $name => $value ) {
-			header( $name . ': ' . $value );
+			// Re-assert the status on every header: PHP special-cases
+			// WWW-Authenticate and forces a 401 when no status is given,
+			// which would silently mask the 429 lockout response.
+			header( $name . ': ' . $value, true, $response->get_status() );
 		}
 		$data = $response->get_data();
 		if ( null !== $data ) {

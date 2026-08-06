@@ -49,6 +49,12 @@ final class Mcp_Pairing {
 	private const DEFAULT_SCOPES = [ 'read', 'write' ];
 
 	/**
+	 * Throttle window (seconds) for last-used writes — one option write per
+	 * minute at most, so a busy client can't hammer the option on every call.
+	 */
+	private const LAST_USED_THROTTLE = 60;
+
+	/**
 	 * The PRIMARY endpoint the user pastes into their AI client — this
 	 * site's own MCP URL.
 	 *
@@ -86,7 +92,7 @@ final class Mcp_Pairing {
 	/**
 	 * Current pairing state, defaults merged.
 	 *
-	 * @return array{site_token:string,connected:bool,connected_at:int,scopes:string[],user_id:int}
+	 * @return array{site_token:string,connected:bool,connected_at:int,scopes:string[],user_id:int,last_used:int}
 	 */
 	public static function state(): array {
 		$stored = get_option( self::OPTION, [] );
@@ -101,7 +107,29 @@ final class Mcp_Pairing {
 				? array_values( array_map( 'strval', $stored['scopes'] ) )
 				: [],
 			'user_id'      => isset( $stored['user_id'] ) ? (int) $stored['user_id'] : 0,
+			'last_used'    => isset( $stored['last_used'] ) ? (int) $stored['last_used'] : 0,
 		];
+	}
+
+	/**
+	 * Record that the static token was just used to authenticate an MCP call.
+	 * Throttled to at most one option write per minute so a busy client can't
+	 * turn every request into a database write. No-op when not connected.
+	 *
+	 * @return void
+	 */
+	public static function touch_last_used(): void {
+		$stored = get_option( self::OPTION, [] );
+		if ( ! is_array( $stored ) || empty( $stored['site_token'] ) ) {
+			return;
+		}
+		$now  = time();
+		$last = isset( $stored['last_used'] ) ? (int) $stored['last_used'] : 0;
+		if ( $now - $last < self::LAST_USED_THROTTLE ) {
+			return;
+		}
+		$stored['last_used'] = $now;
+		update_option( self::OPTION, $stored, false );
 	}
 
 	/**
@@ -156,6 +184,7 @@ final class Mcp_Pairing {
 			'mcp_endpoint'      => self::site_endpoint(),
 			'mcp_endpoint_rest' => self::site_endpoint_fallback(),
 			'connected_at'      => $state['connected_at'],
+			'last_used'         => $state['last_used'],
 			'scopes'            => $state['scopes'],
 			'read_only'         => self::is_read_only(),
 			// Ready-to-paste connection recipes (header-based — token stays out

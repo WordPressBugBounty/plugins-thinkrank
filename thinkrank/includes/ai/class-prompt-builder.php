@@ -100,10 +100,11 @@ class Prompt_Builder {
      * @param string $content_type Type of content
      * @param string $tone Desired tone
      * @param string $provider AI provider
+     * @param string $language Target output language (empty = infer from content)
      * @return string Formatted prompt
      */
-    public function build_seo_prompt(string $content, string $target_keyword, string $content_type, string $tone, string $provider = 'openai'): string {
-        return $this->get_seo_prompts()->build_seo_prompt($content, $target_keyword, $content_type, $tone, $provider);
+    public function build_seo_prompt(string $content, string $target_keyword, string $content_type, string $tone, string $provider = 'openai', string $language = ''): string {
+        return $this->get_seo_prompts()->build_seo_prompt($content, $target_keyword, $content_type, $tone, $provider, $language);
     }
 
     /**
@@ -120,10 +121,11 @@ class Prompt_Builder {
      * @param string $provider         AI provider.
      * @param array  $sentiment_words  Emotion/sentiment words the title check rewards.
      * @param array  $power_words      Power words the title check rewards.
+     * @param string $language          Target output language (empty = infer from content)
      * @return string Formatted prompt
      */
-    public function build_title_improvement_prompt(string $content, string $current_title, string $target_keyword, string $content_type, string $tone, string $suggestion, string $provider = 'openai', array $sentiment_words = [], array $power_words = []): string {
-        return $this->get_seo_prompts()->build_title_improvement_prompt($content, $current_title, $target_keyword, $content_type, $tone, $suggestion, $provider, $sentiment_words, $power_words);
+    public function build_title_improvement_prompt(string $content, string $current_title, string $target_keyword, string $content_type, string $tone, string $suggestion, string $provider = 'openai', array $sentiment_words = [], array $power_words = [], string $language = ''): string {
+        return $this->get_seo_prompts()->build_title_improvement_prompt($content, $current_title, $target_keyword, $content_type, $tone, $suggestion, $provider, $sentiment_words, $power_words, $language);
     }
 
     /**
@@ -138,10 +140,11 @@ class Prompt_Builder {
      * @param string $tone           Desired tone.
      * @param string $suggestion     The suggestion the description must address.
      * @param string $provider       AI provider.
+     * @param string $language        Target output language (empty = infer from content)
      * @return string Formatted prompt
      */
-    public function build_meta_description_improvement_prompt(string $content, string $current_desc, string $target_keyword, string $content_type, string $tone, string $suggestion, string $provider = 'openai'): string {
-        return $this->get_seo_prompts()->build_meta_description_improvement_prompt($content, $current_desc, $target_keyword, $content_type, $tone, $suggestion, $provider);
+    public function build_meta_description_improvement_prompt(string $content, string $current_desc, string $target_keyword, string $content_type, string $tone, string $suggestion, string $provider = 'openai', string $language = ''): string {
+        return $this->get_seo_prompts()->build_meta_description_improvement_prompt($content, $current_desc, $target_keyword, $content_type, $tone, $suggestion, $provider, $language);
     }
 
     /**
@@ -281,7 +284,8 @@ class Prompt_Builder {
         string $tone,
         string $competitor_analysis,
         string $additional_context,
-        string $provider = 'openai'
+        string $provider = 'openai',
+        string $language = ''
     ): string {
         return $this->get_content_brief_prompts()->build_content_brief_prompt(
             $target_keywords,
@@ -291,7 +295,8 @@ class Prompt_Builder {
             $tone,
             $competitor_analysis,
             $additional_context,
-            $provider
+            $provider,
+            $language
         );
     }
 

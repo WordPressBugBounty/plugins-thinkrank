@@ -1328,9 +1328,6 @@ video {
 .tr-root .tr-border-brand\/30{
   border-color: rgb(68 81 255 / 0.3);
 }
-.tr-root .tr-border-brand\/40{
-  border-color: rgb(68 81 255 / 0.4);
-}
 .tr-root .tr-border-danger{
   --tw-border-opacity: 1;
   border-color: rgb(146 28 19 / var(--tw-border-opacity, 1));
@@ -1463,12 +1460,6 @@ video {
 }
 .tr-root .tr-bg-brand-bg\/40{
   background-color: rgb(238 240 255 / 0.4);
-}
-.tr-root .tr-bg-brand\/15{
-  background-color: rgb(68 81 255 / 0.15);
-}
-.tr-root .tr-bg-brand\/5{
-  background-color: rgb(68 81 255 / 0.05);
 }
 .tr-root .tr-bg-cyan-50{
   --tw-bg-opacity: 1;
@@ -2405,6 +2396,11 @@ video {
 .tr-root .hover\:tr-text-brand:hover{
   --tw-text-opacity: 1;
   color: rgb(68 81 255 / var(--tw-text-opacity, 1));
+}
+
+.tr-root .hover\:tr-text-danger:hover{
+  --tw-text-opacity: 1;
+  color: rgb(146 28 19 / var(--tw-text-opacity, 1));
 }
 
 .tr-root .hover\:tr-text-primary:hover{
