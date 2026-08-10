@@ -1,60 +1,9 @@
 @import url(https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap);
 @import url(https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&di);
-*, ::before, ::after{
-  --tw-border-spacing-x: 0;
-  --tw-border-spacing-y: 0;
-  --tw-translate-x: 0;
-  --tw-translate-y: 0;
-  --tw-rotate: 0;
-  --tw-skew-x: 0;
-  --tw-skew-y: 0;
-  --tw-scale-x: 1;
-  --tw-scale-y: 1;
-  --tw-pan-x:  ;
-  --tw-pan-y:  ;
-  --tw-pinch-zoom:  ;
-  --tw-scroll-snap-strictness: proximity;
-  --tw-gradient-from-position:  ;
-  --tw-gradient-via-position:  ;
-  --tw-gradient-to-position:  ;
-  --tw-ordinal:  ;
-  --tw-slashed-zero:  ;
-  --tw-numeric-figure:  ;
-  --tw-numeric-spacing:  ;
-  --tw-numeric-fraction:  ;
-  --tw-ring-inset:  ;
-  --tw-ring-offset-width: 0px;
-  --tw-ring-offset-color: #fff;
-  --tw-ring-color: rgb(59 130 246 / 0.5);
-  --tw-ring-offset-shadow: 0 0 #0000;
-  --tw-ring-shadow: 0 0 #0000;
-  --tw-shadow: 0 0 #0000;
-  --tw-shadow-colored: 0 0 #0000;
-  --tw-blur:  ;
-  --tw-brightness:  ;
-  --tw-contrast:  ;
-  --tw-grayscale:  ;
-  --tw-hue-rotate:  ;
-  --tw-invert:  ;
-  --tw-saturate:  ;
-  --tw-sepia:  ;
-  --tw-drop-shadow:  ;
-  --tw-backdrop-blur:  ;
-  --tw-backdrop-brightness:  ;
-  --tw-backdrop-contrast:  ;
-  --tw-backdrop-grayscale:  ;
-  --tw-backdrop-hue-rotate:  ;
-  --tw-backdrop-invert:  ;
-  --tw-backdrop-opacity:  ;
-  --tw-backdrop-saturate:  ;
-  --tw-backdrop-sepia:  ;
-  --tw-contain-size:  ;
-  --tw-contain-layout:  ;
-  --tw-contain-paint:  ;
-  --tw-contain-style:  ;
-}
-
-::backdrop{
+:where(.tr-root),
+:where(.tr-root) *,
+:where(.tr-root) ::before,
+:where(.tr-root) ::after{
   --tw-border-spacing-x: 0;
   --tw-border-spacing-y: 0;
   --tw-translate-x: 0;
@@ -117,17 +66,18 @@
 2. Allow adding a border to an element by just adding a border-width. (https://github.com/tailwindcss/tailwindcss/pull/116)
 */
 
-*,
-::before,
-::after {
+:where(.tr-root),
+:where(.tr-root) *,
+:where(.tr-root) ::before,
+:where(.tr-root) ::after {
   box-sizing: border-box; /* 1 */
   border-width: 0; /* 2 */
   border-style: solid; /* 2 */
   border-color: #D5D5DD; /* 2 */
 }
 
-::before,
-::after {
+:where(.tr-root) ::before,
+:where(.tr-root) ::after {
   --tw-content: '';
 }
 
@@ -141,8 +91,7 @@
 7. Disable tap highlights on iOS
 */
 
-html,
-:host {
+:where(.tr-root) {
   line-height: 1.5; /* 1 */
   -webkit-text-size-adjust: 100%; /* 2 */ /* 3 */
   tab-size: 4; /* 3 */
@@ -157,7 +106,7 @@ html,
 2. Inherit line-height from `html` so users can set them as a class directly on the `html` element.
 */
 
-body {
+:where(.tr-root) body {
   margin: 0; /* 1 */
   line-height: inherit; /* 2 */
 }
@@ -168,7 +117,7 @@ body {
 3. Ensure horizontal rules are visible by default.
 */
 
-hr {
+:where(.tr-root) hr {
   height: 0; /* 1 */
   color: inherit; /* 2 */
   border-top-width: 1px; /* 3 */
@@ -178,7 +127,7 @@ hr {
 Add the correct text decoration in Chrome, Edge, and Safari.
 */
 
-abbr:where([title]) {
+:where(.tr-root) abbr:where([title]) {
   -webkit-text-decoration: underline dotted;
           text-decoration: underline dotted;
 }
@@ -187,12 +136,12 @@ abbr:where([title]) {
 Remove the default font size and weight for headings.
 */
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
+:where(.tr-root) h1,
+:where(.tr-root) h2,
+:where(.tr-root) h3,
+:where(.tr-root) h4,
+:where(.tr-root) h5,
+:where(.tr-root) h6 {
   font-size: inherit;
   font-weight: inherit;
 }
@@ -201,7 +150,7 @@ h6 {
 Reset links to optimize for opt-in styling instead of opt-out.
 */
 
-a {
+:where(.tr-root) a {
   color: inherit;
   text-decoration: inherit;
 }
@@ -210,8 +159,8 @@ a {
 Add the correct font weight in Edge and Safari.
 */
 
-b,
-strong {
+:where(.tr-root) b,
+:where(.tr-root) strong {
   font-weight: bolder;
 }
 
@@ -222,10 +171,10 @@ strong {
 4. Correct the odd `em` font sizing in all browsers.
 */
 
-code,
-kbd,
-samp,
-pre {
+:where(.tr-root) code,
+:where(.tr-root) kbd,
+:where(.tr-root) samp,
+:where(.tr-root) pre {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; /* 1 */
   font-feature-settings: normal; /* 2 */
   font-variation-settings: normal; /* 3 */
@@ -236,7 +185,7 @@ pre {
 Add the correct font size in all browsers.
 */
 
-small {
+:where(.tr-root) small {
   font-size: 80%;
 }
 
@@ -244,19 +193,19 @@ small {
 Prevent `sub` and `sup` elements from affecting the line height in all browsers.
 */
 
-sub,
-sup {
+:where(.tr-root) sub,
+:where(.tr-root) sup {
   font-size: 75%;
   line-height: 0;
   position: relative;
   vertical-align: baseline;
 }
 
-sub {
+:where(.tr-root) sub {
   bottom: -0.25em;
 }
 
-sup {
+:where(.tr-root) sup {
   top: -0.5em;
 }
 
@@ -266,7 +215,7 @@ sup {
 3. Remove gaps between table borders by default.
 */
 
-table {
+:where(.tr-root) table {
   text-indent: 0; /* 1 */
   border-color: inherit; /* 2 */
   border-collapse: collapse; /* 3 */
@@ -278,11 +227,11 @@ table {
 3. Remove default padding in all browsers.
 */
 
-button,
-input,
-optgroup,
-select,
-textarea {
+:where(.tr-root) button,
+:where(.tr-root) input,
+:where(.tr-root) optgroup,
+:where(.tr-root) select,
+:where(.tr-root) textarea {
   font-family: inherit; /* 1 */
   font-feature-settings: inherit; /* 1 */
   font-variation-settings: inherit; /* 1 */
@@ -299,8 +248,8 @@ textarea {
 Remove the inheritance of text transform in Edge and Firefox.
 */
 
-button,
-select {
+:where(.tr-root) button,
+:where(.tr-root) select {
   text-transform: none;
 }
 
@@ -309,10 +258,10 @@ select {
 2. Remove default button styles.
 */
 
-button,
-input:where([type='button']),
-input:where([type='reset']),
-input:where([type='submit']) {
+:where(.tr-root) button,
+:where(.tr-root) input:where([type='button']),
+:where(.tr-root) input:where([type='reset']),
+:where(.tr-root) input:where([type='submit']) {
   -webkit-appearance: button; /* 1 */
   background-color: transparent; /* 2 */
   background-image: none; /* 2 */
@@ -322,7 +271,7 @@ input:where([type='submit']) {
 Use the modern Firefox focus style for all focusable elements.
 */
 
-:-moz-focusring {
+:where(.tr-root) :-moz-focusring {
   outline: auto;
 }
 
@@ -330,7 +279,7 @@ Use the modern Firefox focus style for all focusable elements.
 Remove the additional `:invalid` styles in Firefox. (https://github.com/mozilla/gecko-dev/blob/2f9eacd9d3d995c937b4251a5557d95d494c9be1/layout/style/res/forms.css#L728-L737)
 */
 
-:-moz-ui-invalid {
+:where(.tr-root) :-moz-ui-invalid {
   box-shadow: none;
 }
 
@@ -338,7 +287,7 @@ Remove the additional `:invalid` styles in Firefox. (https://github.com/mozilla/
 Add the correct vertical alignment in Chrome and Firefox.
 */
 
-progress {
+:where(.tr-root) progress {
   vertical-align: baseline;
 }
 
@@ -346,8 +295,8 @@ progress {
 Correct the cursor style of increment and decrement buttons in Safari.
 */
 
-::-webkit-inner-spin-button,
-::-webkit-outer-spin-button {
+:where(.tr-root) ::-webkit-inner-spin-button,
+:where(.tr-root) ::-webkit-outer-spin-button {
   height: auto;
 }
 
@@ -356,7 +305,7 @@ Correct the cursor style of increment and decrement buttons in Safari.
 2. Correct the outline style in Safari.
 */
 
-[type='search'] {
+:where(.tr-root) [type='search'] {
   -webkit-appearance: textfield; /* 1 */
   outline-offset: -2px; /* 2 */
 }
@@ -365,7 +314,7 @@ Correct the cursor style of increment and decrement buttons in Safari.
 Remove the inner padding in Chrome and Safari on macOS.
 */
 
-::-webkit-search-decoration {
+:where(.tr-root) ::-webkit-search-decoration {
   -webkit-appearance: none;
 }
 
@@ -374,7 +323,7 @@ Remove the inner padding in Chrome and Safari on macOS.
 2. Change font properties to `inherit` in Safari.
 */
 
-::-webkit-file-upload-button {
+:where(.tr-root) ::-webkit-file-upload-button {
   -webkit-appearance: button; /* 1 */
   font: inherit; /* 2 */
 }
@@ -383,7 +332,7 @@ Remove the inner padding in Chrome and Safari on macOS.
 Add the correct display in Chrome and Safari.
 */
 
-summary {
+:where(.tr-root) summary {
   display: list-item;
 }
 
@@ -391,34 +340,34 @@ summary {
 Removes the default spacing and border for appropriate elements.
 */
 
-blockquote,
-dl,
-dd,
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-hr,
-figure,
-p,
-pre {
+:where(.tr-root) blockquote,
+:where(.tr-root) dl,
+:where(.tr-root) dd,
+:where(.tr-root) h1,
+:where(.tr-root) h2,
+:where(.tr-root) h3,
+:where(.tr-root) h4,
+:where(.tr-root) h5,
+:where(.tr-root) h6,
+:where(.tr-root) hr,
+:where(.tr-root) figure,
+:where(.tr-root) p,
+:where(.tr-root) pre {
   margin: 0;
 }
 
-fieldset {
+:where(.tr-root) fieldset {
   margin: 0;
   padding: 0;
 }
 
-legend {
+:where(.tr-root) legend {
   padding: 0;
 }
 
-ol,
-ul,
-menu {
+:where(.tr-root) ol,
+:where(.tr-root) ul,
+:where(.tr-root) menu {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -428,7 +377,7 @@ menu {
 Reset default styling for dialogs.
 */
 
-dialog {
+:where(.tr-root) dialog {
   padding: 0;
 }
 
@@ -436,7 +385,7 @@ dialog {
 Prevent resizing textareas horizontally by default.
 */
 
-textarea {
+:where(.tr-root) textarea {
   resize: vertical;
 }
 
@@ -445,8 +394,8 @@ textarea {
 2. Set the default placeholder color to the user's configured gray 400 color.
 */
 
-input::placeholder,
-textarea::placeholder {
+:where(.tr-root) input::placeholder,
+:where(.tr-root) textarea::placeholder {
   opacity: 1; /* 1 */
   color: #9ca3af; /* 2 */
 }
@@ -455,8 +404,8 @@ textarea::placeholder {
 Set the default cursor for buttons.
 */
 
-button,
-[role="button"] {
+:where(.tr-root) button,
+:where(.tr-root) [role="button"] {
   cursor: pointer;
 }
 
@@ -464,7 +413,7 @@ button,
 Make sure disabled buttons don't get the pointer cursor.
 */
 
-:disabled {
+:where(.tr-root) :disabled {
   cursor: default;
 }
 
@@ -474,14 +423,14 @@ Make sure disabled buttons don't get the pointer cursor.
    This can trigger a poorly considered lint error in some tools but is included by design.
 */
 
-img,
-svg,
-video,
-canvas,
-audio,
-iframe,
-embed,
-object {
+:where(.tr-root) img,
+:where(.tr-root) svg,
+:where(.tr-root) video,
+:where(.tr-root) canvas,
+:where(.tr-root) audio,
+:where(.tr-root) iframe,
+:where(.tr-root) embed,
+:where(.tr-root) object {
   display: block; /* 1 */
   vertical-align: middle; /* 2 */
 }
@@ -490,15 +439,15 @@ object {
 Constrain images and videos to the parent width and preserve their intrinsic aspect ratio. (https://github.com/mozdevs/cssremedy/issues/14)
 */
 
-img,
-video {
+:where(.tr-root) img,
+:where(.tr-root) video {
   max-width: 100%;
   height: auto;
 }
 
 /* Make elements with the HTML hidden attribute stay hidden by default */
 
-[hidden]:where(:not([hidden="until-found"])) {
+:where(.tr-root) [hidden]:where(:not([hidden="until-found"])) {
   display: none;
 }
 .tr-root .tr-pointer-events-none{
@@ -810,6 +759,9 @@ video {
 .tr-root .tr-h-2\.5{
   height: 0.625rem;
 }
+.tr-root .tr-h-24{
+  height: 6rem;
+}
 .tr-root .tr-h-3{
   height: 0.75rem;
 }
@@ -845,6 +797,9 @@ video {
 }
 .tr-root .tr-h-\[22px\]{
   height: 22px;
+}
+.tr-root .tr-h-\[72px\]{
+  height: 72px;
 }
 .tr-root .tr-h-auto{
   height: auto;
@@ -882,6 +837,12 @@ video {
 .tr-root .tr-w-11{
   width: 2.75rem;
 }
+.tr-root .tr-w-12{
+  width: 3rem;
+}
+.tr-root .tr-w-14{
+  width: 3.5rem;
+}
 .tr-root .tr-w-16{
   width: 4rem;
 }
@@ -893,6 +854,9 @@ video {
 }
 .tr-root .tr-w-2\/3{
   width: 66.666667%;
+}
+.tr-root .tr-w-24{
+  width: 6rem;
 }
 .tr-root .tr-w-3{
   width: 0.75rem;
@@ -918,6 +882,9 @@ video {
 .tr-root .tr-w-44{
   width: 11rem;
 }
+.tr-root .tr-w-48{
+  width: 12rem;
+}
 .tr-root .tr-w-5{
   width: 1.25rem;
 }
@@ -942,6 +909,9 @@ video {
 .tr-root .tr-w-\[22px\]{
   width: 22px;
 }
+.tr-root .tr-w-\[260px\]{
+  width: 260px;
+}
 .tr-root .tr-w-full{
   width: 100%;
 }
@@ -963,14 +933,26 @@ video {
 .tr-root .tr-min-w-\[120px\]{
   min-width: 120px;
 }
+.tr-root .tr-min-w-\[160px\]{
+  min-width: 160px;
+}
 .tr-root .tr-min-w-\[16px\]{
   min-width: 16px;
+}
+.tr-root .tr-min-w-\[170px\]{
+  min-width: 170px;
 }
 .tr-root .tr-min-w-\[18px\]{
   min-width: 18px;
 }
 .tr-root .tr-min-w-\[20px\]{
   min-width: 20px;
+}
+.tr-root .tr-min-w-\[220px\]{
+  min-width: 220px;
+}
+.tr-root .tr-min-w-\[240px\]{
+  min-width: 240px;
 }
 .tr-root .tr-max-w-2xl{
   max-width: 42rem;
@@ -986,6 +968,9 @@ video {
 }
 .tr-root .tr-max-w-\[480px\]{
   max-width: 480px;
+}
+.tr-root .tr-max-w-full{
+  max-width: 100%;
 }
 .tr-root .tr-max-w-lg{
   max-width: 32rem;
@@ -1100,6 +1085,9 @@ video {
 .tr-root .tr-select-none{
   -webkit-user-select: none;
           user-select: none;
+}
+.tr-root .tr-resize-none{
+  resize: none;
 }
 .tr-root .tr-resize-y{
   resize: vertical;
@@ -1274,12 +1262,19 @@ video {
 .tr-root .tr-rounded-md{
   border-radius: 8px;
 }
+.tr-root .tr-rounded-sm{
+  border-radius: 4px;
+}
 .tr-root .tr-rounded-xl{
   border-radius: 16px;
 }
 .tr-root .tr-rounded-r{
   border-top-right-radius: 6px;
   border-bottom-right-radius: 6px;
+}
+.tr-root .tr-rounded-t{
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
 }
 .tr-root .tr-border{
   border-width: 1px;
@@ -1308,6 +1303,9 @@ video {
 .tr-root .tr-border-l-4{
   border-left-width: 4px;
 }
+.tr-root .tr-border-r{
+  border-right-width: 1px;
+}
 .tr-root .tr-border-t{
   border-top-width: 1px;
 }
@@ -1316,6 +1314,14 @@ video {
 }
 .tr-root .tr-border-dashed{
   border-style: dashed;
+}
+.tr-root .tr-border-\[\#ddd\]{
+  --tw-border-opacity: 1;
+  border-color: rgb(221 221 221 / var(--tw-border-opacity, 1));
+}
+.tr-root .tr-border-\[\#eee\]{
+  --tw-border-opacity: 1;
+  border-color: rgb(238 238 238 / var(--tw-border-opacity, 1));
 }
 .tr-root .tr-border-blue-100{
   --tw-border-opacity: 1;
@@ -1409,6 +1415,10 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(246 247 251 / var(--tw-bg-opacity, 1));
 }
+.tr-root .tr-bg-\[\#F7F8FA\]{
+  --tw-bg-opacity: 1;
+  background-color: rgb(247 248 250 / var(--tw-bg-opacity, 1));
+}
 .tr-root .tr-bg-\[\#F7F8FB\]{
   --tw-bg-opacity: 1;
   background-color: rgb(247 248 251 / var(--tw-bg-opacity, 1));
@@ -1420,6 +1430,10 @@ video {
 .tr-root .tr-bg-\[\#f2f4f7\]{
   --tw-bg-opacity: 1;
   background-color: rgb(242 244 247 / var(--tw-bg-opacity, 1));
+}
+.tr-root .tr-bg-\[\#fafafa\]{
+  --tw-bg-opacity: 1;
+  background-color: rgb(250 250 250 / var(--tw-bg-opacity, 1));
 }
 .tr-root .tr-bg-\[\#fef3f2\]{
   --tw-bg-opacity: 1;
@@ -1477,6 +1491,10 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(236 253 245 / var(--tw-bg-opacity, 1));
 }
+.tr-root .tr-bg-gray-50{
+  --tw-bg-opacity: 1;
+  background-color: rgb(249 250 251 / var(--tw-bg-opacity, 1));
+}
 .tr-root .tr-bg-green-100{
   --tw-bg-opacity: 1;
   background-color: rgb(220 252 231 / var(--tw-bg-opacity, 1));
@@ -1491,6 +1509,10 @@ video {
 }
 .tr-root .tr-bg-ink-2\/40{
   background-color: rgb(83 83 83 / 0.4);
+}
+.tr-root .tr-bg-line{
+  --tw-bg-opacity: 1;
+  background-color: rgb(213 213 221 / var(--tw-bg-opacity, 1));
 }
 .tr-root .tr-bg-line-2{
   --tw-bg-opacity: 1;
@@ -1557,6 +1579,9 @@ video {
 .tr-root .tr-bg-\[linear-gradient\(90deg\,\#4c4cff_58\%\,\#3535b0_118\%\)\]{
   background-image: linear-gradient(90deg,#4c4cff 58%,#3535b0 118%);
 }
+.tr-root .tr-object-contain{
+  object-fit: contain;
+}
 .tr-root .tr-object-cover{
   object-fit: cover;
 }
@@ -1621,6 +1646,10 @@ video {
 .tr-root .tr-px-3{
   padding-left: 0.75rem;
   padding-right: 0.75rem;
+}
+.tr-root .tr-px-3\.5{
+  padding-left: 0.875rem;
+  padding-right: 0.875rem;
 }
 .tr-root .tr-px-4{
   padding-left: 1rem;
@@ -1707,6 +1736,12 @@ video {
 .tr-root .tr-pl-1\.5{
   padding-left: 0.375rem;
 }
+.tr-root .tr-pl-11{
+  padding-left: 2.75rem;
+}
+.tr-root .tr-pl-2{
+  padding-left: 0.5rem;
+}
 .tr-root .tr-pl-3{
   padding-left: 0.75rem;
 }
@@ -1727,6 +1762,9 @@ video {
 }
 .tr-root .tr-pr-1\.5{
   padding-right: 0.375rem;
+}
+.tr-root .tr-pr-10{
+  padding-right: 2.5rem;
 }
 .tr-root .tr-pr-14{
   padding-right: 3.5rem;
@@ -1802,6 +1840,9 @@ video {
 }
 .tr-root .tr-text-\[11px\]{
   font-size: 11px;
+}
+.tr-root .tr-text-\[26px\]{
+  font-size: 26px;
 }
 .tr-root .tr-text-\[9px\]{
   font-size: 9px;
@@ -2210,23 +2251,21 @@ video {
 	}
 
 /*
- * Fix: Tailwind Preflight (@tailwind base) emits UNSCOPED global resets —
- * `img, svg, video, canvas { display: block }` and `img { max-width: 100% }` —
- * that leak past our React root into WordPress admin chrome on any page where
- * this bundle loads (ThinkRank pages, the post-editor metabox, etc.).
+ * Tailwind Preflight (@tailwind base) emits UNSCOPED global resets — e.g.
+ * `img, svg, video, canvas { display: block }` and `*, ::before, ::after`
+ * box-sizing/border. Left as-is they leak past our React root into WordPress
+ * admin chrome and page builders (Divi/Elementor/Oxygen), breaking host UI
+ * (e.g. Divi's Visual Builder breadcrumb stacked vertically — issue #275).
  *
- * WordPress centers image-based admin-menu icons with `text-align: center` on
- * `#adminmenu div.wp-menu-image` and an inline <img>. Preflight's `display:block`
- * defeats that centering, shoving other plugins' menu icons flush-left (looks
- * "broken"). Restore native rendering for admin-menu icons. Kept unlayered so it
- * always beats Preflight's `@layer base` rules; only display/alignment is set so
- * WP's own padding/opacity on the icon are preserved.
+ * The scoping now happens at BUILD TIME in `build/postcss-scope-preflight.js`,
+ * which rewrites every Preflight selector to live under `.tr-root` (where the
+ * `tr-*` utilities already live). That removes the leak at the source, so the
+ * old per-symptom overrides here (e.g. restoring `#adminmenu` icon centering)
+ * are no longer needed.
+ *
+ * Do NOT add unscoped bare element selectors to this file — they would leak the
+ * same way and defeat the build-time scoping.
  */
-#adminmenu .wp-menu-image img,
-#adminmenu .wp-menu-image svg {
-	display: inline-block;
-	vertical-align: middle;
-}
 
 /* Ensure Tailwind's animate-* skeleton pulse respects reduced-motion */
 
@@ -2329,6 +2368,11 @@ video {
   border-color: rgb(169 174 192 / var(--tw-border-opacity, 1));
 }
 
+.tr-root .hover\:tr-border-brand:hover{
+  --tw-border-opacity: 1;
+  border-color: rgb(68 81 255 / var(--tw-border-opacity, 1));
+}
+
 .tr-root .hover\:tr-border-danger:hover{
   --tw-border-opacity: 1;
   border-color: rgb(146 28 19 / var(--tw-border-opacity, 1));
@@ -2337,6 +2381,11 @@ video {
 .tr-root .hover\:tr-border-primary:hover{
   --tw-border-opacity: 1;
   border-color: rgb(213 213 221 / var(--tw-border-opacity, 1));
+}
+
+.tr-root .hover\:tr-border-secondary:hover{
+  --tw-border-opacity: 1;
+  border-color: rgb(226 230 241 / var(--tw-border-opacity, 1));
 }
 
 .tr-root .hover\:tr-bg-\[\#3641D9\]:hover{
@@ -2428,6 +2477,10 @@ video {
 
 .tr-root .hover\:tr-opacity-70:hover{
   opacity: 0.7;
+}
+
+.tr-root .hover\:tr-opacity-90:hover{
+  opacity: 0.9;
 }
 
 .tr-root .hover\:tr-shadow-lg:hover{
@@ -2550,8 +2603,16 @@ video {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .tr-root .sm\:tr-grid-cols-3{
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .tr-root .sm\:tr-grid-cols-4{
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .tr-root .sm\:tr-grid-cols-\[1fr_1fr_auto\]{
+    grid-template-columns: 1fr 1fr auto;
   }
 
   .tr-root .sm\:tr-flex-row{
@@ -2741,6 +2802,27 @@ video {
   .tr-root .xl\:tr-grid-cols-3{
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+.tr-root :is(.\[\&_p\:last-child\]\:tr-mb-0 p:last-child){
+  margin-bottom: 0px;
+}
+
+.tr-root :is(.\[\&_p\]\:tr-mb-3 p){
+  margin-bottom: 0.75rem;
+}
+
+.tr-root :is(.\[\&_p\]\:tr-mt-0 p){
+  margin-top: 0px;
+}
+
+.tr-root :is(.\[\&_strong\]\:tr-font-semibold strong){
+  font-weight: 600;
+}
+
+.tr-root :is(.\[\&_strong\]\:tr-text-primary strong){
+  --tw-text-opacity: 1;
+  color: rgb(29 29 29 / var(--tw-text-opacity, 1));
 }
 
 /* Full-page WP chrome takeover — applied when ThinkRank admin UI is active */

@@ -2457,46 +2457,73 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
     /**
      * Generate platform-specific meta tags
      *
+     * Platform IDs and verification codes are owned by the Social Platforms tab
+     * (ThinkRank\API\Social_Platforms_Endpoint), which stores them in core
+     * Settings (wp_options) with the sensitive codes encrypted at rest. The
+     * social_meta settings table this manager normally reads no longer receives
+     * these values from the UI, so we resolve each key from core Settings first
+     * and fall back to any legacy value still present in the passed-in table
+     * settings — otherwise the verification tags would never render.
+     *
      * @since 1.0.0
      *
-     * @param array $settings Settings array
+     * @param array $settings Settings array (social_meta table) — legacy fallback.
      * @return array Platform-specific meta tags
      */
     private function generate_platform_meta_tags(array $settings): array {
         $platform_tags = [];
 
+        $core = \ThinkRank\Core\Settings::instance();
+        // Core Settings (decrypted for sensitive keys) wins; the table value is a
+        // backward-compat fallback for installs that saved these before the UI
+        // moved to the Social Platforms tab.
+        $resolve = static function (string $key) use ($core, $settings): string {
+            $value = (string) $core->get($key, '');
+            if ('' === $value) {
+                $value = (string) ($settings[$key] ?? '');
+            }
+            return $value;
+        };
+
         // Facebook meta tags
-        if (!empty($settings['facebook_app_id'])) {
-            $platform_tags['fb:app_id'] = $settings['facebook_app_id'];
+        $facebook_app_id = $resolve('facebook_app_id');
+        if ('' !== $facebook_app_id) {
+            $platform_tags['fb:app_id'] = $facebook_app_id;
         }
 
-        if (!empty($settings['facebook_admins'])) {
-            $platform_tags['fb:admins'] = $settings['facebook_admins'];
+        $facebook_admins = $resolve('facebook_admins');
+        if ('' !== $facebook_admins) {
+            $platform_tags['fb:admins'] = $facebook_admins;
         }
 
         // Pinterest site verification
-        if (!empty($settings['pinterest_site_verification'])) {
-            $platform_tags['pinterest-site-verification'] = $settings['pinterest_site_verification'];
+        $pinterest = $resolve('pinterest_site_verification');
+        if ('' !== $pinterest) {
+            $platform_tags['pinterest-site-verification'] = $pinterest;
         }
 
-        // Instagram verification (if enabled)
-        if (!empty($settings['instagram_verification'])) {
-            $platform_tags['instagram-site-verification'] = $settings['instagram_verification'];
+        // Instagram verification
+        $instagram = $resolve('instagram_verification');
+        if ('' !== $instagram) {
+            $platform_tags['instagram-site-verification'] = $instagram;
         }
 
-        // TikTok verification (if enabled)
-        if (!empty($settings['tiktok_verification'])) {
-            $platform_tags['tiktok-site-verification'] = $settings['tiktok_verification'];
+        // TikTok verification
+        $tiktok = $resolve('tiktok_verification');
+        if ('' !== $tiktok) {
+            $platform_tags['tiktok-site-verification'] = $tiktok;
         }
 
-        // YouTube channel verification (if enabled)
-        if (!empty($settings['youtube_channel_id'])) {
-            $platform_tags['youtube-channel-id'] = $settings['youtube_channel_id'];
+        // YouTube channel verification
+        $youtube = $resolve('youtube_channel_id');
+        if ('' !== $youtube) {
+            $platform_tags['youtube-channel-id'] = $youtube;
         }
 
-        // WhatsApp Business verification (if enabled)
-        if (!empty($settings['whatsapp_business_id'])) {
-            $platform_tags['whatsapp-business-id'] = $settings['whatsapp_business_id'];
+        // WhatsApp Business verification
+        $whatsapp = $resolve('whatsapp_business_id');
+        if ('' !== $whatsapp) {
+            $platform_tags['whatsapp-business-id'] = $whatsapp;
         }
 
         return $platform_tags;

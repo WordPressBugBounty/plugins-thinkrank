@@ -1083,13 +1083,13 @@ class Usage_Analytics_Endpoint {
     private function get_default_model(string $provider): string {
         switch ($provider) {
             case 'openai':
-                return 'gpt-5-nano';
+                return \ThinkRank\Core\Settings::DEFAULT_OPENAI_MODEL;
             case 'claude':
-                return 'claude-sonnet-5';
+                return \ThinkRank\Core\Settings::DEFAULT_CLAUDE_MODEL;
             case 'gemini':
-                return 'gemini-2.5-flash';  // Keep stable default model
+                return \ThinkRank\Core\Settings::DEFAULT_GEMINI_MODEL;
             case 'openrouter':
-                return 'openai/gpt-4o-mini';
+                return \ThinkRank\Core\Settings::DEFAULT_OPENROUTER_MODEL;
             default:
                 return 'unknown';
         }

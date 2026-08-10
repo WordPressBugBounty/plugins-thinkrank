@@ -134,7 +134,7 @@ class Focus_Keyword_Ajax {
         ];
 
 	    // update post modified time
-	    $this->update_post_modified( $post_id );
+	    self::update_post_modified( $post_id );
 
         /**
          * Filter the AJAX response data for focus keyword update
@@ -151,10 +151,12 @@ class Focus_Keyword_Ajax {
 	/**
 	 * Force update post_modified and post_modified_gmt timestamps.
 	 *
+	 * Static so sibling handlers (e.g. Seo_Quick_Edit_Ajax) can reuse it.
+	 *
 	 * @param int $post_id
 	 * @return bool
 	 */
-	function update_post_modified( $post_id ) {
+	public static function update_post_modified( $post_id ) {
 
 		if ( ! $post_id || ! get_post( $post_id ) ) {
 			return false;

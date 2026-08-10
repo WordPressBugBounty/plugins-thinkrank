@@ -170,6 +170,14 @@ class Social_Platforms_Endpoint extends WP_REST_Controller {
             // verification codes / IDs would be stored and later emitted verbatim.
             $sanitized_settings = $this->sanitize_settings($settings);
 
+            // Drop sensitive verification codes that arrive still masked (the
+            // client resending the XXXX placeholder for an unchanged field).
+            // The server is the source of truth: a masked value is never a real
+            // edit, so removing it here both preserves the stored secret and
+            // keeps the untouched placeholder out of the format validator below
+            // (otherwise every save of this tab would 400 once a code is set).
+            $sanitized_settings = $this->strip_masked_sensitive_values($sanitized_settings);
+
             $validation_errors = $this->validate_settings_format($sanitized_settings);
             if (!empty($validation_errors)) {
                 return new WP_REST_Response([
@@ -276,6 +284,63 @@ class Social_Platforms_Endpoint extends WP_REST_Controller {
         }
 
         return $sanitized;
+    }
+
+    /**
+     * Remove sensitive verification codes that are still masked.
+     *
+     * The Social Platforms tab receives verification codes masked (e.g. `a1b2XXXX`)
+     * and binds them straight into their input fields. When the tab is saved
+     * without re-typing a code, that masked placeholder is sent back. Persisting
+     * it would overwrite the real encrypted secret, and — since 1.14.0 — it also
+     * fails format validation, causing the whole save (including unrelated fields)
+     * to 400. A masked value is never a genuine edit, so we drop it here and keep
+     * the currently stored secret untouched.
+     *
+     * @since 1.27.0
+     *
+     * @param array $settings Sanitized settings.
+     * @return array Settings with masked sensitive values removed.
+     */
+    private function strip_masked_sensitive_values(array $settings): array {
+        foreach ($this->sensitive_keys as $key) {
+            if (!isset($settings[$key]) || $settings[$key] === '') {
+                continue;
+            }
+
+            $incoming = (string) $settings[$key];
+            $stored   = (string) $this->settings->get($key, '');
+
+            // Primary check: the incoming value is exactly the mask of the
+            // currently stored secret (the untouched field round-tripping).
+            // Fallback check: the value still matches a generic mask shape, so
+            // even without a stored value we never persist a bare placeholder.
+            if (
+                ($stored !== '' && $incoming === $this->mask_verification_code($stored))
+                || $this->is_masked_value($incoming)
+            ) {
+                unset($settings[$key]);
+            }
+        }
+
+        return $settings;
+    }
+
+    /**
+     * Determine whether a value looks like a masking placeholder.
+     *
+     * Mirrors the shapes produced by mask_verification_code(): `XXXX` for short
+     * codes and `<first 4 chars>XXXX` for longer ones. Genuine verification codes
+     * for the sensitive keys are never this short (Pinterest is 32 hex chars;
+     * Instagram/TikTok require 20+ chars), so a match is safe to treat as "unchanged".
+     *
+     * @since 1.27.0
+     *
+     * @param string $value Value to test.
+     * @return bool True when the value is a mask placeholder.
+     */
+    private function is_masked_value(string $value): bool {
+        return $value === 'XXXX' || (bool) preg_match('/^.{4}XXXX$/', $value);
     }
 
     /**

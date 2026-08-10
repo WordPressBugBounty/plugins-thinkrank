@@ -67,7 +67,7 @@ class OpenAI_Client {
      * @param string $model Default model to use
      * @param int $timeout Request timeout
      */
-    public function __construct(string $api_key, string $model = 'gpt-5-nano', int $timeout = 30) {
+    public function __construct(string $api_key, string $model = \ThinkRank\Core\Settings::DEFAULT_OPENAI_MODEL, int $timeout = 30) {
         $this->api_key = $api_key;
         $this->model = $model;
         $this->timeout = $timeout;
@@ -129,6 +129,15 @@ class OpenAI_Client {
             // Reasoning models (o1/o3) have fixed parameters and restricted support
             // temperature, top_p, frequency_penalty, presence_penalty are not supported
             $body['max_completion_tokens'] = $safe_tokens;
+
+            // GPT-5 models accept reasoning_effort ('minimal'…'high'). Callers
+            // wanting a quick consumer-style answer (e.g. brand-visibility
+            // probes) pass 'minimal' so hidden reasoning can't consume the
+            // whole completion budget and return empty text. Only the GPT-5
+            // family gets it: o1 rejects the parameter outright.
+            if (isset($options['reasoning_effort']) && str_starts_with($options['model'], 'gpt-5')) {
+                $body['reasoning_effort'] = (string) $options['reasoning_effort'];
+            }
         } else {
             // Standard models support all parameters
             $body['temperature'] = $options['temperature'];

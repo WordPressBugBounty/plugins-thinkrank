@@ -4,7 +4,7 @@ Tags: seo, ai seo, focus keyword, schema, llms.txt
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.27.0
+Stable tag: 1.28.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -360,6 +360,29 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 9. AI Content Brief Generator with competitor analysis and content gaps.
 
 == Changelog ==
+
+= 1.28.0 =
+Release Date: 2026-08-10
+
+- New: AI Insights — see how much of your traffic comes from AI assistants and AI crawlers, first-party. AI platforms strip referrers so Google Analytics files those visits under "Direct"; ThinkRank reads them as they arrive. Daily totals only — no IPs, no cookies, no per-visit tracking
+- New: Brand Visibility measures whether AI assistants mention your brand — asking each question several times for a real mention rate instead of a one-shot yes/no, ranking you against named competitors as share of voice, and scoring everything into a 0–100 Visibility Index
+- New: Brand Visibility uses its own API key and model per AI platform, so measuring visibility never means switching the provider that writes your metadata. Adds Perplexity, which searches the web live — the closest thing to what a person actually sees
+- New: Auto AI writes a missing SEO title or description when you publish, in the background, so publishing never waits on an AI call. It fills empty fields only and never overwrites what you wrote
+- New: Quick Edit SEO on the posts list — edit the SEO title, meta description and focus keywords straight from the posts table, without opening the post. Cleared fields fall back to your Global SEO patterns
+- New: Traffic Recovery tab on the AI Tools screen, which finds published pages losing search traffic and writes a refresh brief for each
+- New: A Migration screen for moving SEO data in from another plugin, with a re-scan control that re-detects what is installed
+- New: Social platform verification is now one tab per network, with per-card saving and masked verification codes
+- Fixed: The AI Traffic and Brand Visibility tables were never created, so AI traffic went unrecorded and every brand check spent a paid AI call without saving any history
+- Fixed: Brand Visibility failed to start on upgraded sites with "Could not start the analysis run". A missing table is now detected and repaired on load, instead of going unnoticed until a deactivate/reactivate
+- Fixed: Brand checks reported "not mentioned" for questions that could not plausibly omit your brand — the AI never actually returned an answer, and the blank was saved as a clean negative. A probe with no answer now fails visibly and is never stored
+- Fixed: A Brand Visibility run could sit at 0% forever, and progress never advanced while it was running
+- Fixed: A site that configured Brand Visibility on Pro and then lapsed to free kept running the larger Pro batch on the user's own paid API keys
+- Fixed: The SEO Overview column showed "Not Analyzed" forever on sites that never ran an analysis, even right after editing a post's SEO title and description
+- Fixed: Saving in the editor could wipe an SEO title or description that Auto AI, bulk optimization or an import had just written, and the editor kept showing the old empty value until a manual reload
+- Fixed: Google Analytics, Search Console and PageSpeed were reported as "not configured" on sites connected through Google sign-in, and a site with a perfectly working GA4 tag was told its tracking was unverified
+- Fixed: Reconnecting a different Google account kept showing the previous account's Search Console properties for up to 30 minutes, and domain properties could not be found by searching
+- Fixed: The ThinkRank data stream picker in Pro went blank on every reload
+- Fixed: ThinkRank's styles leaked into the WordPress admin and page builders
 
 = 1.27.0 =
 Release Date: 2026-08-06
@@ -734,6 +757,9 @@ Release Date: 2025-07-07
 - WordPress 6.0+ compatibility
 
 == Upgrade Notice ==
+
+= 1.28.0 =
+Adds AI Insights — AI referral traffic, Brand Visibility measurement across ChatGPT, Claude, Gemini and Perplexity, and Auto AI metadata on publish — plus Quick Edit SEO on the posts list. Fixes two AI tables that were never created, brand checks that reported false negatives, SEO metadata wiped by a stale editor save, and Google integrations reported as unconfigured on sign-in-connected sites. Recommended for all sites.
 
 = 1.27.0 =
 Fixes MCP connections that succeeded while offering zero tools, connectors that could lock themselves out permanently, and ChatGPT rejecting sites with "does not implement OAuth". Also fixes IndexNow returning 403 on read-only hosts, AI writing English metadata on non-English sites, and a hidden ThinkRank SEO metabox. Recommended for all sites.

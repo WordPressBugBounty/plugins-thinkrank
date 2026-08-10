@@ -476,6 +476,9 @@ class Metabox_Manager {
             <!-- Hidden form fields for React to read initial data -->
             <input type="hidden" id="thinkrank_seo_title" name="thinkrank_seo_title" value="<?php echo esc_attr($existing_metadata['title'] ?? ''); ?>" />
             <input type="hidden" id="thinkrank_meta_description" name="thinkrank_meta_description" value="<?php echo esc_attr($existing_metadata['description'] ?? ''); ?>" />
+            <?php // Render-time mirrors of the two fields a background writer (Auto AI, bulk, import) can fill after load. The React app never touches these, so on save they still hold the value shown when the form loaded — letting persist_metadata() tell a stale blank apart from a deliberate clear. ?>
+            <input type="hidden" id="thinkrank_seo_title__orig" name="thinkrank_seo_title__orig" value="<?php echo esc_attr($existing_metadata['title'] ?? ''); ?>" />
+            <input type="hidden" id="thinkrank_meta_description__orig" name="thinkrank_meta_description__orig" value="<?php echo esc_attr($existing_metadata['description'] ?? ''); ?>" />
             <input type="hidden" id="thinkrank_focus_keyword" name="thinkrank_focus_keyword" value="<?php echo esc_attr($existing_metadata['focus_keyword'] ?? ''); ?>" />
             <input type="hidden" id="thinkrank_focus_keywords" name="thinkrank_focus_keywords" value="<?php echo esc_attr(wp_json_encode($existing_metadata['focus_keywords'] ?? [])); ?>" />
             <input type="hidden" id="thinkrank_seo_score" name="thinkrank_seo_score" value="<?php echo esc_attr($existing_metadata['seo_score'] ?? '0'); ?>" />
@@ -564,11 +567,15 @@ class Metabox_Manager {
      * @return void
      */
     private function persist_metadata(int $post_id, array $src): void {
-        // Save metadata. Focus keywords are handled separately (array meta) via
-        // Focus_Keywords below, so they are intentionally absent from this list.
+        // Title & meta description are handled separately below: they can be
+        // written out-of-band (Auto AI on publish, bulk optimization, imports)
+        // after an editor was opened, so a plain save from that now-stale editor
+        // would clobber the generated value with a blank. Focus keywords are
+        // likewise handled separately (array meta) via Focus_Keywords below.
+        $this->persist_seo_text_field($post_id, $src, 'thinkrank_seo_title', '_thinkrank_seo_title', 'sanitize_text_field');
+        $this->persist_seo_text_field($post_id, $src, 'thinkrank_meta_description', '_thinkrank_meta_description', 'sanitize_textarea_field');
+
         $fields = [
-            'thinkrank_seo_title' => 'sanitize_text_field',
-            'thinkrank_meta_description' => 'sanitize_textarea_field',
             'thinkrank_seo_score' => 'absint',
             'thinkrank_generated_at' => 'sanitize_text_field',
             'thinkrank_pillar_content' => 'sanitize_text_field',
@@ -613,6 +620,49 @@ class Metabox_Manager {
 
         // Update last modified timestamp
         update_post_meta($post_id, '_thinkrank_last_updated', current_time('mysql'));
+    }
+
+    /**
+     * Persist one SEO text field with an out-of-band-write guard.
+     *
+     * Auto AI (on publish), bulk optimization and imports write the SEO title /
+     * meta description directly to post meta. When that happens after an editor
+     * was opened, the editor's hidden input is a stale blank; a normal save
+     * would overwrite the freshly generated value with that blank. This guard
+     * skips the write only when the submitted value is empty AND it was also
+     * empty when the form was rendered (the `<field>__orig` mirror), yet the
+     * stored value is now non-empty — i.e. a background writer won the race.
+     *
+     * A deliberate clear still applies: if the field held a value at render and
+     * is submitted empty, `$orig` is non-empty so the guard does not trigger.
+     * Callers that don't send the `__orig` mirror (e.g. the MCP/Elementor
+     * paths) keep the plain write behavior.
+     *
+     * @param int      $post_id  Post being saved.
+     * @param array    $src      Unslashed field map.
+     * @param string   $field    POST field name (e.g. thinkrank_seo_title).
+     * @param string   $meta_key Target post meta key.
+     * @param callable $sanitize Sanitizer applied to the submitted value.
+     * @return void
+     */
+    private function persist_seo_text_field(int $post_id, array $src, string $field, string $meta_key, callable $sanitize): void {
+        if (!isset($src[$field])) {
+            return; // Field absent from this submit → leave the stored value untouched.
+        }
+
+        $submitted = (string) call_user_func($sanitize, (string) $src[$field]);
+
+        if ('' === $submitted && isset($src[$field . '__orig'])) {
+            $orig   = (string) $src[$field . '__orig'];
+            $stored = (string) get_post_meta($post_id, $meta_key, true);
+            // Blank now, blank at render, but populated in storage → a background
+            // write landed after this editor loaded; don't clobber it.
+            if ('' === $orig && '' !== $stored) {
+                return;
+            }
+        }
+
+        update_post_meta($post_id, $meta_key, $submitted);
     }
 
     /**

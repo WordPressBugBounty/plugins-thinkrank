@@ -163,6 +163,73 @@ final class Plan_Config {
     }
 
     /**
+     * Capability map for the AI Insights trio.
+     *
+     * Deliberately NOT gated on "needs an AI key" — the user pays their
+     * provider either way, so that is not what separates free from Pro. The
+     * split is acquisition vs. recurring depth:
+     *
+     *  - AI Traffic analytics stays FREE and ungated. It costs nothing to run
+     *    (referrer classification, no AI call) and is the feature that shows
+     *    value on day one. No capability key exists for it on purpose.
+     *  - Brand Visibility is FREEMIUM: free runs a couple of queries by hand
+     *    and keeps a short history; Pro lifts the query cap, keeps full
+     *    history, and unlocks scheduled (unattended) checks.
+     *  - Auto AI metadata is PRO: unattended automation is the clearest Pro
+     *    trait in the lineup.
+     *
+     * Unlike email_report, this map has no JS mirror in src/admin/config/ on
+     * purpose: the admin UI reads the resolved values off the AI Insights REST
+     * responses (`plan`, `is_pro`, `available`) rather than re-declaring them
+     * client-side, so there is nothing here that can drift out of sync.
+     *
+     * Schema:
+     *   brand_max_queries  int  Saved brand queries allowed (0 = unlimited).
+     *   brand_history_limit int History rows returned (0 = unlimited).
+     *   brand_scheduled    bool Unattended scheduled brand checks.
+     *   auto_ai_meta       bool Auto-generate metadata on first publish.
+     *
+     * @since 1.28.0
+     *
+     * @return array Capability map.
+     */
+    public static function ai_visibility(): array {
+        $defaults = [
+            'brand_max_queries'   => 2,
+            'brand_history_limit' => 10,
+            'brand_scheduled'     => false,
+            'auto_ai_meta'        => false,
+
+            // Brand Visibility v2. Free keeps a usable "quick check" — a
+            // couple of questions on one platform, single sample — which is
+            // enough to see the feature work and understand what Pro measures.
+            // Everything that turns a probe into a MEASUREMENT (sampling,
+            // competitors, multi-platform, trends) is Pro.
+            'brand_wizard'        => false,
+            'brand_competitors'   => 0,     // max competitors; 0 = none
+            'brand_max_platforms' => 1,
+            'brand_max_samples'   => 1,
+            'brand_sentiment'     => false,
+            'brand_history_runs'  => 1,     // runs kept for the trend chart
+        ];
+
+        /**
+         * Filter the AI Insights capability map.
+         *
+         * ThinkRank Pro sets `brand_max_queries` to 0 (unlimited, still
+         * bounded by Brand_Visibility_Checker::MAX_QUERIES), enables
+         * `brand_scheduled` and `auto_ai_meta`, and lifts the history limit.
+         *
+         * @since 1.28.0
+         *
+         * @param array $defaults Capability map (see schema above).
+         */
+        $caps = apply_filters('thinkrank_ai_visibility_capabilities', $defaults);
+
+        return array_merge($defaults, is_array($caps) ? $caps : []);
+    }
+
+    /**
      * Check a single capability for a given feature.
      *
      * Currently only the `email_report` feature is registered. Adding more
@@ -187,6 +254,10 @@ final class Plan_Config {
         switch ($feature) {
             case 'email_report':
                 return self::email_report();
+            case 'focus_keywords':
+                return self::focus_keywords();
+            case 'ai_visibility':
+                return self::ai_visibility();
             default:
                 return [];
         }

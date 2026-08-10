@@ -361,6 +361,10 @@ class Google_OAuth_Proxy {
         update_option('thinkrank_google_token_contract', self::TOKEN_CONTRACT_VERSION);
         delete_option('thinkrank_google_reconnect_required');
 
+        // A fresh authorization may be a different Google account — the cached
+        // Search Console property list must not outlive the account that wrote it.
+        \ThinkRank\API\Integrations_Endpoint::purge_search_console_sites_cache();
+
         // Settings memoizes reads, so a stale empty token from before the
         // connect would otherwise trip the credential check on this request.
         $this->settings_manager = new Settings_Manager();
@@ -430,6 +434,8 @@ class Google_OAuth_Proxy {
             'google_token_created'     => '',
             'google_account_connected' => false,
         ], 'integrations');
+
+        \ThinkRank\API\Integrations_Endpoint::purge_search_console_sites_cache();
 
         update_option('thinkrank_google_reconnect_required', $reason);
     }

@@ -44,7 +44,16 @@ class Database_Schema {
      * @since 1.0.0
      * @var string
      */
-    private string $db_version = '1.2.0';
+    private string $db_version = '1.6.0';
+
+    /**
+     * Transient caching a verified-complete schema, so the missing-table probe
+     * costs one query per hour on a healthy site rather than one per request.
+     *
+     * @since 1.28.0
+     * @var string
+     */
+    private const TABLES_VERIFIED_TRANSIENT = 'thinkrank_schema_verified';
 
     /**
      * Database table definitions with specifications
@@ -163,6 +172,35 @@ class Database_Schema {
                 'site_recent' => ['site_id', 'sent_at']
             ],
             'foreign_keys' => []
+        ],
+
+        // === AI VISIBILITY TABLES (2) ===
+        'ai_traffic' => [
+            'description' => 'Daily aggregate counters for AI referral traffic, AI crawler hits, and the all-traffic baseline',
+            'primary_key' => 'id',
+            'indexes' => ['day', 'kind'],
+            'foreign_keys' => []
+        ],
+        'brand_visibility_checks' => [
+            'description' => 'History of AI brand-visibility checks run through the configured AI provider',
+            'primary_key' => 'id',
+            'indexes' => ['checked_at', 'query_text'],
+            'foreign_keys' => []
+        ],
+        'bv_runs' => [
+            'description' => 'Brand Visibility v2 analysis runs: one row per run, with its config snapshot, progress counters and computed aggregates',
+            'primary_key' => 'id',
+            'indexes' => ['status', 'started_at'],
+            'foreign_keys' => []
+        ],
+        'bv_tasks' => [
+            'description' => 'Brand Visibility v2 units of work: one row per query x platform x sample, processed off-request by cron ticks',
+            'primary_key' => 'id',
+            'indexes' => ['run_id', 'status'],
+            'composite_indexes' => [
+                'run_status' => ['run_id', 'status'],
+            ],
+            'foreign_keys' => []
         ]
     ];
 
@@ -185,7 +223,8 @@ class Database_Schema {
         'ai' => ['ai_cache', 'ai_usage'],
         'content' => ['content_briefs'],
         'scoring' => ['seo_scores'],
-        'reporting' => ['email_report_logs']
+        'reporting' => ['email_report_logs'],
+        'ai_visibility' => ['ai_traffic', 'brand_visibility_checks', 'bv_runs', 'bv_tasks']
     ];
 
     /**
@@ -260,6 +299,10 @@ class Database_Schema {
             update_option('thinkrank_seo_db_created', current_time('mysql'));
         }
 
+        // The schema just changed, so any cached "verified complete" answer is
+        // stale either way — drop it and let the next probe re-check.
+        delete_transient(self::TABLES_VERIFIED_TRANSIENT);
+
         return $results;
     }
 
@@ -317,7 +360,58 @@ class Database_Schema {
      */
     public function needs_update(): bool {
         $current_version = get_option('thinkrank_seo_db_version', '0.0.0');
-        return version_compare($current_version, $this->db_version, '<');
+
+        if (version_compare($current_version, $this->db_version, '<')) {
+            return true;
+        }
+
+        // Version-only gating has now failed twice (#252, #270): if tables are
+        // added but the version isn't moved — or a table is dropped, or an
+        // upgrade half-completes — the stored version matches, the gate says
+        // "nothing to do", and the feature is dead with no way back except
+        // deactivate/reactivate. So also heal when a registered table is
+        // actually missing. dbDelta only creates what's absent, making this
+        // safe to re-run.
+        return !empty($this->missing_tables());
+    }
+
+    /**
+     * Registered tables that don't exist in the database.
+     *
+     * One `SHOW TABLES LIKE` for all of them, and the healthy answer is cached
+     * so a correct install pays at most one extra query per hour rather than
+     * one per request. The cache is cleared whenever tables are created.
+     *
+     * @since 1.28.0
+     *
+     * @return string[] Missing table names (full, prefixed).
+     */
+    public function missing_tables(): array {
+        $cached = get_transient(self::TABLES_VERIFIED_TRANSIENT);
+        if ($cached === $this->db_version) {
+            return [];
+        }
+
+        $expected = [];
+        foreach (array_keys($this->table_definitions) as $table) {
+            $expected[] = $this->get_table_name($table);
+        }
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- schema probe; result cached below.
+        $existing = (array) $this->wpdb->get_col(
+            $this->wpdb->prepare(
+                'SHOW TABLES LIKE %s',
+                $this->wpdb->esc_like($this->wpdb->prefix . 'thinkrank_') . '%'
+            )
+        );
+
+        $missing = array_values(array_diff($expected, $existing));
+
+        if (empty($missing)) {
+            set_transient(self::TABLES_VERIFIED_TRANSIENT, $this->db_version, HOUR_IN_SECONDS);
+        }
+
+        return $missing;
     }
 
     /**
@@ -483,6 +577,16 @@ class Database_Schema {
                 return $this->get_instant_indexing_logs_table_sql($full_table_name, $charset_collate);
             case 'email_report_logs':
                 return $this->get_email_report_logs_table_sql($full_table_name, $charset_collate);
+
+                // AI Visibility Tables
+            case 'ai_traffic':
+                return $this->get_ai_traffic_table_sql($full_table_name, $charset_collate);
+            case 'bv_runs':
+                return $this->get_bv_runs_table_sql($full_table_name, $charset_collate);
+            case 'bv_tasks':
+                return $this->get_bv_tasks_table_sql($full_table_name, $charset_collate);
+            case 'brand_visibility_checks':
+                return $this->get_brand_visibility_checks_table_sql($full_table_name, $charset_collate);
 
             default:
                 throw new \InvalidArgumentException('Unknown table: ' . esc_html($table_name));
@@ -1337,5 +1441,138 @@ class Database_Schema {
         $json_support = version_compare($mysql_version, '5.7.0', '>=');
 
         return $json_support;
+    }
+
+    /**
+     * Get SQL for the AI traffic table.
+     *
+     * Daily aggregate counters only — one row per (day, kind, source, path).
+     * `kind` is 'referral' (human visit from an AI platform), 'crawler' (AI
+     * bot user-agent), or 'baseline' (all human pageviews, for the share-of-
+     * traffic figure). No IPs, no user agents, no per-visit rows: aggregates
+     * keep the table small and the feature privacy-clean.
+     *
+     * @since 1.27.0
+     *
+     * @param string $table_name      Full table name
+     * @param string $charset_collate Charset and collation
+     * @return string SQL for table creation
+     */
+    private function get_ai_traffic_table_sql(string $table_name, string $charset_collate): string {
+        return "CREATE TABLE `{$table_name}` (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            day date NOT NULL,
+            kind varchar(12) NOT NULL,
+            source varchar(40) NOT NULL DEFAULT '',
+            path varchar(191) NOT NULL DEFAULT '',
+            hits bigint(20) unsigned NOT NULL DEFAULT 1,
+            PRIMARY KEY (id),
+            UNIQUE KEY uniq_bucket (day, kind, source, path),
+            KEY idx_day (day),
+            KEY idx_kind (kind)
+        ) {$charset_collate};";
+    }
+
+    /**
+     * Get SQL for the brand visibility checks table.
+     *
+     * One row per (query, check run): whether the AI provider's answer
+     * mentioned the brand and/or cited the site's domain, plus a short
+     * excerpt for context.
+     *
+     * @since 1.27.0
+     *
+     * @param string $table_name      Full table name
+     * @param string $charset_collate Charset and collation
+     * @return string SQL for table creation
+     */
+    private function get_brand_visibility_checks_table_sql(string $table_name, string $charset_collate): string {
+        return "CREATE TABLE `{$table_name}` (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            checked_at datetime NOT NULL,
+            query_text varchar(191) NOT NULL,
+            provider varchar(20) NOT NULL DEFAULT '',
+            model varchar(80) NOT NULL DEFAULT '',
+            mentioned tinyint(1) NOT NULL DEFAULT 0,
+            cited tinyint(1) NOT NULL DEFAULT 0,
+            excerpt text NULL,
+            answer longtext NULL,
+            PRIMARY KEY (id),
+            KEY idx_checked (checked_at),
+            KEY idx_query (query_text)
+        ) {$charset_collate};";
+    }
+
+    /**
+     * Brand Visibility v2 — analysis runs.
+     *
+     * One row per "Run analysis". `config` snapshots the brand profile,
+     * competitors, queries and platforms the run was started with, so a run's
+     * results stay interpretable after the user edits their setup. `results`
+     * holds the computed aggregates (index, mention rate, share of voice,
+     * per-platform and per-query breakdowns) written once by the finalizer.
+     *
+     * @since 1.28.0
+     *
+     * @param string $table_name      Full table name.
+     * @param string $charset_collate Charset/collation clause.
+     * @return string CREATE TABLE statement.
+     */
+    private function get_bv_runs_table_sql(string $table_name, string $charset_collate): string {
+        return "CREATE TABLE `{$table_name}` (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            status varchar(20) NOT NULL DEFAULT 'queued',
+            started_at datetime NOT NULL,
+            finished_at datetime NULL,
+            tasks_total int(11) NOT NULL DEFAULT 0,
+            tasks_done int(11) NOT NULL DEFAULT 0,
+            tasks_failed int(11) NOT NULL DEFAULT 0,
+            config longtext NULL,
+            results longtext NULL,
+            error text NULL,
+            PRIMARY KEY (id),
+            KEY idx_status (status),
+            KEY idx_started (started_at)
+        ) {$charset_collate};";
+    }
+
+    /**
+     * Brand Visibility v2 — individual probe tasks.
+     *
+     * One row per (query x platform x sample). Sampling is the whole point:
+     * a single LLM answer is noise, so a mention rate is only meaningful as
+     * mentions/samples. Rows are processed off-request by cron ticks, which is
+     * what keeps a 100+ call run from timing out a REST request, and what lets
+     * an interrupted run resume instead of restarting.
+     *
+     * @since 1.28.0
+     *
+     * @param string $table_name      Full table name.
+     * @param string $charset_collate Charset/collation clause.
+     * @return string CREATE TABLE statement.
+     */
+    private function get_bv_tasks_table_sql(string $table_name, string $charset_collate): string {
+        return "CREATE TABLE `{$table_name}` (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            run_id bigint(20) unsigned NOT NULL,
+            query_text varchar(500) NOT NULL,
+            query_type varchar(20) NOT NULL DEFAULT 'branded',
+            platform varchar(20) NOT NULL DEFAULT '',
+            sample_index tinyint(3) unsigned NOT NULL DEFAULT 0,
+            status varchar(20) NOT NULL DEFAULT 'pending',
+            attempts tinyint(3) unsigned NOT NULL DEFAULT 0,
+            mentioned tinyint(1) NOT NULL DEFAULT 0,
+            cited tinyint(1) NOT NULL DEFAULT 0,
+            sentiment varchar(10) NOT NULL DEFAULT '',
+            competitors text NULL,
+            excerpt text NULL,
+            answer longtext NULL,
+            error text NULL,
+            updated_at datetime NULL,
+            PRIMARY KEY (id),
+            KEY idx_run (run_id),
+            KEY idx_status (status),
+            KEY run_status (run_id, status)
+        ) {$charset_collate};";
     }
 }

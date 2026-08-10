@@ -53,6 +53,21 @@ class Integrations_Endpoint extends WP_REST_Controller {
     protected $rest_base = 'integrations';
 
     /**
+     * Transient holding the verified Search Console property list.
+     *
+     * Deliberately a fixed key rather than one namespaced per account: a purge
+     * has to be possible from paths that have already cleared the credentials
+     * (disconnect, revoke), and those can no longer derive an account-specific
+     * key. The account is instead fingerprinted inside the payload and checked
+     * on read, so a cache written by one Google account can never be served to
+     * another even if a purge is missed.
+     *
+     * @since 1.28.0
+     * @var string
+     */
+    public const SITES_CACHE_KEY = 'thinkrank_gsc_sites_list';
+
+    /**
      * Settings instance
      *
      * @since 1.0.0
@@ -118,14 +133,23 @@ class Integrations_Endpoint extends WP_REST_Controller {
                     'permission_callback' => [$this, 'check_manage_permissions'],
                     'args' => [
                         'measurement_id' => [
-                            'required' => true,
+                            // Optional, and an empty string is meaningful:
+                            // verify_tracking() then discovers the ID from the
+                            // live homepage. A `required` + `pattern` arg
+                            // rejected that at the REST layer before the
+                            // handler ran, which is why verification was
+                            // unreachable on sites with no stored ID (#250).
+                            'required' => false,
                             'type' => 'string',
+                            'default' => '',
                             // No regex delimiters — WP's REST validator wraps the
                             // pattern in its own (#...#u), so a leading/trailing
                             // slash would require literal slashes in the value.
-                            'pattern' => '^G-[A-Z0-9]{10}$',
+                            // The empty alternative keeps discovery reachable
+                            // while still rejecting a malformed ID.
+                            'pattern' => '^(G-[A-Z0-9]{10})?$',
                             'sanitize_callback' => 'sanitize_text_field',
-                            'description' => 'GA4 Measurement ID in format G-XXXXXXXXXX'
+                            'description' => 'GA4 Measurement ID in format G-XXXXXXXXXX. Omit or leave empty to auto-detect the ID from the site homepage.'
                         ]
                     ]
                 ]
@@ -153,7 +177,14 @@ class Integrations_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'GET',
                     'callback' => [$this, 'get_search_console_sites'],
-                    'permission_callback' => [$this, 'check_manage_permissions']
+                    'permission_callback' => [$this, 'check_manage_permissions'],
+                    'args' => [
+                        'refresh' => [
+                            'description' => 'Bypass the cached property list and re-query Google.',
+                            'type' => 'boolean',
+                            'default' => false,
+                        ],
+                    ],
                 ]
             ]
         );
@@ -793,8 +824,19 @@ class Integrations_Endpoint extends WP_REST_Controller {
             $this->settings->set('google_token_expires_in', '');
             $this->settings->set('google_token_created', '');
             $this->settings->set('google_account_connected', false);
-            // Also clear site selection
-            $this->settings->set('google_search_console_site', '');
+            // Also clear site selection. This targeted `google_search_console_site`,
+            // which is not a declared setting — Settings::set() rejects unknown
+            // keys, so the line never cleared anything and the selection
+            // survived every disconnect. The property picker writes
+            // `search_console_property`; clear that and the GA4 property beside
+            // it, so a reconnect under a different Google account doesn't
+            // inherit the previous account's selections.
+            $this->settings->set('search_console_property', '');
+            $this->settings->set('seo_analytics_google_analytics_property_id', '');
+
+            // The cached property list belongs to the account we just dropped —
+            // leaving it would serve those properties to whoever connects next.
+            self::purge_search_console_sites_cache();
 
             // A deliberate disconnect is not a forced re-authorization.
             delete_option('thinkrank_google_reconnect_required');
@@ -859,15 +901,11 @@ class Integrations_Endpoint extends WP_REST_Controller {
      */
     public function verify_ga4_tracking(WP_REST_Request $request): WP_REST_Response|WP_Error {
         try {
-            $measurement_id = $request->get_param('measurement_id');
-
-            if (empty($measurement_id)) {
-                return new WP_Error(
-                    'missing_measurement_id',
-                    'Measurement ID is required',
-                    ['status' => 400]
-                );
-            }
+            // Empty is allowed and meaningful: verify_tracking() then reads the
+            // homepage and discovers whichever GA4 ID is actually serving. The
+            // old 400 made verification impossible on OAuth-connected sites
+            // that never typed an ID in — precisely the reported case (#250).
+            $measurement_id = (string) ( $request->get_param('measurement_id') ?? '' );
 
             // Load tracking manager
             if (!class_exists('ThinkRank\\Frontend\\Google_Analytics_Tracking_Manager')) {
@@ -926,6 +964,39 @@ class Integrations_Endpoint extends WP_REST_Controller {
         }
     }
     /**
+     * Fingerprint the currently connected Google account.
+     *
+     * Prefers the refresh token: it is issued once per authorization grant and
+     * survives every access-token rotation, so the cache stays warm for a whole
+     * connection but changes the moment a different account authorizes. Falls
+     * back to the access token when no refresh token was granted, which merely
+     * shortens the effective cache life to one token lifetime.
+     *
+     * @since 1.28.0
+     * @return string Non-reversible fingerprint, empty string when disconnected.
+     */
+    private function get_google_account_fingerprint(): string {
+        $token = $this->settings->get('google_refresh_token', '')
+            ?: $this->settings->get('google_access_token', '');
+
+        return empty($token) ? '' : md5((string) $token);
+    }
+
+    /**
+     * Drop the cached Search Console property list.
+     *
+     * Public and static so the OAuth paths — which run outside this controller
+     * and after the credentials are gone — can invalidate the list on connect,
+     * disconnect and revoke.
+     *
+     * @since 1.28.0
+     * @return void
+     */
+    public static function purge_search_console_sites_cache(): void {
+        delete_transient(self::SITES_CACHE_KEY);
+    }
+
+    /**
      * Get Search Console Sites
      *
      * @since 1.0.0
@@ -934,15 +1005,6 @@ class Integrations_Endpoint extends WP_REST_Controller {
      */
     public function get_search_console_sites(WP_REST_Request $request): WP_REST_Response {
         try {
-            // The verified-sites list changes rarely but costs a live Google
-            // round-trip — serve from a 30-minute transient so the Google
-            // Services screen doesn't hit Google on every render.
-            $sites_cache_key = 'thinkrank_gsc_sites_list';
-            $cached_sites = get_transient($sites_cache_key);
-            if (is_array($cached_sites)) {
-                return new WP_REST_Response($cached_sites, 200);
-            }
-
             // Ensure Analytics_Manager is loaded for proactive token refresh
             if (!class_exists('ThinkRank\\SEO\\Analytics_Manager')) {
                 require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-analytics-manager.php';
@@ -960,6 +1022,24 @@ class Integrations_Endpoint extends WP_REST_Controller {
                     'success' => false,
                     'message' => 'Google account not connected'
                 ], 401);
+            }
+
+            // The verified-sites list changes rarely but costs a live Google
+            // round-trip — serve from a 30-minute transient so the Google
+            // Services screen doesn't hit Google on every render. The cache is
+            // only honoured for the account that wrote it: reconnecting as a
+            // different Google account must never hand back the previous
+            // account's properties, which reads as "my site is missing".
+            $account = $this->get_google_account_fingerprint();
+            $cached_sites = get_transient(self::SITES_CACHE_KEY);
+
+            if (
+                !$request->get_param('refresh')
+                && is_array($cached_sites)
+                && isset($cached_sites['account'], $cached_sites['payload'])
+                && hash_equals($account, (string) $cached_sites['account'])
+            ) {
+                return new WP_REST_Response($cached_sites['payload'], 200);
             }
 
             // Initialize Search Console Client
@@ -1035,9 +1115,19 @@ class Integrations_Endpoint extends WP_REST_Controller {
                 'message' => 'Search Console sites retrieved successfully'
             ];
 
-            // Cache successes only — errors must stay retryable.
+            // Cache successes only — errors must stay retryable. Recompute the
+            // fingerprint: the 401 retry above may have rotated the access
+            // token, and the cache must be stamped with the account it came
+            // from, not the one we started the request with.
             if (!empty($sites)) {
-                set_transient($sites_cache_key, $payload, 30 * MINUTE_IN_SECONDS);
+                set_transient(
+                    self::SITES_CACHE_KEY,
+                    [
+                        'account' => $this->get_google_account_fingerprint(),
+                        'payload' => $payload,
+                    ],
+                    30 * MINUTE_IN_SECONDS
+                );
             }
 
             return new WP_REST_Response($payload, 200);

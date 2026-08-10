@@ -33,8 +33,24 @@ if (!defined('ABSPATH')) {
 class Settings {
 
     /**
+     * Canonical default AI model per provider.
+     *
+     * Single source of truth. Every call site that needs a provider's default
+     * model — the $defaults array below, the AI client constructors, the manager
+     * fallbacks, the content-brief generator and the usage-analytics endpoint —
+     * MUST reference these constants instead of repeating the literal, so the
+     * defaults can never silently drift out of sync (see issue #273).
+     *
+     * @since 1.28.0
+     */
+    const DEFAULT_OPENAI_MODEL     = 'gpt-5-nano';
+    const DEFAULT_CLAUDE_MODEL     = 'claude-sonnet-5';
+    const DEFAULT_GEMINI_MODEL     = 'gemini-3.5-flash';
+    const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-4o-mini';
+
+    /**
      * Shared singleton instance
-     * 
+     *
      * @var Settings|null
      */
     private static ?Settings $instance = null;
@@ -85,13 +101,13 @@ class Settings {
         // AI Settings
         'ai_provider' => 'openai',
         'openai_api_key' => '',
-        'openai_model' => 'gpt-5-nano', // Default to GPT‑5‑nano
+        'openai_model' => self::DEFAULT_OPENAI_MODEL,
         'claude_api_key' => '',
-        'claude_model' => 'claude-sonnet-5', // Recommended default (best speed/quality balance)
+        'claude_model' => self::DEFAULT_CLAUDE_MODEL, // Recommended default (best speed/quality balance)
         'gemini_api_key' => '',
-        'gemini_model' => 'gemini-2.5-flash',
+        'gemini_model' => self::DEFAULT_GEMINI_MODEL,
         'openrouter_api_key' => '',
-        'openrouter_model' => 'openai/gpt-4o-mini',
+        'openrouter_model' => self::DEFAULT_OPENROUTER_MODEL,
         'max_tokens' => 1000,
         'temperature' => 0.7,
 
@@ -107,7 +123,9 @@ class Settings {
         'google_token_created' => 0,
         'google_account_connected' => false,
 
-        // Google Analytics Pro Settings
+        // Google Analytics Pro Settings. Read/written by thinkrank-pro's
+        // GoogleAnalyticsSettings.js through the settings-management endpoint —
+        // no consumer exists in THIS repo, so don't dead-key these.
         'ga_analytics_account_id' => '',
         'ga_analytics_data_stream_id' => '',
 
@@ -138,6 +156,35 @@ class Settings {
         'seo_score_threshold' => 70,
         'enable_meta_generation' => true,
         'enable_schema_markup' => true,
+
+        // Auto AI Optimization (on-publish metadata fill; #248 P1)
+        'auto_ai_meta_enabled' => false,
+        'auto_ai_meta_post_types' => ['post'],
+
+        // Brand Visibility v2. The brand profile drives question generation
+        // and mention detection; per-platform keys let this feature query
+        // several assistants without changing the site-wide AI provider.
+        'bv_brand_name' => '',
+        'bv_variants' => [],
+        'bv_location' => '',
+        'bv_category' => '',
+        'bv_description' => '',
+        'bv_competitors' => [],
+        'bv_queries' => [],
+        'bv_platforms' => ['chatgpt'],
+        'bv_samples' => 1,
+        'bv_key_chatgpt' => '',
+        'bv_key_gemini' => '',
+        'bv_key_claude' => '',
+        'bv_key_perplexity' => '',
+        // Empty = use the platform's default model (see Brand_Visibility_Providers).
+        'bv_model_chatgpt' => '',
+        'bv_model_gemini' => '',
+        'bv_model_claude' => '',
+        'bv_model_perplexity' => '',
+
+        // AI Brand Visibility (BYO-key checks; #248 P1)
+        'brand_visibility_queries' => [],
 
         // Author Archives Settings
         'author_archives_enabled' => true,

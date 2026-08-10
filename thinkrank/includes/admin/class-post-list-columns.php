@@ -29,10 +29,44 @@ class Post_List_Columns {
 
     /**
      * Column ID
-     * 
+     *
      * @var string
      */
     private const COLUMN_ID = 'thinkrank_seo_overview';
+
+    /**
+     * Post meta holding the cached on-the-fly column metrics.
+     *
+     * Postmeta rather than a transient on purpose: WordPress primes the meta
+     * cache for every row of a list table in one query, so reading this costs
+     * nothing extra, whereas N non-autoloaded transients would be N queries.
+     *
+     * @since 1.28.0
+     * @var string
+     */
+    private const METRICS_CACHE_META = '_thinkrank_seo_column_metrics';
+
+    /**
+     * Ceiling on how many posts may be scored from scratch in a single request.
+     *
+     * Scoring resolves builder markup (`do_blocks()` + `do_shortcode()`), so an
+     * uncached list at 200-per-page could otherwise stall the page. Results are
+     * cached per post, so anything skipped here is picked up on a later load and
+     * the cap stops mattering once the list has been viewed. Sits comfortably
+     * above WordPress's default 20-per-page.
+     *
+     * @since 1.28.0
+     * @var int
+     */
+    private const MAX_SCORED_PER_REQUEST = 50;
+
+    /**
+     * Number of posts scored from scratch so far in this request.
+     *
+     * @since 1.28.0
+     * @var int
+     */
+    private static int $scored_this_request = 0;
 
     /**
      * Initialize post list columns
@@ -143,9 +177,6 @@ class Post_List_Columns {
      * @return array SEO data
      */
     private function get_seo_data(int $post_id): array {
-        // Get SEO score and metrics from database table
-        $seo_metrics = $this->get_seo_metrics_from_database($post_id);
-
         // Get focus keyword(s). The column shows only the primary keyword, but
         // the inline editor operates on the full comma-separated set so editing
         // never drops the secondary keywords.
@@ -157,15 +188,18 @@ class Post_List_Columns {
         // is set, ThinkRank still renders these from the Bulk SEO Optimization
         // (Global SEO) patterns, so resolve those inherited values here instead of
         // reporting "Not Set" for content that is actually output on the frontend.
-        $raw_title = get_post_meta($post_id, '_thinkrank_seo_title', true);
-        $meta_title = $raw_title !== ''
-            ? \ThinkRank\SEO\Pattern_Resolver::resolve_value($raw_title, $post_id)
-            : \ThinkRank\SEO\Pattern_Resolver::title($post_id);
+        $meta_title = \ThinkRank\SEO\Pattern_Resolver::effective_title($post_id);
+        $meta_description = \ThinkRank\SEO\Pattern_Resolver::effective_description($post_id);
 
-        $raw_description = get_post_meta($post_id, '_thinkrank_meta_description', true);
-        $meta_description = $raw_description !== ''
-            ? \ThinkRank\SEO\Pattern_Resolver::resolve_value($raw_description, $post_id)
-            : \ThinkRank\SEO\Pattern_Resolver::description($post_id);
+        // Raw per-post values (what the Quick Edit inputs actually edit — the
+        // effective values above are what the placeholders show). Both reads hit
+        // the already-primed meta cache.
+        $seo_title_raw = (string) get_post_meta($post_id, '_thinkrank_seo_title', true);
+        $meta_description_raw = (string) get_post_meta($post_id, '_thinkrank_meta_description', true);
+
+        // Get SEO score and metrics — the stored analysis when it is still
+        // current, otherwise one calculated on the spot.
+        $seo_metrics = $this->get_seo_metrics($post_id, $meta_title, $meta_description, $focus_keywords);
 
         // Get content quality and readability from database columns
         $content_quality = $seo_metrics['content_quality'] ?? 'Not Analyzed';
@@ -181,6 +215,10 @@ class Post_List_Columns {
             'focus_keyword_primary' => $focus_keyword_primary,
             'meta_title' => !empty($meta_title),
             'meta_description' => !empty($meta_description),
+            'seo_title_raw' => $seo_title_raw,
+            'meta_description_raw' => $meta_description_raw,
+            'effective_title' => $meta_title,
+            'effective_description' => $meta_description,
             'pillar_content' => $this->is_link_suggestions_enabled(get_post_type($post_id)) && get_post_meta($post_id, '_thinkrank_pillar_content', true) === '1',
         ];
     }
@@ -214,6 +252,161 @@ class Post_List_Columns {
     private static ?bool $scores_table_exists = null;
 
     /**
+     * Resolve the metrics to display for a post.
+     *
+     * Prefers the stored analysis, but only while it still describes the post as
+     * it stands: a score saved before the last edit is stale, and showing it is
+     * how a rewritten post could keep advertising the score of the draft it
+     * replaced. When there is no usable stored score the metrics are calculated
+     * here instead.
+     *
+     * That fallback is the difference between a column that reads "N/A / Not
+     * Analyzed" forever and one that reports a real score straight away. A score
+     * row is only ever written by an explicit analysis (the editor panel, the
+     * bulk analyzer, an MCP call or the importer) — nothing scores a post on
+     * save — so before this fallback existed, editing the SEO title and
+     * description left the column empty with no indication that a separate,
+     * manual step was what it was waiting for.
+     *
+     * @since 1.28.0
+     *
+     * @param int      $post_id     Post ID.
+     * @param string   $title       Effective meta title.
+     * @param string   $description Effective meta description.
+     * @param string[] $keywords    Focus keywords.
+     * @return array SEO metrics (seo_score, seo_grade, content_quality, readability_score)
+     */
+    private function get_seo_metrics(int $post_id, string $title, string $description, array $keywords): array {
+        $stored = $this->get_seo_metrics_from_database($post_id);
+
+        if ($stored['seo_score'] !== null && !$this->is_score_stale($post_id, $stored['calculated_at'] ?? null)) {
+            return $stored;
+        }
+
+        return $this->calculate_seo_metrics($post_id, $title, $description, $keywords);
+    }
+
+    /**
+     * Whether a stored score predates the post's last modification.
+     *
+     * Both timestamps are site-local `Y-m-d H:i:s` — `post_modified` from
+     * WordPress and `created_at` written with `current_time('mysql')` — so they
+     * are directly comparable as strings. A missing timestamp counts as stale;
+     * calculating is cheap and cached, and a score we cannot date is one we
+     * cannot vouch for.
+     *
+     * @since 1.28.0
+     *
+     * @param int         $post_id      Post ID.
+     * @param string|null $calculated_at When the stored score was written.
+     * @return bool True when the post changed after the score was calculated.
+     */
+    private function is_score_stale(int $post_id, ?string $calculated_at): bool {
+        if (empty($calculated_at)) {
+            return true;
+        }
+
+        $post = get_post($post_id);
+        if (!$post instanceof \WP_Post || empty($post->post_modified)) {
+            return false;
+        }
+
+        return $post->post_modified > $calculated_at;
+    }
+
+    /**
+     * Calculate a post's metrics locally, caching the result against the inputs
+     * that produced it.
+     *
+     * The scoring engine is pure PHP — no AI provider and no HTTP calls — so the
+     * list table can run it directly. The cache is keyed on a fingerprint of
+     * everything the score depends on (last modification, effective title and
+     * description, focus keywords, plugin version), which means a Global SEO
+     * pattern change or an inline focus-keyword edit invalidates it on its own,
+     * with nothing to hook and no cache to sweep.
+     *
+     * @since 1.28.0
+     *
+     * @param int      $post_id     Post ID.
+     * @param string   $title       Effective meta title.
+     * @param string   $description Effective meta description.
+     * @param string[] $keywords    Focus keywords.
+     * @return array SEO metrics; score/grade null when the post could not be scored.
+     */
+    private function calculate_seo_metrics(int $post_id, string $title, string $description, array $keywords): array {
+        $empty = [
+            'seo_score' => null,
+            'seo_grade' => null,
+            'content_quality' => null,
+            'readability_score' => null,
+        ];
+
+        $post = get_post($post_id);
+        if (!$post instanceof \WP_Post) {
+            return $empty;
+        }
+
+        $fingerprint = md5(implode('|', [
+            (string) $post->post_modified_gmt,
+            $title,
+            $description,
+            implode(',', $keywords),
+            THINKRANK_VERSION,
+        ]));
+
+        $cached = get_post_meta($post_id, self::METRICS_CACHE_META, true);
+        if (is_array($cached) && ($cached['fingerprint'] ?? '') === $fingerprint && isset($cached['metrics'])) {
+            return $cached['metrics'];
+        }
+
+        // Past the ceiling the column falls back to the un-scored display rather
+        // than holding up the page; the next load picks these up.
+        if (self::$scored_this_request >= self::MAX_SCORED_PER_REQUEST) {
+            return $empty;
+        }
+        self::$scored_this_request++;
+
+        try {
+            $calculator = new \ThinkRank\AI\SEOScoreCalculator(new \ThinkRank\Core\Database());
+
+            $content_data = $calculator->analyze_post_content($post_id);
+            if (empty($content_data)) {
+                return $empty;
+            }
+
+            // Score against the effective title/description so a post inheriting
+            // either from a Global pattern is scored the way it actually renders,
+            // matching the editor panel rather than counting the field as empty.
+            $score_data = $calculator->calculate_score(
+                $content_data,
+                ['title' => $title, 'description' => $description],
+                ['target_keywords' => $keywords]
+            );
+        } catch (\Throwable $e) {
+            // A broken shortcode in one post must not take down the whole list.
+            return $empty;
+        }
+
+        if (!isset($score_data['overall_score'])) {
+            return $empty;
+        }
+
+        $metrics = [
+            'seo_score' => (int) $score_data['overall_score'],
+            'seo_grade' => $score_data['grade'] ?? null,
+            'content_quality' => $score_data['content_quality'] ?? null,
+            'readability_score' => $score_data['readability_score'] ?? null,
+        ];
+
+        update_post_meta($post_id, self::METRICS_CACHE_META, [
+            'fingerprint' => $fingerprint,
+            'metrics' => $metrics,
+        ]);
+
+        return $metrics;
+    }
+
+    /**
      * Get SEO metrics from database table
      *
      * @param int $post_id Post ID
@@ -230,6 +423,7 @@ class Post_List_Columns {
             'seo_grade' => null,
             'content_quality' => null,
             'readability_score' => null,
+            'calculated_at' => null,
         ];
 
         // Check if table exists (memoized per request — the column runs this
@@ -250,7 +444,7 @@ class Post_List_Columns {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- SEO score retrieval requires direct database access
         $result = $wpdb->get_row($wpdb->prepare(
             // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Table name is properly escaped
-            "SELECT overall_score, grade, content_quality, readability_score FROM `{$table_name}` WHERE post_id = %d ORDER BY created_at DESC LIMIT 1",
+            "SELECT overall_score, grade, content_quality, readability_score, created_at FROM `{$table_name}` WHERE post_id = %d ORDER BY created_at DESC LIMIT 1",
             $post_id
         ), ARRAY_A);
 
@@ -263,6 +457,7 @@ class Post_List_Columns {
             'seo_grade' => $result['grade'] !== null ? $result['grade'] : null,
             'content_quality' => $result['content_quality'],
             'readability_score' => $result['readability_score'],
+            'calculated_at' => $result['created_at'],
         ];
     }
 
@@ -307,6 +502,26 @@ class Post_List_Columns {
                             <path d="M1 11H11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
                         </svg>
                     </div>
+                <?php endif; ?>
+
+                <?php if (current_user_can('edit_post', $post_id)): ?>
+                    <button type="button"
+                        class="thinkrank-qe-trigger"
+                        data-post-id="<?php echo esc_attr($post_id); ?>"
+                        data-post-title="<?php echo esc_attr(get_the_title($post_id)); ?>"
+                        data-seo-title="<?php echo esc_attr($seo_data['seo_title_raw']); ?>"
+                        data-meta-description="<?php echo esc_attr($seo_data['meta_description_raw']); ?>"
+                        data-effective-title="<?php echo esc_attr($seo_data['effective_title']); ?>"
+                        data-effective-description="<?php echo esc_attr($seo_data['effective_description']); ?>"
+                        data-focus-keywords="<?php echo esc_attr($seo_data['focus_keyword_value']); ?>"
+                        data-edit-link="<?php echo esc_url(get_edit_post_link($post_id, 'raw') ?? ''); ?>"
+                        aria-label="<?php esc_attr_e('Quick Edit SEO', 'thinkrank'); ?>"
+                        title="<?php esc_attr_e('Quick Edit SEO', 'thinkrank'); ?>">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                            <path d="M8 2H3.333A1.333 1.333 0 0 0 2 3.333v9.334A1.333 1.333 0 0 0 3.333 14h9.334A1.334 1.334 0 0 0 14 12.667V8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                            <path d="M12.25 1.75a1.414 1.414 0 1 1 2 2L8.24 9.758a1.334 1.334 0 0 1-.568.336l-1.915.56a.334.334 0 0 1-.414-.413l.56-1.915c.063-.215.18-.41.338-.568l6.008-6.01Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </button>
                 <?php endif; ?>
             </div>
 
@@ -499,6 +714,54 @@ class Post_List_Columns {
             ['jquery'],
             THINKRANK_VERSION,
             true
+        );
+
+        // Enqueue the Quick Edit SEO modal (style + script + config)
+        wp_enqueue_style(
+            'thinkrank-seo-quick-edit',
+            THINKRANK_PLUGIN_URL . 'static/css/seo-quick-edit.css',
+            [],
+            THINKRANK_VERSION
+        );
+
+        wp_enqueue_script(
+            'thinkrank-seo-quick-edit',
+            THINKRANK_PLUGIN_URL . 'assets/seo-quick-edit.js',
+            [],
+            THINKRANK_VERSION,
+            true
+        );
+
+        wp_localize_script(
+            'thinkrank-seo-quick-edit',
+            'thinkrankSeoQuickEdit',
+            [
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce(\ThinkRank\Admin\Seo_Quick_Edit_Ajax::get_nonce_action()),
+                'actionGet' => \ThinkRank\Admin\Seo_Quick_Edit_Ajax::get_ajax_action_get(),
+                'actionSave' => \ThinkRank\Admin\Seo_Quick_Edit_Ajax::get_ajax_action_save(),
+                'titleMax' => 60,
+                'descriptionMax' => 160,
+                'keywordLimit' => \ThinkRank\SEO\Focus_Keywords::limit(),
+                'i18n' => [
+                    'modalTitle' => __('Quick Edit SEO', 'thinkrank'),
+                    'seoTitle' => __('SEO Title', 'thinkrank'),
+                    'seoTitleHelp' => __('Keep it under 60 characters for best results.', 'thinkrank'),
+                    'metaDescription' => __('Meta Description', 'thinkrank'),
+                    'metaDescriptionHelp' => __('Keep it under 160 characters for best results.', 'thinkrank'),
+                    'focusKeywords' => __('Focus Keywords', 'thinkrank'),
+                    /* translators: %d: maximum number of focus keywords */
+                    'focusKeywordsHelp' => __('Separate keywords with commas. Up to %d keywords.', 'thinkrank'),
+                    'inheritedHint' => __('Leave empty to inherit from your Global SEO pattern.', 'thinkrank'),
+                    'save' => __('Save', 'thinkrank'),
+                    'saving' => __('Saving…', 'thinkrank'),
+                    'cancel' => __('Cancel', 'thinkrank'),
+                    'close' => __('Close', 'thinkrank'),
+                    'editFull' => __('Open full editor', 'thinkrank'),
+                    'loadError' => __('Could not load SEO fields. Please try again.', 'thinkrank'),
+                    'saveError' => __('Could not save. Please try again.', 'thinkrank'),
+                ],
+            ]
         );
 
         // Localize script with AJAX data

@@ -65,6 +65,10 @@ class Deactivator {
             // Email report tick (see ThinkRank\SEO\Email_Report_Scheduler::CRON_HOOK)
             // — was previously left scheduled after deactivation.
             'thinkrank_email_report_tick',
+            // Brand Visibility drain + its recurring stall watchdog
+            // (ThinkRank\AI\Brand_Visibility_Runner::TICK_HOOK / WATCHDOG_HOOK).
+            'thinkrank_bv_tick',
+            'thinkrank_bv_watchdog',
         ];
         
         // Clear all instances of our hooks

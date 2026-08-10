@@ -230,7 +230,13 @@ class Settings_Manager {
                 'seo_analytics_enabled',
                 'seo_analytics_setup_completed',
 
-                // Google Analytics configuration
+                // Google Analytics configuration. NOTE: the account/property/
+                // data-stream picker that reads AND writes these three keys is
+                // thinkrank-pro's GoogleAnalyticsSettings.js (via this plugin's
+                // settings-management endpoint) — a free-repo grep will find no
+                // consumer. ga_analytics_data_stream_id was once removed as a
+                // "dead key" on that basis, which silently broke the Pro
+                // picker's stream selection persisting across reloads.
                 'seo_analytics_google_analytics_property_id',
                 'ga_analytics_account_id',
                 'ga_analytics_data_stream_id',

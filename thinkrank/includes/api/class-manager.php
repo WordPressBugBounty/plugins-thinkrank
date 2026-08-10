@@ -760,13 +760,13 @@ class Manager {
         $settings = [
             'ai_provider' => $settings_instance->get('ai_provider', 'openai'),
             'openai_api_key' => $settings_instance->get('openai_api_key', ''),
-            'openai_model' => $settings_instance->get('openai_model', 'gpt-5-nano'),
+            'openai_model' => $settings_instance->get('openai_model', \ThinkRank\Core\Settings::DEFAULT_OPENAI_MODEL),
             'claude_api_key' => $settings_instance->get('claude_api_key', ''),
-            'claude_model' => $settings_instance->get('claude_model', 'claude-sonnet-5'),
+            'claude_model' => $settings_instance->get('claude_model', \ThinkRank\Core\Settings::DEFAULT_CLAUDE_MODEL),
             'gemini_api_key' => $settings_instance->get('gemini_api_key', ''),
-            'gemini_model' => $settings_instance->get('gemini_model', 'gemini-2.5-flash'),
+            'gemini_model' => $settings_instance->get('gemini_model', \ThinkRank\Core\Settings::DEFAULT_GEMINI_MODEL),
             'openrouter_api_key' => $settings_instance->get('openrouter_api_key', ''),
-            'openrouter_model' => $settings_instance->get('openrouter_model', 'openai/gpt-4o-mini'),
+            'openrouter_model' => $settings_instance->get('openrouter_model', \ThinkRank\Core\Settings::DEFAULT_OPENROUTER_MODEL),
             'max_tokens' => $settings_instance->get('max_tokens', 1000),
             'temperature' => $settings_instance->get('temperature', 0.7),
             'cache_duration' => $settings_instance->get('cache_duration', 3600),
@@ -956,13 +956,18 @@ class Manager {
             return new \WP_REST_Response(['message' => 'You are not allowed to view this metadata.'], 403);
         }
 
-        // Get existing metadata
+        // Get existing metadata. These must read the same canonical meta keys
+        // the rest of the plugin writes/reads (frontend, metabox, scoring),
+        // otherwise the response is always empty:
+        //   title/description → _thinkrank_seo_title / _thinkrank_meta_description
+        //   keywords          → Focus_Keywords (stored as _thinkrank_focus_keywords)
+        //   last_generated    → _thinkrank_generated_at (written by Metadata_Generator)
         $metadata = [
-            'title' => get_post_meta($post_id, '_thinkrank_title', true),
-            'description' => get_post_meta($post_id, '_thinkrank_description', true),
-            'keywords' => get_post_meta($post_id, '_thinkrank_keywords', true),
+            'title' => get_post_meta($post_id, '_thinkrank_seo_title', true),
+            'description' => get_post_meta($post_id, '_thinkrank_meta_description', true),
+            'keywords' => \ThinkRank\SEO\Focus_Keywords::get($post_id),
             'seo_score' => get_post_meta($post_id, '_thinkrank_seo_score', true) ?: 0,
-            'last_generated' => get_post_meta($post_id, '_thinkrank_last_generated', true),
+            'last_generated' => get_post_meta($post_id, '_thinkrank_generated_at', true),
         ];
 
         return new \WP_REST_Response($metadata);
@@ -1520,7 +1525,7 @@ class Manager {
 
         // Get the configured Claude model, with fallback to a current model.
         // Self-heal retired/unavailable IDs saved by earlier versions.
-        $claude_model = \ThinkRank\Core\Settings::instance()->get('claude_model', 'claude-sonnet-5');
+        $claude_model = \ThinkRank\Core\Settings::instance()->get('claude_model', \ThinkRank\Core\Settings::DEFAULT_CLAUDE_MODEL);
         $claude_model = \ThinkRank\AI\Claude_Client::normalize_model($claude_model);
 
         $body = [
@@ -1579,7 +1584,7 @@ class Manager {
      */
     private function test_gemini_connection(string $api_key): array {
         // Test with a simple API call
-        $gemini_model = \ThinkRank\Core\Settings::instance()->get('gemini_model', 'gemini-2.5-flash');
+        $gemini_model = \ThinkRank\Core\Settings::instance()->get('gemini_model', \ThinkRank\Core\Settings::DEFAULT_GEMINI_MODEL);
         $url = "https://generativelanguage.googleapis.com/v1beta/models/{$gemini_model}:generateContent?key={$api_key}";
 
         $body = [
@@ -1746,6 +1751,20 @@ class Manager {
             $site_identity_endpoint->register_routes();
         } catch (\Exception $e) {
             // Failed to register Site Identity endpoint
+        }
+
+        try {
+            $ai_insights_endpoint = new Ai_Insights_Endpoint();
+            $ai_insights_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register AI Insights endpoint
+        }
+
+        try {
+            $brand_visibility_endpoint = new Brand_Visibility_Endpoint();
+            $brand_visibility_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register Brand Visibility endpoint
         }
 
         try {

@@ -95,9 +95,9 @@ class Manager {
                     if ($api_key) {
                         // Allow any model id (incl. user-entered custom models);
                         // only fall back to the default when none is set.
-                        $model = $this->settings->get('openai_model', 'gpt-5-nano');
+                        $model = $this->settings->get('openai_model', Settings::DEFAULT_OPENAI_MODEL);
                         if (empty($model)) {
-                            $model = 'gpt-5-nano';
+                            $model = Settings::DEFAULT_OPENAI_MODEL;
                         }
                         // OpenAI's reasoning models (GPT-5/o-series) spend a long
                         // time on reasoning tokens before emitting content, so
@@ -115,9 +115,9 @@ class Manager {
                     if ($api_key) {
                         // Allow any model id (incl. user-entered custom models);
                         // only fall back to the default when none is set.
-                        $model = $this->settings->get('claude_model', 'claude-sonnet-5');
+                        $model = $this->settings->get('claude_model', Settings::DEFAULT_CLAUDE_MODEL);
                         if (empty($model)) {
-                            $model = 'claude-sonnet-5';
+                            $model = Settings::DEFAULT_CLAUDE_MODEL;
                         }
                         // Use 120-second timeout for complex AI operations
                         $timeout = 120;
@@ -132,9 +132,9 @@ class Manager {
                     if ($api_key) {
                         // Allow any model id (incl. user-entered custom models);
                         // only fall back to the default when none is set.
-                        $model = $this->settings->get('gemini_model', 'gemini-2.5-flash');
+                        $model = $this->settings->get('gemini_model', Settings::DEFAULT_GEMINI_MODEL);
                         if (empty($model)) {
-                            $model = 'gemini-2.5-flash';
+                            $model = Settings::DEFAULT_GEMINI_MODEL;
                         }
                         // Use 120-second timeout for complex AI operations
                         $timeout = 120;
@@ -147,9 +147,9 @@ class Manager {
                     if ($api_key) {
                         // Allow any model id (incl. user-entered custom models);
                         // only fall back to the default when none is set.
-                        $model = $this->settings->get('openrouter_model', 'openai/gpt-4o-mini');
+                        $model = $this->settings->get('openrouter_model', Settings::DEFAULT_OPENROUTER_MODEL);
                         if (empty($model)) {
-                            $model = 'openai/gpt-4o-mini';
+                            $model = Settings::DEFAULT_OPENROUTER_MODEL;
                         }
                         // Use 120-second timeout for complex AI operations
                         $timeout = 120;
@@ -921,15 +921,40 @@ class Manager {
      * @param string $prompt The prompt to send.
      * @return array{ai_text:string,tokens:int}
      */
-    private function request_completion(string $prompt, int $max_tokens = 2048): array {
+    /**
+     * Public plain-text completion against the configured provider.
+     *
+     * Thin gate over request_completion() for callers that need a free-form
+     * answer rather than a structured SEO artifact (e.g. the brand-visibility
+     * checker, which asks the model a user-style question and inspects the
+     * reply). Provider differences are already normalized inside.
+     *
+     * @since 1.27.0
+     *
+     * @param string $prompt     Prompt to send.
+     * @param int    $max_tokens Output token ceiling.
+     * @return array{ai_text:string,tokens:int}
+     * @throws \Exception When no AI client is configured/available.
+     */
+    public function answer_prompt(string $prompt, int $max_tokens = 1024, array $options = []): array {
+        if (!$this->client) {
+            throw new \Exception(esc_html($this->get_client_unavailable_message()));
+        }
+
+        return $this->request_completion($prompt, $max_tokens, $options);
+    }
+
+    private function request_completion(string $prompt, int $max_tokens = 2048, array $options = []): array {
         // "Thinking" providers (e.g. Gemini 2.5) spend output tokens on reasoning
         // before emitting text, so the cap must cover both the reasoning and the
         // visible JSON. Longer outputs (paragraphs) need a bigger budget. It's
         // only a ceiling — short replies cost no more.
-        $response = $this->client->generate_completion($prompt, [
+        // Extra options (e.g. reasoning_effort) pass through; every client
+        // cherry-picks the keys it understands and ignores the rest.
+        $response = $this->client->generate_completion($prompt, array_merge($options, [
             'max_tokens' => $max_tokens,
             'temperature' => 0.4,
-        ]);
+        ]));
 
         $ai_text = '';
         if (isset($response['choices'][0]['message']['content'])) {
@@ -948,7 +973,18 @@ class Manager {
             ?? $response['usage']['output_tokens']
             ?? ($response['usageMetadata']['totalTokenCount'] ?? 0);
 
-        return ['ai_text' => $ai_text, 'tokens' => (int) $tokens];
+        // Diagnostics for callers that must explain an empty answer (e.g. the
+        // brand-visibility probe): why generation stopped, and how much of the
+        // completion budget hidden reasoning consumed (OpenAI reasoning models).
+        $finish_reason    = (string) ($response['choices'][0]['finish_reason'] ?? ($response['stop_reason'] ?? ''));
+        $reasoning_tokens = (int) ($response['usage']['completion_tokens_details']['reasoning_tokens'] ?? 0);
+
+        return [
+            'ai_text'          => $ai_text,
+            'tokens'           => (int) $tokens,
+            'finish_reason'    => $finish_reason,
+            'reasoning_tokens' => $reasoning_tokens,
+        ];
     }
 
     /**
@@ -1287,7 +1323,7 @@ class Manager {
             'gemini' => [
                 'name' => 'Google Gemini',
                 'description' => 'Gemini 3.x and 2.x models',
-                'models' => ['gemini-3.1-pro', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash'],
+                'models' => ['gemini-3.1-pro', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'],
                 'requires_key' => true,
             ],
             'openrouter' => [

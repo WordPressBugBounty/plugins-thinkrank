@@ -67,7 +67,7 @@ class Claude_Client {
      * @param string $model Default model to use
      * @param int $timeout Request timeout
      */
-    public function __construct(string $api_key, string $model = 'claude-sonnet-5', int $timeout = 30) {
+    public function __construct(string $api_key, string $model = \ThinkRank\Core\Settings::DEFAULT_CLAUDE_MODEL, int $timeout = 30) {
         $this->api_key = $api_key;
         $this->model = self::normalize_model($model);
         $this->timeout = $timeout;

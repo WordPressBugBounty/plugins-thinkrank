@@ -70,7 +70,7 @@ class OpenRouter_Client {
      * @param string $model Default model to use
      * @param int $timeout Request timeout
      */
-    public function __construct(string $api_key, string $model = 'openai/gpt-4o-mini', int $timeout = 30) {
+    public function __construct(string $api_key, string $model = \ThinkRank\Core\Settings::DEFAULT_OPENROUTER_MODEL, int $timeout = 30) {
         $this->api_key = $api_key;
         $this->model = $model;
         $this->timeout = $timeout;

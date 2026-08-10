@@ -90,25 +90,25 @@ class Content_Brief_Generator {
         if ($provider === 'openai') {
             $api_key = $this->settings->get('openai_api_key');
             if ($api_key) {
-                $model = $this->settings->get('openai_model', 'gpt-5-nano');
+                $model = $this->settings->get('openai_model', Settings::DEFAULT_OPENAI_MODEL);
                 $this->ai_client = new OpenAI_Client($api_key, $model, self::OPENAI_REQUEST_TIMEOUT);
             }
         } elseif ($provider === 'claude') {
             $api_key = $this->settings->get('claude_api_key');
             if ($api_key) {
-                $model = $this->settings->get('claude_model', 'claude-3.7-sonnet');
+                $model = $this->settings->get('claude_model', Settings::DEFAULT_CLAUDE_MODEL);
                 $this->ai_client = new Claude_Client($api_key, $model, self::AI_REQUEST_TIMEOUT);
             }
         } elseif ($provider === 'gemini') {
             $api_key = $this->settings->get('gemini_api_key');
             if ($api_key) {
-                $model = $this->settings->get('gemini_model', 'gemini-2.5-flash');
+                $model = $this->settings->get('gemini_model', Settings::DEFAULT_GEMINI_MODEL);
                 $this->ai_client = new Gemini_Client($api_key, $model, self::AI_REQUEST_TIMEOUT);
             }
         } elseif ($provider === 'openrouter') {
             $api_key = $this->settings->get('openrouter_api_key');
             if ($api_key) {
-                $model = $this->settings->get('openrouter_model', 'openai/gpt-4o-mini');
+                $model = $this->settings->get('openrouter_model', Settings::DEFAULT_OPENROUTER_MODEL);
                 $this->ai_client = new OpenRouter_Client($api_key, $model, self::AI_REQUEST_TIMEOUT);
             }
         }
@@ -132,13 +132,13 @@ class Content_Brief_Generator {
         // Fallback to settings
         $provider = $this->settings->get('ai_provider', 'openai');
         if ($provider === 'claude') {
-            return $this->settings->get('claude_model', 'claude-sonnet-5');
+            return $this->settings->get('claude_model', Settings::DEFAULT_CLAUDE_MODEL);
         } elseif ($provider === 'gemini') {
-            return $this->settings->get('gemini_model', 'gemini-2.5-flash');
+            return $this->settings->get('gemini_model', Settings::DEFAULT_GEMINI_MODEL);
         } elseif ($provider === 'openrouter') {
-            return $this->settings->get('openrouter_model', 'openai/gpt-4o-mini');
+            return $this->settings->get('openrouter_model', Settings::DEFAULT_OPENROUTER_MODEL);
         } else {
-            return $this->settings->get('openai_model', 'gpt-5-nano');
+            return $this->settings->get('openai_model', Settings::DEFAULT_OPENAI_MODEL);
         }
     }
 

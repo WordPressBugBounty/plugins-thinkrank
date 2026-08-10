@@ -68,7 +68,7 @@ class Gemini_Client {
      * @param string $model Default model to use
      * @param int $timeout Request timeout
      */
-    public function __construct(string $api_key, string $model = 'gemini-2.5-flash', int $timeout = 30) {
+    public function __construct(string $api_key, string $model = \ThinkRank\Core\Settings::DEFAULT_GEMINI_MODEL, int $timeout = 30) {
         $this->api_key = $api_key;
         $this->model = $model;
         $this->timeout = $timeout;
@@ -333,24 +333,25 @@ class Gemini_Client {
      * Build the generationConfig for a request, disabling "thinking" on
      * Gemini 2.5 Flash models.
      *
-     * Gemini 2.5 Flash / Flash-Lite enable an internal "thinking" phase by
+     * Gemini Flash models (2.5 and 3.x) enable an internal "thinking" phase by
      * default, and those thoughts are billed against maxOutputTokens. On smaller
-     * budgets — especially the free API tier used with the default
-     * gemini-2.5-flash model — thinking can consume most of the budget, leaving
-     * the visible answer truncated (finishReason=MAX_TOKENS) with incomplete
-     * JSON. Downstream parsers then fail with "parsing failed". Setting
-     * thinkingBudget to 0 disables thinking so the entire budget is spent on the
-     * JSON answer.
+     * budgets — especially the free API tier used with the default Flash model —
+     * thinking can consume most of the budget, leaving the visible answer
+     * truncated (finishReason=MAX_TOKENS) with incomplete JSON. Downstream
+     * parsers then fail with "parsing failed". Setting thinkingBudget to 0
+     * disables thinking so the entire budget is spent on the JSON answer.
      *
-     * Only 2.5 Flash models accept thinkingBudget=0; 2.5 Pro requires a minimum
+     * Only Flash models accept thinkingBudget=0; Pro models require a minimum
      * budget and pre-2.5 models reject thinkingConfig outright, so the override
-     * is scoped to Flash models to avoid 400 errors.
+     * is scoped to 2.5/3.x Flash models to avoid 400 errors. This deliberately
+     * covers the current default (gemini-3.5-flash) as well as legacy
+     * gemini-2.5-flash installs.
      *
      * @param array $config Caller-supplied generationConfig
      * @return array generationConfig with thinking disabled where supported
      */
     private function build_generation_config(array $config): array {
-        if (strpos($this->model, 'gemini-2.5-flash') === 0) {
+        if (preg_match('/^gemini-(2\.5|3(?:\.\d+)?)-flash/', $this->model) === 1) {
             $config['thinkingConfig'] = ['thinkingBudget' => 0];
         }
 
@@ -433,6 +434,16 @@ class Gemini_Client {
         if ($status_code !== 200) {
             $error_data = json_decode($body, true);
             $error_message = $error_data['error']['message'] ?? 'Unknown error';
+            // A 404 almost always means the configured model has been retired or
+            // is not available to this API key. Surface an actionable message
+            // pointing at the model setting instead of the provider's raw error.
+            if ($status_code === 404) {
+                throw new \Exception(sprintf(
+                    'The selected Gemini model "%s" is unavailable (404). Choose a different model in ThinkRank → Settings → AI. (Provider message: %s)',
+                    esc_html($this->model),
+                    esc_html($error_message)
+                ));
+            }
             throw new \Exception('Gemini API error (' . esc_html($status_code) . '): ' . esc_html($error_message));
         }
 

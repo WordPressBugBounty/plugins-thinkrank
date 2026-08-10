@@ -95,6 +95,13 @@ class Manager {
     private Focus_Keyword_Ajax $focus_keyword_ajax;
 
     /**
+     * SEO Quick Edit modal AJAX handler instance
+     *
+     * @var Seo_Quick_Edit_Ajax
+     */
+    private Seo_Quick_Edit_Ajax $seo_quick_edit_ajax;
+
+    /**
      * Bulk action manager instance
      *
      * @var Bulk_Action_Manager
@@ -130,6 +137,7 @@ class Manager {
         $this->divi_metabox = new Divi_Metabox($this->metabox_manager);
         $this->post_list_columns = new Post_List_Columns();
         $this->focus_keyword_ajax = new Focus_Keyword_Ajax();
+        $this->seo_quick_edit_ajax = new Seo_Quick_Edit_Ajax();
         $this->bulk_action_manager = new Bulk_Action_Manager();
         $this->post_list_filters = new Post_List_Filters();
     }
@@ -169,6 +177,9 @@ class Manager {
 
         // Initialize focus keyword AJAX handler
         $this->focus_keyword_ajax->init();
+
+        // Initialize SEO Quick Edit modal AJAX handler
+        $this->seo_quick_edit_ajax->init();
 
         // Initialize Bulk Action Manager
         $this->bulk_action_manager->init();
@@ -408,6 +419,12 @@ class Manager {
                 // 'contract' (upgraded off the old token flow) or
                 // 'credentials' (stored tokens no longer decryptable).
                 'reconnectReason' => (string) get_option('thinkrank_google_reconnect_required', ''),
+            ],
+            // Setup Wizard state — the dashboard Quick Access widget surfaces a
+            // "Complete Setup" shortcut while onboarding is unfinished.
+            'setupWizard' => [
+                'completed' => (bool) get_option(Setup_Wizard::OPT_COMPLETED, false),
+                'url' => admin_url('admin.php?page=' . Setup_Wizard::PAGE_SLUG),
             ],
         ]);
 

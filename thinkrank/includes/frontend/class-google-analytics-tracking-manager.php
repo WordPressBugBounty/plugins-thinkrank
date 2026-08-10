@@ -201,7 +201,13 @@ gtag('config', '" . esc_js($measurement_id) . "'" . $config_string . ");
         // Sanitize and validate measurement ID
         $measurement_id = sanitize_text_field($measurement_id);
 
-        if (!preg_match('/^G-[A-Z0-9]{10}$/i', $measurement_id)) {
+        // An empty ID is not an error — it is the normal state of an
+        // OAuth-connected site that never used ThinkRank's tag injection. We
+        // are about to fetch the homepage anyway, so discover the ID from the
+        // live page instead of refusing to look. Anything non-empty but
+        // malformed IS a user mistake and still gets told so.
+        $discover = '' === $measurement_id;
+        if (!$discover && !preg_match('/^G-[A-Z0-9]{10}$/i', $measurement_id)) {
             return [
                 'success' => false,
                 'message' => __('Invalid GA4 Measurement ID format. Expected format: G-XXXXXXXXXX', 'thinkrank')
@@ -216,6 +222,9 @@ gtag('config', '" . esc_js($measurement_id) . "'" . $config_string . ");
         ]);
 
         if (is_wp_error($response)) {
+            // Unreachable homepage is not evidence the tag works — don't leave
+            // a previous pass asserted.
+            $this->mark_unverified();
             return [
                 'success' => false,
                 'message' => sprintf(
@@ -230,6 +239,7 @@ gtag('config', '" . esc_js($measurement_id) . "'" . $config_string . ");
         $status_code = wp_remote_retrieve_response_code($response);
 
         if ($status_code !== 200) {
+            $this->mark_unverified();
             return [
                 'success' => false,
                 'message' => sprintf(
@@ -238,6 +248,24 @@ gtag('config', '" . esc_js($measurement_id) . "'" . $config_string . ");
                     $status_code
                 )
             ];
+        }
+
+        $discovered = '';
+        if ($discover) {
+            // Read the ID off the live page. Whatever is actually serving GA4
+            // — our own tag, another plugin, the theme, GTM — the measurement
+            // ID appears in the markup, so this reports the site's real state
+            // rather than only what ThinkRank was told.
+            if (preg_match('/\bG-[A-Z0-9]{10}\b/', $body, $m)) {
+                $measurement_id = $m[0];
+                $discovered     = $measurement_id;
+            } else {
+                $this->mark_unverified();
+                return [
+                    'success' => false,
+                    'message' => __('No GA4 Measurement ID found on your homepage. Add your ID above, or check that your GA4 tag is installed.', 'thinkrank')
+                ];
+            }
         }
 
         // Check for GA4 script presence
@@ -250,11 +278,35 @@ gtag('config', '" . esc_js($measurement_id) . "'" . $config_string . ");
             $this->settings->set('ga4_tracking_verified', true);
             $this->settings->set('ga4_last_verification', current_time('mysql'));
 
+            // Persist a discovered ID so the status ability, the settings
+            // screen and a later re-verify all agree with the live page.
+            //
+            // Deliberately does NOT touch `ga4_auto_inject` (default false):
+            // our own tag is gated on measurement_id AND auto_inject, so
+            // storing the ID alone cannot start emitting a second GA4 tag on
+            // a site that already has one. Keep those two independent.
+            if ('' !== $discovered) {
+                $this->settings->set('ga4_measurement_id', $discovered);
+            }
+
             return [
-                'success' => true,
-                'message' => __('✅ GA4 tracking code detected and working correctly!', 'thinkrank')
+                'success'        => true,
+                'measurement_id' => $measurement_id,
+                'discovered'     => '' !== $discovered,
+                'message'        => '' !== $discovered
+                    ? sprintf(
+                        /* translators: %s: GA4 measurement ID found on the site. */
+                        __('✅ GA4 tracking detected and working — found %s on your site.', 'thinkrank'),
+                        $measurement_id
+                    )
+                    : __('✅ GA4 tracking code detected and working correctly!', 'thinkrank')
             ];
         }
+
+        // Verification failed: the flag must not keep asserting a pass from
+        // some earlier run (it was previously only ever set to true, so it
+        // survived the tag being removed entirely).
+        $this->mark_unverified();
 
         // Provide specific feedback
         if (!$has_ga4_script) {
@@ -275,6 +327,24 @@ gtag('config', '" . esc_js($measurement_id) . "'" . $config_string . ");
             'success' => false,
             'message' => __('⚠️ GA4 tracking code not properly configured. Please check your setup.', 'thinkrank')
         ];
+    }
+
+    /**
+     * Record that the most recent verification did NOT pass.
+     *
+     * `ga4_tracking_verified` used to be written only on success, so once true
+     * it stayed true forever — surviving the GA4 tag being removed, and
+     * meaning "someone once clicked Verify and it passed" rather than "GA4 is
+     * working now". Every failure path now clears it, so the flag describes
+     * the latest check. The timestamp is kept current either way, so the UI
+     * can say when the check ran regardless of outcome.
+     *
+     * @since 1.27.0
+     * @return void
+     */
+    private function mark_unverified(): void {
+        $this->settings->set('ga4_tracking_verified', false);
+        $this->settings->set('ga4_last_verification', current_time('mysql'));
     }
 
     /**
