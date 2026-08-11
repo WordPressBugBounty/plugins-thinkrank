@@ -21,6 +21,14 @@
 
 declare(strict_types=1);
 
+// This file is included from Email_Report_Renderer, so its variables live in
+// that method's scope, not the global one — the prefix sniff assumes file
+// scope means global scope. The two unescaped echoes are the logo anchor and
+// the section HTML, both assembled from esc_url()/esc_html() output above and
+// in the section renderers; escaping them again would print entities in the
+// email body.
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound, WordPress.Security.EscapeOutput.OutputNotEscaped
+
 if (!defined('ABSPATH')) {
     exit;
 }

@@ -1822,8 +1822,10 @@ class Snapshot_Migrator {
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
             $exists = $wpdb->get_var(
+                // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
                 $wpdb->prepare("SELECT id FROM {$table} WHERE url = %s AND created_at = %s LIMIT 1", $url, $created_at)
             );
+                // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
             if ($exists) {
                 continue;
             }

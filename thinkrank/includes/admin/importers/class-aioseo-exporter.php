@@ -92,6 +92,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
             return $this->table_columns;
         }
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
         $columns = $wpdb->get_col("DESCRIBE {$this->get_table_name()}", 0);
         $this->table_columns = is_array($columns) ? $columns : [];
 
@@ -117,6 +118,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
         }
 
         global $wpdb;
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
         $count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$this->get_table_name()}");
 
         return $count > 0;
@@ -131,6 +133,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
         $types = [];
 
         if ($this->table_exists()) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $post_count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$this->get_table_name()}");
             if ($post_count > 0) {
                 $types['postmeta'] = $post_count;
@@ -153,6 +156,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
             $wpdb->prepare("SHOW TABLES LIKE %s", $redirects_table)
         );
         if ($redirects_exists) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $redirect_count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$redirects_table}");
             if ($redirect_count > 0) {
                 $types['redirections'] = $redirect_count;
@@ -185,6 +189,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
         }
 
         $rows = $wpdb->get_results(
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $wpdb->prepare(
                 "SELECT * FROM {$table} ORDER BY post_id ASC LIMIT %d OFFSET %d",
                 $this->chunk_size,
@@ -192,6 +197,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
             ),
             ARRAY_A
         );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         // Report the raw fetched-row count so export_chunk() paginates on it
         // rather than the post-filter emitted count (rows with post_id=0 are
@@ -430,6 +436,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
 
         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         $rows = $wpdb->get_results(
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $wpdb->prepare(
                 "SELECT * FROM {$table} ORDER BY term_id ASC LIMIT %d OFFSET %d",
                 $this->chunk_size,
@@ -437,6 +444,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
             ),
             ARRAY_A
         );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         $this->last_page_row_count = is_array($rows) ? count($rows) : 0;
 
@@ -1162,6 +1170,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
         $offset = ($page - 1) * $this->chunk_size;
 
         $rows = $wpdb->get_results(
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $wpdb->prepare(
                 "SELECT * FROM {$table} ORDER BY id ASC LIMIT %d OFFSET %d",
                 $this->chunk_size,
@@ -1169,6 +1178,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
             ),
             ARRAY_A
         );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         if (empty($rows)) {
             return [];

@@ -282,6 +282,8 @@ class SEOScoreCalculator {
      * @param array $metadata Post metadata
      * @param array $options Additional options (expects scalar target_keyword)
      * @return array Complete scoring result
+     *
+     * @throws \Exception On failure.
      */
     private function compute_score(array $content_data, array $metadata, array $options = []): array {
         $scores = [];
@@ -444,7 +446,7 @@ class SEOScoreCalculator {
             $score += 3;
             $suggestions[] = 'Content is thin - aim for 600+ words minimum';
         } else {
-            $score += 1;
+            $score++;
             $suggestions[] = 'Content too shallow - Google prioritizes comprehensive, satisfying content';
         }
 
@@ -506,10 +508,14 @@ class SEOScoreCalculator {
      * @return string Depth assessment
      */
     private function assess_content_depth_2025(int $word_count): string {
-        if ($word_count >= 3000) return 'Comprehensive';
-        if ($word_count >= 2000) return 'Detailed';
-        if ($word_count >= 1200) return 'Adequate';
-        if ($word_count >= 800) return 'Basic';
+        if ($word_count >= 3000) { return 'Comprehensive';
+        }
+        if ($word_count >= 2000) { return 'Detailed';
+        }
+        if ($word_count >= 1200) { return 'Adequate';
+        }
+        if ($word_count >= 800) { return 'Basic';
+        }
         return 'Insufficient';
     }
 
@@ -540,7 +546,7 @@ class SEOScoreCalculator {
             $score += 4;
             $suggestions[] = 'Optimize title length to 35-60 characters for better SERP visibility';
         } else {
-            $score += 1;
+            $score++;
             $suggestions[] = $title_length < 25 ?
                 'Title too short - aim for 35-60 characters' :
                 'Title too long - risk truncation in search results';
@@ -590,12 +596,12 @@ class SEOScoreCalculator {
         $has_sentiment = $this->title_has_sentiment_word($title);
 
         if ($has_number || $has_power_word) {
-            $score += 1;
+            $score++;
         } else {
             $suggestions[] = 'Add a number or a power word to the title to boost click-through rate';
         }
         if ($has_sentiment) {
-            $score += 1;
+            $score++;
         } else {
             $suggestions[] = 'Use an emotional/sentiment word in the title to make it more compelling';
         }
@@ -672,7 +678,7 @@ class SEOScoreCalculator {
         // A slug under ~75 chars keeps the URL clean and fully visible in SERPs.
         $slug_length = strlen($slug);
         if ($slug === '' || $slug_length <= 75) {
-            $score += 1;
+            $score++;
         } else {
             $suggestions[] = 'Shorten the URL slug - long URLs are harder to read and share';
         }
@@ -867,9 +873,12 @@ class SEOScoreCalculator {
      */
     private function estimate_impact(string $suggestion): string {
         // Simple heuristic - can be enhanced with ML
-        if (strpos(strtolower($suggestion), 'title') !== false) return 'High';
-        if (strpos(strtolower($suggestion), 'content') !== false) return 'High';
-        if (strpos(strtolower($suggestion), 'keyword') !== false) return 'Medium';
+        if (strpos(strtolower($suggestion), 'title') !== false) { return 'High';
+        }
+        if (strpos(strtolower($suggestion), 'content') !== false) { return 'High';
+        }
+        if (strpos(strtolower($suggestion), 'keyword') !== false) { return 'Medium';
+        }
         return 'Low';
     }
     
@@ -881,9 +890,12 @@ class SEOScoreCalculator {
      */
     private function estimate_effort(string $suggestion): string {
         // Simple heuristic - can be enhanced with ML
-        if (strpos(strtolower($suggestion), 'rewrite') !== false) return 'High';
-        if (strpos(strtolower($suggestion), 'add') !== false) return 'Medium';
-        if (strpos(strtolower($suggestion), 'optimize') !== false) return 'Medium';
+        if (strpos(strtolower($suggestion), 'rewrite') !== false) { return 'High';
+        }
+        if (strpos(strtolower($suggestion), 'add') !== false) { return 'Medium';
+        }
+        if (strpos(strtolower($suggestion), 'optimize') !== false) { return 'Medium';
+        }
         return 'Low';
     }
     private function calculate_topic_relevance(string $content, string $target_keyword): float {
@@ -959,7 +971,7 @@ class SEOScoreCalculator {
         }
 
         // WordPress-related terms
-        if (strpos($keyword_lower, 'wordpress') !== false) {
+        if (strpos($keyword_lower, 'wordpress') !== false) { // phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- lowercase on purpose: the haystack is strtolower()ed.
             $terms = array_merge($terms, ['wp', 'plugin', 'theme', 'cms']);
         }
 
@@ -1060,7 +1072,10 @@ class SEOScoreCalculator {
         if ($ts === false) {
             return null;
         }
-        $now = function_exists('current_time') ? (int) current_time('timestamp') : time();
+        // strtotime() returns a real unix timestamp, so this must compare against
+        // one: current_time('timestamp') is offset by the site timezone and made
+        // every "days ago" figure wrong by that offset.
+        $now = time();
         return (int) floor(($now - $ts) / 86400);
     }
 
@@ -1171,10 +1186,14 @@ class SEOScoreCalculator {
      * @return string Depth assessment
      */
     private function assess_content_depth(int $word_count): string {
-        if ($word_count >= 2000) return 'Comprehensive';
-        if ($word_count >= 1000) return 'Detailed';
-        if ($word_count >= 500) return 'Moderate';
-        if ($word_count >= 300) return 'Basic';
+        if ($word_count >= 2000) { return 'Comprehensive';
+        }
+        if ($word_count >= 1000) { return 'Detailed';
+        }
+        if ($word_count >= 500) { return 'Moderate';
+        }
+        if ($word_count >= 300) { return 'Basic';
+        }
         return 'Insufficient';
     }
     private function score_content_freshness(array $content_data): array {
@@ -1636,8 +1655,8 @@ class SEOScoreCalculator {
             'post_id' => $post_id,
             'user_id' => $user_id,
             'overall_score' => $score_data['overall_score'],
-            'score_breakdown' => json_encode($score_data['score_breakdown']),
-            'suggestions' => json_encode($score_data['suggestions']),
+            'score_breakdown' => wp_json_encode($score_data['score_breakdown']),
+            'suggestions' => wp_json_encode($score_data['suggestions']),
             'grade' => $score_data['grade'],
             'algorithm_version' => $score_data['algorithm_version'] ?? '2024.1',
             'calculated_at' => $score_data['calculated_at'],
@@ -1815,17 +1834,28 @@ class SEOScoreCalculator {
     private function get_grade_from_score($score): string {
         $score = (int) $score; // Ensure it's an integer
 
-        if ($score >= 95) return 'A+';
-        if ($score >= 90) return 'A';
-        if ($score >= 85) return 'A-';
-        if ($score >= 80) return 'B+';
-        if ($score >= 75) return 'B';
-        if ($score >= 70) return 'B-';
-        if ($score >= 65) return 'C+';
-        if ($score >= 60) return 'C';
-        if ($score >= 55) return 'C-';
-        if ($score >= 45) return 'D+';
-        if ($score >= 35) return 'D';
+        if ($score >= 95) { return 'A+';
+        }
+        if ($score >= 90) { return 'A';
+        }
+        if ($score >= 85) { return 'A-';
+        }
+        if ($score >= 80) { return 'B+';
+        }
+        if ($score >= 75) { return 'B';
+        }
+        if ($score >= 70) { return 'B-';
+        }
+        if ($score >= 65) { return 'C+';
+        }
+        if ($score >= 60) { return 'C';
+        }
+        if ($score >= 55) { return 'C-';
+        }
+        if ($score >= 45) { return 'D+';
+        }
+        if ($score >= 35) { return 'D';
+        }
         return 'F';
     }
 

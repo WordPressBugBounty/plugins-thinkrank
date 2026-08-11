@@ -4,7 +4,7 @@ Tags: seo, ai seo, focus keyword, schema, llms.txt
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.28.0
+Stable tag: 1.29.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -360,6 +360,22 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 9. AI Content Brief Generator with competitor analysis and content gaps.
 
 == Changelog ==
+
+= 1.29.0 =
+Release Date: 2026-08-11
+
+- New: Show/hide your API key while typing it, and a Replace control so a saved key can be swapped without clearing it first. Saved keys are now only ever sent back to your browser masked, never in full
+- New: A social card on the dashboard with the ThinkRank community and channels in one place
+- Fixed: Content briefs that came back as "Unable to parse AI response", or saved a brief full of raw API output. When the AI refuses, is cut off at its token limit, or answers in an unexpected shape, ThinkRank now tells you what happened instead of saving the failure as a brief
+- Fixed: Short, Medium and Long content briefs all asked the AI for the same output budget, so a Long brief could be truncated while a Short one paid for room it never used. Each length now requests a budget that fits it
+- Fixed: Briefs on GPT-5 models ran at maximum reasoning effort by default — the slowest and most expensive setting, with much of the budget spent on hidden reasoning before any text was written
+- Fixed: A slow AI provider was reported as a generic failure rather than a timeout, and the retry never happened
+- Fixed: "X days ago" counts on sites outside UTC were off by the site's time offset
+- Fixed: Saving settings could send your API key back to the browser in the clear, and re-saving a form that displayed a masked key could overwrite the real key with the mask
+- Fixed: Importing SEO data from another plugin read serialized values from that plugin's tables in a way that could be abused to create PHP objects on your site; those values are now parsed without ever instantiating an object
+- Fixed: Fetching a schema or competitor URL could be pointed at private, internal or cloud-metadata addresses, including addresses disguised as IPv6. All outbound fetches now share one check, applied again on every redirect hop
+- Fixed: Dismissing a ThinkRank admin notice, importing or resetting the whole configuration, and adding database indexes no longer accept requests from users without the capability for them
+- Changed: Brand Visibility is temporarily hidden while it is reworked. Nothing is deleted — recorded runs, history and settings are kept, and the feature returns in a later release
 
 = 1.28.0 =
 Release Date: 2026-08-10
@@ -757,6 +773,9 @@ Release Date: 2025-07-07
 - WordPress 6.0+ compatibility
 
 == Upgrade Notice ==
+
+= 1.29.0 =
+Security release. Closes an SSRF hole in URL fetching (including IPv6-disguised internal addresses), object injection when importing from another SEO plugin, API keys returned to the browser in the clear, and missing capability checks on notice dismissal, settings import/reset and index creation. Also fixes content briefs failing with "Unable to parse AI response" and ignoring the chosen content length. Brand Visibility is temporarily hidden while it is reworked; your data is kept. Recommended for all sites.
 
 = 1.28.0 =
 Adds AI Insights — AI referral traffic, Brand Visibility measurement across ChatGPT, Claude, Gemini and Perplexity, and Auto AI metadata on publish — plus Quick Edit SEO on the posts list. Fixes two AI tables that were never created, brand checks that reported false negatives, SEO metadata wiped by a stale editor save, and Google integrations reported as unconfigured on sign-in-connected sites. Recommended for all sites.

@@ -152,11 +152,12 @@ class Author_Archives_Manager {
 
             if (!$index) {
                 // Remove 'index' if present
-                if (($key = array_search('index', $robots)) !== false) {
-                    unset($robots[$key]);
+                $index_key = array_search('index', $robots, true);
+                if ($index_key !== false) {
+                    unset($robots[$index_key]);
                 }
                 // Add 'noindex' if not present
-                if (!in_array('noindex', $robots)) {
+                if (!in_array('noindex', $robots, true)) {
                     $robots[] = 'noindex';
                 }
             } else {
@@ -166,13 +167,14 @@ class Author_Archives_Manager {
                     $author_id = get_queried_object_id();
                     // Check if author has any published posts
                     $post_count = count_user_posts($author_id, 'post', true); // true = only public posts
-                    if ($post_count == 0) {
+                    if ((int) $post_count === 0) {
                         // Remove 'index' if present
-                        if (($key = array_search('index', $robots)) !== false) {
-                            unset($robots[$key]);
+                        $index_key = array_search('index', $robots, true);
+                        if ($index_key !== false) {
+                            unset($robots[$index_key]);
                         }
                         // Add 'noindex' if not present
-                        if (!in_array('noindex', $robots)) {
+                        if (!in_array('noindex', $robots, true)) {
                             $robots[] = 'noindex';
                         }
                     }

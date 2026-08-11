@@ -288,6 +288,8 @@ class Brand_Visibility_Endpoint extends WP_REST_Controller {
      *
      * @param WP_REST_Request $request Request.
      * @return WP_REST_Response
+     *
+     * @throws \Exception On failure.
      */
     public function generate_queries(WP_REST_Request $request): WP_REST_Response {
         $params = $request->get_json_params() ?: [];

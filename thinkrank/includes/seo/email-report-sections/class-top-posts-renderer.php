@@ -49,12 +49,12 @@ final class Top_Posts_Renderer {
 
             $html .= '<tr>'
                 . '<td style="padding:10px;border-bottom:1px solid #f3f4f6;">'
-                .   ($url !== ''
+                . ($url !== ''
                         ? '<a href="' . esc_url($url) . '" style="color:#111827;text-decoration:none;">' . esc_html($display) . '</a>'
                         : '<span style="color:#111827;">' . esc_html($display) . '</span>')
                 . '</td>'
                 . '<td style="padding:10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#374151;font:600 13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;">'
-                .   esc_html(number_format_i18n($clicks))
+                . esc_html(number_format_i18n($clicks))
                 . '</td>'
                 . self::change_cell($row['change'] ?? null, $accent)
                 . '</tr>';

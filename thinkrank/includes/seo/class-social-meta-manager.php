@@ -852,7 +852,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
 
             // Card Type validation
             $valid_card_types = ['summary', 'summary_large_image', 'app', 'player'];
-            if (!empty($settings['twitter_card_type']) && in_array($settings['twitter_card_type'], $valid_card_types)) {
+            if (!empty($settings['twitter_card_type']) && in_array($settings['twitter_card_type'], $valid_card_types, true)) {
                 $field_details[] = [
                     'field' => 'twitter_card_type',
                     'label' => 'Twitter Card type is properly configured.',
@@ -1171,13 +1171,6 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 'description' => 'Default description for Open Graph tags',
                 'maxLength' => 160,
                 'default' => get_bloginfo('description')
-            ],
-            'og_type' => [
-                'type' => 'string',
-                'title' => 'Open Graph Type',
-                'description' => 'The type of content for Open Graph',
-                'enum' => ['website', 'article', 'book', 'profile'],
-                'default' => 'website'
             ],
             'og_locale' => [
                 'type' => 'string',
@@ -2175,7 +2168,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                         $og_tags['og:description'] = $this->make_description_descriptive($og_tags['og:description']);
                     }
                     // Pinterest prefers article type for rich pins
-                    if (in_array($og_tags['og:type'], ['website', 'blog'])) {
+                    if (in_array($og_tags['og:type'], ['website', 'blog'], true)) {
                         $og_tags['og:type'] = 'article';
                     }
                 }

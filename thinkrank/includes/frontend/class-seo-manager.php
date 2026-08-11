@@ -885,6 +885,7 @@ class SEO_Manager {
         // Output tags in optimal order
         foreach ($og_order as $property) {
             if (!empty($og_tags[$property])) {
+                // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_meta_value() applies esc_url()/esc_attr(); the sniff cannot follow a method call.
                 echo '<meta property="' . esc_attr($property) . '" content="' . $this->esc_meta_value($property, $og_tags[$property]) . '" />' . "\n";
             }
         }
@@ -892,6 +893,7 @@ class SEO_Manager {
         // Output any remaining tags not in the order list
         foreach ($og_tags as $property => $content) {
             if (!empty($content) && !in_array($property, $og_order, true)) {
+                // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_meta_value() applies esc_url()/esc_attr(); the sniff cannot follow a method call.
                 echo '<meta property="' . esc_attr($property) . '" content="' . $this->esc_meta_value($property, $content) . '" />' . "\n";
             }
         }
@@ -922,6 +924,7 @@ class SEO_Manager {
         // Output tags in optimal order
         foreach ($twitter_order as $name) {
             if (!empty($twitter_tags[$name])) {
+                // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_meta_value() applies esc_url()/esc_attr(); the sniff cannot follow a method call.
                 echo '<meta name="' . esc_attr($name) . '" content="' . $this->esc_meta_value($name, $twitter_tags[$name]) . '" />' . "\n";
             }
         }
@@ -929,6 +932,7 @@ class SEO_Manager {
         // Output any remaining tags not in the order list
         foreach ($twitter_tags as $name => $content) {
             if (!empty($content) && !in_array($name, $twitter_order, true)) {
+                // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_meta_value() applies esc_url()/esc_attr(); the sniff cannot follow a method call.
                 echo '<meta name="' . esc_attr($name) . '" content="' . $this->esc_meta_value($name, $content) . '" />' . "\n";
             }
         }
@@ -1960,7 +1964,7 @@ class SEO_Manager {
         if ($this->schema_manager && (is_single() || is_page())) {
 	        $context_id   = get_the_ID();
 	        $context_type = get_post_type( $context_id );
-	        $context_type = in_array( $context_type, [ 'site', 'post', 'page', 'product' ] ) ? $context_type : 'post';
+	        $context_type = in_array( $context_type, [ 'site', 'post', 'page', 'product' ] , true) ? $context_type : 'post';
 
             $page_specific_schemas = $this->schema_manager->get_deployed_schemas($context_type, $context_id);
 
@@ -2501,10 +2505,10 @@ class SEO_Manager {
      * Filter WordPress robots.txt output
      *
      * @param string $output The default robots.txt output
-     * @param string $public Whether the site is public
+     * @param string $is_public Whether the site is public
      * @return string Modified robots.txt content
      */
-    public function filter_robots_txt(string $output, string $public): string {
+    public function filter_robots_txt(string $output, string $is_public): string {
         // Only override if Site Identity is enabled and robots.txt management is enabled
         if (!$this->site_identity_data || !$this->site_identity_data['enabled']) {
             return $output;

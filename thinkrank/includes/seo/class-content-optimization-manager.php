@@ -1403,7 +1403,7 @@ class Content_Optimization_Manager extends Abstract_SEO_Manager {
         if (!empty($compliance['word_count_compliance']) &&
             $compliance['word_count_compliance']['status'] === 'non_compliant') {
             $needed = $compliance['word_count_compliance']['min_required'] -
-                     $compliance['word_count_compliance']['current_count'];
+                    $compliance['word_count_compliance']['current_count'];
             $recommendations[] = [
                 'type' => 'word_count',
                 'priority' => 'high',

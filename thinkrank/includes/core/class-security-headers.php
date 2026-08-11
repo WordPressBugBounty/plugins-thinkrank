@@ -122,8 +122,8 @@ class Security_Headers {
         // Check if it's a ThinkRank admin page
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading page parameter for screen detection, not processing form data.
         return strpos($screen->id, 'thinkrank') !== false || 
-               strpos($screen->base, 'thinkrank') !== false ||
-               (isset($_GET['page']) && strpos(sanitize_text_field(wp_unslash($_GET['page'])), 'thinkrank') !== false); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+                strpos($screen->base, 'thinkrank') !== false ||
+                (isset($_GET['page']) && strpos(sanitize_text_field(wp_unslash($_GET['page'])), 'thinkrank') !== false); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
     }
 
     /**

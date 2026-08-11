@@ -197,8 +197,8 @@ class Builder_Content {
         }
 
         $attrs = [];
-        $collect = static function (array $list) use (&$collect, &$attrs): void {
-            foreach ($list as $block) {
+        $collect = static function (array $items) use (&$collect, &$attrs): void {
+            foreach ($items as $block) {
                 if (!empty($block['attrs']) && is_array($block['attrs'])) {
                     $attrs[] = $block['attrs'];
                 }

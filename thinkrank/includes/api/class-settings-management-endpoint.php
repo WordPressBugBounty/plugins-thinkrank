@@ -248,7 +248,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'POST',
                     'callback' => [$this, 'import_settings'],
-                    'permission_callback' => [$this, 'check_manage_permissions'],
+                    'permission_callback' => [$this, 'check_admin_permissions'],
                     'args' => $this->get_import_args()
                 ]
             ]
@@ -289,7 +289,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'POST',
                     'callback' => [$this, 'reset_settings'],
-                    'permission_callback' => [$this, 'check_manage_permissions'],
+                    'permission_callback' => [$this, 'check_admin_permissions'],
                     'args' => $this->get_reset_args()
                 ]
             ]
@@ -303,7 +303,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'POST',
                     'callback' => [$this, 'add_performance_indexes'],
-                    'permission_callback' => [$this, 'check_manage_permissions']
+                    'permission_callback' => [$this, 'check_admin_permissions']
                 ]
             ]
         );
@@ -374,6 +374,46 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 }
             }
             $settings[$category] = $values;
+        }
+        return $settings;
+    }
+
+    /**
+     * Redact secrets from a single category's flat key => value map.
+     *
+     * Convenience wrapper so the single-category response shapes get the same
+     * treatment as the global map — no response path may return a cleartext
+     * secret.
+     *
+     * @param string $category Category slug.
+     * @param array  $settings Flat key => value map for that category.
+     * @return array Redacted flat map.
+     */
+    private function redact_category_settings(string $category, array $settings): array {
+        $redacted = $this->redact_sensitive_settings([$category => $settings]);
+        return $redacted[$category] ?? [];
+    }
+
+    /**
+     * Drop masked secrets from an incoming write payload.
+     *
+     * Read responses return secrets masked ("••••abcd"). A client that GETs a
+     * settings map and POSTs it straight back would otherwise persist the mask
+     * over the real credential. Any sensitive key whose incoming value still
+     * carries the mask marker is removed so the stored value is left untouched;
+     * a genuinely new secret (no marker) writes through normally.
+     *
+     * @param array $settings Flat key => value map from the request.
+     * @return array Map with masked secret values removed.
+     */
+    private function strip_masked_secrets(array $settings): array {
+        foreach ($settings as $key => $value) {
+            if (!in_array($key, self::SENSITIVE_SETTING_KEYS, true)) {
+                continue;
+            }
+            if (is_string($value) && strpos($value, '••••') !== false) {
+                unset($settings[$key]);
+            }
         }
         return $settings;
     }
@@ -469,6 +509,9 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                         ['status' => 400]
                     );
                 }
+
+                // Reads mask secrets; never persist a mask back over the real one.
+                $settings[$category] = $this->strip_masked_secrets($category_settings);
             }
 
             $validation_results = [];
@@ -542,7 +585,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             return new WP_REST_Response([
                 'success' => true,
                 'data' => [
-                    'updated_settings' => $updated_settings,
+                    'updated_settings' => $this->redact_sensitive_settings($updated_settings),
                     'validation_results' => $validation_results,
                     'update_results' => $update_results,
                     'settings_version' => $this->get_settings_version()
@@ -602,7 +645,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             return new WP_REST_Response([
                 'success' => true,
                 'data' => [
-                    'settings' => $category_settings,
+                    'settings' => $this->redact_category_settings($category, $category_settings),
                     'schema' => $schema,
                     'metadata' => $metadata
                 ],
@@ -658,6 +701,9 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                     ['status' => 400]
                 );
             }
+
+            // Reads mask secrets; never persist a mask back over the real one.
+            $settings = $this->strip_masked_secrets($settings);
 
             $validation_result = ['valid' => true];
 
@@ -717,7 +763,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 'success' => true,
                 'data' => [
                     'category' => $category,
-                    'updated_settings' => $updated_settings,
+                    'updated_settings' => $this->redact_category_settings($category, $updated_settings),
                     'validation_result' => $validation_result,
                     'settings_count' => count($updated_settings)
                 ],
@@ -1424,6 +1470,22 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
     }
 
     /**
+     * Check permissions for administrator-only settings operations.
+     *
+     * The Role Manager can delegate `thinkrank_settings` to non-admin roles so
+     * they can manage the plugin's SEO configuration. Schema-level (DDL) and
+     * destructive whole-configuration operations — performance indexes, reset,
+     * import — are a different altitude and stay with site administrators.
+     *
+     * @since 1.29.0
+     *
+     * @return bool Permission status
+     */
+    public function check_admin_permissions(): bool {
+        return current_user_can('manage_options');
+    }
+
+    /**
      * Helper methods
      */
 
@@ -1617,6 +1679,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             return strcmp((string) ($a['created_at'] ?? ''), (string) ($b['created_at'] ?? ''));
         });
 
+        // phpcs:ignore Squiz.PHP.DisallowSizeFunctionsInLoops.Found -- the loop shrinks $backup_index, so the count has to be re-read.
         while (count($backup_index) > $max_backups) {
             $oldest_id = array_key_first($backup_index);
             unset($backup_index[$oldest_id]);

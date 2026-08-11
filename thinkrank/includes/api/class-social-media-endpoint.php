@@ -231,6 +231,8 @@ class Social_Media_Endpoint extends WP_REST_Controller {
      *
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object or error
+     *
+     * @throws \Exception On failure.
      */
     public function update_settings(WP_REST_Request $request) {
         try {
@@ -244,6 +246,27 @@ class Social_Media_Endpoint extends WP_REST_Controller {
                     'success' => false,
                     'error' => 'Settings data is required'
                 ], 400);
+            }
+
+            // SECURITY: this route writes the same per-object social overrides
+            // as save_social_meta(), so it needs the same object-level guard —
+            // the section-level thinkrank_social_media capability alone would
+            // let a delegated user write to any post (IDOR).
+            $context_id = $context_id === null ? null : (int) $context_id;
+            if (!$this->validate_context($context_type, $context_id)) {
+                return new WP_Error(
+                    'invalid_context',
+                    'Invalid context type or ID provided',
+                    ['status' => 400]
+                );
+            }
+
+            if ($context_type !== 'site' && !current_user_can('edit_post', $context_id)) {
+                return new WP_Error(
+                    'rest_forbidden',
+                    'You are not allowed to edit this content.',
+                    ['status' => 403]
+                );
             }
 
             // Drop unrecognized keys so arbitrary client-supplied keys aren't
@@ -461,6 +484,8 @@ class Social_Media_Endpoint extends WP_REST_Controller {
      *
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object or error
+     *
+     * @throws \Exception On failure.
      */
     public function save_social_meta(WP_REST_Request $request) {
         try {

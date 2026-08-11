@@ -48,7 +48,7 @@ class Google_Search_Analytics_Client extends Google_API_Base_Client {
      * @throws \Exception If the API request fails.
      */
     public function get_search_analytics_data(string $site_url, string $start_date, string $end_date, array $dimensions = [], int $row_limit = 1000): array {
-        $endpoint = '/sites/' . urlencode($site_url) . '/searchAnalytics/query';
+        $endpoint = '/sites/' . rawurlencode($site_url) . '/searchAnalytics/query';
 
         $request_body = [
             'startDate'  => $start_date,
@@ -77,6 +77,8 @@ class Google_Search_Analytics_Client extends Google_API_Base_Client {
      * Test the connection to the API
      *
      * @return array Connection test result
+     *
+     * @throws \Exception On failure.
      */
     public function test_connection(): array {
         try {

@@ -635,13 +635,13 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
      *
      * @since 1.0.0
      *
-     * @param array $array Array to sanitize
+     * @param array $input Array to sanitize
      * @return array Sanitized array
      */
-    private function sanitize_array_recursive(array $array): array {
+    private function sanitize_array_recursive(array $input): array {
         $sanitized = [];
 
-        foreach ($array as $key => $value) {
+        foreach ($input as $key => $value) {
             $sanitized_key = sanitize_key($key);
 
             if (is_string($value)) {

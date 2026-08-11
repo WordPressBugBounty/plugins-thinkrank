@@ -235,6 +235,7 @@ class Ai_Traffic_Tracker {
         // Single cheap upsert per pageview; the unique key is the bucket.
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- aggregate counter upsert; table name is prefix-derived.
         $wpdb->query(
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $wpdb->prepare(
                 "INSERT INTO {$table} (day, kind, source, path, hits) VALUES (%s, %s, %s, %s, 1)
                  ON DUPLICATE KEY UPDATE hits = hits + 1",
@@ -244,6 +245,7 @@ class Ai_Traffic_Tracker {
                 $path
             )
         );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 
     /**

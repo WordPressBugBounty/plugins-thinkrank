@@ -297,9 +297,11 @@ class Brand_Visibility_Checker {
 
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- read on our own table.
         $rows = $wpdb->get_results(
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $wpdb->prepare("SELECT id, checked_at, query_text, provider, model, mentioned, cited, excerpt, answer FROM {$table} ORDER BY id DESC LIMIT %d", $limit),
             ARRAY_A
         );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         return array_map(
             static fn(array $r): array => [

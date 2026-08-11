@@ -503,6 +503,8 @@ class Analytics_Manager {
      *
      * @param string $date_range Date range for data
      * @return array Dashboard data
+     *
+     * @throws \Exception On failure.
      */
     public function get_dashboard_data(string $date_range = '30d'): array {
         $cache_key = "analytics_dashboard_v5_{$date_range}";
@@ -758,7 +760,7 @@ class Analytics_Manager {
      */
     private ?array $merged_settings = null;
 
-    private function get_setting(string $key, $default = '') {
+    private function get_setting(string $key, $fallback = '') {
         if ($this->merged_settings === null) {
             // Merge settings to allow access to both categories. Memoized:
             // this getter is called many times per request and each category
@@ -769,7 +771,7 @@ class Analytics_Manager {
             );
         }
 
-        return $this->merged_settings[$key] ?? $default;
+        return $this->merged_settings[$key] ?? $fallback;
     }
 
     /**

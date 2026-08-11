@@ -221,7 +221,7 @@ trait API_Cache {
         $key_parts = [
             $this->cache_prefix,
             $endpoint,
-            md5(serialize($params))
+            md5(wp_json_encode($params))
         ];
 
         if ($user_id !== null) {

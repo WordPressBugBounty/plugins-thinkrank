@@ -731,6 +731,12 @@ class Manager {
     public function dismiss_notice(): void {
         check_ajax_referer('thinkrank_admin', 'nonce');
 
+        // The nonce proves intent, not authorization — dismissing a site-wide
+        // notice deletes an option, so require a capability as well.
+        if (!current_user_can('edit_posts')) {
+            wp_die(-1, 403);
+        }
+
         $notice_type = sanitize_key($_POST['notice_type'] ?? '');
 
         if ($notice_type === 'welcome') {
@@ -760,6 +766,7 @@ class Manager {
      * @return string Menu icon
      */
     private function get_menu_icon(): string {
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- a data: URI for the menu icon must be base64.
         return 'data:image/svg+xml;base64,' . base64_encode(
             '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <g clipPath="url(#thinkrank-clip)">
@@ -944,7 +951,7 @@ class Manager {
 				'thinkrank_page_thinkrank-usages',
 				'thinkrank_page_thinkrank-license',
 				'thinkrank_page_thinkrank-migration'
-		] ) ) {
+		] , true) ) {
 
 			remove_all_actions( 'user_admin_notices' );
 			remove_all_actions( 'admin_notices' );

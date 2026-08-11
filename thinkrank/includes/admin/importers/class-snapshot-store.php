@@ -106,7 +106,7 @@ class Snapshot_Store {
             $option_name = $row['option_name'];
             $plugin = str_replace([self::OPTION_PREFIX, '_manifest'], '', $option_name);
 
-            $manifest = maybe_unserialize($row['option_value']);
+            $manifest = Safe_Unserializer::unserialize($row['option_value']);
             if (is_array($manifest)) {
                 $snapshots[$plugin] = $manifest;
             }

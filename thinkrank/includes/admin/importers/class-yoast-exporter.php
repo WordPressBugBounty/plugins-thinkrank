@@ -417,6 +417,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
         $offset = ($page - 1) * $this->chunk_size;
 
         $rows = $wpdb->get_results(
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $wpdb->prepare(
                 "SELECT * FROM {$table_name} ORDER BY id ASC LIMIT %d OFFSET %d",
                 $this->chunk_size,
@@ -424,6 +425,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
             ),
             ARRAY_A
         );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         if (empty($rows)) {
             return [];

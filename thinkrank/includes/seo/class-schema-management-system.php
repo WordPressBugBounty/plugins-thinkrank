@@ -824,7 +824,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         if ($context_type === 'site') {
             // Add local business schema if enabled
             if ($options['enable_local_business'] ?? false) {
-                if (!in_array('LocalBusiness', $enabled_types)) {
+                if (!in_array('LocalBusiness', $enabled_types, true)) {
                     $enabled_types[] = 'LocalBusiness';
                 }
             }
@@ -836,35 +836,35 @@ class Schema_Management_System extends Abstract_SEO_Manager {
 
         // Add article schema if enabled and context is appropriate
         if ($options['enable_article_schema'] ?? false) {
-            if (in_array($context_type, ['post', 'page']) && !in_array('Article', $enabled_types)) {
+            if (in_array($context_type, ['post', 'page'], true) && !in_array('Article', $enabled_types, true)) {
                 $enabled_types[] = 'Article';
             }
         }
 
         // Add FAQ schema if enabled
         if ($options['enable_faq_schema'] ?? false) {
-            if (!in_array('FAQPage', $enabled_types)) {
+            if (!in_array('FAQPage', $enabled_types, true)) {
                 $enabled_types[] = 'FAQPage';
             }
         }
 
         // Add How-To schema if enabled
         if ($options['enable_howto_schema'] ?? false) {
-            if (!in_array('HowTo', $enabled_types)) {
+            if (!in_array('HowTo', $enabled_types, true)) {
                 $enabled_types[] = 'HowTo';
             }
         }
 
         // Add product schema if enabled and context is appropriate
         if ($options['enable_product_schema'] ?? false) {
-            if ($context_type === 'product' && !in_array('Product', $enabled_types)) {
+            if ($context_type === 'product' && !in_array('Product', $enabled_types, true)) {
                 $enabled_types[] = 'Product';
             }
         }
 
         // Add local business schema if enabled
         if ($options['enable_local_business'] ?? false) {
-            if (!in_array('LocalBusiness', $enabled_types)) {
+            if (!in_array('LocalBusiness', $enabled_types, true)) {
                 $enabled_types[] = 'LocalBusiness';
             }
         }
@@ -887,14 +887,14 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         if ($context_type === 'site') {
             // Add local business schema if enabled
             if ($settings['enable_local_business'] ?? false) {
-                if (!in_array('LocalBusiness', $enabled_types)) {
+                if (!in_array('LocalBusiness', $enabled_types, true)) {
                     $enabled_types[] = 'LocalBusiness';
                 }
             }
 
             // Add breadcrumbs schema if enabled (site-wide feature)
             if ($settings['enable_breadcrumbs_schema'] ?? false) {
-                if (!in_array('BreadcrumbList', $enabled_types)) {
+                if (!in_array('BreadcrumbList', $enabled_types, true)) {
                     $enabled_types[] = 'BreadcrumbList';
                 }
             }
@@ -906,35 +906,35 @@ class Schema_Management_System extends Abstract_SEO_Manager {
 
         // Add article schema if enabled and context is appropriate
         if ($settings['enable_article_schema'] ?? false) {
-            if (in_array($context_type, ['post', 'page']) && !in_array('Article', $enabled_types)) {
+            if (in_array($context_type, ['post', 'page'], true) && !in_array('Article', $enabled_types, true)) {
                 $enabled_types[] = 'Article';
             }
         }
 
         // Add FAQ schema if enabled
         if ($settings['enable_faq_schema'] ?? false) {
-            if (!in_array('FAQPage', $enabled_types)) {
+            if (!in_array('FAQPage', $enabled_types, true)) {
                 $enabled_types[] = 'FAQPage';
             }
         }
 
         // Add How-To schema if enabled
         if ($settings['enable_howto_schema'] ?? false) {
-            if (!in_array('HowTo', $enabled_types)) {
+            if (!in_array('HowTo', $enabled_types, true)) {
                 $enabled_types[] = 'HowTo';
             }
         }
 
         // Add product schema if enabled and context is appropriate
         if ($settings['enable_product_schema'] ?? false) {
-            if ($context_type === 'product' && !in_array('Product', $enabled_types)) {
+            if ($context_type === 'product' && !in_array('Product', $enabled_types, true)) {
                 $enabled_types[] = 'Product';
             }
         }
 
         // Add local business schema if enabled
         if ($settings['enable_local_business'] ?? false) {
-            if (!in_array('LocalBusiness', $enabled_types)) {
+            if (!in_array('LocalBusiness', $enabled_types, true)) {
                 $enabled_types[] = 'LocalBusiness';
             }
         }
@@ -1260,7 +1260,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
                 'site_data' => $this->get_site_data_for_schema(),
                 'social_data' => $this->get_social_data_for_schema()
             ];
-        } elseif ($context_id && in_array($context_type, ['post', 'page', 'product'])) {
+        } elseif ($context_id && in_array($context_type, ['post', 'page', 'product'], true)) {
             // Post/page/product data
             $post = get_post($context_id);
             if ($post) {
@@ -1964,7 +1964,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             'person_birth_date' => $schema_settings['person_birth_date'] ?? '',
             'person_nationality' => $schema_settings['person_nationality'] ?? '',
             'person_works_for' => $schema_settings['person_works_for'] ?? '',
-            'person_same_as' => $schema_settings['person_same_as'] ?? array(),
+            'person_same_as' => $schema_settings['person_same_as'] ?? [],
 
             // Website schema settings (site-wide)
             'website_name' => $schema_settings['website_name'] ?? '',

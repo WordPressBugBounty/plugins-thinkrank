@@ -17,6 +17,7 @@
 	display: flex;
 	align-items: flex-start;
 	gap: 16px;
+
 	/* Right padding leaves room for the WP dismiss "X". */
 	padding: 16px 40px 16px 16px;
 }
@@ -134,6 +135,7 @@
 }
 
 @media screen and ( max-width: 600px ) {
+
 	.thinkrank-notice .thinkrank-notice__inner {
 		gap: 12px;
 		padding: 14px 36px 14px 14px;

@@ -205,15 +205,15 @@ class Pattern_Resolver {
      *
      * @param int    $post_id Post ID.
      * @param string $key     Setting key ('title' or 'description').
-     * @param string $default Default pattern.
+     * @param string $fallback Default pattern.
      * @return string Pattern template.
      */
-    private static function template_for(int $post_id, string $key, string $default): string {
+    private static function template_for(int $post_id, string $key, string $fallback): string {
         $post_type = get_post_type($post_id) ?: 'post';
         $all = get_option(self::OPTION_NAME, []);
         $template = $all[$post_type][$key] ?? '';
 
-        return is_string($template) && $template !== '' ? $template : $default;
+        return is_string($template) && $template !== '' ? $template : $fallback;
     }
 
     /**

@@ -613,6 +613,12 @@ class Settings_Manager {
         $success_count = 0;
         $total_count = 0;
 
+        // Sanitize per field before persisting. This is unconditional: callers
+        // (including the REST write routes, where the client can ask to skip
+        // validation) must not be able to reach Settings::set with unsanitized
+        // values — Settings::set only key-allowlists, it does not sanitize.
+        $settings = $this->core_settings->sanitize_settings($settings);
+
         foreach ($settings as $key => $value) {
             if (in_array($key, $category_config['keys'], true)) {
                 $total_count++;

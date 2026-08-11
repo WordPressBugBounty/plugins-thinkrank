@@ -12,19 +12,26 @@ declare(strict_types=1);
 
 namespace ThinkRank\AI;
 
+use ThinkRank\AI\Traits\Request_Timeout;
+
 // Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
+require_once __DIR__ . '/traits/trait-request-timeout.php';
+
 /**
  * OpenAI Client Class
- * 
+ *
  * Single Responsibility: Handle OpenAI API communication
- * 
+ *
  * @since 1.0.0
  */
 class OpenAI_Client {
+
+    use Request_Timeout;
+
     
     /**
      * OpenAI API base URL
@@ -110,7 +117,27 @@ class OpenAI_Client {
         ];
         
         $options = array_merge($default_options, $options);
-        
+
+        $body = $this->build_chat_completion_body($prompt, $options);
+
+        return $this->make_request('chat/completions', $body);
+    }
+
+    /**
+     * Build the chat/completions request body for the given (merged) options.
+     *
+     * Extracted so the per-model-family parameter handling is unit-testable:
+     * reasoning models take max_completion_tokens (and only the GPT-5 family
+     * accepts reasoning_effort — o1/o3 reject it), while standard models take
+     * temperature/top_p/penalties/max_tokens. Keeping this in one place stops a
+     * future refactor from silently regressing the GPT-5-only guard (issue #286).
+     *
+     * @param string $prompt  User prompt.
+     * @param array  $options Merged options (must include model, max_tokens, and
+     *                        the sampling defaults; reasoning_effort optional).
+     * @return array Request body for the chat/completions endpoint.
+     */
+    private function build_chat_completion_body(string $prompt, array $options): array {
         $body = [
             'model' => $options['model'],
             'messages' => [
@@ -147,7 +174,7 @@ class OpenAI_Client {
             $body['max_tokens'] = $safe_tokens;
         }
 
-        return $this->make_request('chat/completions', $body);
+        return $body;
     }
     
     /**
@@ -461,7 +488,12 @@ class OpenAI_Client {
             $is_transient = false;
             $retry_after = 0;
             if (is_wp_error($response)) {
-                $is_transient = true;
+                // A client-side timeout means the work genuinely needs longer
+                // than the budget we allowed; re-running the identical prompt,
+                // model and budget just times out again and multiplies the
+                // wait (issue #288). Do not retry a timeout. Other WP_Error
+                // results — DNS, connection refused, TLS — stay retryable.
+                $is_transient = !$this->is_timeout_error($response);
             } else {
                 $status = wp_remote_retrieve_response_code($response);
                 if (429 === $status || $status >= 500) {

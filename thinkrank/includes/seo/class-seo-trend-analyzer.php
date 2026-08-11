@@ -200,7 +200,7 @@ class SEO_Trend_Analyzer {
      * @return float Percentage change
      */
     private function calculate_percentage_change(float $previous, float $current): float {
-        if ($previous == 0) {
+        if ((float) $previous === 0.0) {
             return $current > 0 ? 100.0 : 0.0;
         }
 

@@ -857,7 +857,7 @@ class Manager {
                 $value = $params[$param_key];
 
                 // Handle API keys specially - check for masked values
-                if (in_array($param_key, ['openai_api_key', 'claude_api_key', 'gemini_api_key', 'openrouter_api_key'])) {
+                if (in_array($param_key, ['openai_api_key', 'claude_api_key', 'gemini_api_key', 'openrouter_api_key'], true)) {
                     // Don't update if the value carries the mask sentinel (the
                     // preview now keeps real head/tail chars around it, so match
                     // anywhere rather than only at the start). Empty still clears.
@@ -867,9 +867,9 @@ class Manager {
                 }
 
                 // Use Settings class for all operations (handles encryption automatically)
-                if (!$settings->set($setting_key, $value)) {
-                    // Settings save failed, continue with other settings
-                }
+                // A failed write is skipped rather than aborting the batch, so
+                // one bad setting cannot block the rest of the save.
+                $settings->set($setting_key, $value);
             }
         }
 

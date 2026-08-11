@@ -677,12 +677,13 @@ final class Mcp_Manager {
 	 * @return void
 	 */
 	public function handle_authorize_page(): void {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- compared against a literal after strtoupper(); nothing is stored or echoed.
 		$is_post = isset( $_SERVER['REQUEST_METHOD'] ) && 'POST' === strtoupper( (string) wp_unslash( $_SERVER['REQUEST_METHOD'] ) );
 		// Params come from GET on the consent link and POST on the form submit.
 		// Nonce is verified below before any POST value is acted on.
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- each member is sanitize_text_field()ed in the loop below; nothing reads $source directly.
 		$source = $is_post ? $_POST : $_GET;
-		// phpcs:enable
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$params = [];
 		foreach ( [ 'client_id', 'redirect_uri', 'response_type', 'code_challenge', 'code_challenge_method', 'scope', 'state', 'approve', 'deny', '_thinkrank_oauth_nonce' ] as $k ) {
 			$params[ $k ] = isset( $source[ $k ] ) ? sanitize_text_field( wp_unslash( $source[ $k ] ) ) : '';

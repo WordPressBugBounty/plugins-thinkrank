@@ -1458,7 +1458,9 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
 
     // Report generation helper methods
     private function define_report_period(string $report_type): array {
-        $now = current_time('timestamp');
+        // time(), not current_time('timestamp'): only the differences below
+        // matter, and the latter is offset by the site timezone.
+        $now = time();
         switch ($report_type) {
             case 'daily':
                 return ['start' => $now - DAY_IN_SECONDS, 'end' => $now];
@@ -1661,7 +1663,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
         // Most recent collection timestamp for this device.
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Reading collected performance data requires a direct query
         $measured_at = $wpdb->get_var(
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Table name is derived from $wpdb->prefix
+            // phpcs:disable PluginCheck.Security.DirectDB.UnescapedDBParameter, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is derived from $wpdb->prefix
             $wpdb->prepare(
                 "SELECT measured_at FROM {$table_name}
                  WHERE context_type = %s AND device_type = %s AND measured_by = %s
@@ -1671,6 +1673,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                 'google_pagespeed'
             )
         );
+            // phpcs:enable PluginCheck.Security.DirectDB.UnescapedDBParameter, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         if (empty($measured_at)) {
             return null;
@@ -1678,7 +1681,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
 
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Reading collected performance data requires a direct query
         $rows = $wpdb->get_results(
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Table name is derived from $wpdb->prefix
+            // phpcs:disable PluginCheck.Security.DirectDB.UnescapedDBParameter, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is derived from $wpdb->prefix
             $wpdb->prepare(
                 "SELECT metric_type, metric_value, metric_unit, status FROM {$table_name}
                  WHERE context_type = %s AND device_type = %s AND measured_by = %s AND measured_at = %s",
@@ -1689,6 +1692,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
             ),
             ARRAY_A
         );
+            // phpcs:enable PluginCheck.Security.DirectDB.UnescapedDBParameter, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         if (empty($rows)) {
             return null;
@@ -1873,10 +1877,14 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
      * @return string Performance grade (A-F)
      */
     public function get_performance_grade(int $score): string {
-        if ($score >= 90) return 'A';
-        if ($score >= 80) return 'B';
-        if ($score >= 70) return 'C';
-        if ($score >= 60) return 'D';
+        if ($score >= 90) { return 'A';
+        }
+        if ($score >= 80) { return 'B';
+        }
+        if ($score >= 70) { return 'C';
+        }
+        if ($score >= 60) { return 'D';
+        }
         return 'F';
     }
 
@@ -2000,12 +2008,15 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
             }
         }
 
-        if ($total_count === 0) return 'unknown';
+        if ($total_count === 0) { return 'unknown';
+        }
 
         $pass_rate = ($good_count / $total_count) * 100;
 
-        if ($pass_rate >= 75) return 'positive_ranking_signal';
-        if ($pass_rate >= 50) return 'neutral_ranking_signal';
+        if ($pass_rate >= 75) { return 'positive_ranking_signal';
+        }
+        if ($pass_rate >= 50) { return 'neutral_ranking_signal';
+        }
         return 'negative_ranking_signal';
     }
 
@@ -2020,8 +2031,10 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
         $cls_good = isset($core_web_vitals['cls']['status']) && $core_web_vitals['cls']['status'] === 'good';
         $inp_good = isset($core_web_vitals['inp']['status']) && $core_web_vitals['inp']['status'] === 'good';
 
-        if ($cls_good && $inp_good) return 'excellent_mobile_experience';
-        if ($cls_good || $inp_good) return 'good_mobile_experience';
+        if ($cls_good && $inp_good) { return 'excellent_mobile_experience';
+        }
+        if ($cls_good || $inp_good) { return 'good_mobile_experience';
+        }
         return 'needs_mobile_optimization';
     }
 
@@ -2190,7 +2203,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
         if ($data['status'] === 'poor') {
             $base_score += 3;
         } elseif ($data['status'] === 'needs_improvement') {
-            $base_score += 1;
+            $base_score++;
         }
 
         // LCP has highest impact on user experience
@@ -2200,14 +2213,14 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
 
         // CLS has high impact on user frustration
         if ($metric === 'cls') {
-            $base_score += 1;
+            $base_score++;
         }
 
         // Lower overall performance score increases all priorities
         if ($performance_score < 50) {
             $base_score += 2;
         } elseif ($performance_score < 70) {
-            $base_score += 1;
+            $base_score++;
         }
 
         return min(10, max(1, $base_score));
@@ -2648,5 +2661,4 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
             return 'poor';
         }
     }
-
 }

@@ -249,7 +249,7 @@ class Social_Platforms_Endpoint extends WP_REST_Controller {
         // This ensures proper encryption for sensitive verification codes
         foreach ($settings as $key => $value) {
             // Only save if the key is in our allowed lists and has a value
-            if (in_array($key, array_merge($this->public_keys, $this->sensitive_keys)) && !empty($value)) {
+            if (in_array($key, array_merge($this->public_keys, $this->sensitive_keys), true) && !empty($value)) {
                 if (!$this->settings->set($key, $value)) {
                     $success = false;
                 }

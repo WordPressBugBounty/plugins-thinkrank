@@ -283,6 +283,7 @@ class Import_Detector {
         );
 
         if ($table_exists) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $post_count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_name}");
             if ($post_count > 0) {
                 $counts['postmeta'] = $post_count;
@@ -296,6 +297,7 @@ class Import_Detector {
         );
 
         if ($redirects_exists) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $redirect_count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$redirects_table}");
             if ($redirect_count > 0) {
                 $counts['redirections'] = $redirect_count;

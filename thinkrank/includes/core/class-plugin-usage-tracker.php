@@ -807,6 +807,13 @@ class Plugin_Usage_Tracker {
      */
     public function deactivate_reasons_form_submit() {
         check_ajax_referer('wpins_deactivation_nonce', 'security');
+
+        // The form is only reachable from the plugins screen; require the same
+        // capability that screen does so the nonce isn't the only control.
+        if (!current_user_can('activate_plugins')) {
+            wp_die('', '', ['response' => 403]);
+        }
+
         if (isset($_POST['values'])) {
             $values = sanitize_text_field(wp_unslash($_POST['values']));
             update_option('wpins_deactivation_reason_' . $this->plugin_name, $values);

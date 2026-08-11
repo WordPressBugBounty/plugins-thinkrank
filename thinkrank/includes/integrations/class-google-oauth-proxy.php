@@ -237,6 +237,7 @@ class Google_OAuth_Proxy {
         ]);
 
         // External host, so wp_safe_redirect() is not applicable here.
+        // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- the OAuth proxy is an external host, which wp_safe_redirect() would refuse.
         wp_redirect(add_query_arg(
             ['action' => 'connect', 'state' => $state],
             self::get_proxy_url()

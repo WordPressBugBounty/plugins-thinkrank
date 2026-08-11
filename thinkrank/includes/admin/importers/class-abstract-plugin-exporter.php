@@ -372,7 +372,7 @@ abstract class Abstract_Plugin_Exporter {
 
         // Handle serialized array (Rank Math stores robots as serialized array)
         if (is_string($noindex_value) && is_serialized($noindex_value)) {
-            $noindex_value = maybe_unserialize($noindex_value);
+            $noindex_value = Safe_Unserializer::unserialize($noindex_value);
         }
 
         if (is_array($noindex_value)) {
@@ -434,6 +434,7 @@ abstract class Abstract_Plugin_Exporter {
         // enter the snapshot — SEO meta left on them is noise. Filtering in the
         // query (rather than per-record) keeps the chunk-size based has_more
         // pagination in export_chunk() accurate.
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
         $sql = $wpdb->prepare(
             "SELECT DISTINCT pm.post_id
              FROM {$wpdb->postmeta} pm
@@ -448,7 +449,9 @@ abstract class Abstract_Plugin_Exporter {
                 [$this->chunk_size, $offset]
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
         $ids = $wpdb->get_col($sql);
         $this->last_page_row_count = count($ids);
 

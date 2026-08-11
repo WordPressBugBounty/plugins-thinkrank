@@ -712,7 +712,7 @@ class Usage_Analytics_Endpoint {
             );
         }
 
-        if (!$result || $result['content_optimized'] == 0) {
+        if (!$result || (int) $result['content_optimized'] === 0) {
             return [
                 'content_optimized' => 0,
                 'average_seo_score' => 0,
@@ -859,7 +859,7 @@ class Usage_Analytics_Endpoint {
      * @return float Percentage change
      */
     private function calculate_percentage_change(float $old_value, float $new_value): float {
-        if ($old_value == 0) {
+        if ((float) $old_value === 0.0) {
             return $new_value > 0 ? 100 : 0;
         }
 
@@ -1028,7 +1028,7 @@ class Usage_Analytics_Endpoint {
         $output_tokens = $tokens_used * 0.3;
 
         return (($input_tokens / 1000000) * $pricing['input']) +
-               (($output_tokens / 1000000) * $pricing['output']);
+                (($output_tokens / 1000000) * $pricing['output']);
     }
 
     /**
@@ -1053,7 +1053,7 @@ class Usage_Analytics_Endpoint {
                     return self::CLAUDE_PRICING[$model];
                 }
                 return self::CLAUDE_PRICING['claude-sonnet-5'] ??
-                       self::CLAUDE_PRICING['claude-sonnet-4-6'] ?? null;
+                        self::CLAUDE_PRICING['claude-sonnet-4-6'] ?? null;
 
             case 'gemini':
                 // Try specific model first, fallback to default
@@ -1144,10 +1144,14 @@ class Usage_Analytics_Endpoint {
      * @return string Period key
      */
     private function resolve_period_from_condition(string $condition): string {
-        if (strpos($condition, 'INTERVAL 7') !== false)  return '7d';
-        if (strpos($condition, 'INTERVAL 30') !== false) return '30d';
-        if (strpos($condition, 'INTERVAL 90') !== false) return '90d';
-        if (empty(trim($condition)))                     return 'all';
+        if (strpos($condition, 'INTERVAL 7') !== false) {  return '7d';
+        }
+        if (strpos($condition, 'INTERVAL 30') !== false) { return '30d';
+        }
+        if (strpos($condition, 'INTERVAL 90') !== false) { return '90d';
+        }
+        if (empty(trim($condition))) {                     return 'all';
+        }
         return '30d';
     }
 

@@ -372,7 +372,7 @@ class Schema_Validator {
             (is_string($schema['logo']) || (is_array($schema['logo']) && !empty($schema['logo']['url'])))) {
             $has_logo = true;
         } elseif (isset($schema['publisher']['logo']) && !empty($schema['publisher']['logo']) &&
-                  (is_string($schema['publisher']['logo']) || (is_array($schema['publisher']['logo']) && !empty($schema['publisher']['logo']['url'])))) {
+                    (is_string($schema['publisher']['logo']) || (is_array($schema['publisher']['logo']) && !empty($schema['publisher']['logo']['url'])))) {
             $has_logo = true;
         }
 

@@ -877,7 +877,7 @@ class Schema_Builder {
         $keywords = [];
         foreach ($words as $word) {
             $word = strtolower(trim($word));
-            if (strlen($word) > 3 && !in_array($word, $common_words)) {
+            if (strlen($word) > 3 && !in_array($word, $common_words, true)) {
                 $keywords[] = $word;
             }
         }
@@ -945,7 +945,7 @@ class Schema_Builder {
                 if (empty($schema[$key])) {
                     unset($schema[$key]);
                 }
-            } elseif (empty($value) && $value !== 0 && $value !== '0' && !in_array($key, $critical_fields)) {
+            } elseif (empty($value) && $value !== 0 && $value !== '0' && !in_array($key, $critical_fields, true)) {
                 unset($schema[$key]);
             }
         }

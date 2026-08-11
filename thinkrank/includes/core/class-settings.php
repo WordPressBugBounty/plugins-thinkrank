@@ -290,11 +290,11 @@ class Settings {
      * Get setting value
      * 
      * @param string $key Setting key
-     * @param mixed $default Default value
+     * @param mixed $fallback Default value
      * @param int $user_id User ID (0 for global, >0 for user-specific)
      * @return mixed Setting value
      */
-    public function get(string $key, $default = null, int $user_id = 0) {
+    public function get(string $key, $fallback = null, int $user_id = 0) {
         // Check cache first
         $cache_key = $user_id > 0 ? "user_{$user_id}_{$key}" : $key;
 
@@ -326,13 +326,13 @@ class Settings {
                     $value = false;
                 } else {
                     // Option doesn't exist, use default
-                    $value = $default ?? $this->defaults[$key];
+                    $value = $fallback ?? $this->defaults[$key];
                 }
             }
         } else {
             // Non-boolean settings: use default if not found
             if (null === $value || '' === $value) {
-                $value = $default ?? ($this->defaults[$key] ?? null);
+                $value = $fallback ?? ($this->defaults[$key] ?? null);
             }
         }
 
@@ -385,8 +385,13 @@ class Settings {
 
             // Verify value actually saved (update_option returns false when unchanged)
             $saved_value = get_option($option_name, 'NOT_FOUND');
+            // The loose branch is load-bearing: get_option() returns the stored
+            // STRING ('1', '0', '30') while $encrypted_value may be the original
+            // bool/int. On an unchanged re-save update_option() returns false, so
+            // this comparison is the only thing that marks the save successful —
+            // strict-only here made every unchanged-boolean re-save report failure.
             $values_match = ($saved_value === $encrypted_value) ||
-                ($saved_value == $encrypted_value && $encrypted_value !== 'NOT_FOUND');
+                ($saved_value == $encrypted_value && $encrypted_value !== 'NOT_FOUND'); // phpcs:ignore Universal.Operators.StrictComparisons.LooseEqual -- intentional type-tolerant verify, see above.
 
             // Consider it successful if the value was saved correctly
             $result = $result || $values_match;
@@ -510,6 +515,17 @@ class Settings {
      * @return mixed Sanitized value
      */
     private function sanitize_setting(string $key, $value) {
+        // Only keys that are declared array-typed may receive an array. For a
+        // scalar key an array/object value is malformed input, and the scalar
+        // sanitizers below would fatal on it, so fall back to the declared
+        // default instead of letting the bad value through.
+        if (is_array($value) || is_object($value)) {
+            if (!is_array($this->defaults[$key] ?? null)) {
+                return $this->defaults[$key] ?? '';
+            }
+            $value = (array) $value;
+        }
+
         switch ($key) {
             case 'openai_api_key':
             case 'claude_api_key':
@@ -543,8 +559,26 @@ class Settings {
                 return (float) $value;
 
             case 'dashboard_widgets':
-            case 'seo_analytics_alert_thresholds':
                 return is_array($value) ? array_map('sanitize_key', $value) : [];
+
+            case 'seo_analytics_alert_thresholds':
+                // A threshold_name => value map where the values are numbers
+                // (e.g. traffic_drop_percentage => 20) as well as strings, so
+                // sanitize each value by its own type rather than forcing every
+                // one through sanitize_key() — that turned ints into strings.
+                if (!is_array($value)) {
+                    return [];
+                }
+                $thresholds = [];
+                foreach ($value as $threshold_key => $threshold_value) {
+                    if (is_array($threshold_value)) {
+                        continue;
+                    }
+                    $thresholds[sanitize_key($threshold_key)] = is_numeric($threshold_value)
+                        ? $threshold_value + 0
+                        : sanitize_text_field((string) $threshold_value);
+                }
+                return $thresholds;
 
             case 'google_analytics_property_id':
             case 'seo_analytics_google_analytics_property_id':
@@ -562,7 +596,17 @@ class Settings {
                 } elseif (is_string($value)) {
                     return sanitize_text_field($value);
                 } elseif (is_array($value)) {
-                    return array_map('sanitize_text_field', $value);
+                    // Flat list/map of scalars; nested members are dropped rather
+                    // than passed to a string sanitizer that would fatal on them.
+                    $sanitized = [];
+                    foreach ($value as $item_key => $item) {
+                        if (is_array($item) || is_object($item)) {
+                            continue;
+                        }
+                        $sanitized[is_string($item_key) ? sanitize_key($item_key) : $item_key] =
+                            sanitize_text_field((string) $item);
+                    }
+                    return $sanitized;
                 }
                 return $value;
         }
@@ -598,6 +642,7 @@ class Settings {
         try {
             $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
             $cipher = sodium_crypto_secretbox($value, $nonce, $enc_key);
+            // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- transport encoding for a sodium ciphertext, not obfuscation.
             return self::ENC_PREFIX . base64_encode($nonce . $cipher);
         } catch (\Exception $e) {
             return $value;
@@ -625,6 +670,7 @@ class Settings {
             return $value;
         }
 
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes our own ciphertext envelope; strict mode is on.
         $decoded = base64_decode(substr($value, strlen(self::ENC_PREFIX)), true);
         if (false === $decoded || strlen($decoded) <= SODIUM_CRYPTO_SECRETBOX_NONCEBYTES) {
             return $value;

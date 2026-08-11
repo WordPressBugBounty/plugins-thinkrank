@@ -134,7 +134,7 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
         $end_date   = gmdate('Y-m-d', strtotime('-2 days'));
         $start_date = gmdate('Y-m-d', strtotime('-' . ($days - 1) . ' days', strtotime($end_date)));
 
-        $endpoint = '/sites/' . urlencode($site_url) . '/searchAnalytics/query';
+        $endpoint = '/sites/' . rawurlencode($site_url) . '/searchAnalytics/query';
 
         $request_body = [
             'startDate' => $start_date,
@@ -162,7 +162,7 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
         $end_date   = gmdate('Y-m-d', strtotime('-2 days'));
         $start_date = gmdate('Y-m-d', strtotime('-' . ($days - 1) . ' days', strtotime($end_date)));
 
-        $endpoint = '/sites/' . urlencode($site_url) . '/searchAnalytics/query';
+        $endpoint = '/sites/' . rawurlencode($site_url) . '/searchAnalytics/query';
 
         // diverse from get_search_performance: no dimensions, just totals
         $request_body = [
@@ -210,7 +210,7 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
      * @throws \Exception If API request fails
      */
     public function get_search_totals_by_dates(string $site_url, string $start_date, string $end_date): array {
-        $endpoint = '/sites/' . urlencode($site_url) . '/searchAnalytics/query';
+        $endpoint = '/sites/' . rawurlencode($site_url) . '/searchAnalytics/query';
 
         $request_body = [
             'startDate'  => $start_date,
@@ -247,7 +247,7 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
      * @throws \Exception If API request fails
      */
     public function get_search_performance_by_dates(string $site_url, string $start_date, string $end_date, int $row_limit = 500, array $dimensions = ['query']): array {
-        $endpoint = '/sites/' . urlencode($site_url) . '/searchAnalytics/query';
+        $endpoint = '/sites/' . rawurlencode($site_url) . '/searchAnalytics/query';
 
         $request_body = [
             'startDate'  => $start_date,
@@ -598,7 +598,7 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
      * @return array { branded: {...}, non_branded: {...}, total_clicks: int }
      */
     private function gsc_split_by_brand(string $site_url, string $start, string $end, array $brand_terms): array {
-        $url = self::API_BASE_URL . '/sites/' . urlencode($site_url) . '/searchAnalytics/query';
+        $url = self::API_BASE_URL . '/sites/' . rawurlencode($site_url) . '/searchAnalytics/query';
 
         $page_size       = 25000;
         $start_row       = 0;

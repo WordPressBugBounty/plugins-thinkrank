@@ -135,6 +135,7 @@ class Google_Analytics_Tracking_Manager {
             'google-analytics-gtag',
             "https://www.googletagmanager.com/gtag/js?id=" . esc_attr($measurement_id),
             [],
+            // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion -- Google's gtag.js is versioned by Google; a ?ver= would only bust their cache.
             null, // Use null for external scripts to avoid version query parameter
             false // Load in head for proper GA4 initialization
         );
@@ -414,10 +415,10 @@ gtag('config', '" . esc_js($measurement_id) . "'" . $config_string . ");
      *
      * @since 1.0.0
      * @param string $key Setting key
-     * @param mixed $default Default value
+     * @param mixed $fallback Default value
      * @return mixed Setting value
      */
-    private function get_setting(string $key, $default = '') {
-        return $this->settings->get($key, $default);
+    private function get_setting(string $key, $fallback = '') {
+        return $this->settings->get($key, $fallback);
     }
 }

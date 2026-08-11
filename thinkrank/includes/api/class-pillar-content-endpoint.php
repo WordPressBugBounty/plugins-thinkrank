@@ -139,6 +139,7 @@ class Pillar_Content_Endpoint extends WP_REST_Controller {
             'post_type'      => $post_type,
             'posts_per_page' => 5,
             'post__not_in'   => [$post_id],
+            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- admin-only endpoint listing pillar posts; there is no taxonomy to key this on.
             'meta_query'     => [
                 [
                     'key'     => '_thinkrank_pillar_content',
@@ -146,6 +147,7 @@ class Pillar_Content_Endpoint extends WP_REST_Controller {
                     'compare' => '=',
                 ]
             ],
+            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query -- admin-only endpoint, optional filter.
             'tax_query'      => $tax_query,
             'fields'         => 'ids'
         ];

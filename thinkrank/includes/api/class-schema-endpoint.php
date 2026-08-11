@@ -326,7 +326,7 @@ class Schema_Endpoint extends WP_REST_Controller {
             // IP range — including the link-local 169.254.0.0/16 (cloud metadata,
             // e.g. 169.254.169.254) and 100.64.0.0/10 (CGNAT) ranges that
             // wp_http_validate_url() does NOT block — re-validated on every
-            // redirect hop. See fetch_import_url() / reject_disallowed_fetch_host().
+            // redirect hop. See fetch_import_url() / \ThinkRank\Core\Url_Safety.
             $response = $this->fetch_import_url($url);
 
             if (is_wp_error($response)) {
@@ -416,178 +416,21 @@ class Schema_Endpoint extends WP_REST_Controller {
     }
 
     /**
-     * Fetch a remote URL for schema import, re-validating the host against the
-     * SSRF block list on every redirect hop.
+     * Fetch a remote URL for schema import.
      *
-     * wp_safe_remote_get() re-validates redirect targets with
-     * wp_http_validate_url(), which shares the link-local/CGNAT blind spot, so
-     * redirects are followed manually (redirection => 0) and each hop is checked
-     * with {@see self::reject_disallowed_fetch_host()}.
+     * Delegates to the shared SSRF guard, which follows redirects manually and
+     * re-validates the resolved host against the block list on every hop —
+     * wp_safe_remote_get()'s own redirect validation goes through
+     * wp_http_validate_url(), which shares the link-local/CGNAT blind spot.
      *
      * @param string $url URL to fetch.
      * @return array|\WP_Error Response array on success, WP_Error otherwise.
      */
     private function fetch_import_url(string $url) {
-        $max_redirects = 5;
-
-        for ($hop = 0; $hop <= $max_redirects; $hop++) {
-            if (!wp_http_validate_url($url)) {
-                return new WP_Error('invalid_url', 'The URL is not allowed.', ['status' => 400]);
-            }
-
-            $host_check = $this->reject_disallowed_fetch_host($url);
-            if (is_wp_error($host_check)) {
-                return $host_check;
-            }
-
-            $response = wp_safe_remote_get($url, [
-                'timeout'     => 15,
-                'redirection' => 0, // Follow manually so every hop is re-validated.
-                'user-agent'  => 'ThinkRank/1.0.0 (WordPress Schema Plugin)',
-            ]);
-
-            if (is_wp_error($response)) {
-                return $response;
-            }
-
-            $code = (int) wp_remote_retrieve_response_code($response);
-            if ($code >= 300 && $code < 400) {
-                $location = trim((string) wp_remote_retrieve_header($response, 'location'));
-                if ('' === $location) {
-                    return $response; // Redirect without a target — treat as final.
-                }
-                // Resolve a relative Location against the current URL.
-                $url = (string) \WP_Http::make_absolute_url($location, $url);
-                if ('' === $url) {
-                    return new WP_Error('invalid_url', 'The URL is not allowed.', ['status' => 400]);
-                }
-                continue;
-            }
-
-            return $response;
-        }
-
-        return new WP_Error('too_many_redirects', 'The URL redirected too many times.', ['status' => 400]);
-    }
-
-    /**
-     * Reject URLs whose host resolves to a private, loopback, link-local, or
-     * otherwise reserved IP range.
-     *
-     * WordPress's wp_http_validate_url() blocks loopback and RFC1918 ranges but
-     * NOT the link-local 169.254.0.0/16 (cloud metadata, e.g. 169.254.169.254)
-     * or 100.64.0.0/10 (CGNAT) ranges. FILTER_FLAG_NO_RES_RANGE covers those
-     * reserved ranges, and FILTER_FLAG_NO_PRIV_RANGE covers the private ranges.
-     *
-     * @param string $url URL to check.
-     * @return true|\WP_Error True when every resolved address is public.
-     */
-    private function reject_disallowed_fetch_host(string $url) {
-        $host = wp_parse_url($url, PHP_URL_HOST);
-        if (empty($host)) {
-            return new WP_Error('invalid_url', 'The URL is not allowed.', ['status' => 400]);
-        }
-
-        // Strip IPv6 literal brackets, if present.
-        $host = trim($host, '[]');
-
-        $ips = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : $this->resolve_host_ips($host);
-        if (empty($ips)) {
-            return new WP_Error('invalid_url', 'The URL host could not be resolved.', ['status' => 400]);
-        }
-
-        foreach ($ips as $ip) {
-            if (!$this->is_public_ip($ip)) {
-                return new WP_Error('invalid_url', 'The URL is not allowed.', ['status' => 400]);
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Whether an IP address is a routable public address.
-     *
-     * Combines PHP's private/reserved-range filters with explicit blocks for
-     * reserved IPv4 ranges PHP's FILTER_FLAG_NO_RES_RANGE does not cover — most
-     * importantly 100.64.0.0/10 (CGNAT), which some clouds use for metadata.
-     *
-     * @param string $ip IP address (v4 or v6).
-     * @return bool
-     */
-    private function is_public_ip(string $ip): bool {
-        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-            return false;
-        }
-
-        // Reserved IPv4 blocks PHP's NO_RES_RANGE misses.
-        $extra_blocks = [
-            '100.64.0.0/10',   // Shared address space / CGNAT (RFC 6598).
-            '192.0.0.0/24',    // IETF protocol assignments (RFC 6890).
-            '198.18.0.0/15',   // Benchmarking (RFC 2544).
-            '192.88.99.0/24',  // 6to4 relay anycast (RFC 7526).
-        ];
-        foreach ($extra_blocks as $cidr) {
-            if ($this->ipv4_in_cidr($ip, $cidr)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Whether an IPv4 address falls within a CIDR block.
-     *
-     * @param string $ip   IPv4 address.
-     * @param string $cidr CIDR block (e.g. 100.64.0.0/10).
-     * @return bool
-     */
-    private function ipv4_in_cidr(string $ip, string $cidr): bool {
-        if (strpos($ip, ':') !== false) {
-            return false; // IPv6 is not covered by these IPv4 blocks.
-        }
-
-        [$subnet, $bits] = array_pad(explode('/', $cidr, 2), 2, '32');
-        $ip_long     = ip2long($ip);
-        $subnet_long = ip2long($subnet);
-        if (false === $ip_long || false === $subnet_long) {
-            return false;
-        }
-
-        $mask = -1 << (32 - (int) $bits);
-        return ($ip_long & $mask) === ($subnet_long & $mask);
-    }
-
-    /**
-     * Resolve a hostname to its IPv4 + IPv6 addresses.
-     *
-     * @param string $host Hostname.
-     * @return string[] Resolved IP addresses (may be empty).
-     */
-    private function resolve_host_ips(string $host): array {
-        $ips = [];
-
-        $records = @dns_get_record($host, DNS_A + DNS_AAAA);
-        if (is_array($records)) {
-            foreach ($records as $record) {
-                if (!empty($record['ip'])) {
-                    $ips[] = $record['ip'];       // A record.
-                } elseif (!empty($record['ipv6'])) {
-                    $ips[] = $record['ipv6'];     // AAAA record.
-                }
-            }
-        }
-
-        // Fallback where dns_get_record is unavailable or returns nothing.
-        if (empty($ips)) {
-            $resolved = gethostbyname($host);
-            if ($resolved && $resolved !== $host) {
-                $ips[] = $resolved;
-            }
-        }
-
-        return $ips;
+        return \ThinkRank\Core\Url_Safety::safe_remote_get($url, [
+            'timeout'    => 15,
+            'user-agent' => 'ThinkRank/1.0.0 (WordPress Schema Plugin)',
+        ]);
     }
 
     /**
@@ -1160,9 +1003,36 @@ class Schema_Endpoint extends WP_REST_Controller {
                 );
             }
 
-            // Optimize rich snippets
+            // SECURITY: Validate and sanitize schema data using input validator,
+            // the same way generate/validate/deploy do — this route must not be
+            // the one path that hands a raw client blob to the schema manager.
+            if (!is_array($schema_data)) {
+                return new WP_Error(
+                    'invalid_schema_data',
+                    'Schema data must be an array/object',
+                    ['status' => 400]
+                );
+            }
+
+            $input_validation = $this->input_validator->validate_schema_data($schema_data, $schema_type);
+            if (!$input_validation['valid']) {
+                return new WP_Error(
+                    'schema_validation_failed',
+                    'Schema data validation failed: ' . implode(', ', $input_validation['errors']),
+                    [
+                        'status' => 400,
+                        'validation_errors' => $input_validation['errors'],
+                        'validation_warnings' => $input_validation['warnings']
+                    ]
+                );
+            }
+
+            // SECURITY: Sanitize options
+            $options = $this->input_validator->sanitize_options($options);
+
+            // Optimize rich snippets with the sanitized data
             $optimization_results = $this->schema_manager->optimize_rich_snippets(
-                $schema_data,
+                $input_validation['sanitized_data'],
                 $schema_type,
                 $options
             );
@@ -1274,6 +1144,8 @@ class Schema_Endpoint extends WP_REST_Controller {
      *
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object or error
+     *
+     * @throws \Exception On failure.
      */
     public function bulk_operations(WP_REST_Request $request) {
         try {

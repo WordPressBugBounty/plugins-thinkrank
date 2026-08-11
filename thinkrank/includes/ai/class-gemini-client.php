@@ -14,10 +14,14 @@ declare(strict_types=1);
 
 namespace ThinkRank\AI;
 
+use ThinkRank\AI\Traits\Request_Timeout;
+
 // Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
+
+require_once __DIR__ . '/traits/trait-request-timeout.php';
 
 /**
  * Gemini AI Client Class
@@ -28,6 +32,9 @@ if (!defined('ABSPATH')) {
  * @since 1.0.0
  */
 class Gemini_Client {
+
+    use Request_Timeout;
+
 
     /**
      * API key for Gemini
@@ -495,7 +502,12 @@ class Gemini_Client {
             $is_transient = false;
             $retry_after = 0;
             if (is_wp_error($response)) {
-                $is_transient = true;
+                // A client-side timeout means the work genuinely needs longer
+                // than the budget we allowed; re-running the identical prompt,
+                // model and budget just times out again and multiplies the
+                // wait (issue #288). Do not retry a timeout. Other WP_Error
+                // results — DNS, connection refused, TLS — stay retryable.
+                $is_transient = !$this->is_timeout_error($response);
             } else {
                 $status = wp_remote_retrieve_response_code($response);
                 if (429 === $status || $status >= 500) {

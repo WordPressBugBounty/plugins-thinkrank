@@ -154,10 +154,9 @@ class Activator {
             }
 
             // Add performance indexes for Phase 2 optimization
-            $index_results = $schema->add_performance_indexes();
-            if (!$index_results) {
-                // Performance indexes could not be created - activation continues
-            }
+            // Best effort: activation continues if the performance indexes
+            // cannot be created.
+            $schema->add_performance_indexes();
 
             // Database tables created successfully
 

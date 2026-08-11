@@ -110,6 +110,7 @@ class Language_Resolver {
 
             // WPML: post language details carry a locale (and always a code).
             if (has_filter('wpml_post_language_details')) {
+                // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPML/core hook, not ours to name.
                 $details = apply_filters('wpml_post_language_details', null, $post_id);
                 if (is_array($details)) {
                     if (!empty($details['locale']) && is_string($details['locale'])) {

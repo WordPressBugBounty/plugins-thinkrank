@@ -211,5 +211,4 @@ class Seo_Quick_Edit_Ajax {
 
         return (string) ob_get_clean();
     }
-
 }

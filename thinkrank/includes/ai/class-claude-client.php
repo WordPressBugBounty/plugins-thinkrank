@@ -12,19 +12,26 @@ declare(strict_types=1);
 
 namespace ThinkRank\AI;
 
+use ThinkRank\AI\Traits\Request_Timeout;
+
 // Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
+require_once __DIR__ . '/traits/trait-request-timeout.php';
+
 /**
  * Claude Client Class
- * 
+ *
  * Single Responsibility: Handle Claude API communication
- * 
+ *
  * @since 1.0.0
  */
 class Claude_Client {
+
+    use Request_Timeout;
+
     
     /**
      * Claude API base URL
@@ -232,6 +239,45 @@ class Claude_Client {
     }
 
     /**
+     * Maximum completion (output) tokens accepted for a single Claude request.
+     *
+     * 8192 is accepted by every current Claude model without the extended-output
+     * beta header, so it is a safe per-request ceiling. Kept as a method (rather
+     * than a constant) to mirror the other clients and allow per-model tuning.
+     *
+     * @param string $model Model ID (reserved for future per-model limits).
+     * @return int Maximum output tokens.
+     */
+    private function get_max_completion_tokens(string $model): int {
+        return 8192;
+    }
+
+    /**
+     * Recommended output-token budget for a given use case.
+     *
+     * Mirrors the other clients so the Content Brief generator no longer falls
+     * back to a hardcoded, model-blind budget for Claude (issue #287). Each
+     * value is a fraction of the model's completion ceiling.
+     *
+     * @param string $use_case e.g. 'content_brief', 'seo_metadata', 'analysis'.
+     * @return int Recommended max output tokens.
+     */
+    public function get_recommended_tokens(string $use_case): int {
+        $max_tokens = $this->get_max_completion_tokens($this->model);
+
+        $recommendations = [
+            'content_brief' => 0.9,   // Comprehensive brief incl. a full article body.
+            'seo_metadata'  => 0.15,
+            'analysis'      => 0.25,
+            'llms_txt'      => 0.5,
+            'optimization'  => 0.15,
+        ];
+        $percentage = $recommendations[$use_case] ?? 0.15;
+
+        return (int) ($max_tokens * $percentage);
+    }
+
+    /**
      * Test API connection
      *
      * @return bool True if connection successful
@@ -323,7 +369,12 @@ class Claude_Client {
             $is_transient = false;
             $retry_after = 0;
             if (is_wp_error($response)) {
-                $is_transient = true;
+                // A client-side timeout means the work genuinely needs longer
+                // than the budget we allowed; re-running the identical prompt,
+                // model and budget just times out again and multiplies the
+                // wait (issue #288). Do not retry a timeout. Other WP_Error
+                // results — DNS, connection refused, TLS — stay retryable.
+                $is_transient = !$this->is_timeout_error($response);
             } else {
                 $status = wp_remote_retrieve_response_code($response);
                 if (429 === $status || $status >= 500) {

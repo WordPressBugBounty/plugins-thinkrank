@@ -6,7 +6,7 @@
  * Reads Rank Math data from postmeta/termmeta/options and normalizes
  * into the canonical snapshot format.
  *
- * CRITICAL: rank_math_robots is a serialized array — use maybe_unserialize()
+ * CRITICAL: rank_math_robots is a serialized array — use Safe_Unserializer
  * then in_array() to check for 'noindex'/'nofollow'.
  *
  * @package ThinkRank\Admin\Importers
@@ -682,6 +682,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         $offset = ($page - 1) * $this->chunk_size;
 
         $rows = $wpdb->get_results(
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $wpdb->prepare(
                 "SELECT * FROM {$table_name} ORDER BY id ASC LIMIT %d OFFSET %d",
                 $this->chunk_size,
@@ -689,6 +690,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             ),
             ARRAY_A
         );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         // One rule can fan out into several records, so pagination must key off
         // the number of ROWS fetched, not the number of records emitted.
@@ -706,7 +708,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             // table is one row per source, so fan each source out into its own
             // record rather than keeping only the first (which silently dropped
             // every additional source).
-            $sources = maybe_unserialize($row['sources'] ?? '');
+            $sources = Safe_Unserializer::unserialize($row['sources'] ?? '');
             if (!is_array($sources) || empty($sources)) {
                 continue;
             }
@@ -766,6 +768,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
 
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         $rows = $wpdb->get_results(
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $wpdb->prepare(
                 "SELECT * FROM {$table_name} ORDER BY id ASC LIMIT %d OFFSET %d",
                 $this->chunk_size,
@@ -773,6 +776,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             ),
             ARRAY_A
         );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         $this->last_page_row_count = is_array($rows) ? count($rows) : 0;
 
@@ -902,7 +906,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                 continue;
             }
 
-            $schema = maybe_unserialize($value);
+            $schema = Safe_Unserializer::unserialize($value);
             if (!is_array($schema)) {
                 continue;
             }
@@ -1126,7 +1130,9 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         foreach ($meta as $key => $value) {
             if (strpos($key, 'rank_math_schema_') === 0) {
                 $schema_key = str_replace('rank_math_schema_', '', $key);
-                $details[$schema_key] = maybe_unserialize($value);
+                // Schema blocks are always arrays; anything else is malformed
+                // source data and must not travel further into the migrator.
+                $details[$schema_key] = Safe_Unserializer::to_array($value);
             }
         }
 
@@ -1184,7 +1190,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             if (strpos($key, 'rank_math_schema_') !== 0) {
                 continue;
             }
-            $schema = maybe_unserialize($value);
+            $schema = Safe_Unserializer::unserialize($value);
             if (!is_array($schema)) {
                 continue;
             }
@@ -1247,7 +1253,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * @return array Map of present flag => true (noarchive/noimageindex/nosnippet)
      */
     private function extract_robots_flags($robots_raw): array {
-        $robots = maybe_unserialize($robots_raw);
+        $robots = Safe_Unserializer::unserialize($robots_raw);
         if (!is_array($robots)) {
             return [];
         }
@@ -1288,7 +1294,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * @return array Associative directive => value map (empty when unset)
      */
     private function parse_advanced_robots_meta($raw): array {
-        $advanced = maybe_unserialize($raw);
+        $advanced = Safe_Unserializer::unserialize($raw);
         return is_array($advanced) ? $advanced : [];
     }
 
@@ -1715,7 +1721,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                 $pt_settings['description_template'] = $this->convert_template_tokens($titles["pt_{$pt}_description"]);
             }
             if (isset($titles["pt_{$pt}_robots"])) {
-                $pt_settings['robots'] = maybe_unserialize($titles["pt_{$pt}_robots"]);
+                $pt_settings['robots'] = Safe_Unserializer::to_array($titles["pt_{$pt}_robots"]);
             }
             // Rank Math's per-type Link Suggestions toggle maps onto ThinkRank's
             // global-SEO `link_suggestions` (which gates the Pillar Content column

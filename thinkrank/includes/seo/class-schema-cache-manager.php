@@ -208,7 +208,7 @@ class Schema_Cache_Manager {
         $key_data = [
             'operation' => 'schema_generation',
             'schema_type' => $schema_type,
-            'data_hash' => md5(serialize($data)),
+            'data_hash' => md5(wp_json_encode($data)),
             'options' => $options,
             'version' => THINKRANK_VERSION,
         ];
@@ -230,7 +230,7 @@ class Schema_Cache_Manager {
         $key_data = [
             'operation' => 'schema_validation',
             'schema_type' => $schema_type,
-            'schema_hash' => md5(serialize($schema_data)),
+            'schema_hash' => md5(wp_json_encode($schema_data)),
             'options' => $options,
             'version' => THINKRANK_VERSION,
         ];

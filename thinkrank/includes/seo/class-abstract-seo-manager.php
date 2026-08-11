@@ -439,13 +439,13 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
      *
      * @since 1.0.0
      *
-     * @param array $array Array to sanitize
+     * @param array $input Array to sanitize
      * @return array Sanitized array
      */
-    private function sanitize_array_recursive(array $array): array {
+    private function sanitize_array_recursive(array $input): array {
         $sanitized = [];
 
-        foreach ($array as $key => $value) {
+        foreach ($input as $key => $value) {
             $sanitized_key = sanitize_key($key);
 
             if (is_string($value)) {

@@ -323,12 +323,15 @@ class Multilingual_Manager {
      * @return array<int, array{code: string, locale: string, url: string, is_default: bool}>
      */
     private function get_wpml_alternates(): array {
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPML/core hook, not ours to name.
         $languages = apply_filters('wpml_active_languages', null, ['skip_missing' => 1]);
         if (!is_array($languages) || empty($languages)) {
             return [];
         }
 
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPML/core hook, not ours to name.
         $default = (string) apply_filters('wpml_default_language', null);
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPML/core hook, not ours to name.
         $current = (string) apply_filters('wpml_current_language', null);
         $out     = [];
 
@@ -446,7 +449,9 @@ class Multilingual_Manager {
 
         // TranslatePress tracks the language being rendered on a global rather
         // than through an accessor.
+        // phpcs:ignore WordPress.NamingConventions.ValidVariableName.VariableNotSnakeCase, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- TranslatePress' own global; the name is theirs.
         global $TRP_LANGUAGE;
+        // phpcs:ignore WordPress.NamingConventions.ValidVariableName.VariableNotSnakeCase -- TranslatePress' own global; the name is theirs.
         $current = is_string($TRP_LANGUAGE) ? $TRP_LANGUAGE : '';
 
         $out = [];
@@ -641,5 +646,4 @@ class Multilingual_Manager {
         // duplicate terms per language at all, so likewise nothing to do.
         return $args;
     }
-
 }

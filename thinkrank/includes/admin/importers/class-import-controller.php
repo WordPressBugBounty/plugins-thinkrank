@@ -331,8 +331,9 @@ class Import_Controller extends \WP_REST_Controller {
                     $wpdb->prepare("SHOW TABLES LIKE %s", $table)
                 );
                 if ($table_exists) {
+                    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
                     $count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
-                    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange
+                    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
                     $wpdb->query("DROP TABLE {$table}");
                     $deleted += $count;
                 }

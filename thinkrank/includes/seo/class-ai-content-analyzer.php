@@ -844,6 +844,7 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
         $positions = [];
         $offset = 0;
 
+        // phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition -- the canonical strpos() scan loop; hoisting it needs a duplicated call.
         while (($pos = strpos($content, $keyword, $offset)) !== false) {
             $positions[] = $pos;
             $offset = $pos + 1;

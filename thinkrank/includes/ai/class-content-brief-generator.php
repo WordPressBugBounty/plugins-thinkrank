@@ -49,6 +49,32 @@ class Content_Brief_Generator {
     private const OPENAI_REQUEST_TIMEOUT = 300;
 
     /**
+     * Minimum output-token budget for a content brief.
+     *
+     * A shorter length tier must never starve the structured JSON — plus any
+     * reasoning/thinking tokens, which are drawn from the same budget — to the
+     * point of truncating mid-response (the failure #165 fixed on Gemini). This
+     * floor is only a safety net for small-ceiling models; it never exceeds the
+     * model-aware base budget. See scale_tokens_for_length().
+     */
+    private const MIN_BRIEF_TOKENS = 2000;
+
+    /**
+     * Content-length → budget multipliers, applied to the model-aware base.
+     *
+     * NOTE: provisional starting points (issue #287). They make Short/Medium/
+     * Long request measurably different budgets, but the exact figures should
+     * be validated against recorded completion-token usage for a real brief on
+     * each provider before being treated as final. Unknown lengths fall back to
+     * the 'medium' tier (see scale_tokens_for_length()).
+     */
+    private const LENGTH_TOKEN_MULTIPLIERS = [
+        'short'  => 0.6,
+        'medium' => 0.8,
+        'long'   => 1.0,
+    ];
+
+    /**
      * Settings instance
      *
      * @var Settings
@@ -83,6 +109,8 @@ class Content_Brief_Generator {
      * Initialize AI client based on available API keys
      *
      * @return void
+     *
+     * @throws \Exception On failure.
      */
     private function init_ai_client(): void {
         $provider = $this->settings->get('ai_provider', 'openai');
@@ -140,6 +168,43 @@ class Content_Brief_Generator {
         } else {
             return $this->settings->get('openai_model', Settings::DEFAULT_OPENAI_MODEL);
         }
+    }
+
+    /**
+     * Resolve the reasoning-effort level for a content-brief request.
+     *
+     * Without an explicit level, GPT-5 models run at their default (maximum)
+     * reasoning effort against a ~95% completion budget — the slowest and
+     * costliest configuration, where billed reasoning tokens (drawn from the
+     * same budget) are spent before any visible output (issue #286).
+     *
+     * A brief is a structured planning task, so 'low' is a provisional middle
+     * ground — Brand Visibility uses 'minimal' for quick consumer-style answers.
+     * The level is filterable so a site can trade latency for more reasoning;
+     * returning '' opts out entirely and lets the model use its default effort.
+     * Only the GPT-5 family consumes this — o1/o3, gpt-4o and the non-OpenAI
+     * clients ignore an unrecognised option key.
+     *
+     * @param string $model  The resolved model ID (passed to the filter).
+     * @param array  $params The brief generation parameters (passed to the filter).
+     * @return string One of 'minimal' | 'low' | 'medium' | 'high', or '' to opt out.
+     */
+    private function resolve_reasoning_effort(string $model, array $params): string {
+        /**
+         * Filter the reasoning-effort level used for content-brief generation.
+         *
+         * @param string $effort The default level ('low'). Return '' to opt out.
+         * @param string $model  The resolved model ID for this request.
+         * @param array  $params The brief generation parameters.
+         */
+        $effort = (string) apply_filters('thinkrank_content_brief_reasoning_effort', 'low', $model, $params);
+
+        // Only values OpenAI accepts may reach the request body ('' opts out).
+        // An unrecognised filter return (e.g. 'turbo') would otherwise be sent
+        // verbatim and fail the whole brief with a 400, so degrade to the
+        // documented default instead.
+        $allowed = ['', 'minimal', 'low', 'medium', 'high'];
+        return in_array($effort, $allowed, true) ? $effort : 'low';
     }
 
     /**
@@ -242,34 +307,57 @@ class Content_Brief_Generator {
         );
 
         try {
-            // Get recommended token limit for content briefs (model-specific)
-            $max_tokens = method_exists($this->ai_client, 'get_recommended_tokens')
-                ? $this->ai_client->get_recommended_tokens('content_brief')
-                : 4000; // Fallback for non-OpenAI clients
+            // Get the model-aware budget for a comprehensive brief, then scale
+            // it to the requested content length so Short/Medium/Long actually
+            // request different budgets (issue #287). Every client (OpenAI,
+            // Claude, Gemini, OpenRouter) implements get_recommended_tokens(),
+            // so there is no model-blind fallback.
+            $base_tokens = (int) $this->ai_client->get_recommended_tokens('content_brief');
+            $max_tokens = $this->scale_tokens_for_length($base_tokens, $content_length);
+
+            // Bound hidden reasoning on the GPT-5 family (issue #286). See
+            // resolve_reasoning_effort(). Only the GPT-5 family reads this;
+            // o1/o3, gpt-4o and the non-OpenAI clients ignore the option, and
+            // an empty string opts out (model default effort).
+            $reasoning_effort = $this->resolve_reasoning_effort($this->get_current_model(), $params);
+
+            $completion_options = [
+                // For GPT‑5 family the client translates max_tokens to
+                // max_completion_tokens internally. Temperature is intentionally
+                // omitted: every client defaults it to 0.7, and reasoning models
+                // reject it outright, so passing it here was misleading no-op.
+                'max_tokens' => $max_tokens,
+            ];
+            if ('' !== $reasoning_effort) {
+                $completion_options['reasoning_effort'] = $reasoning_effort;
+            }
 
             // Generate brief using AI
-            $ai_response = $this->ai_client->generate_completion($prompt, [
-                // For GPT‑5 family the client will translate to max_completion_tokens internally
-                'max_tokens' => $max_tokens,
-                'temperature' => 0.7,
-            ]);
+            $ai_response = $this->ai_client->generate_completion($prompt, $completion_options);
+
+            // Detect a provider-side non-answer (refusal, policy block, or
+            // truncation) BEFORE attempting text extraction. Otherwise a
+            // refusal — which OpenAI returns as HTTP 200 with content=null —
+            // slips past every isset() branch and gets serialized into the
+            // brief body instead of being reported to the user.
+            $this->guard_against_non_answer($ai_response);
 
             // Extract text content from AI response
             $ai_text = '';
 
             // Handle OpenAI response format
             if (isset($ai_response['choices'][0]['message']['content'])) {
-                $contentField = $ai_response['choices'][0]['message']['content'];
-                if (is_string($contentField)) {
-                    $ai_text = $contentField;
-                } elseif (is_array($contentField)) {
+                $content_field = $ai_response['choices'][0]['message']['content'];
+                if (is_string($content_field)) {
+                    $ai_text = $content_field;
+                } elseif (is_array($content_field)) {
                     // Concatenate text parts from array-based content (Chat Completions multimodal)
                     $parts = array_map(function($part) {
                         if (is_array($part)) {
                             return $part['text'] ?? '';
                         }
                         return is_string($part) ? $part : '';
-                    }, $contentField);
+                    }, $content_field);
                     $ai_text = trim(implode("\n", array_filter($parts)));
                 }
             }
@@ -280,13 +368,6 @@ class Content_Brief_Generator {
             // Handle Gemini response format
             elseif (isset($ai_response['candidates'][0]['content']['parts'][0]['text'])) {
                 $ai_text = $ai_response['candidates'][0]['content']['parts'][0]['text'];
-
-                // A reply cut off at the token limit is incomplete JSON, so it
-                // can never be parsed. Fail with the real reason instead of
-                // saving a brief titled "Unable to parse AI response".
-                if (($ai_response['candidates'][0]['finishReason'] ?? '') === 'MAX_TOKENS') {
-                    throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try a shorter content length or fewer competitor URLs.');
-                }
             }
             // Handle direct content field
             elseif (isset($ai_response['content']) && is_string($ai_response['content'])) {
@@ -296,10 +377,17 @@ class Content_Brief_Generator {
             elseif (is_string($ai_response)) {
                 $ai_text = $ai_response;
             }
-            // If we still don't have text, log the response structure for debugging
+            // No known provider shape matched and guard_against_non_answer()
+            // found nothing it recognised. Never serialize the raw envelope
+            // into the brief body — that turns a clear failure into a saved,
+            // meaningless brief. Log the shape for diagnostics and fail.
             else {
-                // As a last resort, stringify the response for visibility (prevents empty content error)
-                $ai_text = is_array($ai_response) ? wp_json_encode($ai_response) : (string) $ai_response;
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    $shape = is_array($ai_response) ? implode(', ', array_keys($ai_response)) : gettype($ai_response);
+                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging only when WP_DEBUG is enabled.
+                    error_log('[ThinkRank] Content brief: unrecognised AI response shape. Top-level keys: ' . $shape);
+                }
+                throw new \Exception('The AI returned a response in an unexpected format. Please try again.');
             }
 
             // Ensure we have actual text content
@@ -342,6 +430,16 @@ class Content_Brief_Generator {
         } catch (\Exception $e) {
             // Provide more specific error messages
             $error_message = $e->getMessage();
+
+            // Messages we authored for the user (refusals, policy blocks,
+            // token-limit truncation, unexpected shape) all start with "The AI "
+            // and are already actionable. Pass them through verbatim instead of
+            // flattening them via the substring matching below — e.g. so a
+            // refusal is not rewritten into generic "empty content" advice.
+            if (strpos($error_message, 'The AI ') === 0) {
+                throw new \Exception(esc_html($error_message));
+            }
+
             if (strpos($error_message, 'API key') !== false) {
                 throw new \Exception('API key configuration error. Please check your AI provider settings.');
             } elseif (strpos($error_message, 'Invalid AI response format') !== false) {
@@ -351,6 +449,105 @@ class Content_Brief_Generator {
             } else {
                 throw new \Exception('Failed to generate content brief: ' . esc_html($error_message));
             }
+        }
+    }
+
+    /**
+     * Scale the model-aware brief budget to the requested content length.
+     *
+     * get_recommended_tokens('content_brief') returns the budget for a full,
+     * comprehensive (Long) brief, already capped at the model's completion
+     * ceiling. Shorter tiers request proportionally less so that choosing Short
+     * is genuinely faster and cheaper (issue #287), while every tier stays at or
+     * below the base and at or above MIN_BRIEF_TOKENS so it cannot truncate.
+     *
+     * @param int    $base_tokens    Model-aware budget for a comprehensive brief.
+     * @param string $content_length One of 'short' | 'medium' | 'long'.
+     * @return int Scaled max_tokens, clamped to [floor, base_tokens].
+     */
+    private function scale_tokens_for_length(int $base_tokens, string $content_length): int {
+        // Unknown/missing length falls back to the medium tier — never to 0 or
+        // to the raw ceiling.
+        $multiplier = self::LENGTH_TOKEN_MULTIPLIERS[$content_length]
+            ?? self::LENGTH_TOKEN_MULTIPLIERS['medium'];
+
+        $scaled = (int) round($base_tokens * $multiplier);
+
+        // The floor can never exceed the base itself, so a model with a tiny
+        // ceiling still yields a sane, in-range value.
+        $floor = (int) min($base_tokens, self::MIN_BRIEF_TOKENS);
+
+        return max($floor, min($scaled, $base_tokens));
+    }
+
+    /**
+     * Detect a provider-side non-answer and fail with the real reason.
+     *
+     * A refusal, content-policy block, or token-limit truncation is not a
+     * usable brief. Each provider signals these differently, and none of the
+     * signals set the content field the extraction chain looks for — so if we
+     * don't catch them here they fall through to the "unexpected format" path
+     * (or, historically, were serialized into the brief body). All messages
+     * start with "The AI " so the outer catch passes them through unchanged.
+     *
+     * @param mixed $ai_response Raw response from the AI client.
+     * @throws \Exception If the response is a refusal, policy block, or truncation.
+     */
+    private function guard_against_non_answer($ai_response): void {
+        if (!is_array($ai_response)) {
+            return;
+        }
+
+        // --- OpenAI (Chat Completions) ---
+        // A structured refusal is HTTP 200 with message.content=null and the
+        // stated reason carried in message.refusal. finish_reason distinguishes
+        // a policy block from a truncated completion.
+        if (isset($ai_response['choices'][0]['message'])) {
+            $message = $ai_response['choices'][0]['message'];
+            $finish  = (string) ($ai_response['choices'][0]['finish_reason'] ?? '');
+
+            if (!empty($message['refusal'])) {
+                throw new \Exception(sprintf(
+                    'The AI declined to generate this brief: %s',
+                    (string) $message['refusal']
+                ));
+            }
+            if ('content_filter' === $finish) {
+                throw new \Exception('The AI blocked this request under its content policy. Try a different topic or less sensitive keywords.');
+            }
+            if ('length' === $finish) {
+                throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try a shorter content length or fewer competitor URLs.');
+            }
+        }
+
+        // --- Claude (Messages) ---
+        if (isset($ai_response['stop_reason'])) {
+            $stop_reason = (string) $ai_response['stop_reason'];
+            if ('refusal' === $stop_reason) {
+                throw new \Exception('The AI declined to generate this brief for this topic. Try a different topic or less sensitive keywords.');
+            }
+            if ('max_tokens' === $stop_reason) {
+                throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try a shorter content length or fewer competitor URLs.');
+            }
+        }
+
+        // --- Gemini ---
+        // A prompt rejected outright returns no candidate at all, only
+        // promptFeedback.blockReason; a candidate can also finish on SAFETY or
+        // PROHIBITED_CONTENT, or be truncated at MAX_TOKENS.
+        $block_reason = (string) ($ai_response['promptFeedback']['blockReason'] ?? '');
+        if ('' !== $block_reason) {
+            throw new \Exception(sprintf(
+                'The AI blocked this request under its content policy (%s). Try a different topic or less sensitive keywords.',
+                $block_reason
+            ));
+        }
+        $gemini_finish = (string) ($ai_response['candidates'][0]['finishReason'] ?? '');
+        if (in_array($gemini_finish, ['SAFETY', 'PROHIBITED_CONTENT'], true)) {
+            throw new \Exception('The AI blocked this request under its content policy. Try a different topic or less sensitive keywords.');
+        }
+        if ('MAX_TOKENS' === $gemini_finish) {
+            throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try a shorter content length or fewer competitor URLs.');
         }
     }
 
@@ -366,17 +563,17 @@ class Content_Brief_Generator {
         }
 
         $valid_content_types = ['blog_post', 'product_page', 'landing_page', 'tutorial'];
-        if (!empty($params['content_type']) && !in_array($params['content_type'], $valid_content_types)) {
+        if (!empty($params['content_type']) && !in_array($params['content_type'], $valid_content_types, true)) {
             throw new \Exception('Invalid content type specified.');
         }
 
         $valid_lengths = ['short', 'medium', 'long'];
-        if (!empty($params['content_length']) && !in_array($params['content_length'], $valid_lengths)) {
+        if (!empty($params['content_length']) && !in_array($params['content_length'], $valid_lengths, true)) {
             throw new \Exception('Invalid content length specified.');
         }
 
         $valid_tones = ['professional', 'casual', 'technical', 'friendly'];
-        if (!empty($params['tone']) && !in_array($params['tone'], $valid_tones)) {
+        if (!empty($params['tone']) && !in_array($params['tone'], $valid_tones, true)) {
             throw new \Exception('Invalid tone specified.');
         }
     }
@@ -648,61 +845,15 @@ class Content_Brief_Generator {
      *
      * Prevents SSRF — a low-privilege user could otherwise point competitor
      * scraping at loopback, link-local (e.g. 169.254.169.254 cloud metadata),
-     * private or reserved addresses to probe internal services.
+     * CGNAT, private or reserved addresses to probe internal services. The
+     * block list lives in {@see \ThinkRank\Core\Url_Safety} so this and the
+     * schema importer can never drift apart.
      *
      * @param string $url URL to validate.
      * @return bool True when safe to fetch.
      */
     private function is_safe_public_url(string $url): bool {
-        $parts = wp_parse_url($url);
-        if (empty($parts['scheme']) || empty($parts['host'])) {
-            return false;
-        }
-
-        // Only ever fetch over http/https.
-        if (!in_array(strtolower($parts['scheme']), ['http', 'https'], true)) {
-            return false;
-        }
-
-        $host = $parts['host'];
-
-        // Resolve the host to the IP(s) it points at (literal IPs pass through).
-        $ips = [];
-        if (filter_var($host, FILTER_VALIDATE_IP)) {
-            $ips[] = $host;
-        } else {
-            $records = @dns_get_record($host, DNS_A + DNS_AAAA);
-            if (is_array($records)) {
-                foreach ($records as $record) {
-                    if (!empty($record['ip'])) {
-                        $ips[] = $record['ip'];
-                    } elseif (!empty($record['ipv6'])) {
-                        $ips[] = $record['ipv6'];
-                    }
-                }
-            }
-            // Fallback for hosts dns_get_record can't resolve.
-            if (empty($ips)) {
-                $resolved = gethostbyname($host);
-                if ($resolved !== $host) {
-                    $ips[] = $resolved;
-                }
-            }
-        }
-
-        // Unresolvable host → don't fetch.
-        if (empty($ips)) {
-            return false;
-        }
-
-        // Reject if any resolved address is private, reserved, loopback or link-local.
-        foreach ($ips as $ip) {
-            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                return false;
-            }
-        }
-
-        return true;
+        return \ThinkRank\Core\Url_Safety::is_safe_public_url($url);
     }
 
     /**
@@ -712,10 +863,11 @@ class Content_Brief_Generator {
      * @return array|null Content data or null if failed
      */
     private function scrape_competitor_content(string $url): ?array {
-        // wp_safe_remote_get() (reject_unsafe_urls) re-validates the URL and, unlike
-        // wp_remote_get(), rejects redirects to internal/private hosts — closing the
-        // redirect-based SSRF bypass on top of the pre-flight is_safe_public_url() check.
-        $response = wp_safe_remote_get($url, [
+        // Url_Safety::safe_remote_get() follows redirects manually and re-checks
+        // the resolved host on every hop, so a target that redirects to (or
+        // rebinds onto) an internal address after the pre-flight check is
+        // refused rather than fetched.
+        $response = \ThinkRank\Core\Url_Safety::safe_remote_get($url, [
             'timeout' => 8, // Reduced from 15 to 8 seconds
             'user-agent' => 'Mozilla/5.0 (compatible; ThinkRank SEO Bot)',
             'headers' => [
@@ -1024,9 +1176,12 @@ class Content_Brief_Generator {
             $brief_data['visual_content']['image_recommendations'] = array_map(function($rec) {
                 if (is_array($rec)) {
                     $text = '';
-                    if (isset($rec['type'])) $text .= $rec['type'] . ': ';
-                    if (isset($rec['description'])) $text .= $rec['description'];
-                    if (isset($rec['alt_text'])) $text .= ' (Alt: ' . $rec['alt_text'] . ')';
+                    if (isset($rec['type'])) { $text .= $rec['type'] . ': ';
+                    }
+                    if (isset($rec['description'])) { $text .= $rec['description'];
+                    }
+                    if (isset($rec['alt_text'])) { $text .= ' (Alt: ' . $rec['alt_text'] . ')';
+                    }
                     return $text ?: 'Image recommendation';
                 }
                 return is_string($rec) ? $rec : 'Image recommendation';
@@ -1119,11 +1274,15 @@ class Content_Brief_Generator {
         $brief['target_keywords'] = json_decode($brief['target_keywords'], true);
         $brief['brief_data'] = json_decode($brief['brief_data'], true);
 
+        // Cast: the row comes from $wpdb, which returns every column as a
+        // string, and both helpers declare an int parameter.
+        $brief_id = (int) $brief['id'];
+
         // Retrieve raw response from ai_usage table
-        $brief['brief_data']['raw_response'] = $this->get_raw_response_for_brief($brief['id']);
+        $brief['brief_data']['raw_response'] = $this->get_raw_response_for_brief($brief_id);
 
         // Update model with actual model used (if available in ai_usage table)
-        $actual_model = $this->get_actual_model_for_brief($brief['id']);
+        $actual_model = $this->get_actual_model_for_brief($brief_id);
         if ($actual_model && isset($brief['brief_data']['generation_meta'])) {
             $brief['brief_data']['generation_meta']['model'] = $actual_model;
         }
@@ -1172,7 +1331,8 @@ class Content_Brief_Generator {
 
         // Count sentences (approximate)
         $sentences = preg_split('/[.!?]+/', $text);
-        $sentence_count = count(array_filter($sentences, function($s) { return trim($s) !== ''; }));
+        $sentence_count = count(array_filter($sentences, function($s) { return trim($s) !== '';
+}));
 
         // Count words
         $word_count = str_word_count($text);
@@ -1251,7 +1411,7 @@ class Content_Brief_Generator {
         $syllable_count = 0;
         $previous_was_vowel = false;
 
-        for ($i = 0; $i < strlen($word); $i++) {
+        for ($i = 0, $len = strlen($word); $i < $len; $i++) {
             $is_vowel = strpos($vowels, $word[$i]) !== false;
             if ($is_vowel && !$previous_was_vowel) {
                 $syllable_count++;
@@ -1524,7 +1684,8 @@ class Content_Brief_Generator {
 
         // Readability check
         $sentences = preg_split('/[.!?]+/', $meta_desc);
-        $sentence_count = count(array_filter($sentences, function($s) { return trim($s) !== ''; }));
+        $sentence_count = count(array_filter($sentences, function($s) { return trim($s) !== '';
+}));
         if ($sentence_count >= 1 && $sentence_count <= 3) {
             $score += 20;
             $feedback[] = 'Good sentence structure';
@@ -1619,10 +1780,14 @@ class Content_Brief_Generator {
      * @return string Letter grade
      */
     private function get_grade_from_score(int $score): string {
-        if ($score >= 90) return 'A';
-        if ($score >= 80) return 'B';
-        if ($score >= 70) return 'C';
-        if ($score >= 60) return 'D';
+        if ($score >= 90) { return 'A';
+        }
+        if ($score >= 80) { return 'B';
+        }
+        if ($score >= 70) { return 'C';
+        }
+        if ($score >= 60) { return 'D';
+        }
         return 'F';
     }
 

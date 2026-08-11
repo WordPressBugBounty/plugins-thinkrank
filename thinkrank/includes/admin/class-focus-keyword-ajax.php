@@ -106,6 +106,7 @@ class Focus_Keyword_Ajax {
         // The SEO Overview column edits only the PRIMARY focus keyword. Take the
         // new primary from the input (first value if a list is pasted) and keep
         // the existing secondary keywords so inline editing never drops them.
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- normalize() sanitize_text_field()s every value it keeps.
         $raw_input = isset($_POST['focus_keyword']) ? wp_unslash($_POST['focus_keyword']) : '';
         $new_primary = \ThinkRank\SEO\Focus_Keywords::normalize($raw_input, 1);
 
@@ -185,6 +186,4 @@ class Focus_Keyword_Ajax {
 
 		return ( $updated !== false );
 	}
-
 }
-

@@ -941,4 +941,3 @@ class Global_SEO_Schema_Output {
         echo '<!-- /ThinkRank Global SEO: ' . esc_html($schema_type) . ' Schema -->' . "\n";
     }
 }
-

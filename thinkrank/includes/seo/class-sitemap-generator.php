@@ -721,7 +721,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $unique_images = [];
         $seen_urls = [];
         foreach ($images as $image) {
-            if (!in_array($image['url'], $seen_urls)) {
+            if (!in_array($image['url'], $seen_urls, true)) {
                 $unique_images[] = $image;
                 $seen_urls[] = $image['url'];
             }
@@ -980,10 +980,10 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // Special page types get higher priority
         if ($post_type === 'page') {
             $page_template = get_page_template_slug($post->ID);
-            if (in_array($page_template, ['page-home.php', 'front-page.php']) ||
-                $post->ID == get_option('page_on_front')) {
+            if (in_array($page_template, ['page-home.php', 'front-page.php'], true) ||
+                (int) $post->ID === (int) get_option('page_on_front')) {
                 $base_priority = 1.0; // Homepage gets maximum priority
-            } elseif (in_array($page_template, ['page-contact.php', 'page-about.php'])) {
+            } elseif (in_array($page_template, ['page-contact.php', 'page-about.php'], true)) {
                 $adjustments += 0.05; // Important pages boost
             }
         }
@@ -1007,9 +1007,9 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // Pages typically change less frequently
         if ($post_type === 'page') {
             $page_template = get_page_template_slug($post->ID);
-            if ($post->ID == get_option('page_on_front')) {
+            if ((int) $post->ID === (int) get_option('page_on_front')) {
                 return 'daily'; // Homepage changes frequently
-            } elseif (in_array($page_template, ['page-contact.php', 'page-about.php'])) {
+            } elseif (in_array($page_template, ['page-contact.php', 'page-about.php'], true)) {
                 return 'monthly'; // Static pages change monthly
             }
             return 'yearly'; // Other pages change rarely
@@ -1730,10 +1730,10 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
 
             try {
-                // The single "general"/"wordpress" sitemap is one un-paginated file
+                // The single "general"/"WordPress" sitemap is one un-paginated file
                 // (there is no index to reference extra pages); it no longer drops
                 // overflow URLs.
-                if ($type === 'general' || $type === 'wordpress') {
+                if ($type === 'general' || $type === 'wordpress') { // phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- lowercase on purpose: this is the stored type slug.
                     $xml = $this->generate_sitemap($settings);
                     $this->write_sitemap_page($sitemap_config['url'], $xml, $type, $this->count_urls_in_xml($xml), $results, $index_children);
                     continue;

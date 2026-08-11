@@ -447,17 +447,17 @@ class Schema_Input_Validator {
      */
     private function sanitize_string_value(string $value, string $field_name = ''): string {
         // Handle URLs differently to preserve valid URL structure
-        if (in_array($field_name, ['url', 'sameAs', 'logo', 'image', 'mainEntityOfPage'])) {
+        if (in_array($field_name, ['url', 'sameAs', 'logo', 'image', 'mainEntityOfPage'], true)) {
             return esc_url_raw($value);
         }
 
         // Handle email fields
-        if (in_array($field_name, ['email'])) {
+        if (in_array($field_name, ['email'], true)) {
             return sanitize_email($value);
         }
 
         // Handle description fields that may contain basic HTML
-        if (in_array($field_name, ['description', 'text', 'articleBody'])) {
+        if (in_array($field_name, ['description', 'text', 'articleBody'], true)) {
             // Allow basic HTML but strip dangerous tags
             $allowed_html = [
                 'p' => [],
@@ -537,7 +537,7 @@ class Schema_Input_Validator {
         foreach ($schema_data as $field => $value) {
             if (is_string($value)) {
                 // Validate URLs
-                if (in_array($field, ['url', 'sameAs', 'logo', 'image']) && !empty($value)) {
+                if (in_array($field, ['url', 'sameAs', 'logo', 'image'], true) && !empty($value)) {
                     if (!$this->is_valid_url($value)) {
                         $result['errors'][] = "Invalid URL format for field: {$field}";
                         $result['valid'] = false;
@@ -545,7 +545,7 @@ class Schema_Input_Validator {
                 }
 
                 // Validate email addresses
-                if (in_array($field, ['email']) && !empty($value)) {
+                if (in_array($field, ['email'], true) && !empty($value)) {
                     if (!is_email($value)) {
                         $result['errors'][] = "Invalid email format for field: {$field}";
                         $result['valid'] = false;
@@ -553,7 +553,7 @@ class Schema_Input_Validator {
                 }
 
                 // Validate dates
-                if (in_array($field, ['datePublished', 'dateModified']) && !empty($value)) {
+                if (in_array($field, ['datePublished', 'dateModified'], true) && !empty($value)) {
                     if (!$this->is_valid_date($value)) {
                         $result['warnings'][] = "Invalid date format for field: {$field}. Use ISO 8601 format.";
                     }
@@ -607,7 +607,7 @@ class Schema_Input_Validator {
 
         // Check allowed protocols
         $parsed = wp_parse_url($url);
-        if (!isset($parsed['scheme']) || !in_array($parsed['scheme'], $this->allowed_protocols)) {
+        if (!isset($parsed['scheme']) || !in_array($parsed['scheme'], $this->allowed_protocols, true)) {
             return false;
         }
 
@@ -849,7 +849,7 @@ class Schema_Input_Validator {
         }
 
         // Check if user is the post author
-        if ($post->post_author == $user_id) {
+        if ((int) $post->post_author === (int) $user_id) {
             return true;
         }
 

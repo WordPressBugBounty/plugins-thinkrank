@@ -749,6 +749,7 @@ final class Mcp_OAuth {
 	 * @return string
 	 */
 	private static function s256( string $verifier ): string {
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- base64url of the PKCE challenge, mandated by RFC 7636.
 		return rtrim( strtr( base64_encode( hash( 'sha256', $verifier, true ) ), '+/', '-_' ), '=' );
 	}
 

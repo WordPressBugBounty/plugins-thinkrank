@@ -84,6 +84,8 @@ class Manager {
      * Initialize AI client
      *
      * @return void
+     *
+     * @throws \Exception On failure.
      */
     public function initialize_client(): void {
         $provider = $this->settings->get('ai_provider', 'openai');
@@ -1086,7 +1088,7 @@ class Manager {
         }
 
         // Check cache first
-        $cache_key = 'content_analysis_' . md5($content . serialize($metadata));
+        $cache_key = 'content_analysis_' . md5($content . wp_json_encode($metadata));
         $cached_result = $this->cache->get($cache_key);
         if ($cached_result) {
             return $cached_result['data'] ?? $cached_result;
@@ -1171,7 +1173,7 @@ class Manager {
         }
 
         // Generate cache key using existing pattern
-        $cache_key = 'site_identity_' . md5(serialize($site_data) . serialize($options)) . '_' . $user_id;
+        $cache_key = 'site_identity_' . md5(wp_json_encode($site_data) . wp_json_encode($options)) . '_' . $user_id;
 
         // Check existing cache infrastructure
         // Cache_Manager::set() wraps entries as ['data' => …], so unwrap
@@ -1249,7 +1251,7 @@ class Manager {
         }
 
         // Generate cache key
-        $cache_key = 'llms_txt_' . md5(serialize($website_data) . serialize($options)) . '_' . $user_id;
+        $cache_key = 'llms_txt_' . md5(wp_json_encode($website_data) . wp_json_encode($options)) . '_' . $user_id;
 
         // Check cache first
         // Cache_Manager::set() wraps entries as ['data' => …], so unwrap
@@ -1528,7 +1530,7 @@ class Manager {
         }
 
         // Generate cache key using existing pattern
-        $cache_key = 'homepage_meta_' . md5(serialize($content_data) . serialize($options)) . '_' . $user_id;
+        $cache_key = 'homepage_meta_' . md5(wp_json_encode($content_data) . wp_json_encode($options)) . '_' . $user_id;
 
         // Check existing cache infrastructure
         // Cache_Manager::set() wraps entries as ['data' => …], so unwrap
@@ -1606,7 +1608,7 @@ class Manager {
         }
 
         // Generate cache key using existing pattern
-        $cache_key = 'homepage_hero_' . md5(serialize($hero_data) . serialize($options)) . '_' . $user_id;
+        $cache_key = 'homepage_hero_' . md5(wp_json_encode($hero_data) . wp_json_encode($options)) . '_' . $user_id;
 
         // Check existing cache infrastructure
         // Cache_Manager::set() wraps entries as ['data' => …], so unwrap

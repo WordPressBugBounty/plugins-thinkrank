@@ -663,7 +663,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
      * @return int
      */
     private function count_images_with_alt(): int {
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- indexed COUNT via postmeta meta_key index; short-lived admin action
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- indexed COUNT via postmeta meta_key index; short-lived admin action
         return (int) $this->wpdb->get_var(
             "SELECT COUNT(DISTINCT p.ID) FROM {$this->wpdb->posts} p
              INNER JOIN {$this->wpdb->postmeta} pm
@@ -672,6 +672,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
                AND pm.meta_value != ''
              WHERE p.post_type = 'attachment' AND p.post_mime_type LIKE 'image/%'"
         );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 
     /**

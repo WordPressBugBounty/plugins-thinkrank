@@ -333,8 +333,8 @@ class SEO_Opportunity_Detector {
         $ctr_score = min(100, $ctr_potential * 10); // Max score at 10% CTR potential
 
         return ($impression_score * $impression_weight) +
-               ($position_score * $position_weight) +
-               ($ctr_score * $ctr_weight);
+                ($position_score * $position_weight) +
+                ($ctr_score * $ctr_weight);
     }
 
     /**

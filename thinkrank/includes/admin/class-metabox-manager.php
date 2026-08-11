@@ -781,13 +781,13 @@ class Metabox_Manager {
      */
     public function enqueue_metabox_scripts(string $hook): void {
         // Only load on post edit screens (including block editor)
-        if (!in_array($hook, ['post.php', 'post-new.php'])) {
+        if (!in_array($hook, ['post.php', 'post-new.php'], true)) {
             return;
         }
 
         // Get current post type - handle both classic and block editor contexts
         $current_post_type = $this->get_current_post_type();
-        if (!$current_post_type || !in_array($current_post_type, $this->get_supported_post_types())) {
+        if (!$current_post_type || !in_array($current_post_type, $this->get_supported_post_types(), true)) {
             return;
         }
 
@@ -1020,7 +1020,7 @@ JS;
         // Add other common e-commerce post types
         $ecommerce_types = ['product', 'shop_order', 'shop_coupon'];
         foreach ($ecommerce_types as $type) {
-            if (post_type_exists($type) && !in_array($type, $default_types)) {
+            if (post_type_exists($type) && !in_array($type, $default_types, true)) {
                 $default_types[] = $type;
             }
         }
@@ -1051,7 +1051,7 @@ JS;
                 'acf-field-group',
             ];
 
-            if (!in_array($post_type, $excluded_types) && !in_array($post_type, $default_types)) {
+            if (!in_array($post_type, $excluded_types, true) && !in_array($post_type, $default_types, true)) {
                 $default_types[] = $post_type;
             }
         }

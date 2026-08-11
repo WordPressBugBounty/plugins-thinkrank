@@ -112,7 +112,11 @@ class Brand_Visibility_Runner {
     public function init(): void {
         add_action(self::TICK_HOOK, [$this, 'tick']);
         add_action(self::WATCHDOG_HOOK, [$this, 'watchdog']);
-        add_filter('cron_schedules', [self::class, 'add_cron_interval']); // phpcs:ignore WordPress.WP.CronInterval.ChangeDetected
+        // A 5-minute interval is below the sniff's recommended floor on purpose:
+        // this is the watchdog that recovers a run whose tick was killed, and it
+        // unschedules itself as soon as nothing is outstanding.
+        // phpcs:ignore WordPress.WP.CronInterval.ChangeDetected, WordPress.WP.CronInterval.CronSchedulesInterval
+        add_filter('cron_schedules', [self::class, 'add_cron_interval']);
     }
 
     /**
@@ -383,11 +387,12 @@ class Brand_Visibility_Runner {
         $cutoff = $this->local_time_ago(self::STUCK_AFTER_MINUTES * MINUTE_IN_SECONDS);
         $table  = self::tasks_table();
 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- maintenance sweep on our own table.
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- maintenance sweep on our own table.
         $wpdb->query($wpdb->prepare(
             "UPDATE `{$table}` SET status = 'pending' WHERE status = 'running' AND updated_at < %s",
             $cutoff
         ));
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 
     /**
@@ -410,12 +415,13 @@ class Brand_Visibility_Runner {
 
         // Conditional UPDATE is the claim: if another tick got there first the
         // affected-row count is 0 and we simply skip this one.
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- claim on our own table.
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- claim on our own table.
         $claimed = $wpdb->query($wpdb->prepare(
             "UPDATE `{$table}` SET status = 'running', attempts = attempts + 1, updated_at = %s WHERE id = %d AND status = 'pending'",
             current_time('mysql'),
             (int) $task['id']
         ));
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         return $claimed ? $task : null;
     }
@@ -425,6 +431,8 @@ class Brand_Visibility_Runner {
      *
      * @param array $task Task row.
      * @return void
+     *
+     * @throws \Exception On failure.
      */
     private function process_task(array $task): void {
         global $wpdb;
@@ -591,7 +599,7 @@ class Brand_Visibility_Runner {
         $runs  = self::runs_table();
         $tasks = self::tasks_table();
 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- read on our own tables.
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- read on our own tables.
         $ids = $wpdb->get_col(
             "SELECT r.id FROM `{$runs}` r
              WHERE r.status = 'running'
@@ -600,6 +608,7 @@ class Brand_Visibility_Runner {
                    WHERE t.run_id = r.id AND t.status IN ('pending', 'running')
                )"
         );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         foreach ((array) $ids as $id) {
             $this->finalize((int) $id);
@@ -682,9 +691,11 @@ class Brand_Visibility_Runner {
 
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- read on our own table.
         return (array) $wpdb->get_results(
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $wpdb->prepare("SELECT * FROM `{$table}` WHERE run_id = %d ORDER BY id ASC", $run_id),
             ARRAY_A
         );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 
     /**
@@ -701,9 +712,11 @@ class Brand_Visibility_Runner {
 
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- read on our own table.
         $rows = (array) $wpdb->get_results(
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $wpdb->prepare("SELECT id, status, started_at, finished_at, tasks_total, tasks_done, tasks_failed, results FROM `{$table}` ORDER BY id DESC LIMIT %d", $limit),
             ARRAY_A
         );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         return array_map(static function (array $row): array {
             $row['results'] = json_decode((string) $row['results'], true) ?: [];
@@ -787,10 +800,11 @@ class Brand_Visibility_Runner {
 
         $table = self::runs_table();
 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- counter bump on our own table; column whitelisted above.
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- counter bump on our own table; column whitelisted above.
         $wpdb->query($wpdb->prepare(
             "UPDATE `{$table}` SET {$column} = {$column} + 1 WHERE id = %d",
             $run_id
         ));
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 }

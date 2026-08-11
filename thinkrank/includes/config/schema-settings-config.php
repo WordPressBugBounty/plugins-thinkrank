@@ -104,7 +104,7 @@ class Schema_Settings_Config {
             'person_birth_date' => '',
             'person_nationality' => '',
             'person_works_for' => '',
-            'person_same_as' => array(),
+            'person_same_as' => [],
 
             // Removed FAQPage schema settings (now handled at post/page level)
         ];

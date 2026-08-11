@@ -469,6 +469,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         if (file_exists($robots_file) && is_readable($robots_file)) {
             // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a public web-root file; WP_Filesystem is not available on front-end requests.
             return [
+                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file the plugin just located; WP_Filesystem would need credentials on some hosts.
                 'content' => (string) file_get_contents($robots_file),
                 'is_default' => false,
                 'source' => 'file',
@@ -535,6 +536,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         // are silently dropped. ThinkRank's own filter_robots_txt callback just
         // re-returns this same content (it calls render_robots_txt(), which does
         // not re-apply the filter), so there is no recursion or double-append.
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPML/core hook, not ours to name.
         $content = (string) apply_filters('robots_txt', $content, (bool) get_option('blog_public'));
         if ($content === '') {
             return false;
@@ -3236,6 +3238,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
 
         $robots_file = ABSPATH . 'robots.txt';
         if (file_exists($robots_file)) {
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPress.PHP.NoSilencedErrors.Discouraged -- an unreadable robots.txt is an expected state answered with an empty string.
             $raw = (string) @file_get_contents($robots_file);
             if ($raw !== '') {
                 return $this->strip_robots_header($raw);
@@ -3358,7 +3361,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
                 if (isset($config['recommended_size'])) {
                     [$rec_width, $rec_height] = explode('x', $config['recommended_size']);
 
-                    if ($image_meta['width'] != $rec_width || $image_meta['height'] != $rec_height) {
+                    if ((int) $image_meta['width'] !== (int) $rec_width || (int) $image_meta['height'] !== (int) $rec_height) {
                         $optimization['suggestions'][] = "Consider using {$config['recommended_size']} size for optimal {$element}";
                     }
                 }

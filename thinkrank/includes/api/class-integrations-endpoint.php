@@ -103,7 +103,7 @@ class Integrations_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'POST',
                     'callback' => [$this, 'update_settings'],
-                    'permission_callback' => [$this, 'check_manage_permissions'],
+                    'permission_callback' => [$this, 'check_credential_permissions'],
                     'args' => $this->get_settings_args()
                 ]
             ]
@@ -117,7 +117,7 @@ class Integrations_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'POST',
                     'callback' => [$this, 'test_connections'],
-                    'permission_callback' => [$this, 'check_manage_permissions']
+                    'permission_callback' => [$this, 'check_credential_permissions']
                 ]
             ]
         );
@@ -193,7 +193,7 @@ class Integrations_Endpoint extends WP_REST_Controller {
         register_rest_route($this->namespace, '/integrations/google/disconnect', [
             'methods' => WP_REST_Server::CREATABLE,
             'callback' => [$this, 'disconnect_google_account'],
-            'permission_callback' => [$this, 'check_manage_permissions'] // Changed to check_manage_permissions for consistency
+            'permission_callback' => [$this, 'check_credential_permissions']
         ]);
 
         // Note: there is no save-google-token route. Tokens are swapped
@@ -892,6 +892,22 @@ class Integrations_Endpoint extends WP_REST_Controller {
     }
 
     /**
+     * Check permissions for credential-managing operations.
+     *
+     * Writing provider API keys, disconnecting Google (a server-side token
+     * revoke) and running live connection tests manage the site's third-party
+     * credentials, so they require an administrator — `thinkrank_settings` is
+     * delegatable to non-admin roles through the Role Manager. Mirrors the
+     * pattern used by the brand-visibility and AI-insights key writes.
+     *
+     * @since 1.29.0
+     * @return bool Permission status
+     */
+    public function check_credential_permissions(): bool {
+        return current_user_can('manage_options');
+    }
+
+    /**
      * Verify GA4 tracking
      * Following ThinkRank API response patterns
      *
@@ -1002,6 +1018,8 @@ class Integrations_Endpoint extends WP_REST_Controller {
      * @since 1.0.0
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response Response object
+     *
+     * @throws \Exception On failure.
      */
     public function get_search_console_sites(WP_REST_Request $request): WP_REST_Response {
         try {

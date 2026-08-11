@@ -117,7 +117,9 @@ class Post_List_Filters {
         // every matching ID into memory on each post-list render.
         $args = [
             'post_type' => $typenow,
+            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- admin-only post list filter, opt-in per request.
             'meta_key' => '_thinkrank_pillar_content',
+            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- admin-only post list filter, opt-in per request.
             'meta_value' => '1',
             'post_status' => 'any',
             'posts_per_page' => 1,

@@ -195,9 +195,9 @@ class Connection_Status {
 	 * @return array<string, mixed>
 	 */
 	public static function analyze_schemes( string $home_url, string $site_url, string $rest_url ): array {
-		$home = strtolower( (string) parse_url( $home_url, PHP_URL_SCHEME ) );
-		$site = strtolower( (string) parse_url( $site_url, PHP_URL_SCHEME ) );
-		$rest = strtolower( (string) parse_url( $rest_url, PHP_URL_SCHEME ) );
+		$home = strtolower( (string) wp_parse_url( $home_url, PHP_URL_SCHEME ) );
+		$site = strtolower( (string) wp_parse_url( $site_url, PHP_URL_SCHEME ) );
+		$rest = strtolower( (string) wp_parse_url( $rest_url, PHP_URL_SCHEME ) );
 
 		return [
 			'home'               => $home_url,

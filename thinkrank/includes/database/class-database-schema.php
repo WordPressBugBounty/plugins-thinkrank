@@ -399,11 +399,15 @@ class Database_Schema {
 
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- schema probe; result cached below.
         $existing = (array) $this->wpdb->get_col(
+            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $this->wpdb->prepare(
                 'SHOW TABLES LIKE %s',
+                // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
                 $this->wpdb->esc_like($this->wpdb->prefix . 'thinkrank_') . '%'
             )
         );
+            // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
+                // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
 
         $missing = array_values(array_diff($expected, $existing));
 
@@ -542,6 +546,8 @@ class Database_Schema {
      *
      * @param string $table_name Table name
      * @return string SQL for table creation
+     *
+     * @throws \InvalidArgumentException On failure.
      */
     private function get_table_sql(string $table_name): string {
         $full_table_name = $this->get_table_name($table_name);

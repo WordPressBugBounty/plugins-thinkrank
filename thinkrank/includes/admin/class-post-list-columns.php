@@ -783,5 +783,4 @@ class Post_List_Columns {
             ]
         );
     }
-
 }
