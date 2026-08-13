@@ -68,6 +68,55 @@ class SEO_Analyzer_Endpoint {
             'callback'            => [$this, 'run_analysis'],
             'permission_callback' => [$this, 'check_permissions'],
         ]);
+
+        register_rest_route(self::NAMESPACE, '/seo-analyzer/fix', [
+            'methods'             => 'POST',
+            'callback'            => [$this, 'apply_fix'],
+            'permission_callback' => [$this, 'check_permissions'],
+            'args'                => [
+                'check_id' => [
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_key',
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Apply a one-click fix, then re-run the analysis so the caller gets the
+     * updated score in the same round trip.
+     *
+     * Re-running is the point: a fix the user cannot see land is
+     * indistinguishable from one that silently failed.
+     *
+     * @since 1.28.0
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return WP_REST_Response
+     */
+    public function apply_fix(WP_REST_Request $request): WP_REST_Response {
+        $check_id = (string) $request->get_param('check_id');
+
+        try {
+            $outcome = (new \ThinkRank\SEO\SEO_Analyzer_Fixer())->fix($check_id);
+        } catch (\Throwable $e) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => $outcome['message'],
+            'data'    => [
+                'check_id' => $check_id,
+                'fixed'    => (bool) $outcome['fixed'],
+                'result'   => $outcome['data'],
+                'analysis' => $this->analyzer->run(true),
+            ],
+        ], 200);
     }
 
     /**

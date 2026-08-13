@@ -67,7 +67,7 @@ final class Top_Posts_Renderer {
     /**
      * Render a keyword table (query, position, clicks, click change).
      *
-     * @param array  $rows    Each row: ['query' => string, 'position' => float, 'clicks' => int, 'change' => ?int]
+     * @param array  $rows    Each row: ['query' => string, 'position' => ?float, 'clicks' => int, 'change' => ?int]
      * @param string $variant 'gain' | 'loss'
      */
     public static function render_keywords(array $rows, string $variant = 'gain'): string {
@@ -87,14 +87,18 @@ final class Top_Posts_Renderer {
 
         foreach ($rows as $row) {
             $query = (string) ($row['query'] ?? ($row['keys'][0] ?? ''));
-            $position = (float) ($row['position'] ?? 0);
+            // Null position means "no data this period" (e.g. a keyword that
+            // dropped out entirely) — a literal 0.0 would read as rank #1.
+            $position = isset($row['position'])
+                ? number_format_i18n((float) $row['position'], 1)
+                : '—';
             $clicks = (int) ($row['clicks'] ?? 0);
             if ($query === '') {
                 continue;
             }
             $html .= '<tr>'
                 . '<td style="padding:10px;border-bottom:1px solid #f3f4f6;color:#111827;">' . esc_html($query) . '</td>'
-                . '<td style="padding:10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#374151;font:600 13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;">' . esc_html(number_format_i18n($position, 1)) . '</td>'
+                . '<td style="padding:10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#374151;font:600 13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;">' . esc_html($position) . '</td>'
                 . '<td style="padding:10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#374151;">' . esc_html(number_format_i18n($clicks)) . '</td>'
                 . self::change_cell($row['change'] ?? null, $accent)
                 . '</tr>';

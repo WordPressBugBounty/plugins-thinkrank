@@ -5,11 +5,14 @@
  * Admin REST surface for the AI Insights screen (#248 P1 trio):
  *
  *   GET  /ai-insights/traffic        — AI referral/crawler dashboard summary
- *   GET  /ai-insights/brand          — saved queries + check history
- *   POST /ai-insights/brand          — save the query list
- *   POST /ai-insights/brand/run      — run checks now (paid AI calls, capped)
  *   GET  /ai-insights/auto-ai        — auto-optimization settings + last run
  *   POST /ai-insights/auto-ai        — save auto-optimization settings
+ *
+ * Brand visibility used to live here too (`/ai-insights/brand*`). Those routes
+ * were removed in 1.30.0: the v2 rebuild moved the feature to
+ * `/thinkrank/v1/brand-visibility/*` with a queued runner, and the v1 routes
+ * outlived their only UI consumer while still being able to start a
+ * synchronous batch of paid AI probes in a single request (#301).
  *
  * @package ThinkRank
  * @subpackage API
@@ -20,7 +23,6 @@ declare(strict_types=1);
 
 namespace ThinkRank\API;
 
-use ThinkRank\AI\Brand_Visibility_Checker;
 use ThinkRank\Core\Settings;
 use ThinkRank\SEO\Ai_Traffic_Tracker;
 use ThinkRank\SEO\Auto_Ai_Optimizer;
@@ -34,7 +36,7 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * REST controller for AI traffic, brand visibility, and auto AI settings.
+ * REST controller for AI traffic and auto AI settings.
  */
 class Ai_Insights_Endpoint extends WP_REST_Controller {
 
@@ -69,57 +71,6 @@ class Ai_Insights_Endpoint extends WP_REST_Controller {
                     'default'  => 30,
                     'minimum'  => 1,
                     'maximum'  => 180,
-                ],
-            ],
-        ]);
-
-        register_rest_route($this->namespace, '/' . $this->rest_base . '/brand', [
-            [
-                'methods'             => 'GET',
-                'callback'            => [$this, 'get_brand'],
-                'permission_callback' => [$this, 'check_admin_permissions'],
-            ],
-            [
-                'methods'             => 'POST',
-                'callback'            => [$this, 'save_brand_queries'],
-                'permission_callback' => [$this, 'check_admin_permissions'],
-                'args'                => [
-                    'queries' => [
-                        'required'          => true,
-                        'type'              => 'array',
-                        'items'             => ['type' => 'string'],
-                        'sanitize_callback' => static function ($value) {
-                            if (!is_array($value)) {
-                                return [];
-                            }
-                            $clean = array_values(array_filter(array_map(
-                                static fn($q) => sanitize_text_field((string) $q),
-                                $value
-                            )));
-                            // Clamp to the plan's cap, not the hard ceiling, so
-                            // free can't persist queries it may not run.
-                            return array_slice($clean, 0, Brand_Visibility_Checker::query_limit());
-                        },
-                    ],
-                ],
-            ],
-        ]);
-
-        register_rest_route($this->namespace, '/' . $this->rest_base . '/brand/run', [
-            'methods'             => 'POST',
-            'callback'            => [$this, 'run_brand_checks'],
-            'permission_callback' => [$this, 'check_admin_permissions'],
-        ]);
-
-        register_rest_route($this->namespace, '/' . $this->rest_base . '/brand/history/(?P<id>\d+)', [
-            'methods'             => 'DELETE',
-            'callback'            => [$this, 'delete_brand_history'],
-            'permission_callback' => [$this, 'check_admin_permissions'],
-            'args'                => [
-                'id' => [
-                    'required' => true,
-                    'type'     => 'integer',
-                    'minimum'  => 1,
                 ],
             ],
         ]);
@@ -181,91 +132,6 @@ class Ai_Insights_Endpoint extends WP_REST_Controller {
             'success' => true,
             'data'    => $tracker->summary((int) $request->get_param('days')),
         ], 200);
-    }
-
-    /**
-     * Saved brand queries + history.
-     *
-     * @return WP_REST_Response
-     */
-    public function get_brand(): WP_REST_Response {
-        $checker = new Brand_Visibility_Checker();
-
-        return new WP_REST_Response([
-            'success' => true,
-            'data'    => [
-                'queries'     => $checker->queries(),
-                'history'     => $checker->history(),
-                // The plan's cap, not the hard ceiling — the UI renders the
-                // limit the user can actually use.
-                'max_queries' => Brand_Visibility_Checker::query_limit(),
-                'plan'        => \ThinkRank\Core\Plan_Config::ai_visibility(),
-                'is_pro'      => \ThinkRank\Core\Plan_Config::is_pro(),
-                'brand'       => (string) get_bloginfo('name'),
-                'host'        => (string) wp_parse_url(home_url(), PHP_URL_HOST),
-            ],
-        ], 200);
-    }
-
-    /**
-     * Save the brand query list.
-     *
-     * @param WP_REST_Request $request Request.
-     * @return WP_REST_Response
-     */
-    public function save_brand_queries(WP_REST_Request $request): WP_REST_Response {
-        $queries = (array) $request->get_param('queries');
-        Settings::instance()->set('brand_visibility_queries', $queries);
-
-        return new WP_REST_Response([
-            'success' => true,
-            'data'    => ['queries' => $queries],
-        ], 200);
-    }
-
-    /**
-     * Run brand checks now.
-     *
-     * @return WP_REST_Response
-     */
-    public function run_brand_checks(): WP_REST_Response {
-        try {
-            $checker = new Brand_Visibility_Checker();
-            $results = $checker->run();
-        } catch (\Exception $e) {
-            return new WP_REST_Response([
-                'success' => false,
-                'message' => $e->getMessage(),
-            ], 400);
-        }
-
-        return new WP_REST_Response([
-            'success' => true,
-            'data'    => [
-                'results' => $results,
-                'history' => (new Brand_Visibility_Checker())->history(),
-            ],
-        ], 200);
-    }
-
-    /**
-     * Delete a single brand check-history row.
-     *
-     * @param WP_REST_Request $request Request.
-     * @return WP_REST_Response
-     */
-    public function delete_brand_history(WP_REST_Request $request): WP_REST_Response {
-        $id      = (int) $request->get_param('id');
-        $checker = new Brand_Visibility_Checker();
-        $deleted = $checker->delete_history($id);
-
-        return new WP_REST_Response([
-            'success' => $deleted,
-            'data'    => [
-                'id'      => $id,
-                'history' => $checker->history(),
-            ],
-        ], $deleted ? 200 : 404);
     }
 
     /**

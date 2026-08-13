@@ -736,10 +736,25 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             }
 
             if (!$update_success) {
+                // Name the settings that did not persist. The write is not
+                // transactional, so "failed" can mean some keys saved and others
+                // did not — without the list the UI can only show a generic
+                // error and the user has no idea what to re-enter (#300).
+                $failed_keys = $this->settings_manager->get_last_failed_keys();
+
                 return new WP_Error(
                     'update_failed',
-                    "Failed to update settings for category: {$category}",
-                    ['status' => 500]
+                    empty($failed_keys)
+                        ? "Failed to update settings for category: {$category}"
+                        : sprintf(
+                            'Failed to save %s in category %s. Other settings in this request were saved.',
+                            implode(', ', $failed_keys),
+                            $category
+                        ),
+                    [
+                        'status' => 500,
+                        'failed_keys' => $failed_keys,
+                    ]
                 );
             }
 

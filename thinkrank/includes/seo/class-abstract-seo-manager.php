@@ -189,20 +189,29 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
         $context_type = sanitize_key($context_type);
 
         if (!in_array($context_type, $this->get_supported_contexts(), true)) {
-            // Unsupported context type - validation failed
+            $this->log_save_failure("unsupported context type '{$context_type}'");
             return false;
         }
 
-        // Check if settings table exists
+        // Check if settings table exists. This is the failure a user cannot
+        // diagnose from the UI: on hosts where CREATE TABLE failed (e.g. the
+        // 767-byte InnoDB index limit on MySQL 5.6-era servers), every save in
+        // every manager fails with a generic message while option-backed
+        // features keep working — so name the cause loudly.
         if (!$this->ensure_settings_table_exists()) {
-            // Settings table creation failed
+            $this->log_save_failure(
+                "settings table '{$this->settings_table}' does not exist. " .
+                'ThinkRank re-attempts creation on every load, so no reactivation is needed — and on the server most likely to be causing this, ' .
+                'reactivation fails outright and leaves the plugin deactivated. If the table never appears, the database is rejecting the CREATE TABLE: ' .
+                'ask your host for the MySQL/MariaDB version, as 5.6-era servers cap an index at 767 bytes and reject wider schemas.'
+            );
             return false;
         }
 
         // Validate settings before saving
         $validation = $this->validate_settings($settings);
         if (!$validation['valid']) {
-            // Settings validation failed - error details available in validation response
+            $this->log_save_failure('validation failed: ' . wp_json_encode($validation['errors'] ?? []));
             return false;
         }
 
@@ -244,7 +253,10 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
             $result = $this->wpdb->query($sql);
 
             if (false === $result) {
-                // Database operation failed - error details available in wpdb->last_error
+                $this->log_save_failure(
+                    "insert failed for key '{$sanitized_key}'" .
+                    ('' !== (string) $this->wpdb->last_error ? ' — ' . $this->wpdb->last_error : '')
+                );
                 $success = false;
             }
         }
@@ -511,6 +523,24 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
      *
      * @return bool True if table exists or was created successfully
      */
+    /**
+     * Record why a save failed, so "Failed to update … settings" in the UI has
+     * a matching, actionable line in the PHP error log.
+     *
+     * A customer cannot act on the generic message, and neither can support
+     * without this — the missing-table case (wizard blocked after migration,
+     * every settings screen failing) looked identical to a validation problem.
+     *
+     * @since 1.28.0
+     *
+     * @param string $reason Why the save failed.
+     * @return void
+     */
+    protected function log_save_failure(string $reason): void {
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- deliberate diagnostic; the UI only shows a generic failure message.
+        error_log(sprintf('ThinkRank [%s]: settings save failed — %s', $this->manager_type, $reason));
+    }
+
     protected function ensure_settings_table_exists(): bool {
         // Check if table exists
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Table existence check requires direct database access

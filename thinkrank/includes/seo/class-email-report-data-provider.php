@@ -49,9 +49,18 @@ final class Email_Report_Data_Provider {
      */
     public function fetch(int $frequency_days): array {
         $frequency_days = max(1, $frequency_days);
-        $today = current_time('Y-m-d');
-        $period_end = $today;
-        $period_start = wp_date('Y-m-d', strtotime("-{$frequency_days} days", strtotime($today)));
+
+        // One canonical window for the whole report. Search Console lags
+        // ~2 days, so it ends on the last date that actually has data —
+        // the same anchor Analytics_Manager::get_dashboard_data() uses for
+        // Key Metrics and Position Summary. Previously the header label ran
+        // through today and the comparison through yesterday, so a reader
+        // was handed three windows and told they were one.
+        $period_end = gmdate('Y-m-d', strtotime('-2 days'));
+        $period_start = gmdate(
+            'Y-m-d',
+            strtotime('-' . ($frequency_days - 1) . ' days', strtotime($period_end))
+        );
         $period_label = $this->format_period_label($period_start, $period_end);
 
         $manager = $this->get_analytics_manager();
@@ -75,7 +84,7 @@ final class Email_Report_Data_Provider {
             // metrics for the current window AND the immediately preceding
             // window of equal length straight from Search Console, then key
             // them so winning/losing sections can compute true deltas.
-            $comparison = $this->build_comparison($manager, $frequency_days);
+            $comparison = $this->build_comparison($manager, $frequency_days, $period_start, $period_end);
 
             return [
                 'available' => true,
@@ -104,15 +113,20 @@ final class Email_Report_Data_Provider {
      * Uses the Search Console client's arbitrary date-range API
      * (`get_search_performance_by_dates`) — the same one the Rank Tracker
      * and the Pro winning/losing endpoint use — to fetch query- and
-     * page-level rows for two equal, adjacent windows. GSC lags ~2 days, so
-     * the current window ends yesterday and the previous window is the N
-     * days before it.
+     * page-level rows for two equal, adjacent windows.
+     *
+     * The current window is handed in by fetch() rather than recomputed
+     * here, so the deltas describe exactly the period the report's header
+     * advertises. The previous window is the same length, immediately
+     * before it, with no gap or overlap.
      *
      * @param object $manager        Analytics_Manager instance.
      * @param int    $frequency_days Window length in days.
+     * @param string $cur_start      Current window start (Y-m-d).
+     * @param string $cur_end        Current window end (Y-m-d).
      * @return array{available:bool,queries:array,pages:array}
      */
-    private function build_comparison($manager, int $frequency_days): array {
+    private function build_comparison($manager, int $frequency_days, string $cur_start, string $cur_end): array {
         $empty = ['available' => false, 'queries' => [], 'pages' => []];
 
         if (!method_exists($manager, 'get_search_console_client')) {
@@ -127,10 +141,10 @@ final class Email_Report_Data_Provider {
             return $empty;
         }
 
-        $cur_end    = gmdate('Y-m-d', strtotime('-1 day'));
-        $cur_start  = gmdate('Y-m-d', strtotime('-' . $frequency_days . ' days'));
-        $prev_end   = gmdate('Y-m-d', strtotime('-' . ($frequency_days + 1) . ' days'));
-        $prev_start = gmdate('Y-m-d', strtotime('-' . ($frequency_days * 2) . ' days'));
+        // Previous window: the same number of days, ending the day before
+        // the current window opens.
+        $prev_end   = gmdate('Y-m-d', strtotime('-1 day', strtotime($cur_start)));
+        $prev_start = gmdate('Y-m-d', strtotime('-' . ($frequency_days - 1) . ' days', strtotime($prev_end)));
 
         $cur_q  = $sc->get_search_performance_by_dates($site_url, $cur_start, $cur_end, 1000, ['query']);
         $prev_q = $sc->get_search_performance_by_dates($site_url, $prev_start, $prev_end, 1000, ['query']);
@@ -147,6 +161,12 @@ final class Email_Report_Data_Provider {
     /**
      * Merge current + previous GSC rows into one keyed map carrying both
      * periods' clicks and (for queries) average position.
+     *
+     * The key set is the union of both windows. Search Console omits rows
+     * with no activity in a window, so a page or query that dropped to zero
+     * clicks has no current row at all — keying off `$current` alone would
+     * silently discard exactly the biggest losers the losing sections exist
+     * to surface.
      *
      * @param array $current  Current-window rows.
      * @param array $previous Previous-window rows.
@@ -186,6 +206,32 @@ final class Email_Report_Data_Provider {
             $merged[$key] = $entry;
         }
 
+        // Total drop-outs: present last period, absent now. Synthesize them
+        // from the previous window with the current metrics zeroed. Position
+        // stays null rather than 0 — "no data" is not "ranked first".
+        foreach ($prev_map as $key => $prev_row) {
+            if (isset($merged[$key])) {
+                continue;
+            }
+            $raw = (string) ($prev_row['keys'][0] ?? '');
+            if ($raw === '') {
+                continue;
+            }
+
+            $entry = [
+                'cur_clicks'  => 0,
+                'prev_clicks' => (int) ($prev_row['clicks'] ?? 0),
+            ];
+            if ($is_query) {
+                $entry['query']    = $raw;
+                $entry['cur_pos']  = null;
+                $entry['prev_pos'] = round((float) ($prev_row['position'] ?? 0), 1);
+            } else {
+                $entry['url'] = $raw;
+            }
+            $merged[$key] = $entry;
+        }
+
         return $merged;
     }
 
@@ -207,8 +253,19 @@ final class Email_Report_Data_Provider {
 
     private function format_period_label(string $start, string $end): string {
         $fmt = (string) get_option('date_format', 'M j, Y');
-        $a = wp_date($fmt, strtotime($start) ?: time());
-        $b = wp_date($fmt, strtotime($end) ?: time());
-        return sprintf('%s – %s', $a, $b);
+        return sprintf('%s – %s', $this->format_day($start, $fmt), $this->format_day($end, $fmt));
+    }
+
+    /**
+     * Render a bare Y-m-d as a localized date.
+     *
+     * Anchored at midday UTC on purpose: wp_date() shifts the timestamp into
+     * the site timezone, and a date parsed at midnight would render as the
+     * day before on any negative offset. Midday leaves the calendar date
+     * intact across every real-world offset.
+     */
+    private function format_day(string $date, string $format): string {
+        $ts = strtotime($date . ' 12:00:00 UTC');
+        return wp_date($format, $ts ?: time());
     }
 }

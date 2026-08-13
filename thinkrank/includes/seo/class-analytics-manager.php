@@ -132,9 +132,14 @@ class Analytics_Manager {
      * @return array Modified cron schedules
      */
     public function add_cron_intervals(array $schedules): array {
+        // Only translate once `init` has run: wp_get_schedules() can be reached
+        // before then (wp_schedule_event() at plugin boot does), and translating
+        // that early trips the _load_textdomain_just_in_time notice on WP 6.7+.
         $schedules['thinkrank_45min'] = [
             'interval' => 2700, // 45 minutes in seconds
-            'display'  => __('Every 45 Minutes', 'thinkrank')
+            'display'  => did_action('init')
+                ? __('Every 45 Minutes', 'thinkrank')
+                : 'Every 45 Minutes'
         ];
         return $schedules;
     }

@@ -219,15 +219,26 @@ class SEO_Analyzer {
                 continue;
             }
 
+            $id     = (string) ($def['id'] ?? '');
+            $status = (string) $outcome['status'];
+
+            // Only offer a fix on a finding that still needs one — a passing
+            // check with a Fix button reads as "did this even work?".
+            $fixable = self::PASSED !== $status && SEO_Analyzer_Fixer::can_fix($id);
+            $fix     = $fixable ? (SEO_Analyzer_Fixer::fixable()[$id] ?? []) : [];
+
             $results[] = [
-                'id'         => (string) ($def['id'] ?? ''),
-                'category'   => (string) ($def['category'] ?? 'basic'),
-                'weight'     => isset($def['weight']) ? (float) $def['weight'] : 1.0,
-                'label'      => (string) ($outcome['label'] ?? $def['label'] ?? ''),
-                'status'     => (string) $outcome['status'],
-                'message'    => (string) ($outcome['message'] ?? ''),
-                'how_to_fix' => (string) ($outcome['how_to_fix'] ?? ''),
-                'value'      => $outcome['value'] ?? null,
+                'id'           => $id,
+                'category'     => (string) ($def['category'] ?? 'basic'),
+                'weight'       => isset($def['weight']) ? (float) $def['weight'] : 1.0,
+                'label'        => (string) ($outcome['label'] ?? $def['label'] ?? ''),
+                'status'       => $status,
+                'message'      => (string) ($outcome['message'] ?? ''),
+                'how_to_fix'   => (string) ($outcome['how_to_fix'] ?? ''),
+                'value'        => $outcome['value'] ?? null,
+                'can_auto_fix' => $fixable,
+                'fix_label'    => (string) ($fix['label'] ?? ''),
+                'fix_warning'  => (string) ($fix['warning'] ?? ''),
             ];
         }
 
@@ -400,7 +411,10 @@ class SEO_Analyzer {
         $enabled = true;
         try {
             $generator = new Sitemap_Generator();
-            $data      = $generator->get_output_data('global', null);
+            // 'site' is the stored context; 'global' is unsupported and
+            // returns DEFAULTS (enabled=true), which made this check unable
+            // to fail no matter what the user configured.
+            $data      = $generator->get_output_data('site', null);
             $enabled   = !empty($data['enabled']);
         } catch (\Throwable $e) {
             // Fall back to "enabled" — the default state — on any lookup error.
@@ -593,7 +607,9 @@ class SEO_Analyzer {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- two indexed COUNTs; results are cached at the analysis level
         $total = (int) $wpdb->get_var(
             "SELECT COUNT(*) FROM {$wpdb->posts}
-             WHERE post_type = 'attachment' AND post_mime_type LIKE 'image/%'"
+             WHERE post_type = 'attachment'
+               AND post_mime_type LIKE 'image/%'
+               AND post_status != 'trash'"
         );
 
         if (0 === $total) {
@@ -611,7 +627,9 @@ class SEO_Analyzer {
                 ON pm.post_id = p.ID
                AND pm.meta_key = '_wp_attachment_image_alt'
                AND pm.meta_value != ''
-             WHERE p.post_type = 'attachment' AND p.post_mime_type LIKE 'image/%'"
+             WHERE p.post_type = 'attachment'
+               AND p.post_mime_type LIKE 'image/%'
+               AND p.post_status != 'trash'"
         );
 
         $coverage = (int) round(($with_alt / $total) * 100);

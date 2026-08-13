@@ -2,10 +2,11 @@
 /**
  * Top Losing Keywords Section
  *
- * Keywords with the worst average position among those getting any
- * impressions. Without prior-period data this surfaces the keywords most
- * in need of attention; once Data_Provider returns a prior period it
- * naturally migrates to position deltas.
+ * Queries with the largest click loss vs the previous period, computed from
+ * the shared current-vs-previous comparison the Data Provider builds from
+ * Search Console (query dimension). Ranking is on the click delta, not on
+ * average position — position is carried alongside as context only, and is
+ * null for a query that dropped out of the current window entirely.
  *
  * @package ThinkRank
  * @subpackage SEO\Email_Report_Sections
@@ -56,7 +57,9 @@ final class Top_Losing_Keywords_Section implements Email_Report_Section_Interfac
             }
             $rows[] = [
                 'query'    => $entry['query'] ?? '',
-                'position' => (float) ($entry['cur_pos'] ?? 0),
+                // A keyword that dropped out entirely has no current position.
+                // Keep it null so the renderer shows a dash instead of "0.0".
+                'position' => isset($entry['cur_pos']) ? (float) $entry['cur_pos'] : null,
                 'clicks'   => (int) $entry['cur_clicks'],
                 'change'   => $delta,
             ];

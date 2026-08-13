@@ -49,6 +49,38 @@ class Settings {
     const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-4o-mini';
 
     /**
+     * Canonical default author-archive templates.
+     *
+     * Same single-source-of-truth rule as the model constants above: the
+     * defaults array, the REST endpoint, the get-settings ability and
+     * Author_Archives_Manager all read these instead of repeating the literal,
+     * which had already drifted — the title default hardcoded an en dash while
+     * the feature resolves %separator% from Site Identity (#318).
+     *
+     * @since 1.29.1
+     */
+    const DEFAULT_AUTHOR_ARCHIVES_TITLE     = '%author_name% %separator% %site_title% %page%';
+    const DEFAULT_AUTHOR_ARCHIVES_META_DESC = 'Articles written by %author_name% on %site_title%';
+
+    /**
+     * String settings where a stored empty string is a real value, not "unset".
+     *
+     * get() normally treats '' the same as a missing option and returns the
+     * default, which is right for most keys — a blank API key or model name is
+     * never what the user meant. For these template fields it is the opposite:
+     * clearing the box means "render no template", and the consumers already
+     * branch on an empty value. Without the opt-out the save appeared to
+     * succeed and the default reappeared on the next request (#316).
+     *
+     * @since 1.29.1
+     * @var string[]
+     */
+    private const EMPTY_IS_A_VALUE = [
+        'author_archives_title',
+        'author_archives_meta_desc',
+    ];
+
+    /**
      * Shared singleton instance
      *
      * @var Settings|null
@@ -190,8 +222,8 @@ class Settings {
         'author_archives_enabled' => true,
         'author_archives_index' => true,
         'author_archives_show_empty' => false,
-        'author_archives_title' => '%author_name% – %site_title% %page%',
-        'author_archives_meta_desc' => 'Articles written by %author_name% on %site_title%',
+        'author_archives_title' => self::DEFAULT_AUTHOR_ARCHIVES_TITLE,
+        'author_archives_meta_desc' => self::DEFAULT_AUTHOR_ARCHIVES_META_DESC,
 
         // UI Settings
         'show_welcome_message' => true,
@@ -330,8 +362,18 @@ class Settings {
                 }
             }
         } else {
-            // Non-boolean settings: use default if not found
-            if (null === $value || '' === $value) {
+            // Non-boolean settings: use default if not found.
+            //
+            // get_option() above is called with a null default, so null means
+            // "no row" while '' means a value was deliberately stored. For most
+            // keys we collapse the two — an empty string is treated as unset so
+            // the documented default applies. Keys in EMPTY_IS_A_VALUE opt out:
+            // there, clearing the field is a real choice the consumer honours,
+            // and folding it back into the default made the save look like it
+            // silently failed (#316).
+            $empty_is_unset = !in_array($key, self::EMPTY_IS_A_VALUE, true);
+
+            if (null === $value || ($empty_is_unset && '' === $value)) {
                 $value = $fallback ?? ($this->defaults[$key] ?? null);
             }
         }

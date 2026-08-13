@@ -21,7 +21,15 @@ if (!defined('WP_UNINSTALL_PLUGIN')) {
  * Single Responsibility: Handle complete plugin removal
  */
 class ThinkRank_Uninstaller {
-    
+
+    /**
+     * Option that records a deliberate uninstall.
+     *
+     * Keep in sync with ThinkRank\Core\Activator::UNINSTALLED_OPTION and with
+     * ThinkRank Pro's Free_Plugin_Installer.
+     */
+    private const UNINSTALLED_OPTION = 'thinkrank_uninstalled';
+
     /**
      * Run uninstall process
      * 
@@ -43,8 +51,28 @@ class ThinkRank_Uninstaller {
         self::clear_caches();
         self::remove_cron_jobs();
         self::remove_capabilities();
+        self::mark_uninstalled();
     }
-    
+
+    /**
+     * Record that the user deliberately uninstalled the plugin.
+     *
+     * ThinkRank Pro auto-installs and activates the free plugin whenever it
+     * finds it missing, which silently re-ran the activator and recreated every
+     * table this uninstall had just dropped. Pro reads this marker and stops
+     * auto-installing, falling back to its "Install ThinkRank" notice, so a
+     * deliberate removal stays removed until the user asks for it back.
+     *
+     * Written last, after remove_options() has wiped the `thinkrank_` namespace,
+     * and cleared again by Activator on the next activation.
+     *
+     * @return void
+     */
+    private static function mark_uninstalled(): void {
+        delete_option(self::UNINSTALLED_OPTION);
+        add_option(self::UNINSTALLED_OPTION, time(), '', 'no');
+    }
+
     /**
      * Remove custom database tables
      *
@@ -69,6 +97,13 @@ class ThinkRank_Uninstaller {
             $wpdb->prefix . 'thinkrank_seo_social',
             $wpdb->prefix . 'thinkrank_seo_local',
             $wpdb->prefix . 'thinkrank_email_report_logs',
+            // AI Visibility Tables. These were registered in Database_Schema but
+            // never listed here, so an uninstall left them behind — bv_tasks in
+            // particular holds the full text of every AI answer (#302).
+            $wpdb->prefix . 'thinkrank_ai_traffic',
+            $wpdb->prefix . 'thinkrank_brand_visibility_checks',
+            $wpdb->prefix . 'thinkrank_bv_runs',
+            $wpdb->prefix . 'thinkrank_bv_tasks',
             // Rank Tracker Tables
             $wpdb->prefix . 'thinkrank_rank_tracking',
             $wpdb->prefix . 'thinkrank_tracked_keywords',

@@ -568,7 +568,7 @@ class Metabox_Manager {
      */
     private function persist_metadata(int $post_id, array $src): void {
         // Title & meta description are handled separately below: they can be
-        // written out-of-band (Auto AI on publish, bulk optimization, imports)
+        // written out-of-band (Auto AI on publish, imports)
         // after an editor was opened, so a plain save from that now-stale editor
         // would clobber the generated value with a blank. Focus keywords are
         // likewise handled separately (array meta) via Focus_Keywords below.
@@ -625,8 +625,8 @@ class Metabox_Manager {
     /**
      * Persist one SEO text field with an out-of-band-write guard.
      *
-     * Auto AI (on publish), bulk optimization and imports write the SEO title /
-     * meta description directly to post meta. When that happens after an editor
+     * Auto AI (on publish) and imports write the SEO title / meta description
+     * directly to post meta. When that happens after an editor
      * was opened, the editor's hidden input is a stale blank; a normal save
      * would overwrite the freshly generated value with that blank. This guard
      * skips the write only when the submitted value is empty AND it was also
@@ -907,6 +907,32 @@ JS;
             'linkSuggestionsEnabled' => $this->is_link_suggestions_enabled($post_type),
             'postStatus' => get_post_status($post_id),
             'isPro' => Plan_Config::is_pro(),
+            /**
+             * Filter the editor SEO panel's post-load refresh behaviour.
+             *
+             * The panel re-checks `/metadata/{id}` after load so values written
+             * by a background writer (Auto AI on publish, imports) appear
+             * without a reload. It only polls while the server
+             * reports a write in flight, but the poll lives in JavaScript, so
+             * the switch has to be localized into the bundle rather than being
+             * a PHP-side filter alone (#329).
+             *
+             * Set `enabled` to false to switch the refresh off entirely.
+             *
+             * @since 1.30.0
+             *
+             * @param array $config  enabled (bool), intervalMs (int), maxTicks (int).
+             * @param int   $post_id Post being edited.
+             */
+            'seoRefresh' => apply_filters(
+                'thinkrank_metabox_seo_refresh',
+                [
+                    'enabled' => true,
+                    'intervalMs' => 4000,
+                    'maxTicks' => 10,
+                ],
+                $post_id
+            ),
             // Whether any AI provider API key is configured — gates the
             // "Generate with AI" button in the metabox
             'aiConfigured' => !empty($this->settings->get('openai_api_key', ''))

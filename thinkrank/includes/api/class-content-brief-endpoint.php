@@ -40,6 +40,13 @@ class Content_Brief_Endpoint {
     private ?Content_Brief_Generator $generator = null;
 
     /**
+     * Generator instance for read-only work (no AI client attached)
+     *
+     * @var Content_Brief_Generator|null
+     */
+    private ?Content_Brief_Generator $storage_generator = null;
+
+    /**
      * Constructor
      */
     public function __construct() {
@@ -48,6 +55,9 @@ class Content_Brief_Endpoint {
 
     /**
      * Get generator instance (lazy loading)
+     *
+     * Only for routes that actually call the AI provider. Storage-only routes
+     * must use get_storage_generator() instead.
      *
      * @return Content_Brief_Generator
      * @throws \Exception If generator cannot be created
@@ -61,6 +71,23 @@ class Content_Brief_Endpoint {
             $this->generator = new Content_Brief_Generator(null, $ai_client);
         }
         return $this->generator;
+    }
+
+    /**
+     * Get a generator for storage-only work (list / export / delete).
+     *
+     * These routes only read and write the briefs table, so they must not
+     * require an AI client: on a site with no API key configured — the default
+     * for a fresh install — building one throws and turns a plain database read
+     * into a 500.
+     *
+     * @return Content_Brief_Generator
+     */
+    private function get_storage_generator(): Content_Brief_Generator {
+        if ($this->storage_generator === null) {
+            $this->storage_generator = new Content_Brief_Generator(null, null, false);
+        }
+        return $this->storage_generator;
     }
 
     /**
@@ -232,7 +259,7 @@ class Content_Brief_Endpoint {
             $limit = $request->get_param('limit');
             $offset = $request->get_param('offset');
 
-            $briefs = $this->get_generator()->get_user_briefs($limit, $offset);
+            $briefs = $this->get_storage_generator()->get_user_briefs($limit, $offset);
 
             return new WP_REST_Response([
                 'success' => true,
@@ -241,15 +268,6 @@ class Content_Brief_Endpoint {
             ], 200);
 
         } catch (\Exception $e) {
-            // If no API key is configured, return empty list instead of error
-            if (strpos($e->getMessage(), 'Please configure your AI provider') !== false) {
-                return new WP_REST_Response([
-                    'success' => true,
-                    'data' => [],
-                    'total' => 0
-                ], 200);
-            }
-
             return new WP_Error(
                 'briefs_fetch_failed',
                 $e->getMessage(),
@@ -267,7 +285,7 @@ class Content_Brief_Endpoint {
     public function delete_brief(WP_REST_Request $request): WP_REST_Response|WP_Error {
         try {
             $brief_id = $request->get_param('id');
-            $success = $this->get_generator()->delete_brief($brief_id);
+            $success = $this->get_storage_generator()->delete_brief($brief_id);
 
             if ($success) {
                 return new WP_REST_Response([
@@ -304,7 +322,7 @@ class Content_Brief_Endpoint {
 
             // Fetch the requested brief, scoped to the current user. Returns null
             // (→ 404) when the id doesn't exist or belongs to another user.
-            $brief = $this->get_generator()->get_brief($brief_id);
+            $brief = $this->get_storage_generator()->get_brief($brief_id);
 
             if (!$brief) {
                 return new WP_Error(

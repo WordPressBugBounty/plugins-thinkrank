@@ -4,7 +4,7 @@ Tags: seo, ai seo, focus keyword, schema, llms.txt
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.29.0
+Stable tag: 1.30.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -361,6 +361,30 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 
 == Changelog ==
 
+= 1.30.0 =
+Release Date: 2026-08-13
+
+- New: AI alt text for images — ThinkRank can now look at the picture and describe it, instead of only rewriting the filename. Choose it under Image SEO; the filename template stays the default because AI costs you money per image, and AI runs are capped at 10 images per click
+- New: One-click fixes in the Site SEO Audit. Where an issue is safely fixable — search visibility, XML sitemap, structured data, missing image alt text — a button applies it and the audit is re-scored on the spot. Fixes with consequences warn you before you click, and things that are your call (your titles, your permalinks, your server) are deliberately left alone with an explanation
+- New: A warning when WordPress is set to discourage search engines from indexing your site, so the setting that quietly undoes all your SEO cannot sit there unnoticed
+- Fixed: Opening the editor could hammer your site with repeated SEO requests until pages took 30-40 seconds to load, or failed outright. The panel now makes one request at a time, and only keeps checking while ThinkRank is actually writing metadata in the background
+- Fixed: SEO data imported from another plugin did not appear in an editor that was already open until you reloaded the page
+- Fixed: Saved content briefs could not be listed, exported or deleted on sites with no AI key configured — the screen failed with a server error, even though none of those actions need AI
+- Fixed: On some hosts ThinkRank's settings tables were never created, so every save in Site Identity, Sitemap, Social and Schema silently failed and the setup wizard dead-ended after a migration. The tables now fit the stricter index limit on those servers, and existing sites are migrated
+- Fixed: A settings save that fails now records why in the error log, instead of leaving you with "Failed to update settings" and nothing to act on
+- Fixed: The one-click sitemap and schema fixes reported success while saving nothing, and the audit's sitemap check could never fail no matter what your settings said
+- Fixed: Author archives printed two meta descriptions, ended their title in a stray space, ignored your chosen title separator, and would not let you clear the title or description templates — a cleared field came back on the next load
+- Fixed: The alt-text coverage panel could claim "6 of 5 images have alt text" by counting trashed images on one side only, and the bulk alt fill could spin forever on sites with private images, turning one click into thousands of requests
+- Fixed: The Alt text source setting accepted any value, so an unrecognised value silently fell back to the template and the AI batch limit stopped applying
+- Fixed: Saving Schema settings could white-screen the site on WordPress 6.0, after the settings had already been written
+- Fixed: Email reports — the Save button disappeared when you toggled the feature off, so turning it off never stuck; changing the frequency did not move the next send; a failed send still consumed the whole reporting period; the report described three different date ranges at once; "Next report" showed the wrong time outside UTC; pages and keywords that lost all their clicks were dropped from the Top Losing sections; and a report with no sections could be configured and sent empty
+- Fixed: Deleting ThinkRank with "Delete all data on uninstall" enabled while ThinkRank Pro was active silently reinstalled the free plugin and recreated all of its data
+- Fixed: Data Management could not be saved on sites without an AI API key
+- Fixed: An author or contributor granted Schema Manager access could deploy structured data onto other people's posts
+- Fixed: Alt text beginning with an accented character was corrupted
+- Changed: AI Visibility data is now removed when you delete the plugin with data deletion enabled, and old probe transcripts are aged out after 90 days instead of accumulating forever
+- Changed: The Integrations tab no longer displays or re-saves settings it has no control over, and a partial save now leaves untouched settings exactly as they were
+
 = 1.29.0 =
 Release Date: 2026-08-11
 
@@ -369,7 +393,7 @@ Release Date: 2026-08-11
 - Fixed: Content briefs that came back as "Unable to parse AI response", or saved a brief full of raw API output. When the AI refuses, is cut off at its token limit, or answers in an unexpected shape, ThinkRank now tells you what happened instead of saving the failure as a brief
 - Fixed: Short, Medium and Long content briefs all asked the AI for the same output budget, so a Long brief could be truncated while a Short one paid for room it never used. Each length now requests a budget that fits it
 - Fixed: Briefs on GPT-5 models ran at maximum reasoning effort by default — the slowest and most expensive setting, with much of the budget spent on hidden reasoning before any text was written
-- Fixed: A slow AI provider was reported as a generic failure rather than a timeout, and the retry never happened
+- Fixed: A request that ran past the time ThinkRank allows was retried twice more, each attempt near-certain to time out again — multiplying the wait while the abandoned requests kept running, and billing, on your AI provider. A timed-out request now fails once, straight away, instead of being retried
 - Fixed: "X days ago" counts on sites outside UTC were off by the site's time offset
 - Fixed: Saving settings could send your API key back to the browser in the clear, and re-saving a form that displayed a masked key could overwrite the real key with the mask
 - Fixed: Importing SEO data from another plugin read serialized values from that plugin's tables in a way that could be abused to create PHP objects on your site; those values are now parsed without ever instantiating an object
@@ -773,6 +797,9 @@ Release Date: 2025-07-07
 - WordPress 6.0+ compatibility
 
 == Upgrade Notice ==
+
+= 1.30.0 =
+Adds AI alt text for images and one-click fixes in the Site SEO Audit, plus a warning when WordPress is hiding your site from search engines. Fixes editor loads that could stall or fail under repeated SEO requests, settings tables that were never created on some hosts (breaking every save and the setup wizard), duplicate meta descriptions on author archives, misleading alt-text coverage counts, and a batch of Email Reporting defects including a Save button that vanished when you turned the feature off. Recommended for all sites.
 
 = 1.29.0 =
 Security release. Closes an SSRF hole in URL fetching (including IPv6-disguised internal addresses), object injection when importing from another SEO plugin, API keys returned to the browser in the clear, and missing capability checks on notice dismissal, settings import/reset and index creation. Also fixes content briefs failing with "Unable to parse AI response" and ignoring the chosen content length. Brand Visibility is temporarily hidden while it is reworked; your data is kept. Recommended for all sites.

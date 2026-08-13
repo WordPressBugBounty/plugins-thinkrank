@@ -55,7 +55,7 @@ final class Top_Winning_Keywords_Section implements Email_Report_Section_Interfa
             }
             $rows[] = [
                 'query'    => $entry['query'] ?? '',
-                'position' => (float) ($entry['cur_pos'] ?? 0),
+                'position' => isset($entry['cur_pos']) ? (float) $entry['cur_pos'] : null,
                 'clicks'   => (int) $entry['cur_clicks'],
                 'change'   => $delta,
             ];

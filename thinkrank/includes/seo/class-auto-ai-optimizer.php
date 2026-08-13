@@ -129,6 +129,11 @@ class Auto_Ai_Optimizer {
             return;
         }
 
+        // Tell the editor panel a write is coming, *before* queueing it, so a
+        // panel that mounts between publish and the cron tick sees the flag
+        // and knows to wait for the value instead of polling blind (#329).
+        Metadata_Pending::mark($post->ID);
+
         // WP-Cron collapses identical (hook, args) events scheduled close
         // together, which de-dupes rapid re-saves.
         wp_schedule_single_event(time() + 15, self::CRON_HOOK, [$post->ID]);
@@ -141,6 +146,24 @@ class Auto_Ai_Optimizer {
      * @return void
      */
     public function optimize(int $post_id): void {
+        try {
+            $this->run_optimization($post_id);
+        } finally {
+            // Whatever happened below — skipped, filled, or thrown — no
+            // further write is coming, so the editor panel must stop waiting
+            // for one. Cleared on every path, including exceptions (#329).
+            Metadata_Pending::clear($post_id);
+        }
+    }
+
+    /**
+     * The actual optimization run, wrapped by `optimize()` so the pending
+     * marker is always cleared.
+     *
+     * @param int $post_id Post to optimize.
+     * @return void
+     */
+    private function run_optimization(int $post_id): void {
         $post = get_post($post_id);
         if (!$post || 'publish' !== $post->post_status) {
             return;

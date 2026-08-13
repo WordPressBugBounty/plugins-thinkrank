@@ -107,6 +107,17 @@ final class Email_Report_Renderer {
     }
 
     /**
+     * Whether this config resolves to at least one section.
+     *
+     * A report with everything switched off still produced a valid email —
+     * header, footer, and nothing in between — and reported it as a
+     * successful send. Callers use this to skip the send instead.
+     */
+    public function has_renderable_sections(array $config): bool {
+        return $this->registry->resolve_for($config) !== [];
+    }
+
+    /**
      * Walk the resolved sections, render each, return concatenated HTML.
      */
     private function render_sections(array $config, array $context): string {

@@ -956,6 +956,13 @@ class Manager {
             return new \WP_REST_Response(['message' => 'You are not allowed to view this metadata.'], 403);
         }
 
+        // Read the pending flag BEFORE the meta below, never after. A writer
+        // that finishes mid-request writes the meta and *then* clears the
+        // flag; reading the flag last could therefore observe "no value" and
+        // "not pending" for the same run and stop the editor panel polling one
+        // tick before the value it was waiting for lands (#329).
+        $pending = \ThinkRank\SEO\Metadata_Pending::is_pending($post_id);
+
         // Get existing metadata. These must read the same canonical meta keys
         // the rest of the plugin writes/reads (frontend, metabox, scoring),
         // otherwise the response is always empty:
@@ -968,6 +975,10 @@ class Manager {
             'keywords' => \ThinkRank\SEO\Focus_Keywords::get($post_id),
             'seo_score' => get_post_meta($post_id, '_thinkrank_seo_score', true) ?: 0,
             'last_generated' => get_post_meta($post_id, '_thinkrank_generated_at', true),
+            // Whether a background writer (Auto AI on publish, bulk
+            // optimization, imports) is about to fill these fields. The editor
+            // panel polls only while this is true.
+            'pending' => $pending,
         ];
 
         return new \WP_REST_Response($metadata);

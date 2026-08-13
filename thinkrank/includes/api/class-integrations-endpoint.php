@@ -404,22 +404,42 @@ class Integrations_Endpoint extends WP_REST_Controller {
             }
         }
 
-        // Sanitize numeric settings
-        $sanitized['api_timeout'] = absint($settings['api_timeout'] ?? 30);
-        $sanitized['cache_duration'] = absint($settings['cache_duration'] ?? 3600);
+        // A key the payload never mentioned is left alone rather than being
+        // reset to a hard-coded default. These fallbacks used to fire on every
+        // save, so a partial payload — or a setting the admin has no control
+        // for, like retry_failed_requests — silently reverted to the default a
+        // site owner had deliberately changed in code (#297).
+        $numeric = ['api_timeout', 'cache_duration'];
 
-        // Sanitize GA4 tracking settings
-        $sanitized['ga4_measurement_id'] = sanitize_text_field($settings['ga4_measurement_id'] ?? '');
-        $sanitized['ga4_auto_inject'] = isset($settings['ga4_auto_inject']) ? (bool) $settings['ga4_auto_inject'] : false;
-        $sanitized['ga4_anonymize_ip'] = isset($settings['ga4_anonymize_ip']) ? (bool) $settings['ga4_anonymize_ip'] : false;
-        $sanitized['ga4_exclude_admin'] = isset($settings['ga4_exclude_admin']) ? (bool) $settings['ga4_exclude_admin'] : false;
-        $sanitized['ga4_tracking_verified'] = isset($settings['ga4_tracking_verified']) ? (bool) $settings['ga4_tracking_verified'] : false;
-        $sanitized['ga4_last_verification'] = sanitize_text_field($settings['ga4_last_verification'] ?? '');
+        foreach ($numeric as $key) {
+            if (array_key_exists($key, $settings)) {
+                $sanitized[$key] = absint($settings[$key]);
+            }
+        }
 
-        // Sanitize boolean settings
-        $sanitized['enable_rate_limiting'] = isset($settings['enable_rate_limiting']) ? (bool) $settings['enable_rate_limiting'] : true;
-        $sanitized['auto_test_connections'] = isset($settings['auto_test_connections']) ? (bool) $settings['auto_test_connections'] : true;
-        $sanitized['retry_failed_requests'] = isset($settings['retry_failed_requests']) ? (bool) $settings['retry_failed_requests'] : true;
+        $text = ['ga4_measurement_id', 'ga4_last_verification'];
+
+        foreach ($text as $key) {
+            if (array_key_exists($key, $settings)) {
+                $sanitized[$key] = sanitize_text_field($settings[$key]);
+            }
+        }
+
+        $booleans = [
+            'ga4_auto_inject',
+            'ga4_anonymize_ip',
+            'ga4_exclude_admin',
+            'ga4_tracking_verified',
+            'enable_rate_limiting',
+            'auto_test_connections',
+            'retry_failed_requests',
+        ];
+
+        foreach ($booleans as $key) {
+            if (array_key_exists($key, $settings)) {
+                $sanitized[$key] = (bool) $settings[$key];
+            }
+        }
 
         return $sanitized;
     }

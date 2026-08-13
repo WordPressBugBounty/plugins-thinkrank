@@ -43,44 +43,74 @@ class Author_Archives_Manager {
     /**
      * Add meta description for author archives
      *
+     * This is the only place a description is printed for author archives —
+     * SEO_Manager::output_meta_description() returns early on is_author() so
+     * the two never both emit a <meta name="description"> tag.
+     *
      * @since 1.0.0
      * @return void
      */
     public function add_meta_description(): void {
-        if (is_author()) {
-            $author_id = get_queried_object_id();
-
-            // A per-author meta description (e.g. imported from another SEO plugin)
-            // overrides the global template.
-            $custom_desc = (string) get_user_meta($author_id, '_thinkrank_meta_description', true);
-            if ($custom_desc !== '') {
-                echo '<meta name="description" content="' . esc_attr($custom_desc) . '" />' . "\n";
-                return;
-            }
-
-            $settings = Settings::instance();
-            // Default value matches what we set in endpoint
-            $template = $settings->get('author_archives_meta_desc', 'Articles written by %author_name% on %site_title%');
-            if (empty($template)) {
-                return;
-            }
-
-            // Get variables
-            $author_name = get_the_author_meta('display_name', $author_id);
-            $site_title = get_bloginfo('name');
-
-            $replacements = [
-                '%author_name%' => $author_name,
-                '%site_title%' => $site_title
-            ];
-
-            $meta_desc = str_replace(array_keys($replacements), array_values($replacements), $template);
-            $meta_desc = trim($meta_desc);
-
-            if (!empty($meta_desc)) {
-                echo '<meta name="description" content="' . esc_attr($meta_desc) . '" />' . "\n";
-            }
+        if (!is_author()) {
+            return;
         }
+
+        $author_id = get_queried_object_id();
+
+        // A per-author meta description (e.g. imported from another SEO plugin)
+        // overrides the global template.
+        $custom_desc = (string) get_user_meta($author_id, '_thinkrank_meta_description', true);
+        if ($custom_desc !== '') {
+            $this->print_meta_description($custom_desc);
+            return;
+        }
+
+        $settings = Settings::instance();
+        // Default value matches what we set in endpoint
+        $template = $settings->get('author_archives_meta_desc', Settings::DEFAULT_AUTHOR_ARCHIVES_META_DESC);
+        if (empty($template)) {
+            return;
+        }
+
+        // Get variables
+        $author_name = get_the_author_meta('display_name', $author_id);
+        $site_title = get_bloginfo('name');
+
+        $replacements = [
+            '%author_name%' => $author_name,
+            '%site_title%' => $site_title
+        ];
+
+        $meta_desc = str_replace(array_keys($replacements), array_values($replacements), $template);
+
+        $this->print_meta_description($meta_desc);
+    }
+
+    /**
+     * Print the description tag with the same framing SEO_Manager uses.
+     *
+     * Keeps author archives consistent with every other page type: the plugin
+     * header comment, the 160-character trim, and the open/close markers.
+     *
+     * @since 1.29.1
+     * @param string $description Resolved description text
+     * @return void
+     */
+    private function print_meta_description(string $description): void {
+        $description = $this->tidy_whitespace($description);
+        if ($description === '') {
+            return;
+        }
+
+        // Ensure description is within optimal length (150-160 characters)
+        if (strlen($description) > 160) {
+            $description = wp_trim_words($description, 25, '...');
+        }
+
+        echo "<!-- Search Engine Optimization by ThinkRank - https://thinkrank.ai/ -->\n";
+        echo "<!-- ThinkRank SEO Meta Description -->\n";
+        echo '<meta name="description" content="' . esc_attr($description) . '" />' . "\n";
+        echo "<!-- /ThinkRank SEO Meta Description -->\n";
     }
 
     /**
@@ -102,7 +132,7 @@ class Author_Archives_Manager {
             }
 
             $settings = Settings::instance();
-            $template = $settings->get('author_archives_title', '%author_name% – %site_title% %page%');
+            $template = $settings->get('author_archives_title', Settings::DEFAULT_AUTHOR_ARCHIVES_TITLE);
 
             if (empty($template)) {
                 return $title;
@@ -133,9 +163,26 @@ class Author_Archives_Manager {
                 '%page%' => $page_str
             ];
 
-            return str_replace(array_keys($replacements), array_values($replacements), $template);
+            $rendered = str_replace(array_keys($replacements), array_values($replacements), $template);
+
+            return $this->tidy_whitespace($rendered);
         }
         return $title;
+    }
+
+    /**
+     * Collapse the gaps left by variables that resolved to nothing.
+     *
+     * %page% is empty on an unpaginated archive, so the stock template ended
+     * every author <title> with a stray trailing space; two empty variables in
+     * a row would leave a double space mid-string.
+     *
+     * @since 1.29.1
+     * @param string $value Rendered template
+     * @return string Template with runs of whitespace collapsed and trimmed
+     */
+    private function tidy_whitespace(string $value): string {
+        return trim((string) preg_replace('/\s+/u', ' ', $value));
     }
 
     /**

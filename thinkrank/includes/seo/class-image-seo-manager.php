@@ -30,6 +30,17 @@ if (!defined('ABSPATH')) {
 class Image_SEO_Manager extends Abstract_SEO_Manager {
 
     /**
+     * Accepted values for the `alt_source` setting.
+     *
+     * Single source of truth for the schema's enum, the REST arg constraint and
+     * validate_settings(), so the three cannot disagree about what is legal.
+     *
+     * @since 1.29.1
+     * @var string[]
+     */
+    public const ALT_SOURCES = ['template', 'ai'];
+
+    /**
      * Memoized site separator symbol.
      *
      * Resolved once per request rather than on every image processed during
@@ -82,6 +93,18 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             }
         }
 
+        // The schema declares alt_source as an enum but nothing used to check
+        // it, so any string persisted. The consumer falls back to the template
+        // path on an unknown value, which hid the drift rather than surfacing
+        // it — the settings screen just had no option to select (#323).
+        if (isset($settings['alt_source']) && !in_array($settings['alt_source'], self::ALT_SOURCES, true)) {
+            $validation['errors'][] = sprintf(
+                'alt_source must be one of: %s',
+                implode(', ', self::ALT_SOURCES)
+            );
+            $validation['valid'] = false;
+        }
+
         return $validation;
     }
 
@@ -106,6 +129,17 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
      * @param string $context_type The context type to get defaults for
      * @return array Default settings array
      */
+    /**
+     * Images per batch when alt text comes from the vision model.
+     *
+     * Each one is a paid call of a few seconds; 10 keeps a batch inside a
+     * normal PHP timeout and keeps the spend per click predictable.
+     *
+     * @since 1.28.0
+     * @var int
+     */
+    private const AI_BATCH_LIMIT = 10;
+
     public function get_default_settings(string $context_type): array {
         return [
             'add_missing_alt' => false,
@@ -116,6 +150,9 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             'save_alt_to_media' => false,
             'auto_fill_on_upload' => false,
             'media_alt_overwrite' => false,
+            // 'template' rewrites the filename; 'ai' looks at the picture.
+            // Defaults to template because AI costs the user money per image.
+            'alt_source' => 'template',
         ];
     }
 
@@ -152,6 +189,13 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
                 'title' => __('Title attribute format', 'thinkrank'),
                 'description' => __('The format to use for automatically generated TITLE attributes.', 'thinkrank'),
                 'default' => '%title% %separator% %sitename%'
+            ],
+            'alt_source' => [
+                'type' => 'string',
+                'title' => __('Alt text source', 'thinkrank'),
+                'description' => __('“Template” builds alt text from the filename and title. “AI” looks at the image itself and describes what is in it — this uses your AI provider key and costs one call per image.', 'thinkrank'),
+                'default' => 'template',
+                'enum' => self::ALT_SOURCES
             ],
             'save_alt_to_media' => [
                 'type' => 'boolean',
@@ -500,11 +544,22 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         $format   = $settings['alt_format'] ?? '%filename%';
         $src      = (string) wp_get_attachment_url($attachment_id);
 
-        // Pass the attachment ID as the post context so %title% falls back to the
-        // attachment's own title (there is no surrounding post here).
-        $value = sanitize_text_field(
-            $this->generate_attribute_value($format, $attachment_id, $attachment_id, 0, $src)
-        );
+        $value = '';
+
+        // AI describes the picture; the template can only rewrite its filename.
+        // Falls back to the template on any failure so a provider outage
+        // degrades to the old behaviour instead of leaving images bare.
+        if ('ai' === ($settings['alt_source'] ?? 'template')) {
+            $value = $this->generate_ai_alt($attachment_id);
+        }
+
+        if ('' === $value) {
+            // Pass the attachment ID as the post context so %title% falls back to the
+            // attachment's own title (there is no surrounding post here).
+            $value = sanitize_text_field(
+                $this->generate_attribute_value($format, $attachment_id, $attachment_id, 0, $src)
+            );
+        }
 
         if ($value === '') {
             return false;
@@ -516,6 +571,39 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         }
 
         return update_post_meta($attachment_id, '_wp_attachment_image_alt', $value) !== false;
+    }
+
+    /**
+     * Describe an attachment with the vision model.
+     *
+     * Never throws: alt text generation runs in batches over a whole media
+     * library, and one unreadable image or a rate-limit blip must not abort
+     * the run. Returns '' so the caller falls back to the template.
+     *
+     * @since 1.28.0
+     * @param int $attachment_id Attachment to describe.
+     * @return string Alt text, or '' when unavailable.
+     */
+    private function generate_ai_alt(int $attachment_id): string {
+        try {
+            $vision = new \ThinkRank\AI\Vision_Client();
+
+            if (!$vision->is_available()) {
+                return '';
+            }
+
+            // The parent post's title disambiguates images that are visually
+            // ambiguous on their own (a generic chart, a product on white).
+            $context = '';
+            $parent  = (int) get_post_field('post_parent', $attachment_id);
+            if ($parent > 0) {
+                $context = (string) get_the_title($parent);
+            }
+
+            return sanitize_text_field($vision->describe_attachment($attachment_id, $context));
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 
     /**
@@ -546,12 +634,24 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         $limit     = min(200, max(1, (int) ($args['limit'] ?? 50)));
         $overwrite = !empty($args['overwrite']);
 
+        // In AI mode every image is a paid provider call that takes seconds,
+        // so a 200-image batch would both surprise the user's bill and blow
+        // past max_execution_time. Cap the batch and let the caller page —
+        // `remaining` already drives that loop.
+        if ('ai' === ($this->get_settings('site')['alt_source'] ?? 'template')) {
+            $limit = min($limit, self::AI_BATCH_LIMIT);
+        }
+
         $total = $this->count_images();
 
         $ids = get_posts([
-            'post_type'        => 'attachment',
-            'post_mime_type'   => 'image',
-            'post_status'      => 'inherit',
+            'post_type'      => 'attachment',
+            'post_mime_type' => 'image',
+            // Must cover the same set count_images() counts, or the pager can
+            // never reach the total. 'inherit' alone excluded private-status
+            // attachments — which media-protection and membership plugins do
+            // create — while count_images() still counted them (#322).
+            'post_status'      => ['inherit', 'private', 'publish', 'draft', 'pending', 'future'],
             'numberposts'      => $limit,
             'offset'           => $offset,
             'fields'           => 'ids',
@@ -574,7 +674,14 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         }
 
         $next_offset = $offset + count($ids);
-        $remaining   = max(0, $total - $next_offset);
+
+        // An empty batch means there is nothing left to walk, whatever the
+        // total claims. Deriving `done` from the count alone let any drift
+        // between the two queries strand the caller on a batch that could
+        // never advance the offset, and the admin UI answers that by
+        // re-requesting up to 10,000 times.
+        $exhausted = empty($ids);
+        $remaining = $exhausted ? 0 : max(0, $total - $next_offset);
 
         // Bulk writes change the Site SEO Analyzer's "images have alt text" coverage.
         if ($updated > 0) {
@@ -589,7 +696,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             'offset'      => $offset,
             'next_offset' => $next_offset,
             'remaining'   => $remaining,
-            'done'        => $next_offset >= $total,
+            'done'        => $exhausted || $next_offset >= $total,
         ];
     }
 
@@ -637,27 +744,34 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
     /**
      * Total number of image attachments in the library.
      *
+     * Counted with an explicit `post_status != 'trash'` rather than through
+     * wp_count_attachments(). The helper applies that filter internally, which
+     * looked equivalent — but it left the two halves of get_media_alt_stats()
+     * with different notions of which images exist, and only one of them said
+     * so out loud. Spelling the filter out here keeps this query and
+     * count_images_with_alt() visibly in step (#321).
+     *
      * @since 1.19.1
      * @return int
      */
     private function count_images(): int {
-        $counts = wp_count_attachments();
-        $total  = 0;
-
-        foreach ((array) $counts as $mime => $count) {
-            if (strpos((string) $mime, 'image/') === 0) {
-                $total += (int) $count;
-            }
-        }
-
-        return $total;
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- indexed COUNT; short-lived admin action
+        return (int) $this->wpdb->get_var(
+            "SELECT COUNT(*) FROM {$this->wpdb->posts}
+             WHERE post_type = 'attachment'
+               AND post_mime_type LIKE 'image/%'
+               AND post_status != 'trash'"
+        );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 
     /**
      * Number of image attachments that already have non-empty alt text.
      *
-     * Mirrors the query used by the Site SEO Analyzer's alt-text check so the two
-     * features report consistent coverage.
+     * Carries the same `post_status != 'trash'` filter as count_images(), so a
+     * trashed image can never be counted as covered against a total it is not
+     * part of. Matches the Site SEO Analyzer's alt-text check, which applies
+     * the same filter to both of its counts.
      *
      * @since 1.19.1
      * @return int
@@ -670,7 +784,9 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
                 ON pm.post_id = p.ID
                AND pm.meta_key = '_wp_attachment_image_alt'
                AND pm.meta_value != ''
-             WHERE p.post_type = 'attachment' AND p.post_mime_type LIKE 'image/%'"
+             WHERE p.post_type = 'attachment'
+               AND p.post_mime_type LIKE 'image/%'
+               AND p.post_status != 'trash'"
         );
         // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }

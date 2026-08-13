@@ -31,8 +31,12 @@ if (!defined('ABSPATH')) {
 
 /**
  * Resolves platform slugs to configured AI clients.
+ *
+ * Not final: Brand_Visibility_Runner type-hints this class for its provider
+ * resolution, so a test that needs to drive the runner without reaching a real
+ * provider substitutes a subclass whose client_for() returns a canned client.
  */
-final class Brand_Visibility_Providers {
+class Brand_Visibility_Providers {
 
     /**
      * Supported platforms.

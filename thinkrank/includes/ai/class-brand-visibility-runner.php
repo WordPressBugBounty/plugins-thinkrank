@@ -80,6 +80,20 @@ class Brand_Visibility_Runner {
     private const ANSWER_TOKENS = 8000;
 
     /**
+     * Days a finished run keeps its individual task rows.
+     *
+     * Every task stores the full AI answer (up to 20,000 chars), and a run is
+     * queries × platforms × samples rows — 144 on a 12-query Pro setup. Nothing
+     * ever deleted them, so scheduled runs would grow the table without bound
+     * for the sake of transcripts nobody reads once a run is months old (#302).
+     * The run row itself is never pruned: `bv_runs.results` holds the
+     * aggregates, which is all the trend chart needs.
+     *
+     * @since 1.30.0
+     */
+    public const TASK_RETENTION_DAYS = 90;
+
+    /**
      * Settings accessor.
      *
      * @var Settings
@@ -126,9 +140,17 @@ class Brand_Visibility_Runner {
      * @return array
      */
     public static function add_cron_interval(array $schedules): array {
+        // `cron_schedules` fires from wp_get_schedules(), which any caller can
+        // reach before `init` — wp_schedule_event() at plugin boot does exactly
+        // that. Translating there loads the text domain too early and trips the
+        // _load_textdomain_just_in_time notice on WP 6.7+, so only translate
+        // once `init` has run. Schedules are rebuilt per call, so later reads
+        // still get the translated label.
         $schedules[self::WATCHDOG_INTERVAL] ??= [
             'interval' => 5 * MINUTE_IN_SECONDS,
-            'display'  => __('Every five minutes (ThinkRank Brand Visibility)', 'thinkrank'),
+            'display'  => did_action('init')
+                ? __('Every five minutes (ThinkRank Brand Visibility)', 'thinkrank')
+                : 'Every five minutes (ThinkRank Brand Visibility)',
         ];
 
         return $schedules;
@@ -613,6 +635,14 @@ class Brand_Visibility_Runner {
         foreach ((array) $ids as $id) {
             $this->finalize((int) $id);
         }
+
+        // Runs have just been aggregated, so this is the natural moment to age
+        // out the transcripts of long-finished ones — no extra cron needed.
+        // Once per tick, not once per run: a tick closing N runs would
+        // otherwise issue the same multi-table DELETE N times.
+        if (!empty($ids)) {
+            $this->prune_finished_run_tasks();
+        }
     }
 
     /**
@@ -652,6 +682,77 @@ class Brand_Visibility_Runner {
             ['%s', '%s', '%d', '%d', '%s', '%s'],
             ['%d']
         );
+    }
+
+    /**
+     * Days a finished run keeps its task rows.
+     *
+     * Filterable so a site that wants longer transcripts (or none at all) can
+     * say so; 0 or less disables pruning entirely.
+     *
+     * @since 1.30.0
+     *
+     * @return int Retention window in days.
+     */
+    public static function task_retention_days(): int {
+        /**
+         * Filters how long Brand Visibility keeps per-probe task rows.
+         *
+         * @since 1.30.0
+         *
+         * @param int $days Retention window in days. 0 or less keeps everything.
+         */
+        return (int) apply_filters('thinkrank_bv_task_retention_days', self::TASK_RETENTION_DAYS);
+    }
+
+    /**
+     * Drop task rows belonging to runs that finished outside the retention
+     * window, keeping every run's aggregates.
+     *
+     * The most recent finished run always keeps its tasks however old it is:
+     * on a site that ran Brand Visibility once and then stopped, the transcript
+     * view must not empty itself out just because time passed.
+     *
+     * @since 1.30.0
+     *
+     * @return int Rows deleted.
+     */
+    public function prune_finished_run_tasks(): int {
+        global $wpdb;
+
+        $days = self::task_retention_days();
+        if ($days <= 0) {
+            return 0;
+        }
+
+        $runs  = self::runs_table();
+        $tasks = self::tasks_table();
+
+        // finished_at is written with current_time('mysql'), i.e. site-local,
+        // so the cutoff is built from site-local time too.
+        $cutoff = $this->local_time_ago($days * DAY_IN_SECONDS);
+
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- read on our own table.
+        $keep = (int) $wpdb->get_var(
+            "SELECT id FROM `{$runs}`
+             WHERE status IN ('complete', 'failed') AND finished_at IS NOT NULL
+             ORDER BY finished_at DESC, id DESC
+             LIMIT 1"
+        );
+
+        $deleted = $wpdb->query($wpdb->prepare(
+            "DELETE t FROM `{$tasks}` t
+             INNER JOIN `{$runs}` r ON r.id = t.run_id
+             WHERE r.status IN ('complete', 'failed')
+               AND r.finished_at IS NOT NULL
+               AND r.finished_at < %s
+               AND r.id <> %d",
+            $cutoff,
+            $keep
+        ));
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+        return max(0, (int) $deleted);
     }
 
     /**

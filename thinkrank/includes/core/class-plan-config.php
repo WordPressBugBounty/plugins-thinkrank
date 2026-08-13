@@ -216,8 +216,8 @@ final class Plan_Config {
         /**
          * Filter the AI Insights capability map.
          *
-         * ThinkRank Pro sets `brand_max_queries` to 0 (unlimited, still
-         * bounded by Brand_Visibility_Checker::MAX_QUERIES), enables
+         * ThinkRank Pro sets `brand_max_queries` to 0 (unlimited, bounded
+         * only by what the run request itself asks for), enables
          * `brand_scheduled` and `auto_ai_meta`, and lifts the history limit.
          *
          * @since 1.28.0

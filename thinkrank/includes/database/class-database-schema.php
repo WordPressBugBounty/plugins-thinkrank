@@ -44,7 +44,45 @@ class Database_Schema {
      * @since 1.0.0
      * @var string
      */
-    private string $db_version = '1.6.0';
+    private string $db_version = '1.8.0';
+
+    /**
+     * Widest single indexed COLUMN InnoDB accepts on a COMPACT/REDUNDANT row
+     * format, in bytes.
+     *
+     * The limit is per column, not per key: a key may total well over this as
+     * long as no one column contributes more than 767 bytes. MySQL 5.7+ and
+     * MariaDB 10.2+ default to DYNAMIC and raise it to 3072, but MySQL 5.6-era
+     * servers (and anything with innodb_large_prefix off) enforce 767 — and on
+     * a UNIQUE key it is fatal, because uniqueness cannot be guaranteed from a
+     * truncated prefix, so the whole CREATE TABLE is rejected and the table
+     * never exists (#298). A non-unique key is silently truncated instead.
+     *
+     * utf8mb4 costs 4 bytes per character, so varchar(191) = 764 bytes is the
+     * widest column that fits — the same reason WordPress core uses 191.
+     *
+     * @since 1.30.0
+     * @var int
+     */
+    private const MAX_INDEX_COLUMN_BYTES = 767;
+
+    /**
+     * Wide keys replaced by prefixed equivalents, as new name => legacy name.
+     *
+     * dbDelta never drops or rewrites an existing index, so installs created
+     * before #298 keep their full-width key. The prefixed key is added under a
+     * new name (dbDelta only adds what is absent) and the legacy one is dropped
+     * here once its replacement is confirmed present — never before, so a
+     * failed ALTER leaves the table exactly as it was.
+     *
+     * @since 1.30.0
+     * @var array<string, array<string, string>>
+     */
+    private const REPLACED_WIDE_INDEXES = [
+        'seo_settings' => ['unique_setting_v2' => 'unique_setting'],
+        'seo_social'   => ['unique_social_meta_v2' => 'unique_social_meta'],
+        'ai_cache'     => ['unique_cache_key' => 'cache_key'],
+    ];
 
     /**
      * Transient caching a verified-complete schema, so the missing-table probe
@@ -120,7 +158,9 @@ class Database_Schema {
             'primary_key' => 'id',
             'indexes' => ['cache_key', 'expires_at', 'created_at'],
             'composite_indexes' => [
-                'cache_lookup' => ['cache_key', 'expires_at'],
+                // cache_key is varchar(255) — 1020 bytes in utf8mb4, so it is
+                // prefixed here for the same reason as the unique key (#298).
+                'cache_lookup' => ['cache_key(191)', 'expires_at'],
                 'cleanup_expired' => ['expires_at', 'created_at']
             ],
             'foreign_keys' => []
@@ -190,7 +230,7 @@ class Database_Schema {
         'bv_runs' => [
             'description' => 'Brand Visibility v2 analysis runs: one row per run, with its config snapshot, progress counters and computed aggregates',
             'primary_key' => 'id',
-            'indexes' => ['status', 'started_at'],
+            'indexes' => ['status', 'started_at', 'finished_at'],
             'foreign_keys' => []
         ],
         'bv_tasks' => [
@@ -292,6 +332,10 @@ class Database_Schema {
                 $results['success'] = false;
             }
         }
+
+        // Retire the pre-#298 full-width keys now that their prefixed
+        // replacements are in place.
+        $this->drop_replaced_wide_indexes();
 
         // Update database version
         if ($results['success']) {
@@ -624,7 +668,7 @@ class Database_Schema {
             created_by bigint(20) unsigned NULL,
             updated_by bigint(20) unsigned NULL,
             PRIMARY KEY (setting_id),
-            UNIQUE KEY unique_setting (context_type, context_id, setting_category, setting_key),
+            UNIQUE KEY unique_setting_v2 (context_type, context_id, setting_category, setting_key(191)),
             KEY idx_context (context_type, context_id),
             KEY idx_category (setting_category),
             KEY idx_active (is_active),
@@ -769,7 +813,7 @@ class Database_Schema {
             updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             created_by bigint(20) unsigned NULL,
             PRIMARY KEY (social_id),
-            UNIQUE KEY unique_social_meta (context_type, context_id, platform, meta_key),
+            UNIQUE KEY unique_social_meta_v2 (context_type, context_id, platform, meta_key(191)),
             KEY idx_context (context_type, context_id),
             KEY idx_platform (platform),
             KEY idx_type (meta_type),
@@ -877,7 +921,7 @@ class Database_Schema {
             expires_at bigint(20) unsigned NOT NULL,
             created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            UNIQUE KEY cache_key (cache_key),
+            UNIQUE KEY unique_cache_key (cache_key(191)),
             KEY expires_at_idx (expires_at),
             KEY created_at_idx (created_at)
         ) {$charset_collate};";
@@ -1020,6 +1064,7 @@ class Database_Schema {
             recipient_count smallint(5) unsigned NOT NULL DEFAULT 1,
             frequency_days smallint(5) unsigned NOT NULL DEFAULT 30,
             status varchar(20) NOT NULL DEFAULT 'pending',
+            attempts smallint(5) unsigned NOT NULL DEFAULT 1,
             error_message text NULL,
             sent_at datetime NULL,
             created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1160,8 +1205,13 @@ class Database_Schema {
             return '';
         }
 
-        // Escape column names
+        // Escape column names, preserving an optional key prefix — `col(191)`
+        // stays a prefix rather than becoming part of the column name (#298).
         $escaped_columns = array_map(function ($column) {
+            if (preg_match('/^([A-Za-z0-9_]+)\((\d+)\)$/', trim($column), $matches)) {
+                return "`{$matches[1]}`({$matches[2]})";
+            }
+
             return "`{$column}`";
         }, $columns);
 
@@ -1393,6 +1443,49 @@ class Database_Schema {
     }
 
     /**
+     * Drop the full-width keys replaced by prefixed ones in #298.
+     *
+     * Installs created before the fix carry a key that spans more bytes than a
+     * 767-byte-limit server accepts; the prefixed replacement is added by
+     * dbDelta under a new name, and only once that replacement is confirmed
+     * present is the legacy key dropped. If the ALTER that adds the prefixed
+     * key failed — the one realistic cause being two existing rows that differ
+     * only past the prefix — nothing is dropped and the table keeps working
+     * exactly as before.
+     *
+     * @since 1.30.0
+     *
+     * @return void
+     */
+    private function drop_replaced_wide_indexes(): void {
+        foreach (self::REPLACED_WIDE_INDEXES as $table => $renames) {
+            $full_table_name = $this->get_table_name($table);
+
+            if (!$this->table_exists($full_table_name)) {
+                continue;
+            }
+
+            foreach ($renames as $current_index => $legacy_index) {
+                if (!$this->index_exists($full_table_name, $legacy_index)) {
+                    continue;
+                }
+
+                if (!$this->index_exists($full_table_name, $current_index)) {
+                    // The replacement is not there yet; keep the old key so the
+                    // upsert still has a unique constraint to collide against.
+                    continue;
+                }
+
+                // phpcs:disable WordPress.DB.DirectDatabaseQuery.SchemaChange,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- DDL cannot be prepared; both names come from a class constant and the table name from $wpdb->prefix.
+                $this->wpdb->query(
+                    "ALTER TABLE `{$full_table_name}` DROP INDEX `" . esc_sql($legacy_index) . '`'
+                );
+                // phpcs:enable WordPress.DB.DirectDatabaseQuery.SchemaChange,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+            }
+        }
+    }
+
+    /**
      * Check if an index exists on a table
      *
      * @since 1.0.0
@@ -1538,7 +1631,8 @@ class Database_Schema {
             error text NULL,
             PRIMARY KEY (id),
             KEY idx_status (status),
-            KEY idx_started (started_at)
+            KEY idx_started (started_at),
+            KEY idx_finished (finished_at)
         ) {$charset_collate};";
     }
 

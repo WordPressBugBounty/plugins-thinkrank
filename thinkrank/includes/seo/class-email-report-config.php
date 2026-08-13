@@ -74,13 +74,34 @@ final class Email_Report_Config {
         $sanitized['frequency_days'] = Plan_Config::clamp_email_report_frequency((int) $sanitized['frequency_days']);
         $sanitized['recipients'] = Plan_Config::clamp_email_report_recipients($sanitized['recipients']);
 
+        $previous = get_option(self::OPTION_KEY, []);
+        $previous = is_array($previous) ? $previous : [];
+        $frequency_changed = isset($previous['frequency_days'])
+            && (int) $previous['frequency_days'] !== (int) $sanitized['frequency_days'];
+
         // Seed next_scheduled_at on first enable so the UI shows a real
         // "Next report" date immediately. The scheduler still re-seeds on
         // its first tick for any other path that flips enable on.
-        if ($sanitized['enabled'] && empty($sanitized['next_scheduled_at'])) {
+        //
+        // A frequency change also has to move the date: carrying the old
+        // timestamp through meant a user switching 30 → 7 days still waited
+        // out the original 30-day window before the new cadence took effect.
+        if ($sanitized['enabled'] && (empty($sanitized['next_scheduled_at']) || $frequency_changed)) {
+            // Anchor off the last send when we have one, so shortening the
+            // cadence brings the next report forward instead of adding a
+            // fresh full period on top of time already elapsed.
+            $anchor = $frequency_changed && !empty($sanitized['last_sent_at'])
+                ? strtotime((string) $sanitized['last_sent_at'])
+                : time();
+            $anchor = $anchor ?: time();
+
+            $next = strtotime('+' . max(1, (int) $sanitized['frequency_days']) . ' days', $anchor);
+
+            // Never schedule into the past — a big cadence cut on an old
+            // last_sent_at means "due now", which the next tick picks up.
             $sanitized['next_scheduled_at'] = wp_date(
                 'Y-m-d H:i:s',
-                strtotime('+' . max(1, (int) $sanitized['frequency_days']) . ' days')
+                max($next ?: time(), time())
             );
         }
 

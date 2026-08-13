@@ -32,6 +32,20 @@ if (!defined('ABSPATH')) {
  */
 final class Email_Report_Generator {
 
+    /**
+     * How long to wait before re-attempting a send that failed. Short
+     * enough that a transient SMTP problem doesn't cost the user a whole
+     * reporting period, long enough not to hammer a broken relay.
+     */
+    private const RETRY_DELAY_HOURS = 6;
+
+    /**
+     * Total send attempts per reporting period, including the first. Once
+     * spent, the schedule falls back to the normal cadence so a permanently
+     * misconfigured mailer doesn't retry forever.
+     */
+    private const MAX_SEND_ATTEMPTS = 3;
+
     private Email_Report_Config $config;
     private Email_Report_Renderer $renderer;
     private Email_Report_Mailer $mailer;
@@ -107,11 +121,37 @@ final class Email_Report_Generator {
              */
             do_action('thinkrank_email_report_before_generate', $config, $context);
 
+            // Nothing to report. Checked after the hook above so a section
+            // Pro registers there still counts. An email with a header, a
+            // footer and nothing between them isn't a successful send.
+            if (!$this->renderer->has_renderable_sections($config)) {
+                if (!$is_test) {
+                    // Don't re-evaluate this every hour — wait out a period.
+                    $this->config->update_schedule(
+                        $config['last_sent_at'] ?? null,
+                        $this->compute_next_run($frequency)
+                    );
+                }
+                return ['success' => false, 'skipped' => 'no_sections'];
+            }
+
             // Dedupe check for scheduled sends only (tests can repeat).
             if (!$is_test) {
                 $dedupe = $this->record_attempt($config, $context);
                 if (!$dedupe['inserted']) {
-                    return ['success' => false, 'skipped' => 'duplicate'];
+                    // Out of retries for this period: stop re-attempting and
+                    // rejoin the normal cadence rather than ticking forever.
+                    if (!empty($dedupe['exhausted'])) {
+                        $this->config->update_schedule(
+                            $this->config->get()['last_sent_at'] ?? null,
+                            $this->compute_next_run($frequency)
+                        );
+                        return ['success' => false, 'skipped' => 'retry_limit'];
+                    }
+                    return [
+                        'success' => false,
+                        'skipped' => empty($dedupe['write_failed']) ? 'duplicate' : 'log_write_failed',
+                    ];
                 }
             }
 
@@ -122,10 +162,27 @@ final class Email_Report_Generator {
 
             if (!$is_test) {
                 $this->finalize_log($config, $context, $result);
-                $this->config->update_schedule(
-                    current_time('mysql'),
-                    $this->compute_next_run($frequency)
-                );
+
+                if (!empty($result['success'])) {
+                    $this->config->update_schedule(
+                        current_time('mysql'),
+                        $this->compute_next_run($frequency)
+                    );
+                } else {
+                    // A transient mail failure must not cost the user a whole
+                    // period, and it must not stamp last_sent_at with a send
+                    // that never happened. Retry soon; give up after
+                    // MAX_SEND_ATTEMPTS and fall back to the normal cadence.
+                    $attempts = (int) ($dedupe['attempts'] ?? 1);
+                    $next = $attempts >= self::MAX_SEND_ATTEMPTS
+                        ? $this->compute_next_run($frequency)
+                        : $this->compute_retry_run();
+
+                    $this->config->update_schedule(
+                        $this->config->get()['last_sent_at'] ?? null,
+                        $next
+                    );
+                }
             }
 
             /**
@@ -146,9 +203,17 @@ final class Email_Report_Generator {
     }
 
     /**
-     * Insert a `pending` row in email_report_logs. The unique key on
-     * (site_id, period_start, recipient_hash) is the dedupe gate — a
-     * conflicting insert returns 0 rows and we abort the send.
+     * Claim this period's send by inserting a `pending` row in
+     * email_report_logs. The unique key on (site_id, period_start,
+     * recipient_hash) is the dedupe gate — a conflicting insert means the
+     * period is already accounted for.
+     *
+     * "Already accounted for" is not always "already delivered", though: a
+     * previous attempt may have failed. In that case we re-claim the same
+     * row for another attempt, up to MAX_SEND_ATTEMPTS, so the retry the
+     * scheduler booked can actually run.
+     *
+     * @return array{inserted:bool,log_id:int,attempts:int,retry?:bool,exhausted?:bool,write_failed?:bool}
      */
     private function record_attempt(array $config, array $context): array {
         global $wpdb;
@@ -157,26 +222,116 @@ final class Email_Report_Generator {
         $period_start = $context['period_start'] ?: current_time('mysql');
         $period_end   = $context['period_end']   ?: current_time('mysql');
         $recipients   = (array) ($config['recipients'] ?? []);
+        $hash         = $this->recipient_hash($recipients);
+        $site_id      = get_current_blog_id();
 
-        // Insert with dbDelta-friendly columns; the unique key handles dedupe.
+        // The UNIQUE KEY on (site_id, period_start, recipient_hash) is the
+        // dedupe gate, so a colliding insert is an expected outcome on a
+        // normal tick — not an error. Suppress $wpdb's own error handling
+        // for the duration so a routine dedupe doesn't dump SQL and a stack
+        // trace into the log (or, under WP_DEBUG_DISPLAY, into cron output).
+        $suppressed = $wpdb->suppress_errors(true);
         $rows = $wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
             $table,
             [
-                'site_id'         => get_current_blog_id(),
+                'site_id'         => $site_id,
                 'period_start'    => $period_start,
                 'period_end'      => $period_end,
-                'recipient_hash'  => $this->recipient_hash($recipients),
+                'recipient_hash'  => $hash,
                 'recipient_count' => count($recipients),
                 'frequency_days'  => (int) ($config['frequency_days'] ?? 30),
                 'status'          => 'pending',
+                'attempts'        => 1,
                 'created_at'      => current_time('mysql'),
             ],
-            ['%d','%s','%s','%s','%d','%d','%s','%s']
+            ['%d','%s','%s','%s','%d','%d','%s','%d','%s']
+        );
+        $last_error = (string) $wpdb->last_error;
+        $wpdb->suppress_errors($suppressed);
+
+        if ($rows) {
+            return [
+                'inserted' => true,
+                'log_id'   => (int) $wpdb->insert_id,
+                'attempts' => 1,
+            ];
+        }
+
+        // A failed insert is only a dedupe signal when it failed *because of
+        // the unique key*. Anything else — missing table, wrong schema, disk
+        // full — must not masquerade as "already sent this period", or every
+        // scheduled send would be silently skipped forever with no alert.
+        if (stripos($last_error, 'duplicate entry') === false) {
+            error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                'ThinkRank email report: could not write the send log — '
+                . ($last_error !== '' ? $last_error : 'insert failed with no error reported.')
+            );
+            return ['inserted' => false, 'log_id' => 0, 'attempts' => 0, 'write_failed' => true];
+        }
+
+        return $this->claim_retry($table, $site_id, $period_start, $hash);
+    }
+
+    /**
+     * A row already exists for this period + recipient set. Decide whether
+     * it represents a completed send (skip) or a failed one we may retry.
+     *
+     * @return array{inserted:bool,log_id:int,attempts:int,retry?:bool,exhausted?:bool}
+     */
+    private function claim_retry(string $table, int $site_id, string $period_start, string $hash): array {
+        global $wpdb;
+
+        $existing = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+            $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is built from $wpdb->prefix.
+                "SELECT id, status, attempts FROM {$table} WHERE site_id = %d AND period_start = %s AND recipient_hash = %s",
+                $site_id,
+                $period_start,
+                $hash
+            ),
+            ARRAY_A
+        );
+
+        // No row behind the failed insert — the write itself broke, not a
+        // dedupe collision. Treat as "don't send" and leave it to the caller.
+        if (!is_array($existing)) {
+            return ['inserted' => false, 'log_id' => 0, 'attempts' => 0];
+        }
+
+        // Anything that isn't a recorded failure means this period is done
+        // (or in flight elsewhere) — the original dedupe behaviour.
+        if (($existing['status'] ?? '') !== 'failed') {
+            return ['inserted' => false, 'log_id' => (int) $existing['id'], 'attempts' => (int) $existing['attempts']];
+        }
+
+        $attempts = (int) ($existing['attempts'] ?? 1);
+        if ($attempts >= self::MAX_SEND_ATTEMPTS) {
+            return [
+                'inserted'  => false,
+                'log_id'    => (int) $existing['id'],
+                'attempts'  => $attempts,
+                'exhausted' => true,
+            ];
+        }
+
+        $attempts++;
+        $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+            $table,
+            [
+                'status'        => 'pending',
+                'attempts'      => $attempts,
+                'error_message' => null,
+            ],
+            ['id' => (int) $existing['id']],
+            ['%s','%d','%s'],
+            ['%d']
         );
 
         return [
-            'inserted' => (bool) $rows,
-            'log_id'   => (int) $wpdb->insert_id,
+            'inserted' => true,
+            'log_id'   => (int) $existing['id'],
+            'attempts' => $attempts,
+            'retry'    => true,
         ];
     }
 
@@ -187,14 +342,17 @@ final class Email_Report_Generator {
         global $wpdb;
         $table = $wpdb->prefix . 'thinkrank_email_report_logs';
 
-        $status = !empty($result['success']) ? 'sent' : 'failed';
-        $error = empty($result['success']) ? ($result['error'] ?? __('Unknown send failure.', 'thinkrank')) : null;
+        $success = !empty($result['success']);
+        $status  = $success ? 'sent' : 'failed';
+        $error   = $success ? null : ($result['error'] ?? __('Unknown send failure.', 'thinkrank'));
 
         $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
             $table,
             [
-                'status'        => $status,
-                'sent_at'       => current_time('mysql'),
+                'status' => $status,
+                // Only a real send has a send time. wpdb writes a literal
+                // NULL for a null value, which is what a failed row wants.
+                'sent_at'       => $success ? current_time('mysql') : null,
                 'error_message' => $error,
             ],
             [
@@ -220,5 +378,9 @@ final class Email_Report_Generator {
     private function compute_next_run(int $frequency_days): string {
         $frequency_days = max(1, $frequency_days);
         return wp_date('Y-m-d H:i:s', strtotime('+' . $frequency_days . ' days'));
+    }
+
+    private function compute_retry_run(): string {
+        return wp_date('Y-m-d H:i:s', strtotime('+' . self::RETRY_DELAY_HOURS . ' hours'));
     }
 }

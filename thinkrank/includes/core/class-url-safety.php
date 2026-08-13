@@ -60,6 +60,20 @@ class Url_Safety {
      * @return bool True when the address is public.
      */
     public static function is_public_ip(string $ip): bool {
+        // An IPv6 address that embeds an IPv4 target (IPv4-mapped ::ffff:a.b.c.d,
+        // deprecated IPv4-compatible ::a.b.c.d, or NAT64 64:ff9b::a.b.c.d) routes
+        // to that IPv4 address, so it is judged by that address alone — decided
+        // here, before PHP's own filters, because those disagree with themselves
+        // across versions on ::ffff:0:0/96: up to PHP 8.2 the whole block passes
+        // as public (so ::ffff:169.254.169.254 reached cloud metadata), and from
+        // PHP 8.3 the whole block is reserved (so a perfectly routable
+        // ::ffff:8.8.8.8 was refused). Neither answer is usable; the embedded
+        // IPv4 is, and it gives identical results on every supported version.
+        $embedded = self::embedded_ipv4($ip);
+        if (null !== $embedded) {
+            return self::is_public_ip($embedded);
+        }
+
         if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
             return false;
         }
@@ -68,16 +82,6 @@ class Url_Safety {
             if (self::ipv4_in_cidr($ip, $cidr)) {
                 return false;
             }
-        }
-
-        // An IPv6 address that embeds an IPv4 target (IPv4-mapped ::ffff:a.b.c.d,
-        // deprecated IPv4-compatible ::a.b.c.d, or NAT64 64:ff9b::a.b.c.d) routes
-        // to that IPv4 address, but PHP's range filters above judge only the IPv6
-        // form and let it through. Re-run the full check on the embedded IPv4 so
-        // e.g. ::ffff:169.254.169.254 is blocked exactly like 169.254.169.254.
-        $embedded = self::embedded_ipv4($ip);
-        if (null !== $embedded && !self::is_public_ip($embedded)) {
-            return false;
         }
 
         return true;

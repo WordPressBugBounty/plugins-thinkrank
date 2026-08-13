@@ -121,7 +121,7 @@ if ($logo_link !== '') {
                         <tr>
                             <td align="center" style="padding:0 24px 28px 24px;">
                                 <a href="<?php echo esc_url($cta_url); ?>" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font:600 14px/1 -apple-system,Segoe UI,Roboto,sans-serif;padding:12px 22px;border-radius:8px;">
-                                    <?php esc_html_e('View Full Report', 'thinkrank'); ?>
+                                    <?php esc_html_e('View Full Report in Dashboard', 'thinkrank'); ?>
                                 </a>
                             </td>
                         </tr>

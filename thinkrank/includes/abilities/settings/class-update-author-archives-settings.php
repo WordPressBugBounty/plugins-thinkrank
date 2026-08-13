@@ -122,19 +122,24 @@ class Update_Author_Archives_Settings extends Ability_Base {
 			);
 		}
 
-		$store = Settings::instance();
-		$found = false;
+		$store  = Settings::instance();
+		$found  = false;
+		$failed = [];
 
 		foreach ( self::BOOL_MAP as $alias => $storage_key ) {
 			if ( array_key_exists( $alias, $settings ) ) {
-				$store->set( $storage_key, (bool) $settings[ $alias ] );
 				$found = true;
+				if ( ! $store->set( $storage_key, (bool) $settings[ $alias ] ) ) {
+					$failed[] = $alias;
+				}
 			}
 		}
 		foreach ( self::STRING_MAP as $alias => $storage_key ) {
 			if ( array_key_exists( $alias, $settings ) ) {
-				$store->set( $storage_key, sanitize_text_field( (string) $settings[ $alias ] ) );
 				$found = true;
+				if ( ! $store->set( $storage_key, sanitize_text_field( (string) $settings[ $alias ] ) ) ) {
+					$failed[] = $alias;
+				}
 			}
 		}
 
@@ -143,6 +148,20 @@ class Update_Author_Archives_Settings extends Ability_Base {
 				'thinkrank_no_valid_author_archives_setting_keys',
 				__( 'No valid author archives setting keys were provided.', 'thinkrank' ),
 				[ 'status' => 400 ]
+			);
+		}
+
+		// A discarded set() return meant a failed write still answered
+		// "settings updated"; surface it instead.
+		if ( ! empty( $failed ) ) {
+			return new \WP_Error(
+				'thinkrank_author_archives_settings_not_saved',
+				sprintf(
+					/* translators: %s is a comma-separated list of setting names that could not be saved. */
+					__( 'Some author archives settings could not be saved: %s', 'thinkrank' ),
+					implode( ', ', $failed )
+				),
+				[ 'status' => 500 ]
 			);
 		}
 

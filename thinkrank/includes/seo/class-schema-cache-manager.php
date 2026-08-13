@@ -137,8 +137,20 @@ class Schema_Cache_Manager {
     public function clear_all(): bool {
         global $wpdb;
 
-        // Clear memory cache (if using object cache)
-        wp_cache_flush_group(self::CACHE_GROUP);
+        // Clear memory cache (if using object cache).
+        //
+        // wp_cache_flush_group() is WordPress 6.1+, and the plugin header
+        // declares "Requires at least: 6.0" — on 6.0 this was a fatal
+        // "call to undefined function" on every schema settings save, since
+        // save_settings() reaches here via invalidate_all_cache(). Fall back to
+        // a full flush rather than skipping: a no-op would leave stale schema
+        // served until the database rows expire, which is worse than a coarse
+        // flush. Deactivator already guards the same call this way.
+        if (function_exists('wp_cache_flush_group')) {
+            wp_cache_flush_group(self::CACHE_GROUP);
+        } else {
+            wp_cache_flush();
+        }
 
         // Clear database cache
         $table_name = $wpdb->prefix . 'thinkrank_ai_cache';

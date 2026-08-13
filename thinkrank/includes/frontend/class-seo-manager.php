@@ -461,9 +461,19 @@ class SEO_Manager {
      * Output meta description (HIGH PRIORITY)
      * Priority: Post-specific metadata > Global SEO templates > Site Identity templates > WordPress defaults
      *
+     * Author archives are skipped entirely: Author_Archives_Manager owns that
+     * context and prints its own template-based description on wp_head at
+     * priority 5. get_archive_meta_description() already declines to build one
+     * there, but the fallback chain used to continue into the Site Identity
+     * default, so the page ended up with two <meta name="description"> tags.
+     *
      * @return void
      */
     public function output_meta_description(): void {
+        if (is_author()) {
+            return;
+        }
+
         $description = $this->get_meta_description();
 
         if ($description) {

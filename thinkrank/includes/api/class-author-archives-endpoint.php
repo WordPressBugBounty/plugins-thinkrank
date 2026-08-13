@@ -14,7 +14,6 @@ declare(strict_types=1);
 
 namespace ThinkRank\API;
 
-use ThinkRank\API\Traits\CSRF_Protection;
 use ThinkRank\Core\Settings;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -26,7 +25,14 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Load CSRF Protection trait
+// Load CSRF Protection trait.
+//
+// This class does not compose the trait — its routes are guarded by
+// check_permissions() plus WordPress' own X-WP-Nonce enforcement for cookie
+// auth — but the require stays: of the 13 endpoints that call trait methods
+// only 3 require the file themselves, so the other 10 depend on whichever
+// endpoint loaded first having pulled it in. Untangling that belongs in an
+// API-wide autoload pass, not here.
 require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-csrf-protection.php';
 
 /**
@@ -35,7 +41,6 @@ require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-csrf-protection.p
  * @since 1.0.0
  */
 class Author_Archives_Endpoint extends WP_REST_Controller {
-    use CSRF_Protection;
 
     /**
      * API namespace
@@ -50,6 +55,29 @@ class Author_Archives_Endpoint extends WP_REST_Controller {
      * @var string
      */
     protected $rest_base = 'author-archives';
+
+    /**
+     * Boolean API field => Settings storage key.
+     *
+     * @since 1.29.1
+     * @var array<string, string>
+     */
+    private const BOOL_SETTINGS = [
+        'enabled'                => 'author_archives_enabled',
+        'show_in_search_results' => 'author_archives_index',
+        'show_empty_archives'    => 'author_archives_show_empty',
+    ];
+
+    /**
+     * String API field => Settings storage key.
+     *
+     * @since 1.29.1
+     * @var array<string, string>
+     */
+    private const STRING_SETTINGS = [
+        'title'            => 'author_archives_title',
+        'meta_description' => 'author_archives_meta_desc',
+    ];
 
     /**
      * Register API routes
@@ -95,17 +123,9 @@ class Author_Archives_Endpoint extends WP_REST_Controller {
      */
     public function get_settings(WP_REST_Request $request) {
         try {
-            $settings = Settings::instance();
-
             return new WP_REST_Response([
                 'success' => true,
-                'data' => [
-                    'enabled' => $settings->get('author_archives_enabled', true),
-                    'show_in_search_results' => $settings->get('author_archives_index', true),
-                    'show_empty_archives' => $settings->get('author_archives_show_empty', false),
-                    'title' => $settings->get('author_archives_title', '%author_name% – %site_title% %page%'),
-                    'meta_description' => $settings->get('author_archives_meta_desc', 'Articles written by %author_name% on %site_title%')
-                ],
+                'data' => $this->get_current_settings(),
             ], 200);
         } catch (\Exception $e) {
             return new WP_Error(
@@ -114,6 +134,27 @@ class Author_Archives_Endpoint extends WP_REST_Controller {
                 ['status' => 500]
             );
         }
+    }
+
+    /**
+     * Read the stored settings in API field shape.
+     *
+     * Shared by GET and by the POST response so a save always answers with the
+     * same values a subsequent read would return.
+     *
+     * @since 1.29.1
+     * @return array<string, bool|string>
+     */
+    private function get_current_settings(): array {
+        $settings = Settings::instance();
+
+        return [
+            'enabled' => (bool) $settings->get('author_archives_enabled', true),
+            'show_in_search_results' => (bool) $settings->get('author_archives_index', true),
+            'show_empty_archives' => (bool) $settings->get('author_archives_show_empty', false),
+            'title' => (string) $settings->get('author_archives_title', Settings::DEFAULT_AUTHOR_ARCHIVES_TITLE),
+            'meta_description' => (string) $settings->get('author_archives_meta_desc', Settings::DEFAULT_AUTHOR_ARCHIVES_META_DESC),
+        ];
     }
 
     /**
@@ -134,38 +175,53 @@ class Author_Archives_Endpoint extends WP_REST_Controller {
                 );
             }
 
+            // Reject unrecognised fields rather than reporting them as saved.
+            // A typo'd key used to come back inside a "saved successfully"
+            // envelope while nothing was written.
+            $unknown = array_diff(
+                array_keys($params),
+                array_keys(self::BOOL_SETTINGS),
+                array_keys(self::STRING_SETTINGS)
+            );
+            if (!empty($unknown)) {
+                return new WP_Error(
+                    'invalid_params',
+                    'Unknown setting keys: ' . implode(', ', $unknown),
+                    ['status' => 400]
+                );
+            }
+
             $settings = Settings::instance();
-            $success = true;
+            $failed = [];
 
-            // Map and save settings
-            if (isset($params['enabled'])) {
-                $success = $settings->set('author_archives_enabled', (bool) $params['enabled']);
+            // Accumulate failures instead of overwriting $success on each
+            // field — the old code let the last field's result decide the
+            // whole response, so an earlier failure reported as a 200.
+            foreach (self::BOOL_SETTINGS as $field => $key) {
+                if (isset($params[$field]) && !$settings->set($key, (bool) $params[$field])) {
+                    $failed[] = $field;
+                }
             }
-            if (isset($params['show_in_search_results'])) {
-                $success = $settings->set('author_archives_index', (bool) $params['show_in_search_results']);
-            }
-            if (isset($params['show_empty_archives'])) {
-                $success = $settings->set('author_archives_show_empty', (bool) $params['show_empty_archives']);
-            }
-            if (isset($params['title'])) {
-                $success = $settings->set('author_archives_title', sanitize_text_field($params['title']));
-            }
-            if (isset($params['meta_description'])) {
-                $success = $settings->set('author_archives_meta_desc', sanitize_text_field($params['meta_description']));
+            foreach (self::STRING_SETTINGS as $field => $key) {
+                if (isset($params[$field]) && !$settings->set($key, sanitize_text_field((string) $params[$field]))) {
+                    $failed[] = $field;
+                }
             }
 
-            if (!$success) {
+            if (!empty($failed)) {
                 return new WP_Error(
                     'update_failed',
-                    'Failed to update settings',
-                    ['status' => 500]
+                    'Failed to update settings: ' . implode(', ', $failed),
+                    ['status' => 500, 'failed_keys' => $failed]
                 );
             }
 
             return new WP_REST_Response([
                 'success' => true,
                 'message' => 'Settings saved successfully',
-                'data' => $params // Return back what was sent for UI consistency
+                // Report what is actually stored, not an echo of the request.
+                // Returning $params advertised unsanitized input as saved state.
+                'data' => $this->get_current_settings(),
             ], 200);
         } catch (\Exception $e) {
             return new WP_Error(

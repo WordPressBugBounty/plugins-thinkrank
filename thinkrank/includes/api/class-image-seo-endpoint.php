@@ -238,6 +238,21 @@ class Image_SEO_Endpoint extends WP_REST_Controller {
                 'required' => false,
                 'sanitize_callback' => $config['type'] === 'boolean' ? 'rest_sanitize_boolean' : 'sanitize_text_field'
             ];
+
+            // Carry through any constraint the schema already declares. Copying
+            // only type/required/sanitize_callback silently dropped the
+            // alt_source enum, so the REST validator never enforced it.
+            //
+            // The enum needs a validate_callback to have any effect:
+            // WP_REST_Request::has_valid_params() skips an arg entirely unless
+            // one is set, so declaring the enum alone leaves it inert. Attach
+            // it only to args that actually carry a constraint — applying it to
+            // every arg would also start enforcing `type`, turning today's
+            // lenient boolean coercion into a hard 400.
+            if (isset($config['enum'])) {
+                $args[$key]['enum']              = $config['enum'];
+                $args[$key]['validate_callback'] = 'rest_validate_request_arg';
+            }
         }
 
         return $args;

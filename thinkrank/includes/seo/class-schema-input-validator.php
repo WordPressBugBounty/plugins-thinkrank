@@ -809,16 +809,23 @@ class Schema_Input_Validator {
                 return $result;
             }
 
-            // SECURITY: Check context ownership
-            if ($user_id && !$this->validate_context_ownership($post, $user_id)) {
+            // SECURITY: Check context ownership.
+            // Fails closed on a missing user — a security helper that waves the
+            // check through when it cannot identify the caller is the wrong way
+            // round. Every caller passes a real ID, so this only tightens an
+            // unreachable path.
+            if (!$user_id || !$this->validate_context_ownership($post, $user_id)) {
                 $result['errors'][] = "Access denied: You don't have permission to modify this {$context_type}";
                 return $result;
             }
         } else {
             $context_id = null; // Site context doesn't use ID
 
-            // SECURITY: Check site-level permissions for site context
-            if ($user_id && !current_user_can('manage_options')) {
+            // SECURITY: Check site-level permissions for site context.
+            // user_can($user_id, …) rather than current_user_can() so this
+            // agrees with the rest of the validator outside a REST request,
+            // where the current user and $user_id can differ (cron, CLI).
+            if (!$user_id || !user_can($user_id, 'manage_options')) {
                 $result['errors'][] = 'Access denied: You need administrator privileges for site-level schema operations';
                 return $result;
             }
@@ -843,23 +850,21 @@ class Schema_Input_Validator {
      * @return bool Whether user has permission
      */
     private function validate_context_ownership(\WP_Post $post, int $user_id): bool {
-        // Check if user can edit this specific post
-        if (current_user_can('edit_post', $post->ID)) {
-            return true;
-        }
-
-        // Check if user is the post author
-        if ((int) $post->post_author === (int) $user_id) {
-            return true;
-        }
-
-        // Check if user has general edit capabilities for this post type
-        $post_type_object = get_post_type_object($post->post_type);
-        if ($post_type_object && current_user_can($post_type_object->cap->edit_posts)) {
-            return true;
-        }
-
-        return false;
+        // `edit_post` is a meta capability: map_meta_cap() already resolves
+        // authorship, published state, and edit_others_posts for this specific
+        // post. It is the whole check.
+        //
+        // Two fallbacks used to sit under it and between them defeated the
+        // function. One granted access on authorship alone, which hands a
+        // Contributor back a post they lost edit rights to once it published.
+        // The other granted access to anyone holding the post type's *general*
+        // edit_posts capability — a cap every Author and Contributor has, that
+        // says nothing about this post — so ownership validation returned true
+        // for every post on the site (#326).
+        //
+        // user_can() rather than current_user_can() so the method honours the
+        // $user_id it was handed, matching validate_user_permissions().
+        return user_can($user_id, 'edit_post', $post->ID);
     }
 
     /**

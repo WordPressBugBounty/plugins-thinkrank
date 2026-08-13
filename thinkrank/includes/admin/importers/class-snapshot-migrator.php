@@ -23,6 +23,7 @@ declare(strict_types=1);
 namespace ThinkRank\Admin\Importers;
 
 use ThinkRank\SEO\Focus_Keywords;
+use ThinkRank\SEO\Metadata_Pending;
 use ThinkRank\SEO\Pattern_Resolver;
 
 if (!defined('ABSPATH')) {
@@ -146,6 +147,14 @@ class Snapshot_Migrator {
                 'processed' => 0,
                 'skipped'  => 0,
             ];
+        }
+
+        // Tell an open editor that SEO meta is being written right now, so its
+        // panel adopts the imported title / description instead of showing the
+        // pre-import values until a reload. Re-marked on every chunk, which is
+        // what holds the window open for a long migration (#329).
+        if ($type === 'postmeta') {
+            Metadata_Pending::mark_bulk();
         }
 
         $processed = 0;
@@ -300,6 +309,13 @@ class Snapshot_Migrator {
         $type_info = $manifest['types'][$type] ?? [];
         $total_chunks = $type_info['total_chunks'] ?? 0;
         $has_more = $page < $total_chunks;
+
+        // Last chunk: no more writes are coming, so stop every open editor
+        // polling for one. The marker's own expiry covers a migration that is
+        // abandoned part-way and never reaches this line.
+        if ($type === 'postmeta' && !$has_more) {
+            Metadata_Pending::clear_bulk();
+        }
 
         return [
             'status'          => $has_more ? 'processing' : 'complete',

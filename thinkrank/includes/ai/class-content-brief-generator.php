@@ -84,7 +84,9 @@ class Content_Brief_Generator {
     /**
      * AI client instance
      *
-     * @var OpenAI_Client|Claude_Client
+     * Null when the generator was built for storage-only work.
+     *
+     * @var OpenAI_Client|Claude_Client|null
      */
     private $ai_client;
 
@@ -93,16 +95,29 @@ class Content_Brief_Generator {
      *
      * @param Settings|null $settings Settings instance
      * @param OpenAI_Client|Claude_Client|null $ai_client AI client instance
+     * @param bool $require_ai_client Whether a provider client is required. Pass
+     *                                false for storage-only use (list/export/
+     *                                delete), which never calls a provider.
      */
-    public function __construct(?Settings $settings = null, $ai_client = null) {
+    public function __construct(?Settings $settings = null, $ai_client = null, bool $require_ai_client = true) {
         $this->settings = $settings ?? Settings::instance();
 
         if ($ai_client) {
             $this->ai_client = $ai_client;
-        } else {
-            // Fallback to creating own client for backward compatibility
-            $this->init_ai_client();
+
+            return;
         }
+
+        // Read-only callers (listing, exporting and deleting saved briefs) only
+        // touch the database and never reach a provider. Constructing a client
+        // for them turns "no API key configured" — the default state of a fresh
+        // install — into a hard failure, so let them opt out.
+        if (!$require_ai_client) {
+            return;
+        }
+
+        // Fallback to creating own client for backward compatibility
+        $this->init_ai_client();
     }
 
     /**

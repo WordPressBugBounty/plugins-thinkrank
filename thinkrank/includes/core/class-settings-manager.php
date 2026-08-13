@@ -53,6 +53,18 @@ class Settings_Manager {
     private SEO_Settings_Manager $seo_settings;
 
     /**
+     * Keys the most recent core-category save could not persist.
+     *
+     * A batch save is all-or-nothing in its reporting but not in its writes, so
+     * a caller that gets false needs to know *which* settings did not make it —
+     * a bare boolean leaves the UI unable to say anything useful (#300).
+     *
+     * @since 1.30.0
+     * @var string[]
+     */
+    private array $last_failed_keys = [];
+
+    /**
      * Settings categories mapping
      *
      * @since 1.0.0
@@ -80,7 +92,12 @@ class Settings_Manager {
                 'debug_mode',
                 'api_timeout',
                 'retry_attempts',
-                'rate_limit_enabled',
+                // 'rate_limit_enabled' used to be listed here, but it has no
+                // entry in Settings::defaults, so Settings::set() rejected it on
+                // every save and no code ever read it. Under the old 70%
+                // threshold that silent rejection was reported as success;
+                // all-or-nothing reporting would now fail every core save that
+                // carried it, so the dead key goes rather than the save (#300).
                 'data_retention_days',
                 'anonymize_logs',
                 'share_usage_data',
@@ -318,11 +335,30 @@ class Settings_Manager {
 
         $category_config = $this->settings_categories[$category];
 
+        // Reset here, not only in the core path: a SEO-category save must not
+        // leave a previous core save's failed keys readable.
+        $this->last_failed_keys = [];
+
         if ($category_config['manager'] === 'core') {
             return $this->update_core_settings_by_category($settings, $category);
         } else {
             return $this->update_seo_settings_by_category($settings, $category, $context_type, $context_id);
         }
+    }
+
+    /**
+     * Keys the most recent update_settings() call could not persist.
+     *
+     * Empty on success, and reset at the start of every update_settings()
+     * call. SEO categories persist through their own manager and do not
+     * report per key, so this stays empty for them.
+     *
+     * @since 1.30.0
+     *
+     * @return string[] Setting keys that failed to save.
+     */
+    public function get_last_failed_keys(): array {
+        return $this->last_failed_keys;
     }
 
     /**
@@ -610,8 +646,9 @@ class Settings_Manager {
      */
     private function update_core_settings_by_category(array $settings, string $category): bool {
         $category_config = $this->settings_categories[$category];
-        $success_count = 0;
         $total_count = 0;
+
+        $this->last_failed_keys = [];
 
         // Sanitize per field before persisting. This is unconditional: callers
         // (including the REST write routes, where the client can ask to skip
@@ -623,15 +660,25 @@ class Settings_Manager {
             if (in_array($key, $category_config['keys'], true)) {
                 $total_count++;
 
-                if ($this->core_settings->set($key, $value)) {
-                    $success_count++;
+                if (!$this->core_settings->set($key, $value)) {
+                    $this->last_failed_keys[] = $key;
+
+                    // Name the key in the log: the UI can only ever show one
+                    // message for the batch, so without this a single dropped
+                    // setting is indistinguishable from a healthy save.
+                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- deliberate diagnostic, see above.
+                    error_log(sprintf('ThinkRank [%s]: settings save failed — key \'%s\' was not stored', $category, $key));
                 }
             }
         }
 
-        // Consider successful if at least 70% of settings were saved
-        $success_rate = $total_count > 0 ? ($success_count / $total_count) : 0;
-        $success = $success_rate >= 0.7;
+        // Every requested key must persist. A partial save used to pass on a 70%
+        // threshold, so a batch could silently drop up to a third of the user's
+        // settings while the UI reported success and the values were simply gone
+        // (#300). Note the write is not transactional: the keys that did save
+        // stay saved, which is why the failed keys are reported rather than just
+        // a bare false.
+        $success = $total_count > 0 && empty($this->last_failed_keys);
 
         if ($success) {
             update_option('thinkrank_settings_last_updated', current_time('mysql'));

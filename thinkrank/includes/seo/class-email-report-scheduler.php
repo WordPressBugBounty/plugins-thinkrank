@@ -89,12 +89,27 @@ final class Email_Report_Scheduler {
     /**
      * Convenience used by REST + admin UI to surface the next-send timestamp
      * to the user. Defends against an empty or stale next_scheduled_at.
+     *
+     * next_scheduled_at is stored as a site-local `Y-m-d H:i:s` string with
+     * no zone information. Handing that to the browser meant `new Date()`
+     * read it in the *viewer's* timezone, so any admin whose browser zone
+     * differed from the site's saw the wrong time. Emit a real ISO 8601
+     * string carrying the site's UTC offset instead, which parses to one
+     * unambiguous instant everywhere.
      */
     public function next_run_iso(): ?string {
         $config = $this->config->get();
         if (empty($config['enabled']) || empty($config['next_scheduled_at'])) {
             return null;
         }
-        return (string) $config['next_scheduled_at'];
+
+        // Interpret the stored wall clock in the site timezone, then render
+        // that same instant with its offset attached.
+        $timestamp = (int) get_gmt_from_date((string) $config['next_scheduled_at'], 'U');
+        if ($timestamp <= 0) {
+            return null;
+        }
+
+        return wp_date('c', $timestamp);
     }
 }

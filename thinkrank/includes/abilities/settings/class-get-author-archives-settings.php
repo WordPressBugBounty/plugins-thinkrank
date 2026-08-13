@@ -36,8 +36,8 @@ class Get_Author_Archives_Settings extends Ability_Base {
 	 * String settings: API alias => [ storage_key, default ].
 	 */
 	private const STRING_MAP = [
-		'title'            => [ 'author_archives_title', '%author_name% – %site_title% %page%' ],
-		'meta_description' => [ 'author_archives_meta_desc', 'Articles written by %author_name% on %site_title%' ],
+		'title'            => [ 'author_archives_title', Settings::DEFAULT_AUTHOR_ARCHIVES_TITLE ],
+		'meta_description' => [ 'author_archives_meta_desc', Settings::DEFAULT_AUTHOR_ARCHIVES_META_DESC ],
 	];
 
 	/**

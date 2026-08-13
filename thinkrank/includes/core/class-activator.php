@@ -30,12 +30,23 @@ if (!defined('ABSPATH')) {
 class Activator {
 
     /**
+     * Option the uninstaller sets to record a deliberate removal.
+     *
+     * Pro's Free_Plugin_Installer skips its silent auto-install while this is
+     * set, so activating again — the user asking for the plugin back — has to
+     * clear it. Keep in sync with uninstall.php.
+     */
+    public const UNINSTALLED_OPTION = 'thinkrank_uninstalled';
+
+    /**
      * Plugin activation tasks
-     * 
+     *
      * @return void
      * @throws \Exception If activation fails
      */
     public function activate(): void {
+        delete_option(self::UNINSTALLED_OPTION);
+
         $this->check_requirements();
         $this->create_database_tables();
         $this->set_default_options();

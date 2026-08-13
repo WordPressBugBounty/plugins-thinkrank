@@ -122,8 +122,15 @@ class Cache_Manager {
     public function clear_all(): bool {
         global $wpdb;
         
-        // Clear memory cache (if using object cache)
-        wp_cache_flush_group(self::CACHE_GROUP);
+        // Clear memory cache (if using object cache).
+        // wp_cache_flush_group() is WP 6.1+ and the plugin supports 6.0; see
+        // Schema_Cache_Manager::clear_all() for the reasoning behind the
+        // fallback rather than a skip.
+        if (function_exists('wp_cache_flush_group')) {
+            wp_cache_flush_group(self::CACHE_GROUP);
+        } else {
+            wp_cache_flush();
+        }
         
         // Clear database cache
         $table_name = $wpdb->prefix . 'thinkrank_ai_cache';
