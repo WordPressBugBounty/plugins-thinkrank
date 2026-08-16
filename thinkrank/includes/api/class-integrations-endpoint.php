@@ -823,7 +823,7 @@ class Integrations_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function disconnect_google_account(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function disconnect_google_account(WP_REST_Request $request) {
         try {
             // Best-effort revoke at Google so the refresh token (which never
             // auto-expires) can't keep querying on the admin's behalf after
@@ -935,7 +935,7 @@ class Integrations_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function verify_ga4_tracking(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function verify_ga4_tracking(WP_REST_Request $request) {
         try {
             // Empty is allowed and meaningful: verify_tracking() then reads the
             // homepage and discovers whichever GA4 ID is actually serving. The
@@ -973,7 +973,7 @@ class Integrations_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function detect_ga4_conflicts(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function detect_ga4_conflicts(WP_REST_Request $request) {
         try {
             // Load tracking manager
             if (!class_exists('ThinkRank\\Frontend\\Google_Analytics_Tracking_Manager')) {

@@ -315,7 +315,7 @@ class Usage_Analytics_Endpoint {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_overview_metrics(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_overview_metrics(WP_REST_Request $request) {
         $period = $request->get_param('period');
         $user_id = $request->get_param('user_id') ?: get_current_user_id();
 
@@ -389,7 +389,7 @@ class Usage_Analytics_Endpoint {
      * @param WP_REST_Request $request Request object
      * @return bool|WP_Error Permission result
      */
-    public function check_permissions(WP_REST_Request $request): bool|WP_Error {
+    public function check_permissions(WP_REST_Request $request) {
         // Check if user is logged in
         if (!is_user_logged_in()) {
             return new WP_Error(
@@ -459,13 +459,22 @@ class Usage_Analytics_Endpoint {
      * @return string|null Cutoff datetime in MySQL format, or null for all time
      */
     private function get_date_cutoff(string $period): ?string {
-        $days = match($period) {
-            '7d'  => 7,
-            '30d' => 30,
-            '90d' => 90,
-            'all' => null,
-            default => 30,
-        };
+        switch ($period) {
+            case '7d':
+                $days = 7;
+                break;
+            case '30d':
+                $days = 30;
+                break;
+            case '90d':
+                $days = 90;
+                break;
+            case 'all':
+                $days = null;
+                break;
+            default:
+                $days = 30;
+        }
         if ($days === null) {
             return null;
         }
@@ -482,13 +491,18 @@ class Usage_Analytics_Endpoint {
      * @return string SQL date condition
      */
     private function get_date_condition(string $period): string {
-        return match($period) {
-            '7d' => "AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)",
-            '30d' => "AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)",
-            '90d' => "AND created_at >= DATE_SUB(NOW(), INTERVAL 90 DAY)",
-            'all' => "",
-            default => "AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
-        };
+        switch ($period) {
+            case '7d':
+                return "AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
+            case '30d':
+                return "AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
+            case '90d':
+                return "AND created_at >= DATE_SUB(NOW(), INTERVAL 90 DAY)";
+            case 'all':
+                return "";
+            default:
+                return "AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
+        }
     }
     
     /**
@@ -607,10 +621,19 @@ class Usage_Analytics_Endpoint {
         }
 
         if (empty($usage_data)) {
+            // Must return the same shape as the populated path below —
+            // get_overview_metrics() reads every key unconditionally, so a
+            // short array here surfaces as undefined-key warnings and null
+            // fields for any user with no AI usage yet (i.e. a fresh install).
+            // The values mirror what the loop below produces for zero rows.
             return [
                 'total_actions' => 0,
                 'total_tokens' => 0,
                 'feature_breakdown' => [],
+                'features_used_count' => 0,
+                'most_used_feature' => '',
+                'most_used_count' => 0,
+                'success_rate' => 0,
                 'usage_data' => [],
                 'cost_change' => 0,
                 'time_saved_change' => 0
@@ -785,7 +808,7 @@ class Usage_Analytics_Endpoint {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_usage_breakdown(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_usage_breakdown(WP_REST_Request $request) {
         try {
             $user_id = get_current_user_id();
             $period = $request->get_param('period') ?? '30d';
@@ -829,7 +852,7 @@ class Usage_Analytics_Endpoint {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_cost_analysis(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_cost_analysis(WP_REST_Request $request) {
         // Return 200 with success:false so the frontend can render an
         // "unavailable" state — apiFetch rejects on non-2xx, which would
         // otherwise surface as a generic hard error.

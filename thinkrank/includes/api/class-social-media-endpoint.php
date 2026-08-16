@@ -333,7 +333,7 @@ class Social_Media_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function validate_settings(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function validate_settings(WP_REST_Request $request) {
         try {
             $settings = $request->get_param('settings') ?? [];
             $context_type = $request->get_param('context_type') ?? 'site';

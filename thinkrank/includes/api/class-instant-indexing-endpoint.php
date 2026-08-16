@@ -16,6 +16,7 @@ declare(strict_types=1);
 namespace ThinkRank\API;
 
 use ThinkRank\Core\Settings;
+use ThinkRank\SEO\Instant_Indexing_Reconciler;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -53,6 +54,14 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
      * @var string
      */
     private $option_name = 'thinkrank_instant_indexing_settings';
+
+    /**
+     * Reconciler instance
+     *
+     * @since 1.31.0
+     * @var Instant_Indexing_Reconciler|null
+     */
+    private ?Instant_Indexing_Reconciler $reconciler = null;
 
     /**
      * Register API routes
@@ -161,6 +170,110 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
                 ]
             ]
         );
+
+        // Coverage report: which published URLs IndexNow actually knows about.
+        register_rest_route(
+            $this->namespace,
+            '/' . $this->rest_base . '/coverage',
+            [
+                [
+                    'methods' => 'GET',
+                    'callback' => [$this, 'get_coverage_report'],
+                    'permission_callback' => [$this, 'check_read_permissions'],
+                    'args' => [
+                        'limit' => [
+                            'required' => false,
+                            'type' => 'integer',
+                            'default' => Instant_Indexing_Reconciler::REPORT_LIMIT,
+                            'minimum' => 1,
+                            'maximum' => 2000
+                        ],
+                        'offset' => [
+                            'required' => false,
+                            'type' => 'integer',
+                            'default' => 0,
+                            'minimum' => 0
+                        ]
+                    ]
+                ]
+            ]
+        );
+
+        // Run a reconciliation pass now instead of waiting for the daily cron.
+        register_rest_route(
+            $this->namespace,
+            '/' . $this->rest_base . '/reconcile',
+            [
+                [
+                    'methods' => 'POST',
+                    // Resubmits URLs to a third party, so this needs the manage
+                    // capability rather than the read one.
+                    'callback' => [$this, 'run_reconciliation'],
+                    'permission_callback' => [$this, 'check_manage_permissions'],
+                    'args' => [
+                        'dry_run' => [
+                            'required' => false,
+                            'type' => 'boolean',
+                            'default' => false
+                        ]
+                    ]
+                ]
+            ]
+        );
+    }
+
+    /**
+     * Get the IndexNow coverage report.
+     *
+     * @since 1.31.0
+     *
+     * @param WP_REST_Request $request Request object
+     * @return WP_REST_Response Response object
+     */
+    public function get_coverage_report(WP_REST_Request $request): WP_REST_Response {
+        $report = $this->get_reconciler()->build_report(
+            (int) $request->get_param('limit'),
+            (int) $request->get_param('offset')
+        );
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => $report,
+        ], 200);
+    }
+
+    /**
+     * Run a reconciliation pass on demand.
+     *
+     * @since 1.31.0
+     *
+     * @param WP_REST_Request $request Request object
+     * @return WP_REST_Response Response object
+     */
+    public function run_reconciliation(WP_REST_Request $request): WP_REST_Response {
+        $summary = $this->get_reconciler()->reconcile((bool) $request->get_param('dry_run'));
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => $summary,
+            'message' => $summary['ran']
+                ? sprintf('Reconciliation complete: %d URLs examined, %d resubmitted.', $summary['examined'], $summary['retried'])
+                : $summary['reason'],
+        ], 200);
+    }
+
+    /**
+     * Reconciler instance, built on first use.
+     *
+     * @since 1.31.0
+     * @return Instant_Indexing_Reconciler
+     */
+    private function get_reconciler(): Instant_Indexing_Reconciler {
+        if (null === $this->reconciler) {
+            $this->reconciler = new Instant_Indexing_Reconciler();
+        }
+
+        return $this->reconciler;
     }
 
     /**

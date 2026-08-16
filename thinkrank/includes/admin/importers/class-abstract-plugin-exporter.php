@@ -210,7 +210,7 @@ abstract class Abstract_Plugin_Exporter {
      * @param int|null $post_id Post ID for context-specific variables
      * @return string Converted string
      */
-    abstract protected function convert_template_variables(mixed $value, ?int $post_id = null): string;
+    abstract protected function convert_template_variables($value, ?int $post_id = null): string;
 
     /**
      * Coerce a foreign settings/meta value into a template string.
@@ -224,7 +224,7 @@ abstract class Abstract_Plugin_Exporter {
      * @param mixed $value Raw value from the source plugin's storage.
      * @return string Usable template string, possibly ''.
      */
-    final protected function stringify_template_value(mixed $value): string {
+    final protected function stringify_template_value($value): string {
         if (is_string($value)) {
             return $value;
         }
@@ -252,15 +252,28 @@ abstract class Abstract_Plugin_Exporter {
         // raw fetched-row count here.
         $this->last_page_row_count = null;
 
-        $records = match ($type) {
-            'postmeta'     => $this->export_postmeta_page($page),
-            'termmeta'     => $this->export_termmeta_page($page),
-            'usermeta'     => $this->export_usermeta_page($page),
-            'settings'     => $this->export_settings(),
-            'redirections' => $this->export_redirections_page($page),
-            '404_logs'     => $this->export_404_logs_page($page),
-            default        => [],
-        };
+        switch ($type) {
+            case 'postmeta':
+                $records = $this->export_postmeta_page($page);
+                break;
+            case 'termmeta':
+                $records = $this->export_termmeta_page($page);
+                break;
+            case 'usermeta':
+                $records = $this->export_usermeta_page($page);
+                break;
+            case 'settings':
+                $records = $this->export_settings();
+                break;
+            case 'redirections':
+                $records = $this->export_redirections_page($page);
+                break;
+            case '404_logs':
+                $records = $this->export_404_logs_page($page);
+                break;
+            default:
+                $records = [];
+        }
 
         $exported_count = count($records);
 

@@ -959,7 +959,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * @param int   $term_id Term ID for context
      * @return string Resolved value
      */
-    private function convert_term_template_variables(mixed $value, int $term_id): string {
+    private function convert_term_template_variables($value, int $term_id): string {
         // Same foreign-data rule as convert_template_variables (see abstract).
         $value = $this->stringify_template_value($value);
         if ($value === '' || strpos($value, '%') === false) {
@@ -979,7 +979,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         return trim((string) preg_replace('/\s{2,}/', ' ', $this->convert_template_variables($value)));
     }
 
-    protected function convert_template_variables(mixed $value, ?int $post_id = null): string {
+    protected function convert_template_variables($value, ?int $post_id = null): string {
         // Foreign data first: booleans/arrays in the source plugin's options
         // must degrade to '' here, not fatal the migration (see abstract).
         $value = $this->stringify_template_value($value);
@@ -1046,7 +1046,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * @param mixed $template Raw Rank Math template
      * @return string ThinkRank-compatible template
      */
-    private function convert_template_tokens(mixed $template): string {
+    private function convert_template_tokens($template): string {
         // Foreign data first: booleans/arrays in the source plugin's options
         // must degrade to '' here, not fatal the migration (see abstract).
         $template = $this->stringify_template_value($template);
@@ -1091,7 +1091,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * @param string $format Raw Rank Math image format
      * @return string ThinkRank-compatible image format
      */
-    private function convert_image_tokens(mixed $format): string {
+    private function convert_image_tokens($format): string {
         // Foreign data first: booleans/arrays in the source plugin's options
         // must degrade to '' here, not fatal the migration (see abstract).
         $format = $this->stringify_template_value($format);

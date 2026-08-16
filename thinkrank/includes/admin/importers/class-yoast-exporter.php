@@ -453,7 +453,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
     /**
      * {@inheritDoc}
      */
-    protected function convert_template_variables(mixed $value, ?int $post_id = null): string {
+    protected function convert_template_variables($value, ?int $post_id = null): string {
         // Foreign data first: booleans/arrays in the source plugin's options
         // must degrade to '' here, not fatal the migration (see abstract).
         $value = $this->stringify_template_value($value);
@@ -524,7 +524,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
      * @param mixed $template Raw Yoast template (e.g. "%%title%% %%sep%% %%sitename%%").
      * @return string ThinkRank pattern (e.g. "%title% %sep% %sitename%").
      */
-    private function convert_template_pattern(mixed $template): string {
+    private function convert_template_pattern($template): string {
         // Foreign data first: booleans/arrays in the source plugin's options
         // must degrade to '' here, not fatal the migration (see abstract).
         $template = $this->stringify_template_value($template);
@@ -572,7 +572,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
      * @param mixed $value Raw meta value from Yoast
      * @return array{noarchive:int,noimageindex:int,nosnippet:int}
      */
-    private function parse_yoast_advanced_robots(mixed $value): array {
+    private function parse_yoast_advanced_robots($value): array {
         $result = ['noarchive' => 0, 'noimageindex' => 0, 'nosnippet' => 0];
 
         // Foreign data first: non-string meta degrades to '' → no extras (see abstract).
@@ -868,7 +868,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
         return array_keys($value) !== range(0, count($value) - 1);
     }
 
-    private function map_yoast_separator(mixed $separator): string {
+    private function map_yoast_separator($separator): string {
         // Foreign data first: a non-string separator setting degrades to '' so
         // the default fallback applies instead of fatalling (see abstract).
         $separator = $this->stringify_template_value($separator);
@@ -899,7 +899,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
      * @param mixed $json JSON string from _yoast_wpseo_focuskeywords
      * @return array Array of additional keyword strings
      */
-    private function parse_yoast_additional_keywords(mixed $json): array {
+    private function parse_yoast_additional_keywords($json): array {
         // Foreign data first: non-string meta degrades to '' → no keywords (see abstract).
         $json = $this->stringify_template_value($json);
 

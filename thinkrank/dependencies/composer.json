@@ -4,13 +4,16 @@
 	"type": "project",
 	"license": "GPL-2.0-or-later",
 	"require": {
-		"php": ">=8.0",
+		"php": ">=7.4",
 		"automattic/jetpack-autoloader": "^5.0",
 		"wordpress/abilities-api": "^0.4"
 	},
 	"config": {
 		"allow-plugins": {
 			"automattic/jetpack-autoloader": true
+		},
+		"platform": {
+			"php": "7.4"
 		},
 		"optimize-autoloader": true,
 		"sort-packages": true

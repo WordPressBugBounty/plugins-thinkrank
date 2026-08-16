@@ -60,6 +60,13 @@ class Google_PageSpeed_Client extends Google_API_Base_Client {
     private const FAILURE_TTL = 300;
 
     /**
+     * Exception code marking a rethrown remembered failure rather than a live
+     * API error, so callers can report "try again shortly" instead of implying
+     * the request was actually attempted.
+     */
+    public const CODE_REMEMBERED_FAILURE = 9001;
+
+    /**
      * Per-request memo of parsed snapshots, keyed by url|strategy
      *
      * @var array<string,array>
@@ -141,13 +148,26 @@ class Google_PageSpeed_Client extends Google_API_Base_Client {
      * @return array{core_web_vitals:array,opportunities:array,diagnostics:array,performance_score:float,fetched_at:int}
      * @throws \Exception If the API request fails (including remembered recent failures)
      */
-    public function get_pagespeed_snapshot(string $url, string $strategy = 'mobile'): array {
+    public function get_pagespeed_snapshot(string $url, string $strategy = 'mobile', bool $fresh = false): array {
         $memo_key = $url . '|' . $strategy;
+        $hash = md5($memo_key);
+
+        // A user-initiated refresh must actually re-measure. The 7-day gate in
+        // Performance_Data_Collector was the only thing $force skipped, so a
+        // manual retry within FAILURE_TTL of any failure re-threw the remembered
+        // message in milliseconds without contacting Google — which made
+        // "refresh" useless for exactly the case people press it in, right after
+        // seeing an error.
+        if ($fresh) {
+            unset(self::$snapshot_memo[$memo_key]);
+            delete_transient('thinkrank_psi_snapshot_' . $hash);
+            delete_transient('thinkrank_psi_failure_' . $hash);
+        }
+
         if (isset(self::$snapshot_memo[$memo_key])) {
             return self::$snapshot_memo[$memo_key];
         }
 
-        $hash = md5($memo_key);
         $cached = get_transient('thinkrank_psi_snapshot_' . $hash);
         if (is_array($cached)) {
             self::$snapshot_memo[$memo_key] = $cached;
@@ -156,7 +176,7 @@ class Google_PageSpeed_Client extends Google_API_Base_Client {
 
         $recent_failure = get_transient('thinkrank_psi_failure_' . $hash);
         if (is_string($recent_failure) && $recent_failure !== '') {
-            throw new \Exception($recent_failure); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+            throw new \Exception($recent_failure, self::CODE_REMEMBERED_FAILURE); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
         }
 
         try {
@@ -266,14 +286,30 @@ class Google_PageSpeed_Client extends Google_API_Base_Client {
                 'needs_improvement_threshold' => 4.0,
                 'description' => 'Time until the largest content element is rendered'
             ],
-            'fid' => [
-                'name' => 'First Input Delay',
-                'value' => round(($audits['max-potential-fid']['numericValue'] ?? 0), 4),
-                'score' => ($audits['max-potential-fid']['score'] ?? 0) * 100,
+            // INP replaced FID as a Core Web Vital in March 2024. INP is a field
+            // metric — a standard PSI navigation run has no interaction to
+            // measure — so Lighthouse only reports it in timespan mode. Read that
+            // audit when it is present and otherwise fall back to Total Blocking
+            // Time, which is Google's documented lab proxy for INP. Real INP
+            // comes from the CrUX field data in Performance_Monitoring_Manager.
+            'inp' => [
+                'name' => 'Interaction to Next Paint',
+                'value' => round(
+                    $audits['interaction-to-next-paint']['numericValue']
+                        ?? $audits['total-blocking-time']['numericValue']
+                        ?? 0,
+                    4
+                ),
+                'score' => (
+                    $audits['interaction-to-next-paint']['score']
+                        ?? $audits['total-blocking-time']['score']
+                        ?? 0
+                ) * 100,
                 'unit' => 'ms',
-                'good_threshold' => 100,
-                'needs_improvement_threshold' => 300,
-                'description' => 'Time from first user interaction to browser response'
+                'good_threshold' => 200,
+                'needs_improvement_threshold' => 500,
+                'description' => 'Responsiveness across all interactions on the page',
+                'is_lab_proxy' => !isset($audits['interaction-to-next-paint'])
             ],
             'cls' => [
                 'name' => 'Cumulative Layout Shift',
@@ -363,8 +399,7 @@ class Google_PageSpeed_Client extends Google_API_Base_Client {
             'largest-contentful-paint' => ['title' => 'Largest Contentful Paint', 'impact' => 'LCP'],
             'first-meaningful-paint' => ['title' => 'First Meaningful Paint', 'impact' => 'Performance'],
             'speed-index' => ['title' => 'Speed Index', 'impact' => 'Performance'],
-            'total-blocking-time' => ['title' => 'Total Blocking Time', 'impact' => 'Performance'],
-            'max-potential-fid' => ['title' => 'Max Potential First Input Delay', 'impact' => 'FID'],
+            'total-blocking-time' => ['title' => 'Total Blocking Time', 'impact' => 'INP'],
             'cumulative-layout-shift' => ['title' => 'Cumulative Layout Shift', 'impact' => 'CLS'],
             'server-response-time' => ['title' => 'Initial server response time was short', 'impact' => 'Performance'],
             'interactive' => ['title' => 'Time to Interactive', 'impact' => 'Performance'],

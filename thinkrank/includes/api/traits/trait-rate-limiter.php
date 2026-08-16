@@ -56,7 +56,7 @@ trait Rate_Limiter {
      * @param int    $user_id       User ID (0 for anonymous)
      * @return true|WP_Error True if within limits, WP_Error if exceeded
      */
-    protected function check_rate_limit(string $endpoint_name, int $user_id = 0): bool|WP_Error {
+    protected function check_rate_limit(string $endpoint_name, int $user_id = 0) {
         // Get user identifier (IP for anonymous, user ID for authenticated)
         $identifier = $user_id > 0 ? "user_{$user_id}" : $this->get_client_ip();
         

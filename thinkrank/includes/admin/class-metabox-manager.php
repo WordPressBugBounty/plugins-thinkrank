@@ -259,7 +259,7 @@ class Metabox_Manager {
      * @param int $depth Current recursion depth
      * @return mixed Sanitized data
      */
-    private function sanitize_json_recursively($data, int $depth = 0): mixed {
+    private function sanitize_json_recursively($data, int $depth = 0) {
         // Prevent deep recursion attacks
         if ($depth > 10) {
             return null;
@@ -338,7 +338,7 @@ class Metabox_Manager {
 	 *
 	 * @return mixed Sanitized data
 	 */
-	private function sanitize_json_ld_recursively( $data, int $depth = 0 ): mixed {
+	private function sanitize_json_ld_recursively( $data, int $depth = 0 ) {
 		// Prevent deep recursion attacks
 		if ( $depth > 10 ) {
 			return null;

@@ -391,13 +391,18 @@ class Import_Controller extends \WP_REST_Controller {
      * @return Abstract_Plugin_Exporter|\WP_Error
      */
     private function get_exporter(string $plugin) {
-        return match ($plugin) {
-            'yoast'    => new Yoast_Exporter(),
-            'rankmath' => new Rankmath_Exporter(),
-            'seopress' => new SEOPress_Exporter(),
-            'aioseo'   => new AIOSEO_Exporter(),
-            default    => new \WP_Error('invalid_plugin', 'Unsupported plugin: ' . $plugin, ['status' => 400]),
-        };
+        switch ($plugin) {
+            case 'yoast':
+                return new Yoast_Exporter();
+            case 'rankmath':
+                return new Rankmath_Exporter();
+            case 'seopress':
+                return new SEOPress_Exporter();
+            case 'aioseo':
+                return new AIOSEO_Exporter();
+            default:
+                return new \WP_Error('invalid_plugin', 'Unsupported plugin: ' . $plugin, ['status' => 400]);
+        }
     }
 
     /**

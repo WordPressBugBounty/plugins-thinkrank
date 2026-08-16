@@ -415,11 +415,27 @@ class Performance_Endpoint extends WP_REST_Controller {
         try {
             $results = $this->get_data_collector()->manual_collect();
 
-            return new WP_REST_Response([
-                'success' => $results['success'],
-                'data' => $results,
-                'message' => $results['message']
-            ], $results['success'] ? 200 : 500);
+            if (!empty($results['success'])) {
+                return new WP_REST_Response([
+                    'success' => true,
+                    'data' => $results,
+                    'message' => $results['message']
+                ], 200);
+            }
+
+            // A failure here is almost never a server fault: the site is not
+            // connected, Google cannot reach the URL, or the quota is spent. This
+            // used to answer 500 for all of them, with a hardcoded message that
+            // dropped the real reason, so the user could neither tell what was
+            // wrong nor that it was their configuration rather than a bug.
+            // Return a WP_Error like every other failure in this file, so clients
+            // get the normal code/message envelope instead of a 200-shaped body
+            // carrying a 500.
+            return new WP_Error(
+                $this->collection_error_code((string) ($results['error_code'] ?? '')),
+                $results['message'],
+                $this->collection_error_data((string) ($results['error_code'] ?? ''))
+            );
 
         } catch (\Exception $e) {
             return new WP_Error(
@@ -427,6 +443,60 @@ class Performance_Endpoint extends WP_REST_Controller {
                 'Failed to collect performance data: ' . $e->getMessage(),
                 ['status' => 500]
             );
+        }
+    }
+
+    /**
+     * REST error code for a collection failure class.
+     *
+     * @since 1.31.0
+     * @param string $error_code One of Performance_Data_Collector::ERROR_*.
+     * @return string
+     */
+    private function collection_error_code(string $error_code): string {
+        $codes = [
+            Performance_Data_Collector::ERROR_NOT_CONFIGURED => 'pagespeed_not_configured',
+            Performance_Data_Collector::ERROR_URL_UNREACHABLE => 'site_not_reachable',
+            Performance_Data_Collector::ERROR_RATE_LIMITED => 'pagespeed_rate_limited',
+            Performance_Data_Collector::ERROR_RECENT_FAILURE => 'pagespeed_recently_failed',
+            Performance_Data_Collector::ERROR_STORAGE_FAILED => 'performance_storage_failed',
+        ];
+
+        return $codes[$error_code] ?? 'data_collection_failed';
+    }
+
+    /**
+     * HTTP status (and Retry-After, where it applies) for a failure class.
+     *
+     * @since 1.31.0
+     * @param string $error_code One of Performance_Data_Collector::ERROR_*.
+     * @return array Error data for WP_Error.
+     */
+    private function collection_error_data(string $error_code): array {
+        switch ($error_code) {
+            case Performance_Data_Collector::ERROR_NOT_CONFIGURED:
+                // Client-side condition: no credential to call PageSpeed with.
+                return ['status' => 400];
+
+            case Performance_Data_Collector::ERROR_URL_UNREACHABLE:
+                // The request was well-formed and authorised; the site simply
+                // cannot be fetched by Google.
+                return ['status' => 422];
+
+            case Performance_Data_Collector::ERROR_RATE_LIMITED:
+                return ['status' => 429];
+
+            case Performance_Data_Collector::ERROR_RECENT_FAILURE:
+                // Nothing was attempted — a recent failure is still remembered.
+                return ['status' => 503, 'retry_after' => 300];
+
+            case Performance_Data_Collector::ERROR_STORAGE_FAILED:
+                // Measured fine but the write failed: genuinely our side.
+                return ['status' => 500];
+
+            default:
+                // An upstream API error we could not classify.
+                return ['status' => 502];
         }
     }
 
@@ -477,7 +547,7 @@ class Performance_Endpoint extends WP_REST_Controller {
                 'required' => false,
                 'type' => 'string',
                 'default' => 'all',
-                'enum' => ['all', 'lcp', 'fid', 'cls', 'inp', 'score'],
+                'enum' => ['all', 'lcp', 'cls', 'inp', 'score'],
                 'description' => 'Specific metric to retrieve'
             ]
         ];

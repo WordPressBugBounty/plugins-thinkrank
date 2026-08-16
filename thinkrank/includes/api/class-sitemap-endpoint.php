@@ -255,6 +255,26 @@ class Sitemap_Endpoint extends WP_REST_Controller {
     }
 
     /**
+     * Record that the published sitemap files are gone.
+     *
+     * The inverse of {@see record_generation()}: clears `last_generated` so the
+     * admin's "View Generated Sitemaps" links go back to disabled instead of
+     * pointing at files that have just been deleted.
+     *
+     * @since 1.31.0
+     * @return void
+     */
+    private function clear_generation_record(): void {
+        $settings = $this->sitemap_generator->get_settings('site');
+        if (empty($settings['last_generated'])) {
+            return;
+        }
+
+        $settings['last_generated'] = '';
+        $this->sitemap_generator->save_settings('site', null, $settings);
+    }
+
+    /**
      * Persist a manual-generation auto-promotion into the stored settings.
      *
      * maybe_promote_to_index() may flip use_sitemap_index on and synthesize the
@@ -270,24 +290,27 @@ class Sitemap_Endpoint extends WP_REST_Controller {
      * @return void
      */
     private function persist_promoted_mode(array $options): void {
-        // Only ever persist an auto-promotion (single -> index). Never turn index
-        // mode OFF here: a bare generate call passes an optional/partial payload
-        // that may omit use_sitemap_index, and disabling index mode is a settings
-        // change owned by the settings endpoint — the generate route must not
-        // clobber a saved index because the toggle happened to be absent.
-        if (empty($options['use_sitemap_index'])) {
-            return;
-        }
-
         $saved = $this->sitemap_generator->get_settings('site');
 
-        // Already in index mode with the same children — nothing to persist.
-        if (!empty($saved['use_sitemap_index'])
-            && ($options['sitemap_urls'] ?? null) === ($saved['sitemap_urls'] ?? null)) {
+        // Record the mode that was actually written, in both directions, so the
+        // stored settings and the files on disk cannot disagree. Persisting a
+        // demotion used to be unsafe because an absent use_sitemap_index was
+        // indistinguishable from an explicit "off", and treating it as off would
+        // clobber a saved index whenever the toggle merely happened to be
+        // missing. maybe_promote_to_index() now resolves an absent key from the
+        // saved settings before this runs, so whatever arrives here is the
+        // resolved decision rather than a gap in the payload.
+        $mode = !empty($options['use_sitemap_index']);
+        $urls = $options['sitemap_urls'] ?? ($saved['sitemap_urls'] ?? null);
+
+        $mode_unchanged = $mode === !empty($saved['use_sitemap_index']);
+        $urls_unchanged = $urls === ($saved['sitemap_urls'] ?? null);
+
+        if ($mode_unchanged && $urls_unchanged) {
             return;
         }
 
-        $saved['use_sitemap_index'] = true;
+        $saved['use_sitemap_index'] = $mode;
         if (isset($options['sitemap_urls'])) {
             $saved['sitemap_urls'] = $options['sitemap_urls'];
         }
@@ -1055,47 +1078,36 @@ class Sitemap_Endpoint extends WP_REST_Controller {
      */
     public function cleanup_sitemap_files(WP_REST_Request $request) {
         try {
-            // Scan filesystem for actual sitemap files instead of relying on configured URLs
-            $cleaned_files = [];
-            $failed_files = [];
+            $settings = $this->sitemap_generator->get_settings('site');
 
-            // Common sitemap file patterns to look for
-            $sitemap_patterns = [
-                'sitemap*.xml',
-                '*sitemap*.xml'
-            ];
+            // Delete only the files ThinkRank published. This used to glob
+            // ABSPATH for 'sitemap*.xml' and '*sitemap*.xml' and delete anything
+            // whose name contained "sitemap", which also swept up a physical
+            // core wp-sitemap.xml and any other plugin's sitemap sitting in the
+            // web root. delete_published_sitemaps() derives the name list from
+            // our own stored sitemap_urls (honouring a custom url pattern) plus
+            // the default names, and covers the -N pagination pages.
+            $removed = $this->sitemap_generator->delete_published_sitemaps($settings);
+            $cleaned_files = $removed['deleted'];
+            $failed_files = $removed['failed'];
 
-            // Get all XML files in root directory that match sitemap patterns
-            $sitemap_files = [];
-            foreach ($sitemap_patterns as $pattern) {
-                $files = glob(ABSPATH . $pattern);
-                if ($files) {
-                    $sitemap_files = array_merge($sitemap_files, $files);
-                }
+            // Cleanup on its own used to leave the site with no sitemap at all
+            // and nothing scheduled to rebuild one: the regeneration that is
+            // meant to follow lives in the admin bundle, so a bare REST/MCP call
+            // — or a generate that then hit the rate limit or lost the
+            // generation lock — published nothing and 404'd indefinitely. Queue
+            // the rebuild here so the recovery does not depend on the caller.
+            $regeneration_scheduled = false;
+            if (!empty($settings['enabled']) && $cleaned_files) {
+                $this->sitemap_generator->schedule_regeneration();
+                $regeneration_scheduled = true;
             }
 
-            // Remove duplicates and filter to only sitemap-related files
-            $sitemap_files = array_unique($sitemap_files);
-
-            foreach ($sitemap_files as $file_path) {
-                $filename = basename($file_path);
-
-                // Skip if not a sitemap file (additional safety check)
-                if (!$this->is_sitemap_file($filename)) {
-                    continue;
-                }
-
-                // Only delete if file exists and is in root directory (security)
-                $file_dir = trailingslashit(dirname($file_path));
-                $root_dir = trailingslashit(ABSPATH);
-
-                if (file_exists($file_path) && $file_dir === $root_dir) {
-                    if (wp_delete_file($file_path)) {
-                        $cleaned_files[] = $filename;
-                    } else {
-                        $failed_files[] = $filename;
-                    }
-                }
+            // The files are gone, so stop reporting them as generated —
+            // otherwise the admin keeps offering "View Generated Sitemaps"
+            // links to files that no longer exist.
+            if ($cleaned_files) {
+                $this->clear_generation_record();
             }
 
             return new WP_REST_Response([
@@ -1103,7 +1115,8 @@ class Sitemap_Endpoint extends WP_REST_Controller {
                 'data' => [
                     'cleaned_files' => $cleaned_files,
                     'failed_files' => $failed_files,
-                    'total_cleaned' => count($cleaned_files)
+                    'total_cleaned' => count($cleaned_files),
+                    'regeneration_scheduled' => $regeneration_scheduled
                 ],
                 'message' => sprintf(
                     'Cleaned up %d sitemap file(s) successfully',
@@ -1262,38 +1275,5 @@ class Sitemap_Endpoint extends WP_REST_Controller {
      */
     private function release_generation_lock(): void {
         delete_transient('thinkrank_sitemap_generation_lock');
-    }
-
-    /**
-     * Check if a filename is a sitemap file
-     *
-     * @since 1.0.0
-     * @param string $filename Filename to check
-     * @return bool True if it's a sitemap file
-     */
-    private function is_sitemap_file(string $filename): bool {
-        // Must be XML file
-        if (!str_ends_with($filename, '.xml')) {
-            return false;
-        }
-
-        // Must contain 'sitemap' in the name
-        if (stripos($filename, 'sitemap') === false) {
-            return false;
-        }
-
-        // Exclude WordPress core files that aren't sitemaps
-        $excluded_patterns = [
-            'wp-sitemap-users-',  // WordPress user sitemaps
-            'wp-sitemap-taxonomies-',  // WordPress taxonomy sitemaps
-        ];
-
-        foreach ($excluded_patterns as $pattern) {
-            if (stripos($filename, $pattern) !== false) {
-                return false;
-            }
-        }
-
-        return true;
     }
 }

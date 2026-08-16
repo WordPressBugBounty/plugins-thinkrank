@@ -498,6 +498,40 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * Describe how /robots.txt is actually delivered, and whether that still
+     * matches the saved settings.
+     *
+     * The admin screen edits settings, but a physical robots.txt in the web root
+     * is served directly by the web server and bypasses the `robots_txt` filter
+     * entirely. When those two drift, the editor is showing content no crawler
+     * ever sees — the conflict this exists to surface.
+     *
+     * @since 1.31.0
+     *
+     * @return array{content: string, source: string, is_default: bool, in_sync: bool, url: string}
+     *         The served content and its origin, whether it still reflects the
+     *         saved settings, and the public URL it is served from.
+     */
+    public function get_robots_txt_delivery(): array {
+        $effective = $this->get_effective_robots_txt();
+
+        // Compare bodies, not raw strings: the auto-generated header carries a
+        // regeneration timestamp that always differs and means nothing here.
+        $served = $this->strip_robots_header($effective['content']);
+        $expected = $this->strip_robots_header($this->render_robots_txt());
+
+        return [
+            'content' => $effective['content'],
+            'source' => $effective['source'],
+            'is_default' => $effective['is_default'],
+            // Only a physical file can drift. Every other source is rendered
+            // from the settings on demand, so it is in sync by construction.
+            'in_sync' => $effective['source'] !== 'file' || $served === $expected,
+            'url' => home_url('/robots.txt'),
+        ];
+    }
+
+    /**
      * Keep the physical robots.txt file in step with the saved settings.
      *
      * When management is enabled the physical file is the source of truth the

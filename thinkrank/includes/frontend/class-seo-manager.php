@@ -91,6 +91,21 @@ class SEO_Manager {
     private string $current_context = 'site';
 
     /**
+     * Memoised "should core's sitemap be disabled" flag. Null until resolved.
+     *
+     * @var bool|null
+     */
+    private ?bool $thinkrank_sitemap_enabled = null;
+
+    /**
+     * Memoised public URL of the sitemap ThinkRank publishes. Empty until
+     * should_disable_core_sitemap() has resolved, and while it resolves false.
+     *
+     * @var string
+     */
+    private string $thinkrank_sitemap_url = '';
+
+    /**
      * Initialize SEO manager
      *
      * @return void
@@ -169,6 +184,28 @@ class SEO_Manager {
 
         // Add robots.txt filter hook
         add_filter('robots_txt', [$this, 'filter_robots_txt'], 10, 2);
+
+        // Take WordPress core's own sitemap offline while ThinkRank's is active.
+        // Two sitemap indexes on one site is a crawl conflict: core keeps
+        // /wp-sitemap.xml served and injects its own "Sitemap:" line into
+        // robots.txt (WP_Sitemaps::add_robots, priority 0). Until now that line
+        // only disappeared as a side effect of filter_robots_txt() replacing the
+        // whole filter output, which does not happen when robots.txt management
+        // is off, when Site Identity is disabled, or when another SEO plugin
+        // claims the filter first — and it never took /wp-sitemap.xml itself
+        // offline, so crawlers could still find and follow the duplicate index.
+        add_filter('wp_sitemaps_enabled', [$this, 'filter_wp_sitemaps_enabled']);
+
+        // …and point the URLs core owned at our sitemap, rather than letting
+        // them dead-end. Disabling core's sitemap does not unhook the two core
+        // paths that route /sitemap.xml: WP_Rewrite::rewrite_rules() adds the
+        // `sitemap\.xml` rule unconditionally, and redirect_canonical() 301s any
+        // request carrying the `sitemap` query var to /wp-sitemap.xml without
+        // consulting wp_sitemaps_enabled — which then 404s. Runs before both
+        // redirect_canonical() and WP_Sitemaps::render_sitemaps() (priority 10),
+        // and after a Pro redirect rule (priority 1) so a user-defined redirect
+        // for these URLs still wins.
+        add_action('template_redirect', [$this, 'redirect_core_sitemap_requests'], 9);
 
         // Keep an existing physical robots.txt in step with WordPress's
         // "Discourage search engines" toggle (blog_public). A physical file
@@ -659,6 +696,25 @@ class SEO_Manager {
             }
         }
 
+        // 4. Term meta override for taxonomy archives (Overrides everything).
+        //
+        // Terms had no branch here at all — not a wrong key or a skipped
+        // conditional, the lookup simply did not exist — so a category, tag or
+        // custom-taxonomy archive saved with noindex still rendered the global
+        // default. The stored value read back correctly through the abilities
+        // API, which made the setting look applied when it never reached output.
+        //
+        // Deliberately placed *after* the archive block so it is a real
+        // override, matching how a per-post override is final for singular
+        // views. Running it earlier would let is_paged() overwrite a term's
+        // explicit directives on page 2 of its own archive.
+        if (is_category() || is_tag() || is_tax()) {
+            $queried = get_queried_object();
+            if ($queried instanceof \WP_Term) {
+                $robots = $this->apply_term_robots_override($queried->term_id, $robots, $current_settings);
+            }
+        }
+
         // Apply filters for customization
         $robots = apply_filters('thinkrank_robots_meta', $robots);
 
@@ -679,18 +735,67 @@ class SEO_Manager {
      * @return array Updated robots directive list
      */
     private function apply_post_robots_override(int $post_id, array $robots, array $current_settings): array {
-        if (!(bool) get_post_meta($post_id, '_thinkrank_robots_meta_enabled', true)) {
+        return $this->apply_meta_robots_override(
+            (bool) get_post_meta($post_id, '_thinkrank_robots_meta_enabled', true),
+            (string) get_post_meta($post_id, '_thinkrank_robots_meta', true),
+            (string) get_post_meta($post_id, '_thinkrank_advanced_robots_meta', true),
+            $robots,
+            $current_settings
+        );
+    }
+
+    /**
+     * Apply per-term robots overrides on top of the cascaded directives.
+     *
+     * The term-meta twin of apply_post_robots_override(). Terms store the same
+     * three keys with the same shapes — written by the update-term-seo ability
+     * and by the Rank Math / Yoast / AIOSEO / SEOPress importer — so the two
+     * paths share one engine rather than a second copy that can drift.
+     *
+     * @since 1.31.0
+     *
+     * @param int   $term_id          Term being rendered
+     * @param array $robots           Directives accumulated so far
+     * @param array $current_settings Effective robots flags (global + post type)
+     * @return array Updated robots directive list
+     */
+    private function apply_term_robots_override(int $term_id, array $robots, array $current_settings): array {
+        return $this->apply_meta_robots_override(
+            (bool) get_term_meta($term_id, '_thinkrank_robots_meta_enabled', true),
+            (string) get_term_meta($term_id, '_thinkrank_robots_meta', true),
+            (string) get_term_meta($term_id, '_thinkrank_advanced_robots_meta', true),
+            $robots,
+            $current_settings
+        );
+    }
+
+    /**
+     * Rebuild the robots directives from a stored override, whatever holds it.
+     *
+     * Kept free of get_post_meta()/get_term_meta() so posts and terms cannot
+     * diverge: term support was missing entirely because the only override
+     * logic lived behind a post-meta read.
+     *
+     * @since 1.31.0
+     *
+     * @param bool   $enabled          Whether the override is switched on
+     * @param string $raw_robots       JSON robots flags
+     * @param string $raw_advanced     JSON advanced directives
+     * @param array  $robots           Directives accumulated so far
+     * @param array  $current_settings Effective robots flags (global + post type)
+     * @return array Updated robots directive list
+     */
+    private function apply_meta_robots_override(bool $enabled, string $raw_robots, string $raw_advanced, array $robots, array $current_settings): array {
+        if (!$enabled) {
             return $robots;
         }
 
-        $raw_robots = get_post_meta($post_id, '_thinkrank_robots_meta', true);
-        $post_robots = is_string($raw_robots) && $raw_robots !== '' ? json_decode($raw_robots, true) : null;
+        $post_robots = $raw_robots !== '' ? json_decode($raw_robots, true) : null;
         if (!is_array($post_robots)) {
             return $robots;
         }
 
-        $raw_advanced = get_post_meta($post_id, '_thinkrank_advanced_robots_meta', true);
-        $post_advanced = is_string($raw_advanced) && $raw_advanced !== '' ? json_decode($raw_advanced, true) : null;
+        $post_advanced = $raw_advanced !== '' ? json_decode($raw_advanced, true) : null;
 
         $effective = array_merge($current_settings, array_intersect_key($post_robots, array_flip([
             'index', 'noindex', 'nofollow', 'noarchive', 'noimageindex', 'nosnippet',
@@ -2543,6 +2648,177 @@ class SEO_Manager {
 
         // Fallback to default output if rendering fails
         return $output;
+    }
+
+    /**
+     * Disable WordPress core's sitemap while ThinkRank's sitemap is enabled.
+     *
+     * Prevents the site from publishing two competing sitemap indexes. Core's
+     * /wp-sitemap.xml is taken offline (it 404s) and, as a consequence, core
+     * stops adding its own "Sitemap:" directive to robots.txt — including on the
+     * paths where ThinkRank does not own the robots.txt output.
+     *
+     * Only ever turns core's sitemap *off*: when ThinkRank's sitemap is disabled
+     * the incoming value is returned untouched, so core (or another plugin
+     * filtering this) keeps whatever behaviour it already had.
+     *
+     * @since 1.31.0
+     *
+     * @param bool $enabled Whether core's sitemap functionality is enabled.
+     * @return bool Filtered value.
+     */
+    public function filter_wp_sitemaps_enabled($enabled): bool {
+        return $this->should_disable_core_sitemap() ? false : (bool) $enabled;
+    }
+
+    /**
+     * Redirect the sitemap URLs core owns to the sitemap ThinkRank publishes.
+     *
+     * Only the *index* route is redirected. Core's per-type children
+     * (/wp-sitemap-posts-post-1.xml and friends) are genuinely gone once core is
+     * switched off, and a 404 is the honest answer for those; the index is the
+     * one URL crawlers and humans actually guess, and the one core's own
+     * /sitemap.xml rule funnels into.
+     *
+     * @since 1.31.0
+     *
+     * @return void
+     */
+    public function redirect_core_sitemap_requests(): void {
+        if ('index' !== get_query_var('sitemap')) {
+            return;
+        }
+
+        $request_uri = isset($_SERVER['REQUEST_URI'])
+            ? sanitize_text_field(wp_unslash($_SERVER['REQUEST_URI']))
+            : '';
+
+        $target = $this->resolve_core_sitemap_redirect(
+            (string) wp_parse_url($request_uri, PHP_URL_PATH)
+        );
+
+        if ('' === $target) {
+            return;
+        }
+
+        wp_safe_redirect($target, 301, 'ThinkRank');
+        exit;
+    }
+
+    /**
+     * Where a request for one of core's sitemap URLs should be sent, if anywhere.
+     *
+     * Split out from the hook so the rules are testable without dispatching a
+     * request — the caller above is the only part that cannot be (it exits).
+     *
+     * @since 1.31.0
+     *
+     * @param string $requested_path Path of the incoming request.
+     * @return string Absolute URL to redirect to, or '' to leave the request alone.
+     */
+    private function resolve_core_sitemap_redirect(string $requested_path): string {
+        // Nothing to redirect to unless we have actually taken core offline,
+        // which already implies our own sitemap file is on disk.
+        if (!$this->should_disable_core_sitemap()) {
+            return '';
+        }
+
+        $target = $this->thinkrank_sitemap_url;
+        if ('' === $target) {
+            return '';
+        }
+
+        // Never redirect a URL to itself. A site publishing at /sitemap.xml
+        // normally has the web server serve that file before WordPress sees the
+        // request, but on a setup where the request does reach PHP this is the
+        // difference between a redirect and a loop.
+        $destination = (string) wp_parse_url($target, PHP_URL_PATH);
+
+        if ('' !== $requested_path && untrailingslashit($requested_path) === untrailingslashit($destination)) {
+            return '';
+        }
+
+        return $target;
+    }
+
+    /**
+     * Whether core's sitemap should be switched off for this site.
+     *
+     * True when ThinkRank publishes its own sitemap — except in two cases where
+     * taking core offline would leave a URL answering nothing:
+     *
+     * 1. The site is configured to publish *at core's own URL* (the "WordPress
+     *    Core" preset). Once the static file exists the web server serves it
+     *    ahead of WordPress anyway, so core can be left alone.
+     * 2. ThinkRank's own sitemap file is not on disk yet. Sitemaps here are
+     *    static files with no dynamic route (see save_sitemap_to_file()), so
+     *    while the file is missing core's /sitemap.xml -> /wp-sitemap.xml
+     *    redirect is the only thing answering that URL; suppressing core would
+     *    turn a recoverable "enabled but not generated" state into a hard 404
+     *    for crawlers. Core is taken offline as soon as our file appears, so the
+     *    duplicate-index conflict this filter exists to prevent cannot occur —
+     *    two indexes are only ever reachable if both are actually published.
+     *
+     * Once our file does exist, the URLs core stops answering are handed to
+     * redirect_core_sitemap_requests() rather than left to 404 — which is why
+     * this also resolves the destination.
+     *
+     * Resolved lazily and memoised: this is consulted from an `init`-time filter
+     * on every request, and the underlying settings read is object-cached. The
+     * memoisation also keeps the file_exists() call to one per request.
+     *
+     * @since 1.31.0
+     *
+     * @return bool True when WordPress core's sitemap should be disabled.
+     */
+    private function should_disable_core_sitemap(): bool {
+        if ($this->thinkrank_sitemap_enabled === null) {
+            try {
+                // Read-only instance — passing false keeps it from registering a
+                // second copy of the save_post/term auto-generation hooks.
+                $generator = new \ThinkRank\SEO\Sitemap_Generator(false);
+                $settings = $generator->get_settings('site');
+
+                $this->thinkrank_sitemap_enabled = !empty($settings['enabled'])
+                    && !$this->publishes_at_core_sitemap_url($settings)
+                    && $generator->primary_sitemap_file_exists($settings);
+
+                if ($this->thinkrank_sitemap_enabled) {
+                    $this->thinkrank_sitemap_url = $generator->get_primary_sitemap_url($settings);
+                }
+            } catch (\Exception $e) {
+                // Settings unreadable — leave core's sitemap alone rather than
+                // removing a working sitemap on the strength of a failed read.
+                $this->thinkrank_sitemap_enabled = false;
+                $this->thinkrank_sitemap_url = '';
+            }
+        }
+
+        return $this->thinkrank_sitemap_enabled;
+    }
+
+    /**
+     * Whether any configured sitemap URL is WordPress core's own wp-sitemap.xml.
+     *
+     * @since 1.31.0
+     *
+     * @param array $settings Sitemap settings.
+     * @return bool True when the site publishes at core's sitemap URL.
+     */
+    private function publishes_at_core_sitemap_url(array $settings): bool {
+        foreach ((array) ($settings['sitemap_urls'] ?? []) as $sitemap) {
+            if (!is_array($sitemap)) {
+                continue;
+            }
+
+            $path = (string) wp_parse_url((string) ($sitemap['url'] ?? ''), PHP_URL_PATH);
+
+            if (ltrim($path, '/') === 'wp-sitemap.xml') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

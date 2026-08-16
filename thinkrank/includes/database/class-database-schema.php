@@ -44,7 +44,7 @@ class Database_Schema {
      * @since 1.0.0
      * @var string
      */
-    private string $db_version = '1.8.0';
+    private string $db_version = '1.9.0';
 
     /**
      * Widest single indexed COLUMN InnoDB accepts on a COMPACT/REDUNDANT row
@@ -200,7 +200,7 @@ class Database_Schema {
         'instant_indexing_logs' => [
             'description' => 'Log of IndexNow URL submissions',
             'primary_key' => 'id',
-            'indexes' => ['status', 'response_code', 'created_at'],
+            'indexes' => ['url', 'status', 'response_code', 'created_at'],
             'foreign_keys' => []
         ],
         'email_report_logs' => [
@@ -1000,6 +1000,7 @@ class Database_Schema {
             response_message text NULL,
             created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
+            KEY idx_url (url(191)),
             KEY idx_status (status),
             KEY idx_response_code (response_code),
             KEY idx_created (created_at)

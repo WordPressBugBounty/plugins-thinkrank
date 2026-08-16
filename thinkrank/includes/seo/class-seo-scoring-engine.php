@@ -212,7 +212,7 @@ class SEO_Scoring_Engine {
             'pages_per_session_threshold' => 2.0,
             'core_web_vitals' => [
                 'lcp_threshold' => 2.5, // seconds
-                'fid_threshold' => 100, // milliseconds
+                'inp_threshold' => 200, // milliseconds
                 'cls_threshold' => 0.1
             ]
         ];
@@ -314,11 +314,32 @@ class SEO_Scoring_Engine {
         }
 
         // Score based on Core Web Vitals metrics
-        $lcp_score = $this->score_lcp($core_web_vitals['lcp'] ?? 0);
-        $fid_score = $this->score_fid($core_web_vitals['fid'] ?? 0);
-        $cls_score = $this->score_cls($core_web_vitals['cls'] ?? 0);
+        // Both sides of this merge are needed: extract_vital_value() unwraps the
+        // structured vital payload, and the metric is INP rather than the
+        // retired FID.
+        $lcp_score = $this->score_lcp($this->extract_vital_value($core_web_vitals['lcp'] ?? 0));
+        $inp_score = $this->score_inp($this->extract_vital_value($core_web_vitals['inp'] ?? 0));
+        $cls_score = $this->score_cls($this->extract_vital_value($core_web_vitals['cls'] ?? 0));
 
-        return ($lcp_score + $fid_score + $cls_score) / 3;
+        return ($lcp_score + $inp_score + $cls_score) / 3;
+    }
+
+    /**
+     * Extract the numeric value from a Core Web Vital entry
+     *
+     * The PageSpeed client represents each vital as a structured array
+     * (['value' => 14.7652, 'unit' => 's', 'score' => 30, ...]); older or
+     * cached payloads may carry a bare scalar. Accept both.
+     *
+     * @param mixed $vital Structured vital array or scalar value
+     * @return float Numeric metric value
+     */
+    private function extract_vital_value($vital): float {
+        if (is_array($vital)) {
+            $vital = $vital['value'] ?? 0;
+        }
+
+        return is_numeric($vital) ? (float) $vital : 0.0;
     }
 
     /**
@@ -605,15 +626,18 @@ class SEO_Scoring_Engine {
     }
 
     /**
-     * Score First Input Delay (FID)
+     * Score Interaction to Next Paint (INP)
      *
-     * @param float $fid FID value in milliseconds
-     * @return float FID score
+     * INP replaced FID as a Core Web Vital in March 2024; its thresholds are
+     * 200ms (good) and 500ms (needs improvement).
+     *
+     * @param float $inp INP value in milliseconds
+     * @return float INP score
      */
-    private function score_fid(float $fid): float {
-        if ($fid <= 100) {
+    private function score_inp(float $inp): float {
+        if ($inp <= 200) {
             return 8.33; // Good
-        } elseif ($fid <= 300) {
+        } elseif ($inp <= 500) {
             return 6.0; // Needs improvement
         } else {
             return 3.0; // Poor

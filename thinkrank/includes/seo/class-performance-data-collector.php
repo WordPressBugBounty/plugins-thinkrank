@@ -57,8 +57,9 @@ class Performance_Data_Collector {
     public function __construct() {
         $this->pagespeed_client = null;
 
-        // Register cron hooks
-        add_action(self::CRON_HOOK, [$this, 'collect_performance_data']);
+        // Register cron hooks. Routed through the wrapper so a scheduled failure
+        // gets logged — WP-Cron throws the return value away.
+        add_action(self::CRON_HOOK, [$this, 'collect_performance_data_via_cron']);
 
         // Schedule cron if not already scheduled
         if (!wp_next_scheduled(self::CRON_HOOK)) {
@@ -105,20 +106,47 @@ class Performance_Data_Collector {
         }
 
         try {
-            // The PageSpeed API itself is public (API key / keyless — see
-            // Google_PageSpeed_Client::for_site()), but a Google connection
-            // still gates the feature: only collect for connected sites.
-            $access_token = $this->get_google_access_token();
-
-            if (empty($access_token)) {
+            // Either credential is enough. This used to require an OAuth token,
+            // which locked out sites configured with only a PageSpeed API key —
+            // the credential Google_PageSpeed_Client::for_site() actually
+            // *prefers*, since a dedicated key bills its own project quota. Those
+            // sites could never collect and got the same generic failure.
+            if (!$this->has_pagespeed_credentials()) {
                 $this->pagespeed_client = null;
+                $this->last_error = __('Connect Google or add a PageSpeed API key to collect Core Web Vitals.', 'thinkrank');
+                $this->last_error_code = self::ERROR_NOT_CONFIGURED;
                 return;
             }
 
             $this->pagespeed_client = Google_PageSpeed_Client::for_site();
         } catch (\Exception $e) {
             $this->pagespeed_client = null;
+            $this->last_error = $e->getMessage();
+            $this->last_error_code = self::ERROR_NOT_CONFIGURED;
         }
+    }
+
+    /**
+     * Whether this site has a credential the PageSpeed API will accept.
+     *
+     * @return bool
+     */
+    private function has_pagespeed_credentials(): bool {
+        if ($this->get_google_pagespeed_api_key() !== '') {
+            return true;
+        }
+
+        return $this->get_google_access_token() !== '';
+    }
+
+    /**
+     * Get the site-owned PageSpeed API key from settings.
+     *
+     * @return string API key, or an empty string when not configured.
+     */
+    private function get_google_pagespeed_api_key(): string {
+        $api_key = (new Settings())->get('google_pagespeed_api_key', '');
+        return is_string($api_key) ? trim($api_key) : '';
     }
 
     /**
@@ -148,12 +176,42 @@ class Performance_Data_Collector {
     private const AUTO_REFRESH_GAP = 7 * DAY_IN_SECONDS;
 
     /**
+     * Failure classes a collection can end in. Every one of these used to
+     * collapse into a bare `false` and then into the literal string
+     * "Data collection failed", which told the user nothing and made the REST
+     * route answer 500 for conditions that are not server faults.
+     */
+    public const ERROR_NOT_CONFIGURED = 'not_configured';
+    public const ERROR_URL_UNREACHABLE = 'url_unreachable';
+    public const ERROR_RATE_LIMITED = 'rate_limited';
+    public const ERROR_RECENT_FAILURE = 'recent_failure';
+    public const ERROR_STORAGE_FAILED = 'storage_failed';
+    public const ERROR_API_FAILED = 'api_failed';
+
+    /**
+     * Human-readable reason the last collection failed.
+     *
+     * @var string
+     */
+    private string $last_error = '';
+
+    /**
+     * Machine-readable class of the last failure — one of the ERROR_* constants.
+     *
+     * @var string
+     */
+    private string $last_error_code = '';
+
+    /**
      * Collect performance data for the site
      *
      * @param bool $force Bypass the 7-day auto-refresh gate (manual refresh).
      * @return bool Success status
      */
     public function collect_performance_data(bool $force = false): bool {
+        $this->last_error = '';
+        $this->last_error_code = '';
+
         try {
             // Auto-collections (cron / background) re-measure at most every
             // 7 days; only an explicit user refresh forces a new audit.
@@ -176,7 +234,7 @@ class Performance_Data_Collector {
             $success = true;
 
             foreach ($devices as $device) {
-                $device_success = $this->collect_device_performance_data($home_url, $device);
+                $device_success = $this->collect_device_performance_data($home_url, $device, $force);
                 if (!$device_success) {
                     $success = false;
                 }
@@ -192,8 +250,88 @@ class Performance_Data_Collector {
             return $success;
 
         } catch (\Exception $e) {
+            $this->record_error($e);
             return false;
         }
+    }
+
+    /**
+     * Cron entry point.
+     *
+     * WP-Cron discards a callback's return value, so a hook that returns false is
+     * still reported as having run successfully — this collection could fail on
+     * every scheduled pass with the only evidence being an empty table. Log the
+     * reason instead.
+     *
+     * @since 1.31.0
+     * @return void
+     */
+    public function collect_performance_data_via_cron(): void {
+        if ($this->collect_performance_data()) {
+            return;
+        }
+
+        error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- the only record that a silent cron failure happened.
+            sprintf(
+                'ThinkRank [performance]: scheduled Core Web Vitals collection failed (%s) — %s',
+                $this->last_error_code !== '' ? $this->last_error_code : 'unknown',
+                $this->last_error !== '' ? $this->last_error : 'no reason reported'
+            )
+        );
+    }
+
+    /**
+     * Reason the last collection failed, for the REST layer to report.
+     *
+     * @since 1.31.0
+     * @return array{code: string, message: string} Empty strings when the last
+     *         run did not fail.
+     */
+    public function get_last_error(): array {
+        return [
+            'code' => $this->last_error_code,
+            'message' => $this->last_error,
+        ];
+    }
+
+    /**
+     * Classify an exception from the PageSpeed call into a failure class.
+     *
+     * The distinctions matter to the caller: an unreachable site and an
+     * exhausted quota need different advice, and neither is a server fault.
+     *
+     * @since 1.31.0
+     * @param \Exception $e Exception thrown while collecting.
+     * @return void
+     */
+    private function record_error(\Exception $e): void {
+        $message = $e->getMessage();
+        $this->last_error = $message;
+
+        if ((int) $e->getCode() === Google_PageSpeed_Client::CODE_REMEMBERED_FAILURE) {
+            $this->last_error_code = self::ERROR_RECENT_FAILURE;
+            return;
+        }
+
+        // Lighthouse could not load the page: not public, DNS/TLS failure, or the
+        // server refused the fetch.
+        if (stripos($message, 'FAILED_DOCUMENT_REQUEST') !== false
+            || stripos($message, 'ERRORED_DOCUMENT_REQUEST') !== false
+            || stripos($message, 'DNS_FAILURE') !== false
+            || stripos($message, 'net::') !== false) {
+            $this->last_error_code = self::ERROR_URL_UNREACHABLE;
+            return;
+        }
+
+        // The base client throws with the HTTP status as the exception code.
+        if ((int) $e->getCode() === 429
+            || stripos($message, 'rate limit') !== false
+            || stripos($message, 'quota') !== false) {
+            $this->last_error_code = self::ERROR_RATE_LIMITED;
+            return;
+        }
+
+        $this->last_error_code = self::ERROR_API_FAILED;
     }
 
     /**
@@ -203,16 +341,20 @@ class Performance_Data_Collector {
      * @param string $device_type Device type (mobile/desktop)
      * @return bool Success status
      */
-    private function collect_device_performance_data(string $url, string $device_type): bool {
+    private function collect_device_performance_data(string $url, string $device_type, bool $force = false): bool {
         try {
             // Check if PageSpeed client is available
             if (!$this->pagespeed_client) {
+                if ($this->last_error === '') {
+                    $this->last_error = __('Connect Google or add a PageSpeed API key to collect Core Web Vitals.', 'thinkrank');
+                    $this->last_error_code = self::ERROR_NOT_CONFIGURED;
+                }
                 return false;
             }
 
             // One snapshot provides both the Core Web Vitals and the performance
             // score — previously this ran two full Lighthouse audits per device.
-            $snapshot = $this->pagespeed_client->get_pagespeed_snapshot($url, $device_type);
+            $snapshot = $this->pagespeed_client->get_pagespeed_snapshot($url, $device_type, $force);
 
             // Prepare data for storage
             $performance_data = $snapshot['core_web_vitals'];
@@ -228,9 +370,19 @@ class Performance_Data_Collector {
             
 
             
+            if (!$stored) {
+                $this->last_error = sprintf(
+                    /* translators: %s: device type (mobile or desktop). */
+                    __('Measured %s successfully but could not store the result.', 'thinkrank'),
+                    $device_type
+                );
+                $this->last_error_code = self::ERROR_STORAGE_FAILED;
+            }
+
             return $stored;
-            
+
         } catch (\Exception $e) {
+            $this->record_error($e);
             return false;
         }
     }
@@ -245,6 +397,7 @@ class Performance_Data_Collector {
             'success' => false,
             'message' => '',
             'data_collected' => false,
+            'error_code' => '',
             'errors' => []
         ];
         
@@ -257,12 +410,21 @@ class Performance_Data_Collector {
                 $results['data_collected'] = true;
                 $results['message'] = __('Performance data collected successfully', 'thinkrank');
             } else {
-                $results['message'] = __('Failed to collect performance data', 'thinkrank');
-                $results['errors'][] = 'Data collection failed';
+                $error = $this->get_last_error();
+                $results['message'] = $error['message'] !== ''
+                    ? $error['message']
+                    : __('Failed to collect performance data', 'thinkrank');
+                $results['error_code'] = $error['code'];
+                $results['errors'][] = $results['message'];
             }
-            
+
         } catch (\Exception $e) {
-            $results['message'] = __('Error during data collection', 'thinkrank');
+            $this->record_error($e);
+            $error = $this->get_last_error();
+            $results['message'] = $error['message'] !== ''
+                ? $error['message']
+                : __('Error during data collection', 'thinkrank');
+            $results['error_code'] = $error['code'];
             $results['errors'][] = $e->getMessage();
         }
         

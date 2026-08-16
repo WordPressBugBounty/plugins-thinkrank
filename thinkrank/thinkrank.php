@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 1.30.0
+ * Version: 1.31.0
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -12,10 +12,10 @@
  * Text Domain: thinkrank
  * Domain Path: /languages
  * Requires at least: 6.0
- * Requires PHP: 8.0
+ * Requires PHP: 7.4
  * 
  * @package ThinkRank
- * @version 1.30.0
+ * @version 1.31.0
  * @since 1.0.0
  */
 
@@ -27,17 +27,17 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '1.30.0');
+define('THINKRANK_VERSION', '1.31.0');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('THINKRANK_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
 // Minimum requirements check
-if (version_compare(PHP_VERSION, '8.0', '<')) {
+if (version_compare(PHP_VERSION, '7.4', '<')) {
     add_action('admin_notices', function () {
         echo '<div class="notice notice-error"><p>';
-        echo esc_html__('ThinkRank requires PHP 8.0 or higher. Please upgrade your PHP version.', 'thinkrank');
+        echo esc_html__('ThinkRank requires PHP 7.4 or higher. Please upgrade your PHP version.', 'thinkrank');
         echo '</p></div>';
     });
     return;
@@ -273,6 +273,7 @@ final class ThinkRank {
             'search_visibility_notice' => new ThinkRank\Admin\Search_Visibility_Notice(),
             'performance_collector' => new ThinkRank\SEO\Performance_Data_Collector(),
             'instant_indexing' => new ThinkRank\SEO\Instant_Indexing_Manager(),
+            'instant_indexing_reconciler' => new ThinkRank\SEO\Instant_Indexing_Reconciler(),
             'author_archives' => new ThinkRank\SEO\Author_Archives_Manager(),
             'email_report' => new ThinkRank\SEO\Email_Report_Manager(),
             'google_oauth' => new ThinkRank\Integrations\Google_OAuth_Proxy(),

@@ -135,28 +135,28 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
     private array $performance_benchmarks = [
         'e_commerce' => [
             'lcp' => 2.2,
-            'fid' => 80,
+            'inp' => 160,
             'cls' => 0.08,
             'page_speed' => 85,
             'conversion_impact' => 'high'
         ],
         'blog' => [
             'lcp' => 2.0,
-            'fid' => 70,
+            'inp' => 140,
             'cls' => 0.05,
             'page_speed' => 90,
             'conversion_impact' => 'medium'
         ],
         'corporate' => [
             'lcp' => 1.8,
-            'fid' => 60,
+            'inp' => 120,
             'cls' => 0.03,
             'page_speed' => 95,
             'conversion_impact' => 'medium'
         ],
         'news' => [
             'lcp' => 1.5,
-            'fid' => 50,
+            'inp' => 100,
             'cls' => 0.02,
             'page_speed' => 92,
             'conversion_impact' => 'low'
@@ -235,13 +235,13 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                     'weight' => 30,
                     'description' => 'Time to render the largest content element'
                 ],
-                'fid' => [
-                    'name' => 'First Input Delay',
+                'inp' => [
+                    'name' => 'Interaction to Next Paint',
                     'unit' => 'milliseconds',
-                    'good_threshold' => 100,
-                    'needs_improvement_threshold' => 300,
+                    'good_threshold' => 200,
+                    'needs_improvement_threshold' => 500,
                     'weight' => 25,
-                    'description' => 'Time from first user interaction to browser response'
+                    'description' => 'Responsiveness across all interactions on the page'
                 ],
                 'cls' => [
                     'name' => 'Cumulative Layout Shift',
@@ -566,7 +566,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
             'data_retention' => $this->monitoring_config['data_retention'],
             'performance_targets' => [
                 'lcp' => 2.5,
-                'fid' => 100,
+                'inp' => 200,
                 'cls' => 0.1,
                 'fcp' => 1.8,
                 'page_speed_score' => 90
@@ -649,7 +649,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
             'core_web_vitals_tracking' => [
                 'type' => 'boolean',
                 'title' => 'Core Web Vitals Tracking',
-                'description' => 'Track Core Web Vitals metrics (LCP, FID, CLS, FCP)',
+                'description' => 'Track Core Web Vitals metrics (LCP, INP, CLS, FCP)',
                 'default' => true
             ],
             'seo_metrics_tracking' => [
@@ -672,13 +672,13 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                 'maximum' => 10.0,
                 'default' => 2.5
             ],
-            'fid_target' => [
+            'inp_target' => [
                 'type' => 'integer',
-                'title' => 'FID Target (milliseconds)',
-                'description' => 'Target First Input Delay time',
+                'title' => 'INP Target (milliseconds)',
+                'description' => 'Target Interaction to Next Paint time',
                 'minimum' => 10,
                 'maximum' => 1000,
-                'default' => 100
+                'default' => 200
             ],
             'cls_target' => [
                 'type' => 'number',
@@ -1110,21 +1110,21 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                 }
                 break;
 
-            case 'fid':
-                if ($data['value'] > 300) {
+            case 'inp':
+                if ($data['value'] > 500) {
                     $recommendations[] = [
-                        'type' => 'fid_optimization',
+                        'type' => 'inp_optimization',
                         'priority' => 'critical',
-                        'message' => 'First Input Delay is critically high',
+                        'message' => 'Interaction to Next Paint is critically high',
                         'action' => 'Reduce JavaScript execution time and optimize main thread',
                         'impact' => 'high',
                         'effort' => 'high'
                     ];
-                } elseif ($data['value'] > 100) {
+                } elseif ($data['value'] > 200) {
                     $recommendations[] = [
-                        'type' => 'fid_optimization',
+                        'type' => 'inp_optimization',
                         'priority' => 'high',
-                        'message' => 'First Input Delay needs improvement',
+                        'message' => 'Interaction to Next Paint needs improvement',
                         'action' => 'Break up long tasks and defer non-critical JavaScript',
                         'impact' => 'medium',
                         'effort' => 'medium'
@@ -1267,11 +1267,21 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
             $loading_experience = $pagespeed_client->get_pagespeed_snapshot($url, $device_type)['loading_experience'];
 
             if (!empty($loading_experience)) {
+                $metrics = $loading_experience['metrics'] ?? [];
+
                 return [
                     'field_data' => [
-                        'lcp' => $loading_experience['metrics']['LARGEST_CONTENTFUL_PAINT_MS'] ?? [],
-                        'fid' => $loading_experience['metrics']['FIRST_INPUT_DELAY_MS'] ?? [],
-                        'cls' => $loading_experience['metrics']['CUMULATIVE_LAYOUT_SHIFT_SCORE'] ?? [],
+                        'lcp' => $metrics['LARGEST_CONTENTFUL_PAINT_MS'] ?? [],
+                        // INP replaced FID as a Core Web Vital in March 2024 and
+                        // FIRST_INPUT_DELAY_MS was dropped from CrUX entirely in
+                        // September 2024, so asking for it returned nothing and
+                        // the metric rendered permanently empty. The EXPERIMENTAL_
+                        // key is the name CrUX used before INP graduated; kept as
+                        // a fallback so older cached snapshots still resolve.
+                        'inp' => $metrics['INTERACTION_TO_NEXT_PAINT']
+                            ?? $metrics['EXPERIMENTAL_INTERACTION_TO_NEXT_PAINT']
+                            ?? [],
+                        'cls' => $metrics['CUMULATIVE_LAYOUT_SHIFT_SCORE'] ?? [],
                         'overall_category' => $loading_experience['overall_category'] ?? 'UNKNOWN'
                     ],
                     'available' => true
@@ -1354,7 +1364,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                     'error' => 'Google account not connected',
                     'message' => 'Please connect your Google account in Integrations > Google Services to view real Core Web Vitals data.',
                     'lcp' => $this->get_empty_metric_data('Largest Contentful Paint', 's', 2.5, 4.0),
-                    'fid' => $this->get_empty_metric_data('First Input Delay', 'ms', 100, 300),
+                    'inp' => $this->get_empty_metric_data('Interaction to Next Paint', 'ms', 200, 500),
                     'cls' => $this->get_empty_metric_data('Cumulative Layout Shift', '', 0.1, 0.25),
                     'fcp' => $this->get_empty_metric_data('First Contentful Paint', 's', 1.8, 3.0)
                 ];
@@ -1382,17 +1392,17 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                         'needs_improvement_threshold' => $core_web_vitals['lcp']['needs_improvement_threshold']
                     ])
                 ],
-                'fid' => [
-                    'name' => $core_web_vitals['fid']['name'],
-                    'value' => $core_web_vitals['fid']['value'],
-                    'unit' => $core_web_vitals['fid']['unit'],
-                    'good_threshold' => $core_web_vitals['fid']['good_threshold'],
-                    'needs_improvement_threshold' => $core_web_vitals['fid']['needs_improvement_threshold'],
-                    'description' => $core_web_vitals['fid']['description'],
-                    'score' => $core_web_vitals['fid']['score'],
-                    'status' => $this->determine_metric_status($core_web_vitals['fid']['value'], [
-                        'good_threshold' => $core_web_vitals['fid']['good_threshold'],
-                        'needs_improvement_threshold' => $core_web_vitals['fid']['needs_improvement_threshold']
+                'inp' => [
+                    'name' => $core_web_vitals['inp']['name'],
+                    'value' => $core_web_vitals['inp']['value'],
+                    'unit' => $core_web_vitals['inp']['unit'],
+                    'good_threshold' => $core_web_vitals['inp']['good_threshold'],
+                    'needs_improvement_threshold' => $core_web_vitals['inp']['needs_improvement_threshold'],
+                    'description' => $core_web_vitals['inp']['description'],
+                    'score' => $core_web_vitals['inp']['score'],
+                    'status' => $this->determine_metric_status($core_web_vitals['inp']['value'], [
+                        'good_threshold' => $core_web_vitals['inp']['good_threshold'],
+                        'needs_improvement_threshold' => $core_web_vitals['inp']['needs_improvement_threshold']
                     ])
                 ],
                 'cls' => [
@@ -1432,7 +1442,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                 'error_type' => $error_info['type'],
                 'suggested_action' => $error_info['action'],
                 'lcp' => $this->get_empty_metric_data('Largest Contentful Paint', 's', 2.5, 4.0),
-                'fid' => $this->get_empty_metric_data('First Input Delay', 'ms', 100, 300),
+                'inp' => $this->get_empty_metric_data('Interaction to Next Paint', 'ms', 200, 500),
                 'cls' => $this->get_empty_metric_data('Cumulative Layout Shift', '', 0.1, 0.25),
                 'fcp' => $this->get_empty_metric_data('First Contentful Paint', 's', 1.8, 3.0)
             ];
@@ -2054,9 +2064,6 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                     case 'lcp':
                         $recommendations[] = 'Improve LCP to enhance page experience ranking signal';
                         break;
-                    case 'fid':
-                        $recommendations[] = 'Optimize FID to improve user interaction experience';
-                        break;
                     case 'cls':
                         $recommendations[] = 'Reduce CLS to prevent layout shifts affecting user experience';
                         break;
@@ -2167,7 +2174,6 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
         // Add implementation difficulty and expected timeframe
         $difficulty_map = [
             'lcp' => 'medium',
-            'fid' => 'hard',
             'cls' => 'easy',
             'inp' => 'medium'
         ];
@@ -2260,7 +2266,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                     FROM %s
                     WHERE measured_at >= %%s
                         AND context_type = 'site'
-                        AND metric_type IN ('lcp', 'fid', 'cls', 'inp', 'performance_score')
+                        AND metric_type IN ('lcp', 'cls', 'inp', 'performance_score')
                     GROUP BY DATE(measured_at), metric_type
                     ORDER BY date ASC
                 ", $table_name);
@@ -2349,16 +2355,6 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                     'Implement lazy loading for below-fold content',
                     'Minimize render-blocking resources',
                     'Use a CDN for faster content delivery'
-                ]
-            ],
-            'fid' => [
-                'title' => 'Improve First Input Delay',
-                'description' => "Your FID is {$data['value']}{$data['unit']}, target is ≤{$data['good_threshold']}{$data['unit']}",
-                'actions' => [
-                    'Minimize JavaScript execution time',
-                    'Remove unused JavaScript',
-                    'Split long tasks into smaller chunks',
-                    'Use web workers for heavy computations'
                 ]
             ],
             'cls' => [
@@ -2559,7 +2555,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
 
         try {
             // Store Core Web Vitals
-            $core_web_vitals = ['lcp', 'fid', 'cls', 'inp'];
+            $core_web_vitals = ['lcp', 'cls', 'inp'];
             foreach ($core_web_vitals as $metric) {
                 if (isset($performance_data[$metric])) {
                     $metric_data = $performance_data[$metric];

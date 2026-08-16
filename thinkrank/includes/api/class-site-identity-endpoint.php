@@ -538,6 +538,11 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             // the auto-generated comment/timestamp never lands in the textarea.
             $robots_data['content'] = $this->identity_manager->get_served_robots_body();
 
+            // How /robots.txt is actually delivered right now, so the screen can
+            // show the served output next to the editable body and flag a
+            // physical file in the web root that has drifted from the settings.
+            $robots_data['effective'] = $this->identity_manager->get_robots_txt_delivery();
+
             return new WP_REST_Response([
                 'success' => true,
                 'data' => $robots_data,
@@ -646,6 +651,10 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             // Return the header-stripped body so the client textarea reflects
             // exactly what it should hold (the header is added only at render).
             $robots_data['content'] = $this->identity_manager->get_served_robots_body();
+
+            // Re-read delivery after the write above so the screen reflects the
+            // file that now exists rather than the state it was in on load.
+            $robots_data['effective'] = $this->identity_manager->get_robots_txt_delivery();
 
             return new WP_REST_Response([
                 'success' => true,

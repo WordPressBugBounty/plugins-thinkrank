@@ -71,6 +71,49 @@ class Builder_Content {
     ];
 
     /**
+     * JSON keys whose values hold a link destination.
+     *
+     * Builders store a link's destination in a structured field separate from
+     * its label, either as a bare URL string or as a `{ url: … }` object.
+     * Neither shape survives a text sweep — the key is not content and a bare
+     * URL contains no `<` — so no `<a>` tag reached the link counters.
+     *
+     * @var string[]
+     */
+    private const URL_KEYS = [
+        'link', 'url', 'href', 'link_url', 'button_link', 'permalink', 'link_to',
+    ];
+
+    /**
+     * JSON keys whose values hold an image, as a URL string or `{ url, alt }`.
+     *
+     * @var string[]
+     */
+    private const IMAGE_KEYS = [
+        'image', 'src', 'image_url', 'background_image', 'bg_image', 'photo',
+    ];
+
+    /**
+     * JSON keys that carry a heading level for the node's text.
+     *
+     * A builder heading's text is collected (its key is in CONTENT_KEYS) and so
+     * counts toward the word count, but it arrives as bare text with no `<h2>`
+     * wrapper — which is why heading-structure checks saw none.
+     *
+     * @var string[]
+     */
+    private const HEADING_TAG_KEYS = [
+        'header_size', 'heading_tag', 'html_tag', 'title_tag', 'tag', 'level', 'size',
+    ];
+
+    /**
+     * Keys whose value is alternative text for a sibling image.
+     *
+     * @var string[]
+     */
+    private const ALT_KEYS = ['alt', 'alt_text', 'image_alt', 'title'];
+
+    /**
      * Resolve the content worth analyzing for a post.
      *
      * @param \WP_Post $post Post being analyzed.
@@ -273,7 +316,44 @@ class Builder_Content {
     private static function text_from_tree(array $tree): string {
         $collected = [];
 
-        $walk = static function ($node, $key = null) use (&$walk, &$collected): void {
+        // Strings already represented inside reconstructed markup, so the plain
+        // sweep below doesn't emit a link label or heading a second time and
+        // double it in the word count.
+        $consumed = [];
+
+        // Pass 1 — rebuild <a>, <img> and <hN> from node *shape*. This has to
+        // happen per node rather than per leaf: a link's label and its
+        // destination are separate sibling fields, so once the tree is
+        // flattened to leaves the pairing is gone.
+        $reconstruct = static function ($node) use (&$reconstruct, &$collected, &$consumed): void {
+            if (!is_array($node)) {
+                return;
+            }
+
+            $markup = self::markup_for_node($node, $consumed);
+            if ('' !== $markup) {
+                $collected[] = $markup;
+            }
+
+            foreach ($node as $child_key => $child) {
+                // A `link` / `image` sub-object is a destination descriptor the
+                // parent has already folded into its markup. Descending into it
+                // would emit the same URL a second time as a bare link, and
+                // would turn an image's own `url` field into a spurious <a>.
+                if (is_string($child_key)
+                    && (in_array(strtolower($child_key), self::URL_KEYS, true)
+                        || in_array(strtolower($child_key), self::IMAGE_KEYS, true))
+                ) {
+                    continue;
+                }
+
+                $reconstruct($child);
+            }
+        };
+        $reconstruct($tree);
+
+        // Pass 2 — remaining visible text.
+        $walk = static function ($node, $key = null) use (&$walk, &$collected, &$consumed): void {
             if (is_array($node)) {
                 foreach ($node as $child_key => $child) {
                     $walk($child, is_string($child_key) ? $child_key : $key);
@@ -282,6 +362,11 @@ class Builder_Content {
             }
 
             if (!is_string($node) || '' === trim($node)) {
+                return;
+            }
+
+            // Already inside a reconstructed tag.
+            if (in_array($node, $consumed, true)) {
                 return;
             }
 
@@ -307,6 +392,215 @@ class Builder_Content {
         $collected = array_unique($collected);
 
         return implode("\n", $collected);
+    }
+
+    /**
+     * Rebuild the HTML a single builder node represents, if any.
+     *
+     * Looks only at the node's own fields (plus one level of nesting, because
+     * builders commonly wrap a destination as `{ url: … }`). Returns an empty
+     * string for the vast majority of nodes, which are layout or configuration.
+     *
+     * Any leaf string folded into the returned markup is appended to $consumed
+     * so the plain-text sweep doesn't count it twice.
+     *
+     * @param array $node     Builder node.
+     * @param array $consumed Collects strings represented in the returned markup.
+     * @return string Reconstructed HTML, or '' when the node carries none.
+     */
+    private static function markup_for_node(array $node, array &$consumed): string {
+        $text = self::first_value($node, self::CONTENT_KEYS);
+        $url = self::url_from($node, self::URL_KEYS);
+        $image = self::image_from($node);
+        $tag = self::heading_tag_from($node);
+
+        $parts = [];
+
+        // Image: alt text matters as much as the tag, since alt checks run over
+        // whatever this returns.
+        if ('' !== $image['url']) {
+            $alt = '' !== $image['alt'] ? $image['alt'] : (string) self::first_value($node, self::ALT_KEYS);
+            if ('' !== $alt) {
+                $consumed[] = $alt;
+            }
+            $parts[] = sprintf(
+                '<img src="%s" alt="%s" />',
+                esc_url_raw($image['url']),
+                htmlspecialchars($alt, ENT_QUOTES)
+            );
+        }
+
+        if ('' !== $text) {
+            $inner = $text;
+
+            if ('' !== $url) {
+                $consumed[] = $text;
+                $inner = sprintf('<a href="%s">%s</a>', esc_url_raw($url), $text);
+            }
+
+            if ('' !== $tag) {
+                $consumed[] = $text;
+                $parts[] = sprintf('<%1$s>%2$s</%1$s>', $tag, $inner);
+            } elseif ('' !== $url) {
+                $parts[] = $inner;
+            }
+        } elseif ('' !== $url) {
+            // A destination with no label still counts as a link for link
+            // checks; the URL doubles as its anchor text.
+            $parts[] = sprintf('<a href="%1$s">%1$s</a>', esc_url_raw($url));
+        }
+
+        return implode("\n", $parts);
+    }
+
+    /**
+     * First non-empty scalar value under any of the given keys.
+     *
+     * @param array    $node Builder node.
+     * @param string[] $keys Candidate keys.
+     * @return string Trimmed value, or '' when none match.
+     */
+    private static function first_value(array $node, array $keys): string {
+        foreach ($node as $key => $value) {
+            if (!is_string($key) || !is_string($value)) {
+                continue;
+            }
+            if (in_array(strtolower($key), $keys, true) && '' !== trim($value)) {
+                return trim($value);
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Link destination held by a node, as a bare string or a `{ url: … }` object.
+     *
+     * @param array    $node Builder node.
+     * @param string[] $keys Candidate keys.
+     * @return string URL, or '' when the node holds none.
+     */
+    private static function url_from(array $node, array $keys): string {
+        foreach ($node as $key => $value) {
+            if (!is_string($key) || !in_array(strtolower($key), $keys, true)) {
+                continue;
+            }
+
+            if (is_string($value) && self::looks_like_url($value)) {
+                return trim($value);
+            }
+
+            // Elementor and Breakdance both nest the destination one level down.
+            if (is_array($value)) {
+                foreach ($value as $nested_key => $nested) {
+                    if (is_string($nested_key)
+                        && in_array(strtolower($nested_key), ['url', 'href', 'permalink'], true)
+                        && is_string($nested)
+                        && self::looks_like_url($nested)
+                    ) {
+                        return trim($nested);
+                    }
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Image URL and alt text held by a node.
+     *
+     * @param array $node Builder node.
+     * @return array{url:string,alt:string}
+     */
+    private static function image_from(array $node): array {
+        foreach ($node as $key => $value) {
+            if (!is_string($key) || !in_array(strtolower($key), self::IMAGE_KEYS, true)) {
+                continue;
+            }
+
+            if (is_string($value) && self::looks_like_url($value)) {
+                return ['url' => trim($value), 'alt' => ''];
+            }
+
+            if (is_array($value)) {
+                $url = '';
+                $alt = '';
+                foreach ($value as $nested_key => $nested) {
+                    if (!is_string($nested_key) || !is_string($nested)) {
+                        continue;
+                    }
+                    $nested_key = strtolower($nested_key);
+                    if ('' === $url && in_array($nested_key, ['url', 'src'], true) && self::looks_like_url($nested)) {
+                        $url = trim($nested);
+                    }
+                    if ('' === $alt && in_array($nested_key, self::ALT_KEYS, true)) {
+                        $alt = trim($nested);
+                    }
+                }
+                if ('' !== $url) {
+                    return ['url' => $url, 'alt' => $alt];
+                }
+            }
+        }
+
+        return ['url' => '', 'alt' => ''];
+    }
+
+    /**
+     * Heading tag a node asks for, normalised to h1–h6.
+     *
+     * Accepts both the `h2` form and a bare level like `2`.
+     *
+     * @param array $node Builder node.
+     * @return string Tag name, or '' when the node is not a heading.
+     */
+    private static function heading_tag_from(array $node): string {
+        foreach ($node as $key => $value) {
+            if (!is_string($key) || !in_array(strtolower($key), self::HEADING_TAG_KEYS, true)) {
+                continue;
+            }
+
+            if (is_string($value) && preg_match('/^h([1-6])$/i', trim($value), $m)) {
+                return 'h' . $m[1];
+            }
+
+            // A bare level only counts under a key that unambiguously means one;
+            // `size` and `tag` carry values like "large" or "div" far more often.
+            if (is_numeric($value)
+                && in_array(strtolower($key), ['level'], true)
+                && (int) $value >= 1 && (int) $value <= 6
+            ) {
+                return 'h' . (int) $value;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Whether a string is plausibly a link or asset destination.
+     *
+     * Deliberately permissive about relative paths — builders store internal
+     * links that way — but rejects the option slugs and CSS values that make up
+     * most of a builder tree.
+     *
+     * @param string $value Candidate.
+     * @return bool
+     */
+    private static function looks_like_url(string $value): bool {
+        $value = trim($value);
+
+        if ('' === $value || strlen($value) > 2048) {
+            return false;
+        }
+
+        if (preg_match('#^(https?:)?//#i', $value) || str_starts_with($value, '/')) {
+            return true;
+        }
+
+        // Protocol-ish destinations a link node can legitimately hold.
+        return (bool) preg_match('#^(mailto:|tel:|\#)#i', $value);
     }
 
     /**

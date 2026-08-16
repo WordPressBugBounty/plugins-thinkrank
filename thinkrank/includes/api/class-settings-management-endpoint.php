@@ -1417,7 +1417,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function add_performance_indexes(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function add_performance_indexes(WP_REST_Request $request) {
         try {
             // Import the Database_Schema class
             if (!class_exists('ThinkRank\\Database\\Database_Schema')) {

@@ -1072,7 +1072,12 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             'og_site_name' => $site_name,
             'og_description' => $site_description,
             'og_type' => 'website',
-            'og_locale' => 'en_US',
+            // Empty by design: og:locale is resolved from the site locale via
+            // get_og_locale(), which is where the thinkrank_og_locale filter (and
+            // therefore the WPML/Polylang/TranslatePress integration) applies. A
+            // hardcoded default was merged into every settings read, so the
+            // resolver was unreachable and every install advertised en_US.
+            'og_locale' => '',
             'default_og_image' => '',
             'og_image_width' => 1200,
             'og_image_height' => 630,
@@ -1175,8 +1180,8 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             'og_locale' => [
                 'type' => 'string',
                 'title' => 'Locale',
-                'description' => 'The locale for Open Graph tags',
-                'default' => 'en_US'
+                'description' => 'Optional override for og:locale. Leave empty to follow the site language.',
+                'default' => ''
             ],
             'default_og_image' => [
                 'type' => 'string',
@@ -1436,7 +1441,21 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             // social caches than the canonical.
             $data['url'] = home_url('/');
             $data['type'] = $settings['og_type'] ?? 'website';
-            $data['locale'] = $settings['og_locale'] ?? null;
+            // Leaving this null lets generate_og_tags() fall through to
+            // get_og_locale(), which is what every other context already does.
+            //
+            // A stored 'en_US' is deliberately treated as "not set". It was the
+            // hardcoded default on every install and there has never been a UI
+            // control for this field, so it cannot represent a deliberate choice
+            // — it is the old default persisted by an unrelated save of the
+            // Social Media tab. Honouring it would leave every already-saved
+            // site broken after this fix. Any other stored value is a genuine
+            // override and still wins; a site that really wants to force en_US
+            // can do so through the thinkrank_og_locale filter.
+            $stored_locale = trim((string) ($settings['og_locale'] ?? ''));
+            $data['locale'] = ('' !== $stored_locale && 'en_US' !== $stored_locale)
+                ? $stored_locale
+                : null;
 
             // Set Open Graph image with proper fallback
             $data['image'] = $this->get_og_image_for_context($settings, null);

@@ -209,7 +209,7 @@ class Content_Brief_Endpoint {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function generate_brief(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function generate_brief(WP_REST_Request $request) {
         try {
             // Persistent per-user throttle on this paid AI-backed route (the other
             // AI endpoints do the same) to prevent an edit_posts user looping it.
@@ -254,7 +254,7 @@ class Content_Brief_Endpoint {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_briefs(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_briefs(WP_REST_Request $request) {
         try {
             $limit = $request->get_param('limit');
             $offset = $request->get_param('offset');
@@ -282,7 +282,7 @@ class Content_Brief_Endpoint {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function delete_brief(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function delete_brief(WP_REST_Request $request) {
         try {
             $brief_id = $request->get_param('id');
             $success = $this->get_storage_generator()->delete_brief($brief_id);
@@ -315,7 +315,7 @@ class Content_Brief_Endpoint {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function export_brief(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function export_brief(WP_REST_Request $request) {
         try {
             $brief_id = (int) $request->get_param('id');
             $format = $request->get_param('format');
@@ -386,7 +386,7 @@ class Content_Brief_Endpoint {
      * @param array $keywords Keywords to validate
      * @return bool|WP_Error Validation result
      */
-    public function validate_keywords($keywords): bool|WP_Error {
+    public function validate_keywords($keywords) {
         // A custom validate_callback replaces WP's array type-coercion, so the
         // raw param arrives here as-is; reject non-arrays instead of letting a
         // strict array type hint throw an uncaught TypeError during dispatch.

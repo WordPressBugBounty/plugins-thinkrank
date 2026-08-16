@@ -115,8 +115,8 @@ class Activator {
      */
     private function check_requirements(): void {
         // PHP version check
-        if (version_compare(PHP_VERSION, '8.0', '<')) {
-            throw new \Exception('ThinkRank requires PHP 8.0 or higher');
+        if (version_compare(PHP_VERSION, '7.4', '<')) {
+            throw new \Exception('ThinkRank requires PHP 7.4 or higher');
         }
 
         // WordPress version check

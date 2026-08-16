@@ -145,12 +145,19 @@ class Blocks_Manager {
             return $block_content;
         }
 
-        $schema = match ($name) {
-            self::FAQ_BLOCK   => $this->build_faq_schema($attrs),
-            self::HOWTO_BLOCK => $this->build_howto_schema($attrs),
-            self::TOC_BLOCK   => $this->build_toc_schema($attrs),
-            default           => null,
-        };
+        switch ($name) {
+            case self::FAQ_BLOCK:
+                $schema = $this->build_faq_schema($attrs);
+                break;
+            case self::HOWTO_BLOCK:
+                $schema = $this->build_howto_schema($attrs);
+                break;
+            case self::TOC_BLOCK:
+                $schema = $this->build_toc_schema($attrs);
+                break;
+            default:
+                $schema = null;
+        }
 
         if (null === $schema) {
             return $block_content;

@@ -337,7 +337,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function test_connections(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function test_connections(WP_REST_Request $request) {
         try {
             $connection_results = $this->analytics_manager->test_connections();
 
@@ -361,7 +361,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_dashboard_data(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_dashboard_data(WP_REST_Request $request) {
         try {
             $date_range = $request->get_param('date_range');
             $dashboard_data = $this->analytics_manager->get_dashboard_data($date_range);
@@ -386,7 +386,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_seo_opportunities(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_seo_opportunities(WP_REST_Request $request) {
         try {
             $date_range = $request->get_param('date_range');
             $opportunities = $this->analytics_manager->get_seo_opportunities($date_range);
@@ -411,7 +411,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function setup_search_console(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function setup_search_console(WP_REST_Request $request) {
         try {
             $site_url = $request->get_param('site_url');
             $setup_result = $this->analytics_manager->setup_search_console_verification($site_url);
@@ -436,7 +436,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_indexing_status(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_indexing_status(WP_REST_Request $request) {
         try {
             $indexing_status = $this->analytics_manager->get_indexing_status();
 
@@ -460,7 +460,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function refresh_data(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function refresh_data(WP_REST_Request $request) {
         try {
             $refresh_result = $this->analytics_manager->refresh_data();
 
@@ -488,7 +488,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_client_status(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_client_status(WP_REST_Request $request) {
         try {
             $client_status = $this->analytics_manager->get_client_status();
 
@@ -565,7 +565,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param string $site_url Site URL to validate
      * @return bool|WP_Error Validation result
      */
-    public function validate_site_url(string $site_url): bool|WP_Error {
+    public function validate_site_url(string $site_url) {
         if (empty($site_url)) {
             return new WP_Error(
                 'invalid_site_url',
@@ -591,7 +591,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_search_totals(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_search_totals(WP_REST_Request $request) {
         try {
             $start_date = $request->get_param('start_date');
             $end_date   = $request->get_param('end_date');
@@ -644,7 +644,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_search_daily(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_search_daily(WP_REST_Request $request) {
         try {
             $date_range = $request->get_param('date_range') ?: '30d';
             $days = (int) preg_replace('/[^0-9]/', '', $date_range);
@@ -738,7 +738,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error
      */
-    public function get_branded(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_branded(WP_REST_Request $request) {
         try {
             $date_range = $request->get_param('date_range') ?: '30d';
             $brand_name = $request->get_param('brand_name') ?: '';
@@ -778,7 +778,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_countries(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_countries(WP_REST_Request $request) {
         try {
             $date_range = $request->get_param('date_range') ?: '30d';
 
@@ -819,7 +819,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @since 1.0.0
      * @return array{0: \ThinkRank\Integrations\Google_Search_Console_Client, 1: string}|WP_Error
      */
-    private function resolve_search_console(): array|WP_Error {
+    private function resolve_search_console() {
         $client = $this->analytics_manager->get_search_console_client();
 
         if (!$client) {
@@ -926,7 +926,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      *
      * @return bool|WP_Error True when allowed, false or WP_Error otherwise
      */
-    public function check_data_permissions(): bool|WP_Error {
+    public function check_data_permissions() {
         if (!$this->check_permissions()) {
             return false;
         }
@@ -952,7 +952,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_intelligent_dashboard(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_intelligent_dashboard(WP_REST_Request $request) {
         try {
             $date_range = $request->get_param('date_range');
 
@@ -991,7 +991,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_intelligent_opportunities(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_intelligent_opportunities(WP_REST_Request $request) {
         try {
             $date_range = $request->get_param('date_range');
 
@@ -1029,7 +1029,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
      */
-    public function get_seo_insights(WP_REST_Request $request): WP_REST_Response|WP_Error {
+    public function get_seo_insights(WP_REST_Request $request) {
         try {
             $date_range = $request->get_param('date_range');
 

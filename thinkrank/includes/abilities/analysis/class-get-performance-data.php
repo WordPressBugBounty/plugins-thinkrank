@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Retrieves ThinkRank's Core Web Vitals / performance snapshot for the site.
  *
  * Mirrors `GET /thinkrank/v1/performance/monitor`: returns the collected Core
- * Web Vitals (LCP, FID, CLS, FCP), a 0-100 performance score and grade, and the
+ * Web Vitals (LCP, INP, CLS, FCP), a 0-100 performance score and grade, and the
  * SEO correlation. Requires a connected Google account for real data; when not
  * connected the payload still returns with a `core_web_vitals.error` marker and
  * zeroed metrics.
@@ -32,7 +32,7 @@ class Get_Performance_Data extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-performance-data';
 		$this->label       = __( 'Get Performance Data', 'thinkrank' );
-		$this->description = __( 'Retrieve the site Core Web Vitals / performance snapshot (LCP, FID, CLS, FCP), performance score and grade, and SEO correlation. Requires a connected Google account for real data; otherwise returns an empty snapshot with a not-connected marker.', 'thinkrank' );
+		$this->description = __( 'Retrieve the site Core Web Vitals / performance snapshot (LCP, INP, CLS, FCP), performance score and grade, and SEO correlation. Requires a connected Google account for real data; otherwise returns an empty snapshot with a not-connected marker.', 'thinkrank' );
 	}
 
 	/**

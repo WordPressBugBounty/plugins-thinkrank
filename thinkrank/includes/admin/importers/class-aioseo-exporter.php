@@ -1219,7 +1219,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
     /**
      * {@inheritDoc}
      */
-    protected function convert_template_variables(mixed $value, ?int $post_id = null): string {
+    protected function convert_template_variables($value, ?int $post_id = null): string {
         // Foreign data first: booleans/arrays in the source plugin's options
         // must degrade to '' here, not fatal the migration (see abstract).
         $value = $this->stringify_template_value($value);

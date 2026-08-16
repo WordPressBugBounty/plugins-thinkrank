@@ -70,12 +70,20 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * Constructor
      *
      * @since 1.0.0
+     *
+     * @param bool $register_hooks Optional. Whether to register the auto-generation
+     *                             hooks. Pass false for a read-only instance built
+     *                             solely to query settings — the hooks are bound to
+     *                             `$this`, so a second hook-registering instance
+     *                             would run `handle_content_change()` twice per save.
      */
-    public function __construct() {
+    public function __construct(bool $register_hooks = true) {
         parent::__construct('sitemap');
 
         // Initialize auto-generation hooks
-        $this->init_auto_generation_hooks();
+        if ($register_hooks) {
+            $this->init_auto_generation_hooks();
+        }
     }
 
     /**
@@ -625,6 +633,13 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
 
             foreach ($terms as $term) {
+                // A term the user marked noindex must not be advertised in the
+                // sitemap: the robots tag now honours term meta, so listing it
+                // here would have the sitemap contradict the page's own tag.
+                if ($this->term_is_noindexed((int) $term->term_id)) {
+                    continue;
+                }
+
                 $url = get_term_link($term);
                 if (!is_wp_error($url)) {
                     // Omit lastmod for terms — the generation time is not a real
@@ -889,6 +904,14 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             return [];
         }
 
+        // Drop terms the user marked noindex. This path feeds the single general
+        // sitemap while collect_taxonomy_entries_iter() feeds the segmented ones,
+        // so both need the filter or the two disagree about the same term.
+        $all_terms = array_values(array_filter(
+            $all_terms,
+            fn($term) => !$this->term_is_noindexed((int) $term->term_id)
+        ));
+
         // Group terms by taxonomy
         return $this->group_terms_by_taxonomy($all_terms);
     }
@@ -1073,6 +1096,33 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         }
 
         return true;
+    }
+
+    /**
+     * Whether a term carries an explicit noindex override.
+     *
+     * Mirrors the post-side check in should_include_post(); terms store the same
+     * `_thinkrank_robots_meta_enabled` / `_thinkrank_robots_meta` keys, written
+     * by the update-term-seo ability and by the SEO importer.
+     *
+     * @since 1.31.0
+     *
+     * @param int $term_id Term to test.
+     * @return bool True when the term is marked noindex.
+     */
+    private function term_is_noindexed(int $term_id): bool {
+        if (!(bool) get_term_meta($term_id, '_thinkrank_robots_meta_enabled', true)) {
+            return false;
+        }
+
+        $raw = get_term_meta($term_id, '_thinkrank_robots_meta', true);
+        if (!is_string($raw) || $raw === '') {
+            return false;
+        }
+
+        $robots = json_decode($raw, true);
+
+        return is_array($robots) && !empty($robots['noindex']);
     }
 
     /**
@@ -1353,15 +1403,26 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     /**
      * Remove every static sitemap file ThinkRank publishes to the web root.
      *
-     * Called when the sitemap feature is disabled so /sitemap.xml,
-     * /sitemap_index.xml, the segmented children (incl. paginated -N pages), and
-     * /local-sitemap.xml stop being served. Only ThinkRank's own filenames are
-     * targeted; WordPress core's wp-sitemap.xml is left untouched.
+     * Called when the sitemap feature is disabled, and by the cleanup route, so
+     * /sitemap.xml, /sitemap_index.xml, the segmented children (incl. paginated
+     * -N pages), and /local-sitemap.xml stop being served. Only ThinkRank's own
+     * filenames are targeted; WordPress core's wp-sitemap.xml and any other
+     * plugin's sitemap in the web root are left untouched.
      *
-     * @return void
+     * @since 1.31.0 Returns the filenames removed, and accepts the settings to
+     *               derive them from, so a caller that already read them (and
+     *               needs to report what went) does not have to re-read or
+     *               re-derive the name list.
+     *
+     * @param array|null $settings Optional. Sitemap settings; defaults to the
+     *                             saved site settings.
+     * @return array{deleted: string[], failed: string[]} Basenames removed, and
+     *                             those that existed but could not be removed.
      */
-    public function delete_published_sitemaps(): void {
-        $settings = $this->get_settings('site');
+    public function delete_published_sitemaps(?array $settings = null): array {
+        $settings = $settings ?? $this->get_settings('site');
+        $deleted = [];
+        $failed = [];
 
         // Base filenames to remove. Derive the child/index names from the stored
         // sitemap_urls so a custom custom_url_pattern (e.g. seo-{type}.xml) is
@@ -1384,19 +1445,96 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
         }
 
+        // Segment names for every type we could have published under the current
+        // url pattern, not just the ones stored in sitemap_urls. Two states leave
+        // a published child unlisted there: settings that drifted from what is on
+        // disk (a single-file entry while an index and its children are live), and
+        // a content type that has since been switched off. Deriving the names
+        // from the pattern reaches those without falling back to a 'sitemap-*.xml'
+        // glob, which would also match another plugin's segments.
+        $names = array_merge($names, $this->publishable_segment_filenames($settings));
+
         foreach (array_unique(array_filter($names)) as $name) {
             // Remove the file itself and any paginated -N variants of its stem
             // (e.g. seo-posts.xml plus seo-posts-2.xml, seo-posts-3.xml…).
             $path = ABSPATH . $name;
             if (file_exists($path)) {
                 wp_delete_file($path);
+                // wp_delete_file() returns nothing, so confirm by re-checking.
+                if (file_exists($path)) {
+                    $failed[] = $name;
+                } else {
+                    $deleted[] = $name;
+                }
             }
             if (preg_match('/^(.*)\.xml$/i', $name, $m)) {
+                // Pagination pages only — a numeric suffix on this exact stem.
+                // Globbing '<stem>-*.xml' matched any name that merely started
+                // with the stem, so the default 'sitemap.xml' entry pulled in
+                // every sitemap-*.xml in the root, including another plugin's.
+                $paged_pattern = '/^' . preg_quote($m[1], '/') . '-\d+\.xml$/i';
+
                 foreach (glob(ABSPATH . $m[1] . '-*.xml') ?: [] as $paged) {
+                    $paged_name = basename($paged);
+                    if (!preg_match($paged_pattern, $paged_name)) {
+                        continue;
+                    }
+
                     wp_delete_file($paged);
+                    if (file_exists($paged)) {
+                        $failed[] = $paged_name;
+                    } else {
+                        $deleted[] = $paged_name;
+                    }
                 }
             }
         }
+
+        return [
+            'deleted' => array_values(array_unique($deleted)),
+            'failed' => array_values(array_unique($failed)),
+        ];
+    }
+
+    /**
+     * Every child-sitemap filename this site could have published.
+     *
+     * Formats the configured url pattern against each type ThinkRank segments by
+     * — the four built-ins plus every public custom post type and public custom
+     * taxonomy — ignoring whether that type is currently included. The point is
+     * to recognise our own filenames, and a type that was published and later
+     * disabled still left a file behind.
+     *
+     * @since 1.31.0
+     *
+     * @param array $settings Sitemap settings (read for `custom_url_pattern`).
+     * @return string[] Basenames, e.g. ['sitemap-posts.xml', 'sitemap-pages.xml'].
+     */
+    private function publishable_segment_filenames(array $settings): array {
+        $pattern = (string) ($settings['custom_url_pattern'] ?? 'sitemap-{type}.xml');
+        if (strpos($pattern, '{type}') === false) {
+            return [];
+        }
+
+        $types = ['posts', 'pages', 'categories', 'tags'];
+
+        foreach (get_post_types(['public' => true, '_builtin' => false], 'names') as $cpt) {
+            $types[] = (string) $cpt;
+        }
+
+        foreach (get_taxonomies(['public' => true, '_builtin' => false], 'names') as $taxonomy) {
+            $types[] = (string) $taxonomy;
+        }
+
+        $names = [];
+        foreach (array_unique($types) as $type) {
+            $name = basename(str_replace('{type}', $type, $pattern));
+            if ($name !== '') {
+                $names[] = $name;
+            }
+        }
+
+        return $names;
     }
 
     /**
@@ -1474,12 +1612,59 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return array Possibly-updated settings.
      */
     public function maybe_promote_to_index(array $settings): array {
-        $has_children = count((is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : [])) > 1;
+        $saved = $this->get_settings('site');
+
+        // Read from the *payload*, before the merge below folds the saved values
+        // in: "the caller named this" and "this has a value" are different
+        // questions, and the mode resolution turns on the former.
+        $mode_supplied = array_key_exists('use_sitemap_index', $settings);
+        $urls_supplied = is_array($settings['sitemap_urls'] ?? null);
+        $has_children = count($urls_supplied ? $settings['sitemap_urls'] : []) > 1;
 
         // Inclusion flags may be absent from a partial payload (e.g. the manual
         // generate endpoint) — fall back to saved settings so synthesized child
         // sitemaps reflect the real include_posts/pages/categories choices.
-        $inclusions = array_merge($this->get_settings('site'), $settings);
+        $inclusions = array_merge($saved, $settings);
+
+        // Hand the generators a *complete* settings array. Only the mode was
+        // resolved before, so every other unnamed key reached them missing: a
+        // bare `{}` from a REST/MCP client republished the sitemap with
+        // enable_styling and include_images read as off, overwriting the live
+        // files with output that had lost its XSL stylesheet, its image
+        // namespace and its image entries. Presentation and inclusion settings
+        // are not something a generate call opts into — they are the site's
+        // configuration, and only a value actually present in the payload
+        // overrides them.
+        $settings = $inclusions;
+
+        // The two keys that drive mode keep their own resolution rules below,
+        // so they must go back to "not specified" when the caller omitted them.
+        if (!$mode_supplied) {
+            unset($settings['use_sitemap_index']);
+        }
+        if (!$urls_supplied) {
+            unset($settings['sitemap_urls']);
+        }
+
+        // An absent use_sitemap_index means "not specified", which is not the
+        // same as "single file". Reading it as the latter meant a partial payload
+        // — `{}` from a REST/MCP client, or anything short of the full settings
+        // object the admin bundle sends — republished one flat sitemap.xml on an
+        // index-mode site and left sitemap_index.xml and its children stale or
+        // missing. Inherit the saved mode instead; only a value actually present
+        // in the payload decides the mode.
+        if (!array_key_exists('use_sitemap_index', $settings)) {
+            $settings['use_sitemap_index'] = $saved['use_sitemap_index'] ?? '';
+
+            // Inheriting the mode means inheriting its children too, unless the
+            // caller named its own set.
+            if (!empty($settings['use_sitemap_index'])
+                && !$urls_supplied
+                && count((is_array($saved['sitemap_urls'] ?? null) ? $saved['sitemap_urls'] : [])) > 1) {
+                $settings['sitemap_urls'] = $saved['sitemap_urls'];
+                $has_children = true;
+            }
+        }
 
         if (!empty($settings['use_sitemap_index'])) {
             if (!$has_children) {
@@ -1819,8 +2004,86 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
         }
 
+        // Remove segments that are no longer part of the set. Publishing was
+        // purely additive: a type that dropped out (Categories unticked, a CPT
+        // that stopped qualifying) simply stopped being overwritten, so its file
+        // kept serving and — until the index happened to be rebuilt — kept being
+        // listed in it. The index above is built from the children actually
+        // generated, so pruning here leaves disk and index agreeing.
+        $this->prune_orphaned_segments($settings, $results['sitemaps_generated']);
+
         return $results;
     }
+
+    /**
+     * Delete published segment files that this run did not write.
+     *
+     * Only filenames this site could have published under its own url pattern
+     * are considered, so another plugin's or core's sitemap in the web root is
+     * never a candidate — the same reason cleanup does not glob 'sitemap-*.xml'.
+     *
+     * @since 1.31.0
+     *
+     * @param array $settings  Sitemap settings (read for `custom_url_pattern`).
+     * @param array $generated Entries from $results['sitemaps_generated'].
+     * @return string[] Basenames removed.
+     */
+    private function prune_orphaned_segments(array $settings, array $generated): array {
+        $kept = [];
+        foreach ($generated as $entry) {
+            if (!empty($entry['filename'])) {
+                $kept[strtolower((string) $entry['filename'])] = true;
+            }
+        }
+
+        // The index and the local business sitemap are written by their own
+        // paths and are not segments, so they are never orphans here.
+        $kept[strtolower(basename($this->get_primary_sitemap_filename($settings)))] = true;
+        $kept['local-sitemap.xml'] = true;
+        $kept['sitemap.xml'] = true;
+        $kept['sitemap_index.xml'] = true;
+
+        $removed = [];
+
+        global $wp_filesystem;
+        if (!$wp_filesystem) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            WP_Filesystem();
+        }
+        if (!$wp_filesystem) {
+            return $removed;
+        }
+
+        foreach ($this->publishable_segment_filenames($settings) as $candidate) {
+            if (isset($kept[strtolower($candidate)])) {
+                continue;
+            }
+
+            if (!preg_match('/^(.*)\.xml$/i', $candidate, $m)) {
+                continue;
+            }
+
+            // The base file plus its numeric pagination pages.
+            $paths = [ABSPATH . $candidate];
+            foreach (glob(ABSPATH . $m[1] . '-*.xml') ?: [] as $paged) {
+                if (preg_match('/^' . preg_quote($m[1], '/') . '-\d+\.xml$/i', basename($paged))) {
+                    $paths[] = $paged;
+                }
+            }
+
+            foreach ($paths as $path) {
+                if (!file_exists($path)) {
+                    continue;
+                }
+                if ($wp_filesystem->delete($path)) {
+                    $removed[] = basename($path);
+                }
+            }
+        }
+
+        return $removed;
+    }
+
 
     /**
      * Collect the full (un-paginated) entry list for a content sitemap type.
