@@ -167,6 +167,12 @@ class SEO_Manager {
         // Add Site Identity specific outputs
         add_action('wp_head', [$this, 'output_site_schema_markup'], 7);
         add_action('wp_head', [$this, 'output_breadcrumb_schema'], 8);
+        // Late enough that Global_SEO_Schema_Output (priority 15) has registered.
+        add_action('wp_head', [$this, 'output_schema_graph'], 20);
+        // Tell the graph it has a renderer, so a body producer asking whether
+        // its FAQ was absorbed can trigger collection itself when a block theme
+        // renders the post content ahead of wp_head.
+        Schema_Graph::instance()->schedule_render();
 
         // Add closing comment (runs last)
         add_action('wp_head', [$this, 'output_closing_comment'], 99);
@@ -184,6 +190,14 @@ class SEO_Manager {
 
         // Add robots.txt filter hook
         add_filter('robots_txt', [$this, 'filter_robots_txt'], 10, 2);
+
+        // Serve /llms.txt from PHP when the request reaches WordPress. A
+        // published llms.txt is a physical file, so the web server normally
+        // answers it — with `text/plain` and no charset, which renders UTF-8
+        // content as mojibake. This route (plus the .htaccess block written by
+        // LLMs_Txt_Manager for the static file) guarantees an explicit UTF-8
+        // charset. Priority 8 keeps it ahead of redirect_canonical().
+        add_action('template_redirect', [$this, 'maybe_serve_llms_txt'], 8);
 
         // Take WordPress core's own sitemap offline while ThinkRank's is active.
         // Two sitemap indexes on one site is a crawl conflict: core keeps
@@ -1210,7 +1224,11 @@ class SEO_Manager {
         } else {
             $description = $this->get_meta_description();
         }
-        if (!$description) {
+        // Skipped for a protected post: core answers get_the_excerpt() with its
+        // "There is no excerpt because this is a protected post." placeholder,
+        // so this is not a leak — but publishing that sentence as the social
+        // description is worse than publishing none (#363).
+        if (!$description && !$this->is_content_password_protected()) {
             $description = is_singular() ? wp_trim_words(get_the_excerpt(), 30) : get_bloginfo('description');
         }
 
@@ -1401,7 +1419,11 @@ class SEO_Manager {
         } else {
             $description = $this->get_meta_description();
         }
-        if (!$description) {
+        // Skipped for a protected post: core answers get_the_excerpt() with its
+        // "There is no excerpt because this is a protected post." placeholder,
+        // so this is not a leak — but publishing that sentence as the social
+        // description is worse than publishing none (#363).
+        if (!$description && !$this->is_content_password_protected()) {
             $description = is_singular() ? wp_trim_words(get_the_excerpt(), 30) : get_bloginfo('description');
         }
 
@@ -1688,10 +1710,17 @@ class SEO_Manager {
             // Get excerpt
             $post = get_post($this->current_post_id);
             if ($post) {
-                $excerpt = !empty($post->post_excerpt)
-                    ? $post->post_excerpt
-                    : wp_trim_words(wp_strip_all_tags($post->post_content), 25, '...');
-                $placeholders['%excerpt%'] = $excerpt;
+                // An authored post_excerpt is written for public consumption, so
+                // it stays. Falling back to the body does not: for a protected
+                // post that derivation leaks the gated content through any
+                // template containing %excerpt%, and this branch runs BEFORE the
+                // derive-from-content priority below, so guarding only that one
+                // would leave this path open (#363).
+                if (!empty($post->post_excerpt)) {
+                    $placeholders['%excerpt%'] = $post->post_excerpt;
+                } elseif (!$this->is_content_password_protected($post->ID)) {
+                    $placeholders['%excerpt%'] = wp_trim_words(wp_strip_all_tags($post->post_content), 25, '...');
+                }
             }
 
             // Get author
@@ -1889,6 +1918,40 @@ class SEO_Manager {
     }
 
     /**
+     * Whether a post's body must not be read for a public surface.
+     *
+     * Deriving metadata from `post_content` publishes that content to everyone
+     * who requests the URL — and to every crawler and link-preview unfurler
+     * that reads og:description — while the page itself still shows only the
+     * password form, so the leak is invisible to the site owner (#363).
+     *
+     * This is the one thing every content reader should call before touching
+     * `post_content` for output. It mirrors core: a visitor who has already
+     * entered the correct password sees the body anyway, so nothing is hidden
+     * from them here either.
+     *
+     * @param int|null $post_id Optional. Post ID. Defaults to the current post.
+     * @return bool True when the body is password-gated for this visitor.
+     */
+    private function is_content_password_protected(?int $post_id = null): bool {
+        $post_id = $post_id ?? $this->current_post_id;
+
+        if (!$post_id) {
+            return false;
+        }
+
+        $post = get_post($post_id);
+
+        if (!$post) {
+            return false;
+        }
+
+        // Guarded for the same reason the schema path guards it: this class is
+        // also exercised outside a full front-end request.
+        return function_exists('post_password_required') && post_password_required($post);
+    }
+
+    /**
      * Get meta description with fallback system
      * Priority: Post-specific metadata > Global SEO templates > Site Identity templates > WordPress defaults
      *
@@ -1923,8 +1986,12 @@ class SEO_Manager {
             }
         }
 
-        // Fourth priority: Generate from content for posts/pages
-        if (is_singular() && $this->current_post_id) {
+        // Fourth priority: Generate from content for posts/pages.
+        // Never for a password-protected post — deriving the description from a
+        // gated body published its first ~25 words in the page head, and the
+        // same value is reused for og:description and twitter:description, so
+        // one unguarded read leaked through three tags (#363).
+        if (is_singular() && $this->current_post_id && !$this->is_content_password_protected()) {
             $post_content = get_post_field('post_content', $this->current_post_id);
             if ($post_content) {
                 $excerpt = wp_trim_words(wp_strip_all_tags($post_content), 25, '...');
@@ -2048,7 +2115,7 @@ class SEO_Manager {
 
             if (!empty($site_wide_schemas)) {
                 foreach ($site_wide_schemas as $schema_type => $schema_info) {
-                    $this->output_schema_markup($schema_info['data'], $schema_type, 'Schema Manager');
+                    Schema_Graph::instance()->add_supporting($schema_info['data'], (string) $schema_type);
                 }
                 $has_schema_manager_output = true;
                 $has_website_schema = isset($site_wide_schemas['WebSite']);
@@ -2071,7 +2138,7 @@ class SEO_Manager {
             $website_schema = apply_filters('thinkrank_website_schema', $website_schema);
 
             if (!empty($website_schema)) {
-                $this->output_schema_markup($website_schema, 'WebSite', 'Site Identity');
+                Schema_Graph::instance()->add_supporting($website_schema, 'WebSite');
             }
         }
 
@@ -2100,9 +2167,19 @@ class SEO_Manager {
                 }
 
                 foreach ($page_specific_schemas as $schema_type => $schema_info) {
-                    $this->output_schema_markup($schema_info['data'], $schema_type, 'Schema Manager');
+                    Schema_Graph::instance()->add_primary($schema_info['data'], (string) $schema_type, 'schema_manager');
                 }
                 $has_schema_manager_output = true;
+            }
+        }
+
+        // Absorb FAQ content from the post body (FAQ block / Elementor widget)
+        // so it merges into the graph's single FAQPage instead of each producer
+        // emitting its own competing one.
+        if (is_singular()) {
+            $queried_post = get_post();
+            if ($queried_post instanceof \WP_Post) {
+                Schema_Graph::instance()->collect_post_faq($queried_post);
             }
         }
 
@@ -2126,7 +2203,7 @@ class SEO_Manager {
         $schema = $this->generate_organization_schema($settings);
 
         if ($schema) {
-            $this->output_schema_markup($schema, 'Organization', 'Site Identity');
+            Schema_Graph::instance()->add_supporting($schema, 'Organization');
         }
     }
 
@@ -2164,26 +2241,6 @@ class SEO_Manager {
         ];
 
         return $schema;
-    }
-
-    /**
-     * Output schema markup with consistent formatting
-     *
-     * @param array  $schema_data Schema data
-     * @param string $schema_type Schema type name
-     * @param string $source      Source of schema (Schema Manager, Site Identity, etc.)
-     * @return void
-     */
-    private function output_schema_markup(array $schema_data, string $schema_type, string $source): void {
-        if (empty($schema_data)) {
-            return;
-        }
-
-        echo '<!-- ThinkRank ' . esc_html($source) . ': ' . esc_html($schema_type) . ' Schema -->' . "\n";
-        echo '<script type="application/ld+json">' . "\n";
-        echo wp_json_encode($schema_data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . "\n";
-        echo '</script>' . "\n";
-        echo '<!-- /ThinkRank ' . esc_html($source) . ': ' . esc_html($schema_type) . ' Schema -->' . "\n";
     }
 
     /**
@@ -2391,12 +2448,21 @@ class SEO_Manager {
         $breadcrumbs = $this->generate_breadcrumbs($settings);
 
         if (!empty($breadcrumbs['schema'])) {
-            echo "<!-- ThinkRank SEO Breadcrumb Schema Markup -->\n";
-            echo '<script type="application/ld+json">' . "\n";
-            echo wp_json_encode($breadcrumbs['schema'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . "\n";
-            echo '</script>' . "\n";
-            echo "<!-- /ThinkRank SEO Breadcrumb Schema Markup -->\n";
+            Schema_Graph::instance()->add_supporting($breadcrumbs['schema'], 'BreadcrumbList');
         }
+    }
+
+    /**
+     * Emit everything ThinkRank collected for this request as one linked @graph.
+     *
+     * Runs after every producer has registered (site schema 7, breadcrumbs 8,
+     * Global SEO 15), so the graph can arbitrate between them.
+     *
+     * @since 1.32.0
+     * @return void
+     */
+    public function output_schema_graph(): void {
+        Schema_Graph::instance()->render();
     }
 
     /**
@@ -2614,6 +2680,55 @@ class SEO_Manager {
         $breadcrumbs['schema'] = $this->generate_breadcrumb_schema($items);
 
         return $breadcrumbs;
+    }
+
+    /**
+     * Serve /llms.txt through PHP so the response declares UTF-8.
+     *
+     * Cheap guard first: every other front-end request leaves without loading
+     * the manager.
+     *
+     * @since 1.32.0
+     *
+     * @return void
+     */
+    public function maybe_serve_llms_txt(): void {
+        if (!$this->is_llms_txt_request()) {
+            return;
+        }
+
+        if (!class_exists('ThinkRank\\SEO\\LLMs_Txt_Manager')) {
+            require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-llms-txt-manager.php';
+        }
+
+        $manager = new \ThinkRank\SEO\LLMs_Txt_Manager();
+        $manager->serve_llms_txt();
+    }
+
+    /**
+     * Whether the current request is for /llms.txt.
+     *
+     * @since 1.32.0
+     *
+     * @return bool
+     */
+    private function is_llms_txt_request(): bool {
+        if (empty($_SERVER['REQUEST_URI'])) {
+            return false;
+        }
+
+        $path = wp_parse_url(sanitize_text_field(wp_unslash($_SERVER['REQUEST_URI'])), PHP_URL_PATH);
+        if (!is_string($path) || '' === $path) {
+            return false;
+        }
+
+        // Strip the install's home path so subdirectory installs match too.
+        $home_path = (string) wp_parse_url(home_url('/'), PHP_URL_PATH);
+        if ('' !== $home_path && '/' !== $home_path && 0 === strpos($path, $home_path)) {
+            $path = substr($path, strlen($home_path));
+        }
+
+        return 'llms.txt' === strtolower(trim($path, '/'));
     }
 
     /**

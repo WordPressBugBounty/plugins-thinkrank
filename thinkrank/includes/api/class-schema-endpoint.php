@@ -941,13 +941,11 @@ class Schema_Endpoint extends WP_REST_Controller {
             $context_type = $request->get_param('context_type');
             $context_id = (int) $request->get_param('context_id');
 
-            // Validate context
-            if (!$this->validate_context($context_type, $context_id)) {
-                return new WP_Error(
-                    'invalid_context',
-                    'Invalid context type or ID provided',
-                    ['status' => 400]
-                );
+            // Validate context and the caller's access to it. Returns true or a
+            // WP_Error carrying the right status (400 shape, 403 authorization).
+            $context_validation = $this->validate_context($context_type, $context_id);
+            if (is_wp_error($context_validation)) {
+                return $context_validation;
             }
 
             // Get schema output data
@@ -1066,13 +1064,11 @@ class Schema_Endpoint extends WP_REST_Controller {
             $context_id = (int) $request->get_param('context_id');
             $options = $request->get_param('options') ?? [];
 
-            // Validate context
-            if (!$this->validate_context($context_type, $context_id)) {
-                return new WP_Error(
-                    'invalid_context',
-                    'Invalid context type or ID provided',
-                    ['status' => 400]
-                );
+            // Validate context and the caller's access to it. Returns true or a
+            // WP_Error carrying the right status (400 shape, 403 authorization).
+            $context_validation = $this->validate_context($context_type, $context_id);
+            if (is_wp_error($context_validation)) {
+                return $context_validation;
             }
 
             // Track schema performance
@@ -1512,19 +1508,47 @@ class Schema_Endpoint extends WP_REST_Controller {
      * @param int|null $context_id   Context ID
      * @return bool Validation status
      */
-    private function validate_context(string $context_type, ?int $context_id): bool {
+    private function validate_context(string $context_type, ?int $context_id) {
         $valid_types = ['site', 'post', 'page', 'product'];
 
+        $invalid = new WP_Error(
+            'invalid_context',
+            'Invalid context type or ID provided',
+            ['status' => 400]
+        );
+
         if (!in_array($context_type, $valid_types, true)) {
-            return false;
+            return $invalid;
         }
 
         if ($context_type !== 'site' && (!$context_id || $context_id <= 0)) {
-            return false;
+            return $invalid;
         }
 
         if ($context_id && !get_post($context_id)) {
-            return false;
+            return $invalid;
+        }
+
+        // SECURITY: everything above establishes that the context *exists*, not
+        // that this caller may see it. `edit_post` is a meta capability, so
+        // map_meta_cap() resolves authorship, published state and
+        // edit_others_posts for this specific post — the same check
+        // Schema_Input_Validator::validate_context_ownership() makes on the
+        // write paths, and the one class-social-media-endpoint.php already makes
+        // on its own context routes. Without it a delegated Schema Manager can
+        // walk context_id and read SEO data for drafts, pending posts and other
+        // authors' content.
+        //
+        // Site context is deliberately left to the route's capability gate.
+        // The write paths demand manage_options for it, but applying that here
+        // would stop a delegated Schema Manager reading site-level schema at
+        // all, which is the point of delegating the section.
+        if ($context_type !== 'site' && !current_user_can('edit_post', $context_id)) {
+            return new WP_Error(
+                'rest_forbidden',
+                'You are not allowed to access this content.',
+                ['status' => 403]
+            );
         }
 
         return true;

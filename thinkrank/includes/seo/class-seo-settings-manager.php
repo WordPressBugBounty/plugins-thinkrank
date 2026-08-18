@@ -180,14 +180,21 @@ class SEO_Settings_Manager extends Abstract_SEO_Manager {
      * @param int|null $context_id   Optional. Context ID
      * @param array    $settings     Settings array to save
      * @param string   $category     Optional. Settings category
-     * @return bool True on success, false on failure
+     * @return bool|null True on success, false on failure, null when this store
+     *                   does not own the category (nothing was attempted).
      */
-    public function save_settings_by_category(string $context_type, ?int $context_id, array $settings, string $category = 'general'): bool {
-        // Validate category
+    public function save_settings_by_category(string $context_type, ?int $context_id, array $settings, string $category = 'general'): ?bool {
+        // Not this store's category. Callers address categories by the
+        // endpoint's vocabulary (`social_media`, `site_identity`, …) while this
+        // store registers its own (`social`, `general`, …), so an unrecognised
+        // name is routine and must NOT be reported as a failed write — the
+        // caller's dedicated manager is the store of record for those (#371).
+        // Returning false here made every such save answer 500 while the
+        // manager's row had already committed.
         if (!isset($this->settings_categories[$category])) {
-            return false;
+            return null;
         }
-        
+
         // Check if context is supported for this category
         if (!in_array($context_type, $this->settings_categories[$category]['contexts'], true)) {
             return false;
@@ -250,8 +257,11 @@ class SEO_Settings_Manager extends Abstract_SEO_Manager {
             $category = $settings_data['category'] ?? 'general';
             unset($settings_data['category']);
             
-            $success = $this->save_settings_by_category($context_type, $context_id, $settings_data, $category);
-            
+            // Normalise the tri-state to a boolean: an unknown category (null)
+            // persisted nothing here, and this bulk API has no dedicated-manager
+            // fallback, so it is a failure from this caller's point of view.
+            $success = true === $this->save_settings_by_category($context_type, $context_id, $settings_data, $category);
+
             $results[$context_key] = [
                 'success' => $success,
                 'context_type' => $context_type,

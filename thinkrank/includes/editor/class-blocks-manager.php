@@ -147,6 +147,12 @@ class Blocks_Manager {
 
         switch ($name) {
             case self::FAQ_BLOCK:
+                // The request's schema graph already merged this block's questions
+                // into its single FAQPage, so emitting here would recreate the
+                // duplicate FAQPage the graph exists to prevent (#355).
+                if ($this->faq_absorbed_by_graph()) {
+                    return $block_content;
+                }
                 $schema = $this->build_faq_schema($attrs);
                 break;
             case self::HOWTO_BLOCK:
@@ -169,6 +175,23 @@ class Blocks_Manager {
         }
 
         return $block_content . "\n" . '<script type="application/ld+json">' . $json . '</script>';
+    }
+
+    /**
+     * Whether the schema graph already absorbed this page's FAQ content.
+     *
+     * Falls back to false whenever the graph never ran, so the block keeps its
+     * original standalone behaviour outside a normal front-end render.
+     *
+     * @since 1.32.0
+     * @return bool
+     */
+    private function faq_absorbed_by_graph(): bool {
+        if (!class_exists('ThinkRank\\Frontend\\Schema_Graph')) {
+            return false;
+        }
+
+        return \ThinkRank\Frontend\Schema_Graph::instance()->absorbed_content_faq();
     }
 
     /**

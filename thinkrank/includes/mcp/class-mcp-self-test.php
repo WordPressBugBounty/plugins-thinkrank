@@ -331,11 +331,46 @@ final class Mcp_Self_Test {
 	 * @return array{stage:string,detail:string}
 	 */
 	private static function probe_discovery(): array {
-		// Each document must carry an identifier EXACTLY equal to the one we
-		// compute locally. A mere "the key exists" check passes on another
-		// plugin's metadata served from the same /.well-known/ path, which is
-		// the hijack case the rewrite rules already warn about.
-		$docs = [
+		$documents = [];
+
+		// --- The documents clients are POINTED at (must work) -------------
+		// The 401 challenge advertises the REST-served resource metadata, and
+		// spec-compliant clients derive the OIDC-suffix form of the AS
+		// metadata from our path-based issuer. Neither lives under the site
+		// root's /.well-known/ directory, so both survive hosts that
+		// intercept that directory at the proxy edge (SiteGround). Each must
+		// carry an identifier EXACTLY equal to the one we compute locally — a
+		// mere "the key exists" check passes on another plugin's metadata,
+		// which is the hijack case the rewrite rules already warn about.
+		$primary = [
+			Mcp_OAuth::resource_metadata_url() => [
+				'key'      => 'resource',
+				'expected' => Mcp_Pairing::site_endpoint(),
+			],
+			rest_url( 'thinkrank/v1/mcp/oauth/authorization-server' ) => [
+				'key'      => 'issuer',
+				'expected' => Mcp_OAuth::issuer(),
+			],
+			Mcp_OAuth::issuer() . '/.well-known/openid-configuration' => [
+				'key'      => 'issuer',
+				'expected' => Mcp_OAuth::issuer(),
+			],
+		];
+
+		foreach ( $primary as $url => $spec ) {
+			$issue = self::probe_document( $url, $spec, $documents );
+			if ( null !== $issue ) {
+				return $issue;
+			}
+		}
+
+		// --- The spec-derived /.well-known/ forms (should work) -----------
+		// A client that ignores the challenge pointer derives these itself
+		// (RFC 9728 / RFC 8414 path-insert). Some hosts resolve the root
+		// /.well-known/ directory at their proxy as physical files, 404ing
+		// before WordPress runs — measurably different from broken rewrites,
+		// and fixable by publishing the documents AS physical files.
+		$derived = [
 			home_url( '/.well-known/oauth-protected-resource/' . Mcp_Pairing::SITE_ENDPOINT_PATH ) => [
 				'key'      => 'resource',
 				'expected' => Mcp_Pairing::site_endpoint(),
@@ -346,64 +381,63 @@ final class Mcp_Self_Test {
 			],
 		];
 
-		$documents = [];
-
-		foreach ( $docs as $url => $spec ) {
-			$response = wp_remote_get(
-				$url,
-				[
-					'timeout'     => 10,
-					'redirection' => 0,
-				]
-			);
-			if ( is_wp_error( $response ) ) {
-				return [
-					'stage'     => 'discovery',
-					'documents' => $documents,
-					'detail'    => sprintf(
-						/* translators: 1: discovery document URL, 2: transport error. */
-						__( 'The OAuth discovery document %1$s could not be fetched: %2$s. Clients that connect by URL alone cannot authenticate without it.', 'thinkrank' ),
-						$url,
-						$response->get_error_message()
-					),
-				];
+		$root_issue = null;
+		foreach ( $derived as $url => $spec ) {
+			$root_issue = self::probe_document( $url, $spec, $documents );
+			if ( null !== $root_issue ) {
+				break;
 			}
-			$status            = (int) wp_remote_retrieve_response_code( $response );
-			$raw               = (string) wp_remote_retrieve_body( $response );
-			$body              = json_decode( $raw, true );
-			$documents[ $url ] = is_array( $body ) ? $body : $raw;
+		}
 
-			if ( 200 !== $status || ! is_array( $body ) || ! isset( $body[ $spec['key'] ] ) ) {
-				return [
-					'stage'     => 'discovery',
-					'documents' => $documents,
-					'detail'    => sprintf(
-						/* translators: 1: discovery document URL, 2: HTTP status code. */
-						__( 'The OAuth discovery document %1$s returned %2$d instead of valid metadata. Re-save Settings → Permalinks; if it persists, another plugin may be claiming the /.well-known/ URLs.', 'thinkrank' ),
-						$url,
-						$status
-					),
-				];
+		if ( null !== $root_issue ) {
+			// A document that answers with SOMEONE ELSE'S identity is a plugin
+			// conflict poisoning derive-only clients — that stays a hard fail.
+			// Only the intercepted/unreachable shapes are softened below.
+			if ( 'mismatch' === ( $root_issue['kind'] ?? '' ) ) {
+				return $root_issue;
 			}
 
-			$advertised = (string) $body[ $spec['key'] ];
-			if ( $advertised !== $spec['expected'] ) {
+			// The host's own trick becomes the fix: if the proxy insists on
+			// serving /.well-known/ as physical files, give it physical files.
+			/**
+			 * Filter whether the self-test may publish static /.well-known/
+			 * discovery files when the dynamic route is unreachable.
+			 *
+			 * @since 1.32.0
+			 *
+			 * @param bool $allowed Defaults to whether the install can host them.
+			 */
+			$may_publish = apply_filters( 'thinkrank_mcp_static_discovery_publish', Mcp_Static_Discovery::applicable() );
+
+			$healed = false;
+			if ( $may_publish && Mcp_Static_Discovery::publish() ) {
+				$healed = true;
+				foreach ( $derived as $url => $spec ) {
+					if ( null !== self::probe_document( $url, $spec, $documents ) ) {
+						$healed = false;
+						break;
+					}
+				}
+			}
+
+			if ( ! $healed ) {
+				// Not fatal on its own any more: the challenge points clients
+				// at the REST document (verified above), so the flow survives.
+				// Say what is degraded instead of failing the whole check.
+				$scheme_issue = self::probe_scheme();
+				if ( null !== $scheme_issue ) {
+					$scheme_issue['documents'] = $documents;
+					return $scheme_issue;
+				}
 				return [
-					'stage'     => 'discovery',
+					'stage'     => 'ok',
 					'documents' => $documents,
-					'detail'    => sprintf(
-						/* translators: 1: metadata field name, 2: value found in the document, 3: value it should be, 4: discovery document URL. */
-						__( 'The discovery document %4$s advertises %1$s "%2$s" but this site\'s MCP endpoint is "%3$s". RFC 9728 requires an exact match, so clients reject the metadata and report that the server does not implement OAuth. If the two differ only by scheme, a reverse proxy is terminating TLS without passing X-Forwarded-Proto; otherwise another plugin is serving this URL.', 'thinkrank' ),
-						$spec['key'],
-						$advertised,
-						$spec['expected'],
-						$url
-					),
+					'detail'    => __( 'The primary discovery documents are served and correct, but the host intercepts the site root\'s /.well-known/ directory before WordPress runs (common on SiteGround shared hosting), and static files could not be published there. Clients that follow the challenge — ChatGPT, Claude — still connect; a client that only derives the root /.well-known/ URL itself may not. If write access to the site root is possible, granting it lets ThinkRank publish static discovery files that fix this completely.', 'thinkrank' ),
 				];
 			}
 		}
 
-		// Both documents agree with us — but they agree on whatever home_url()
+		// Documents agree with us — but they agree on whatever home_url()
 		// says, so a site whose stored URL is http:// while it actually serves
 		// https:// is self-consistently wrong. Clients connect over https and
 		// then reject the http identifier.
@@ -416,8 +450,78 @@ final class Mcp_Self_Test {
 		return [
 			'stage'     => 'ok',
 			'documents' => $documents,
-			'detail'    => __( 'Both OAuth discovery documents are served and advertise this site\'s MCP endpoint exactly.', 'thinkrank' ),
+			'detail'    => __( 'All OAuth discovery documents are served and advertise this site\'s MCP endpoint exactly.', 'thinkrank' ),
 		];
+	}
+
+	/**
+	 * Fetch and validate one discovery document. Appends what was actually
+	 * served to $documents either way, so support can read the site's real
+	 * responses instead of asking the customer for screenshots.
+	 *
+	 * @param string                            $url       Document URL.
+	 * @param array{key:string,expected:string} $spec      Identity field + required value.
+	 * @param array<string,mixed>               $documents Accumulator (by reference).
+	 * @return array{stage:string,documents:array<string,mixed>,detail:string}|null Null when the document is valid.
+	 */
+	private static function probe_document( string $url, array $spec, array &$documents ): ?array {
+		$response = wp_remote_get(
+			$url,
+			[
+				'timeout'     => 10,
+				'redirection' => 0,
+			]
+		);
+		if ( is_wp_error( $response ) ) {
+			return [
+				'stage'     => 'discovery',
+				'kind'      => 'unreachable',
+				'documents' => $documents,
+				'detail'    => sprintf(
+					/* translators: 1: discovery document URL, 2: transport error. */
+					__( 'The OAuth discovery document %1$s could not be fetched: %2$s. Clients that connect by URL alone cannot authenticate without it.', 'thinkrank' ),
+					$url,
+					$response->get_error_message()
+				),
+			];
+		}
+		$status            = (int) wp_remote_retrieve_response_code( $response );
+		$raw               = (string) wp_remote_retrieve_body( $response );
+		$body              = json_decode( $raw, true );
+		$documents[ $url ] = is_array( $body ) ? $body : $raw;
+
+		if ( 200 !== $status || ! is_array( $body ) || ! isset( $body[ $spec['key'] ] ) ) {
+			return [
+				'stage'     => 'discovery',
+				'kind'      => 'invalid',
+				'documents' => $documents,
+				'detail'    => sprintf(
+					/* translators: 1: discovery document URL, 2: HTTP status code. */
+					__( 'The OAuth discovery document %1$s returned %2$d instead of valid metadata. Re-save Settings → Permalinks; if it persists, the host may be intercepting the URL before WordPress runs, or another plugin may be claiming it.', 'thinkrank' ),
+					$url,
+					$status
+				),
+			];
+		}
+
+		$advertised = (string) $body[ $spec['key'] ];
+		if ( $advertised !== $spec['expected'] ) {
+			return [
+				'stage'     => 'discovery',
+				'kind'      => 'mismatch',
+				'documents' => $documents,
+				'detail'    => sprintf(
+					/* translators: 1: metadata field name, 2: value found in the document, 3: value it should be, 4: discovery document URL. */
+					__( 'The discovery document %4$s advertises %1$s "%2$s" but this site\'s MCP endpoint is "%3$s". RFC 9728 requires an exact match, so clients reject the metadata and report that the server does not implement OAuth. If the two differ only by scheme, a reverse proxy is terminating TLS without passing X-Forwarded-Proto; otherwise another plugin is serving this URL.', 'thinkrank' ),
+					$spec['key'],
+					$advertised,
+					$spec['expected'],
+					$url
+				),
+			];
+		}
+
+		return null;
 	}
 
 	/**
@@ -547,7 +651,7 @@ final class Mcp_Self_Test {
 					'stage'  => 'challenge',
 					'detail' => sprintf(
 						/* translators: 1: resource_metadata URL from the challenge header, 2: endpoint URL. */
-						__( 'The challenge from %2$s points at %1$s, but that URL does not return OAuth metadata. This is the first thing a client fetches, so the connection fails there. On a subdirectory install the spec-derived URL sits at the domain root, which WordPress cannot serve — a root redirect to this URL is needed.', 'thinkrank' ),
+						__( 'The challenge from %2$s points at %1$s, but that URL does not return OAuth metadata. This is the first thing a client fetches, so the connection fails there. A security plugin or edge rule blocking the REST API for visitors is the usual cause.', 'thinkrank' ),
 						$metadata_url,
 						$url
 					),
@@ -606,7 +710,7 @@ final class Mcp_Self_Test {
 				'stage'  => 'ua_filter',
 				'detail' => sprintf(
 					/* translators: 1: user agent string, 2: HTTP status returned for it, 3: HTTP status returned for WordPress's own user agent. */
-					__( 'The endpoint answered %3$d for WordPress but %2$d for an AI client\'s User-Agent (%1$s). A security plugin, firewall or "block bad bots" rule is refusing non-browser clients — exempt the MCP and /.well-known/ paths, or no AI client will ever reach this site.', 'thinkrank' ),
+					__( 'The endpoint answered %3$d for WordPress but %2$d for an AI client\'s User-Agent (%1$s). ThinkRank deliberately tests with the generic agents real MCP backends send; this refusal means a security plugin, firewall or host-level "block bad bots" rule (SiteGround\'s edge protection does this) will also refuse the real AI client. Ask the host to exempt the MCP and /.well-known/ paths, or allowlist these User-Agents.', 'thinkrank' ),
 					$agent,
 					$status,
 					$baseline

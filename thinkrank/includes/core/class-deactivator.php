@@ -51,6 +51,12 @@ class Deactivator {
         if (class_exists('ThinkRank\\SEO\\LLMs_Txt_Manager')) {
             (new \ThinkRank\SEO\LLMs_Txt_Manager())->delete_llms_txt_file();
         }
+        // Static /.well-known/ OAuth discovery files (published by the MCP
+        // self-test on hosts whose proxy intercepts that directory) — a
+        // static copy must not keep advertising a server that is now off.
+        if (class_exists('ThinkRank\\Mcp\\Mcp_Static_Discovery')) {
+            \ThinkRank\Mcp\Mcp_Static_Discovery::remove();
+        }
     }
     
     /**

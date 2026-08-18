@@ -1203,6 +1203,52 @@ class Content_Brief_Generator {
             }, $brief_data['visual_content']['image_recommendations']);
         }
 
+        return $this->sanitize_brief_output($brief_data);
+    }
+
+    /**
+     * Strip untrusted markup out of brief fields before they leave the server.
+     *
+     * Brief content crosses a trust boundary: it is assembled by an external AI
+     * provider from prompts that can include text fetched from competitor URLs.
+     * It was previously copied out of the decoded JSON verbatim and rendered in
+     * the admin SPA through dangerouslySetInnerHTML, so a malicious or
+     * prompt-injected response could execute script in the admin origin (#365).
+     *
+     * Runs on the read path as well as generation, so briefs stored before this
+     * fix are sanitized when they are loaded.
+     *
+     * @since 1.32.0
+     *
+     * @param array $brief_data Brief data to sanitize.
+     * @return array Sanitized brief data.
+     */
+    private function sanitize_brief_output(array $brief_data): array {
+        foreach ($brief_data as $key => $value) {
+            // The raw provider response is debug output shown as plain text, and
+            // the generation params are our own values — leave both intact.
+            if ('raw_response' === $key || 'generation_params' === $key) {
+                continue;
+            }
+
+            if ('content_body' === $key && is_string($value)) {
+                // Deliberately HTML: it is the drafted article and is rendered as
+                // markup. wp_kses_post() keeps normal post formatting while
+                // dropping script/style/iframe, event-handler attributes and
+                // javascript: URLs.
+                $brief_data[$key] = wp_kses_post($value);
+                continue;
+            }
+
+            if (is_array($value)) {
+                $brief_data[$key] = $this->sanitize_brief_output($value);
+            } elseif (is_string($value)) {
+                // Every other field is plain text (headings, keywords, guidance).
+                // Markdown emphasis markers are preserved; HTML tags are not.
+                $brief_data[$key] = wp_strip_all_tags($value);
+            }
+        }
+
         return $brief_data;
     }
 

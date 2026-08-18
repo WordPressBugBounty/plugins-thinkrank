@@ -415,6 +415,31 @@ final class Mcp_Manager {
 		// Discovery, dynamic client registration, and the token endpoint are
 		// all public (permission enforced inside): a client must reach them
 		// BEFORE it holds any credential.
+		//
+		// The discovery documents are ALSO served here, not only at the
+		// /.well-known/ rewrites: hosts that resolve root /.well-known/ at
+		// their proxy edge (SiteGround) never let those requests reach
+		// WordPress, while /wp-json/ always arrives. The 401 challenge
+		// advertises this route (Mcp_OAuth::resource_metadata_url), so the
+		// flow survives on such hosts.
+		register_rest_route(
+			self::NS,
+			'/mcp/oauth/protected-resource',
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'rest_oauth_discovery_resource' ],
+				'permission_callback' => '__return_true',
+			]
+		);
+		register_rest_route(
+			self::NS,
+			'/mcp/oauth/authorization-server',
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'rest_oauth_discovery_server' ],
+				'permission_callback' => '__return_true',
+			]
+		);
 		register_rest_route(
 			self::NS,
 			'/mcp/oauth/register',
@@ -591,6 +616,41 @@ final class Mcp_Manager {
 	}
 
 	// -- OAuth 2.1 handlers ------------------------------------------------
+
+	/**
+	 * GET /mcp/oauth/protected-resource — RFC 9728 metadata via REST.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function rest_oauth_discovery_resource() {
+		return $this->oauth_discovery_response( Mcp_OAuth::protected_resource_metadata() );
+	}
+
+	/**
+	 * GET /mcp/oauth/authorization-server — RFC 8414 metadata via REST.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function rest_oauth_discovery_server() {
+		return $this->oauth_discovery_response( Mcp_OAuth::authorization_server_metadata() );
+	}
+
+	/**
+	 * Shape one discovery document response: public, cacheable, and 404 when
+	 * MCP is off — matching the /.well-known/ rewrites exactly, so a client
+	 * sees the same truth regardless of which serving path reached it.
+	 *
+	 * @param array<string,mixed> $document Discovery metadata.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	private function oauth_discovery_response( array $document ) {
+		if ( ! self::is_enabled() ) {
+			return new \WP_Error( 'thinkrank_mcp_disabled', __( 'MCP is disabled on this site.', 'thinkrank' ), [ 'status' => 404 ] );
+		}
+		$response = new \WP_REST_Response( $document, 200 );
+		$response->header( 'Cache-Control', 'public, max-age=3600' );
+		return $response;
+	}
 
 	/**
 	 * POST /mcp/oauth/register — RFC 7591 dynamic client registration.

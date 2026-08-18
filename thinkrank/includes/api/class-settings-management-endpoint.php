@@ -93,8 +93,13 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
         'sitemap' => 'XML Sitemap Management',
         'integrations' => 'External Integrations',
         'analytics_integration' => 'Analytics Integration',
-        'seo_analytics' => 'SEO Analytics & Intelligence',
-        'global_defaults' => 'Global Default Settings'
+        'seo_analytics' => 'SEO Analytics & Intelligence'
+        // 'global_defaults' was listed here but is registered in no settings
+        // store and read by no client — the only mention in the codebase was
+        // this label. Every save against it reached the compound write with
+        // nothing to persist to and answered 500, so accepting the name only
+        // promised a category that could never be stored. It now falls through
+        // to the 400 invalid_category branch like any other unknown name (#371).
     ];
 
     /**
@@ -117,7 +122,12 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
     private array $seo_manager_classes = [
         'site_identity' => Site_Identity_Manager::class,
         'performance_monitoring' => Performance_Monitoring_Manager::class,
-        'ai_content_analyzer' => AI_Content_Analyzer::class,
+        // Keyed by the endpoint's own category name. It was 'ai_content_analyzer',
+        // which appears in no other registry, so the route rejected it with 400
+        // invalid_category and this manager was never reachable — while the
+        // endpoint's actual category, 'content_analysis', had no manager and
+        // therefore nowhere to persist (#371).
+        'content_analysis' => AI_Content_Analyzer::class,
         'content_optimization' => Content_Optimization_Manager::class,
         'schema_management' => Schema_Management_System::class,
         'social_media' => Social_Meta_Manager::class,
@@ -702,6 +712,20 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 );
             }
 
+            // SECURITY: this route also accepts an object context and forwards it
+            // to the category's SEO manager, which upserts rows keyed by that ID.
+            // The `thinkrank_settings` capability authorises entry to the Settings
+            // section — it is not authorisation to edit every post on the site — so
+            // resolve and authorise the object before ANY write happens below (#367).
+            $context_type = $request->get_param('context_type') ?? 'site';
+            $context_id = $request->get_param('context_id');
+            $context_id = null === $context_id ? null : (int) $context_id;
+
+            $context_error = $this->authorize_settings_context($context_type, $context_id);
+            if (is_wp_error($context_error)) {
+                return $context_error;
+            }
+
             // Reads mask secrets; never persist a mask back over the real one.
             $settings = $this->strip_masked_secrets($settings);
 
@@ -724,16 +748,31 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 }
             }
 
-            // Update settings
-            $update_success = $this->settings_manager->update_settings($settings, $category);
+            // Update settings. The context must be forwarded: update_settings()
+            // defaults to the 'site' context, so a post-scoped request was also
+            // silently rewriting the site-wide defaults (#367).
+            $generic_update = $this->settings_manager->update_settings($settings, $category, $context_type, $context_id);
+            $manager_update = null;
 
-            // Also update through specific SEO manager if available
+            // Also update through specific SEO manager if available. The context was
+            // resolved and authorised above.
             if ($this->has_seo_manager($category)) {
-                $context_type = $request->get_param('context_type') ?? 'site';
-                $context_id = $request->get_param('context_id') ?? null;
                 $manager_update = $this->get_seo_manager($category)->save_settings($context_type, $context_id, $settings);
-                $update_success = $update_success && $manager_update;
             }
+
+            // null from a store means "this category is not mine", not "the write
+            // failed" — the two registries use different category vocabularies, so
+            // most categories are owned by exactly one store (#371). Judge only the
+            // stores that actually attempted a write: the save succeeded if at least
+            // one store owned the category and none of the owners failed. ANDing the
+            // raw values reported 500 for every category the generic store does not
+            // know, while the dedicated manager's row had already committed.
+            $attempted = array_filter(
+                [$generic_update, $manager_update],
+                static fn($result) => null !== $result
+            );
+
+            $update_success = [] !== $attempted && !in_array(false, $attempted, true);
 
             if (!$update_success) {
                 // Name the settings that did not persist. The write is not
@@ -741,6 +780,39 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 // did not — without the list the UI can only show a generic
                 // error and the user has no idea what to re-enter (#300).
                 $failed_keys = $this->settings_manager->get_last_failed_keys();
+
+                // Report which store failed. Collapsing both writes into one boolean
+                // meant a committed manager row could be reported as a total failure,
+                // hiding a persisted change behind a 500 (#367). Only a literal false
+                // is a failure — null means the store does not own this category and
+                // never attempted a write, so it must not be named here (#371).
+                $stores_failed = [];
+                if (false === $generic_update) {
+                    $stores_failed[] = 'settings';
+                }
+                if (false === $manager_update) {
+                    $stores_failed[] = 'category_manager';
+                }
+
+                // No store owns the category. That is a routing defect rather than a
+                // failed write, and it is worth distinguishing: the settings were
+                // never persisted anywhere, so reporting it as a plain write failure
+                // would send the user back to re-enter values that have nowhere to go.
+                if ([] === $attempted) {
+                    return new WP_Error(
+                        'category_not_persistable',
+                        sprintf(
+                            'No settings store is registered for category %s, so nothing was saved.',
+                            $category
+                        ),
+                        [
+                            'status' => 500,
+                            'failed_keys' => $failed_keys,
+                            'stores_failed' => $stores_failed,
+                            'partial_write' => false,
+                        ]
+                    );
+                }
 
                 return new WP_Error(
                     'update_failed',
@@ -754,6 +826,12 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                     [
                         'status' => 500,
                         'failed_keys' => $failed_keys,
+                        'stores_failed' => $stores_failed,
+                        // True when more than one store attempted the write and they
+                        // disagreed, so the client knows the request was not a clean
+                        // no-op. Stores that did not own the category are excluded.
+                        'partial_write' => in_array(true, $attempted, true)
+                            && in_array(false, $attempted, true),
                     ]
                 );
             }
@@ -771,8 +849,13 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             // Update category metadata
             $this->update_category_metadata($category);
 
-            // Get updated settings
-            $updated_settings = $this->settings_manager->get_settings($category);
+            // Get updated settings. Read them back from whichever store actually
+            // owns the category: the generic store returns [] for the categories it
+            // does not know, which would report a successful save as zero settings
+            // and hand the UI an empty form to render (#371).
+            $updated_settings = null === $generic_update && $this->has_seo_manager($category)
+                ? $this->get_seo_manager($category)->get_settings($context_type, $context_id)
+                : $this->settings_manager->get_settings($category, $context_type, $context_id);
 
             return new WP_REST_Response([
                 'success' => true,
@@ -1762,8 +1845,95 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 'type' => 'boolean',
                 'default' => true,
                 'description' => 'Whether to validate settings before updating'
+            ],
+            // Declared so the REST schema validates/normalises them. They were read
+            // by the handler while undeclared, which skipped validation entirely (#367).
+            'context_type' => [
+                'required' => false,
+                'type' => 'string',
+                'enum' => ['site', 'post', 'page', 'product'],
+                'default' => 'site',
+                'description' => 'Object context these settings apply to'
+            ],
+            'context_id' => [
+                'required' => false,
+                'type' => 'integer',
+                'minimum' => 1,
+                'description' => 'Object ID when context_type is not "site"'
             ]
         ];
+    }
+
+    /**
+     * Authorise the object context a category settings write targets.
+     *
+     * The Settings section capability is delegatable, so a non-administrator can
+     * reach this controller. Writing settings for a specific post is an edit of
+     * that post and must be authorised as one — mirroring the per-object check the
+     * social-media write route performs (#277, #367).
+     *
+     * @since 1.32.0
+     *
+     * @param string   $context_type Requested context type.
+     * @param int|null $context_id   Requested object ID.
+     * @return true|WP_Error True when the write is allowed, WP_Error otherwise.
+     */
+    private function authorize_settings_context(string $context_type, ?int $context_id) {
+        if ('site' === $context_type) {
+            return true;
+        }
+
+        if (!in_array($context_type, ['post', 'page', 'product'], true)) {
+            return new WP_Error(
+                'invalid_context',
+                'Invalid context type provided',
+                ['status' => 400]
+            );
+        }
+
+        if (!$context_id || $context_id <= 0) {
+            return new WP_Error(
+                'invalid_context',
+                'A valid context_id is required for non-site contexts',
+                ['status' => 400]
+            );
+        }
+
+        $post = get_post($context_id);
+
+        if (!$post || 'revision' === $post->post_type) {
+            return new WP_Error(
+                'invalid_context',
+                'The requested content could not be found',
+                ['status' => 404]
+            );
+        }
+
+        // The declared context must match the one the front-end read path derives
+        // from the real post type, otherwise `page`/`product` can alias an arbitrary
+        // object and the row is written where nothing will ever read it. Mirrors
+        // Seo_Manager::get_context_type() — custom post types fall back to 'post'.
+        $expected_context = in_array($post->post_type, ['post', 'page', 'product'], true)
+            ? $post->post_type
+            : 'post';
+
+        if ($context_type !== $expected_context) {
+            return new WP_Error(
+                'invalid_context',
+                'The context type does not match the requested content.',
+                ['status' => 400]
+            );
+        }
+
+        if (!current_user_can('edit_post', $context_id)) {
+            return new WP_Error(
+                'rest_forbidden',
+                'You are not allowed to edit settings for this content.',
+                ['status' => 403]
+            );
+        }
+
+        return true;
     }
 
     /**

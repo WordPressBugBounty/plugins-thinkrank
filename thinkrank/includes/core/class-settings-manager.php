@@ -326,11 +326,15 @@ class Settings_Manager {
      * @param string $category Settings category
      * @param string $context_type Optional. Context type for SEO settings
      * @param int|null $context_id Optional. Context ID for SEO settings
-     * @return bool Success status
+     * @return bool|null True on success, false on failure, null when this store
+     *                   does not own the category (nothing was attempted).
      */
-    public function update_settings(array $settings, string $category, string $context_type = 'site', ?int $context_id = null): bool {
+    public function update_settings(array $settings, string $category, string $context_type = 'site', ?int $context_id = null): ?bool {
+        // Unknown here means "not this store's category", not "the write
+        // failed" — the caller may still have a dedicated manager that owns it
+        // (#371). Failing closed made those saves report 500 after committing.
         if (!isset($this->settings_categories[$category])) {
-            return false;
+            return null;
         }
 
         $category_config = $this->settings_categories[$category];
@@ -711,9 +715,10 @@ class Settings_Manager {
      * @param string $category Category name
      * @param string $context_type Context type
      * @param int|null $context_id Context ID
-     * @return bool Success status
+     * @return bool|null True on success, false on failure, null when the SEO
+     *                   store does not own the category.
      */
-    private function update_seo_settings_by_category(array $settings, string $category, string $context_type, ?int $context_id): bool {
+    private function update_seo_settings_by_category(array $settings, string $category, string $context_type, ?int $context_id): ?bool {
         return $this->seo_settings->save_settings_by_category($context_type, $context_id, $settings, $category);
     }
 

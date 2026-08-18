@@ -29,7 +29,7 @@ class Capability_Manager {
      * Option storing the version that capabilities were last synced at.
      */
     private const VERSION_OPTION = 'thinkrank_caps_version';
-    private const VERSION        = '2';
+    private const VERSION        = '3';
 
     /**
      * Base capability required to open ThinkRank at all.
@@ -60,7 +60,11 @@ class Capability_Manager {
             'thinkrank_instant_indexing'  => __('Instant Indexing', 'thinkrank'),
             'thinkrank_author_archives'   => __('Author Archives', 'thinkrank'),
             'thinkrank_content_tools'     => __('AI Tools', 'thinkrank'),
+            'thinkrank_ai_insights'       => __('AI Insights', 'thinkrank'),
             'thinkrank_internal_links'    => __('Internal Links', 'thinkrank'),
+            'thinkrank_redirections'      => __('Redirections', 'thinkrank'),
+            'thinkrank_broken_links'      => __('Broken Links', 'thinkrank'),
+            'thinkrank_woocommerce'       => __('WooCommerce', 'thinkrank'),
             'thinkrank_settings'          => __('Settings & API Keys', 'thinkrank'),
             self::MANAGE_ROLES            => __('Manage Roles', 'thinkrank'),
         ];
@@ -84,7 +88,11 @@ class Capability_Manager {
             'crawling-ai-indexing' => 'thinkrank_crawling',
             'instant-indexing'     => 'thinkrank_instant_indexing',
             'author-archives'      => 'thinkrank_author_archives',
+            'ai-insights'          => 'thinkrank_ai_insights',
             'internal-links'       => 'thinkrank_internal_links',
+            'redirections'         => 'thinkrank_redirections',
+            'broken-links'         => 'thinkrank_broken_links',
+            'woocommerce'          => 'thinkrank_woocommerce',
             'integrations'         => 'thinkrank_settings',
             'role-manager'         => self::MANAGE_ROLES,
         ];
@@ -100,6 +108,15 @@ class Capability_Manager {
             'site-identity'     => 'thinkrank_site_identity',
             'seo-analytics'     => 'thinkrank_analytics',
             'analytics'         => 'thinkrank_analytics',
+            // Analytics sub-features that register their own Pro route prefixes
+            // (rather than nesting under /analytics/) — gate them with the
+            // Analytics capability, not the base ACCESS fall-through.
+            'rank-tracker'      => 'thinkrank_analytics',
+            'keywords'          => 'thinkrank_analytics',
+            'email-report'      => 'thinkrank_analytics',
+            'top-content'       => 'thinkrank_analytics',
+            'url-inspection'    => 'thinkrank_analytics',
+            'refresh-radar'     => 'thinkrank_analytics',
             'seo-score'         => 'thinkrank_content_tools',
             'content-brief'     => 'thinkrank_content_tools',
             'pillar-content'    => 'thinkrank_content_tools',
@@ -112,14 +129,28 @@ class Capability_Manager {
             'global-seo'        => 'thinkrank_global_seo',
             'global-robot-meta' => 'thinkrank_crawling',
             'image-seo'         => 'thinkrank_image_seo',
+            'ai-insights'       => 'thinkrank_ai_insights',
+            // Brand Visibility is part of the AI Insights section.
+            'brand-visibility'  => 'thinkrank_ai_insights',
             'schema'            => 'thinkrank_schema',
+            // Custom Schema (Pro) lives in the Schema Manager section but
+            // registers its own /custom-schema/ prefix.
+            'custom-schema'     => 'thinkrank_schema',
             'social-media'      => 'thinkrank_social_media',
             'social-platforms'  => 'thinkrank_settings',
             'sitemap'           => 'thinkrank_crawling',
+            // Publisher Sitemaps (Pro) is part of the Crawling & AI Indexing
+            // section but registers its own /publisher-sitemaps/ prefix.
+            'publisher-sitemaps' => 'thinkrank_crawling',
             'llms-txt'          => 'thinkrank_crawling',
             'instant-indexing'  => 'thinkrank_instant_indexing',
             'author-archives'   => 'thinkrank_author_archives',
             'internal-links'    => 'thinkrank_internal_links',
+            'redirections'      => 'thinkrank_redirections',
+            'broken-links'      => 'thinkrank_broken_links',
+            'woocommerce'       => 'thinkrank_woocommerce',
+            // Multi-location (Pro) is managed inside Site Identity › Business Info.
+            'locations'         => 'thinkrank_site_identity',
             'integrations'      => 'thinkrank_settings',
             'settings-management' => 'thinkrank_settings',
             'settings'          => 'thinkrank_settings',

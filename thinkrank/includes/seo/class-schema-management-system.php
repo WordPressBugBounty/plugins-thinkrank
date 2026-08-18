@@ -585,16 +585,86 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         $this->cleanup_duplicate_schemas($context_type, $context_id);
 
         // CACHE INVALIDATION: Clear cache after successful deployment
+        $cache_invalidated = false;
         if ($this->cache_manager && !empty($deployment['deployed_schemas'])) {
             $this->cache_manager->invalidate_context_cache($context_type, $context_id);
+            $cache_invalidated = true;
         }
 
-        // Set deployment status based on results
-        $deployment['cache_status'] = ['cache_updated' => true, 'message' => 'Schema cache updated'];
-        $deployment['validation_post_deployment'] = ['validation_passed' => true, 'message' => 'Schema deployed successfully'];
-        $deployment['deployment_status'] = !empty($deployment['deployed_schemas']) ? 'success' : 'failed';
+        $deployment['cache_status'] = $cache_invalidated
+            ? ['cache_updated' => true, 'message' => 'Schema cache invalidated']
+            : ['cache_updated' => false, 'message' => 'No schema cache to invalidate'];
+
+        // Post-deployment verification: read back through the same accessor the
+        // front end uses, so a row that was written but is not retrievable (wrong
+        // context, inactive, stale cache) is reported as a failure instead of
+        // being assumed successful.
+        $deployment['validation_post_deployment'] = $this->verify_deployment(
+            $context_type,
+            $context_id,
+            array_keys($deployment['deployed_schemas'])
+        );
+
+        $writes_ok = !empty($deployment['deployed_schemas']);
+        foreach ($deployment['deployed_schemas'] as $deploy_result) {
+            if (empty($deploy_result['deployed'])) {
+                $writes_ok = false;
+                break;
+            }
+        }
+
+        $deployment['deployment_status'] =
+            ($writes_ok && !empty($deployment['validation_post_deployment']['validation_passed']))
+                ? 'success'
+                : 'failed';
 
         return $deployment;
+    }
+
+    /**
+     * Verify deployed schema is retrievable after a deploy.
+     *
+     * Reads back through get_deployed_schemas() — the same accessor
+     * Frontend\SEO_Manager::output_site_schema_markup() uses to emit schema — so
+     * the check reflects what will actually reach the page rather than only that
+     * an INSERT returned without error.
+     *
+     * @since 1.32.0
+     *
+     * @param string   $context_type   Context type
+     * @param int|null $context_id     Context ID
+     * @param array    $expected_types Schema types that were just deployed
+     * @return array Validation result
+     */
+    private function verify_deployment(string $context_type, ?int $context_id, array $expected_types): array {
+        if (empty($expected_types)) {
+            return [
+                'validation_passed' => false,
+                'message' => 'No schema was deployed',
+                'missing_types' => []
+            ];
+        }
+
+        $retrieved = $this->get_deployed_schemas($context_type, $context_id);
+        $missing   = array_values(array_diff($expected_types, array_keys($retrieved)));
+
+        if (!empty($missing)) {
+            return [
+                'validation_passed' => false,
+                'message' => sprintf(
+                    /* translators: %s: comma-separated list of schema types */
+                    __('Deployed schema could not be read back: %s', 'thinkrank'),
+                    implode(', ', $missing)
+                ),
+                'missing_types' => $missing
+            ];
+        }
+
+        return [
+            'validation_passed' => true,
+            'message' => __('Schema deployed and verified on the front end', 'thinkrank'),
+            'missing_types' => []
+        ];
     }
 
     /**

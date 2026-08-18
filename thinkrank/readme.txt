@@ -4,7 +4,7 @@ Tags: seo, ai seo, focus keyword, schema, llms.txt
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.31.0
+Stable tag: 1.32.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -361,6 +361,27 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 
 == Changelog ==
 
+= 1.32.0 =
+Release Date: 2026-08-18
+
+- New: All of ThinkRank's structured data is now published as one linked graph instead of several separate scripts. A page that had, say, an Article, a breadcrumb trail and an FAQ used to emit three unconnected blocks — search engines now receive one graph in which those entities reference each other, and duplicate or competing entries are merged away
+- New: FAQ content is collected from anywhere on the page — the FAQ block, the Elementor FAQ widget and any FAQ you deployed for the post — and published as a single FAQPage instead of several competing ones with different questions
+- New: The Instant Indexing Submit URLs screen tells you what will actually be sent before you send it. Line numbers down the side, and each URL checked as you type: URLs pointing at another site, lines that are not URLs and duplicates are all called out, with a counter against the 100-URL limit. Clean up tidies the list, Clear empties it, Cmd/Ctrl+Enter submits, and the success message says how many URLs went
+- New: The submission history screen was rebuilt — an empty state instead of a blank table, readable response codes with an explanation of what each one means, and Refresh now really re-reads the log, so URLs you just submitted show up immediately
+- New: Every feature on/off switch now saves itself. Flipping a switch is the save — there is no separate Save button to remember, the switch rolls back and tells you if the save fails, and a short message confirms the new state. The Save button stays where you are filling in a form
+- New: Screens show a placeholder shaped like the content while their data loads, instead of the word "Loading" or a blank panel
+- New: Role Manager can grant or withhold AI Insights and Manage Roles separately, like every other ThinkRank area
+- Changed: Connecting ChatGPT and other AI assistants now works on hosts that answer /.well-known/ addresses themselves before WordPress ever sees the request — reported on SiteGround, where the connection failed with "does not implement OAuth". ThinkRank now advertises an address that reaches WordPress on every host, and publishes the discovery files directly where a host insists on serving them itself
+- Fixed: The first few sentences of a password-protected post were published as its meta description, and in its Facebook and X preview text — visible to anyone requesting the page and to every crawler and link preview, while the page itself still showed the password form. Questions from an FAQ block on a protected post could be published the same way
+- Fixed: AI content briefs were displayed without sanitizing them. Brief text comes back from an AI provider and can include content pulled from competitor pages you supplied, so it is not trusted input; it is now cleaned before it is stored and before it is shown
+- Fixed: A user given access to only the Social Media or Schema section could read the SEO details of posts they cannot edit — including other authors' drafts and pending posts — by changing the post number in the request
+- Fixed: A user given access to only the Settings section could write post-specific social and SEO settings onto another author's post, changing what its public page shares. The same request also overwrote your site-wide defaults
+- Fixed: Saving settings reported a server error even though the settings had been saved, on 8 of the 11 settings groups. People re-entered settings that were never lost, and a genuine failure looked identical to the permanent one. A successful save also came back empty, leaving the form blank
+- Fixed: A published llms.txt file could display accented and non-Latin characters as mojibake ("Aktivitäten" as "AktivitÃ¤ten") because the file was served without saying which character set it used. The bytes were always correct — only the declaration was missing
+- Fixed: On block themes, a page with an FAQ block published its questions twice — once inside ThinkRank's graph and once in a second block beside it
+- Fixed: A Codex connection on the MCP screen showed a plain letter instead of the OpenAI mark
+- Fixed: The two Schema screens showed their title three times over before any content, and the Global SEO, Crawling and Author Archives screens had the wrong icon or a missing divider
+
 = 1.31.0 =
 Release Date: 2026-08-16
 
@@ -510,6 +531,9 @@ Release Date: 2026-08-02
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
+
+= 1.32.0 =
+Publishes all of ThinkRank's structured data as one linked graph, with every FAQ on the page merged into a single FAQPage. Rebuilds the Instant Indexing Submit URLs and History screens, makes every feature switch save itself, and fixes AI assistant connections on hosts that intercept /.well-known/ addresses. Includes five security fixes: password-protected post content published as meta and social descriptions, unsanitized AI content briefs, and three cases where a user with access to one ThinkRank section could read or write SEO data for content they cannot edit. Also stops settings saves reporting a failure after they had saved. Recommended for all sites.
 
 = 1.31.0 =
 Adds Submission Coverage for Instant Indexing, applies a noindex set on category and tag archives, and shows what your robots.txt actually serves. ThinkRank now runs on PHP 7.4 and stops WordPress publishing a second, competing sitemap. Fixes /sitemap.xml leading crawlers to a dead page, a cleanup that deleted other plugins' sitemap files and left your site without one, Core Web Vitals failures reported as server errors, and Open Graph claiming every site is in US English. Recommended for all sites.

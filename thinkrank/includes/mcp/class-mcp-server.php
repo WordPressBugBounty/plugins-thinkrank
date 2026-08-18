@@ -317,10 +317,12 @@ final class Mcp_Server {
 	 * @return string
 	 */
 	private static function challenge_header(): string {
-		// The path-suffixed form (RFC 9728 §3.1) — specific to OUR resource,
-		// so it can't collide with another plugin's root-form metadata.
-		$metadata_url = home_url( '/.well-known/oauth-protected-resource/' . Mcp_Pairing::SITE_ENDPOINT_PATH );
-		return sprintf( 'Bearer resource_metadata="%s"', $metadata_url );
+		// REST-served, not the /.well-known/ path-insert form: some hosts
+		// (SiteGround) intercept root /.well-known/ at their Nginx edge and
+		// 404 it before WordPress runs, killing the flow on the client's very
+		// first fetch. See Mcp_OAuth::resource_metadata_url() for the full
+		// reasoning and the override filter.
+		return sprintf( 'Bearer resource_metadata="%s"', Mcp_OAuth::resource_metadata_url() );
 	}
 
 	/**

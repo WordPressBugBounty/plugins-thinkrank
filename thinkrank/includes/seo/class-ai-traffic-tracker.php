@@ -206,6 +206,50 @@ class Ai_Traffic_Tracker {
     }
 
     /**
+     * Record a page served as Markdown to an AI agent.
+     *
+     * Called by Pro's Markdown for AI feature at serve time. Lives here rather
+     * than in Pro because this class owns the aggregate table; Pro owning a
+     * second writer to it would couple the schema to two repos.
+     *
+     * @param string $source Crawler slug when the agent is a known AI crawler,
+     *                       'header' for Accept-negotiated requests, 'link' for
+     *                       ?format=markdown / .md URLs.
+     * @param string $path   Path of the post served.
+     * @return void
+     */
+    public function record_served_markdown(string $source, string $path = ''): void {
+        $source = sanitize_key($source);
+        if ('' === $source) {
+            $source = 'other';
+        }
+        $this->bump('markdown', $source, substr($path, 0, 191));
+    }
+
+    /**
+     * Total Markdown-for-AI responses served in the last N days.
+     *
+     * @param int $days Range in days (bounded 1–180).
+     * @return int
+     */
+    public function served_markdown_count(int $days = 30): int {
+        global $wpdb;
+
+        $days  = max(1, min(self::RETENTION_DAYS, $days));
+        $table = $wpdb->prefix . 'thinkrank_ai_traffic';
+        $since = gmdate('Y-m-d', time() - $days * DAY_IN_SECONDS);
+
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- read-only aggregate over our own table.
+        return (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COALESCE(SUM(hits), 0) FROM {$table} WHERE kind = 'markdown' AND day >= %s",
+                $since
+            )
+        );
+        // phpcs:enable
+    }
+
+    /**
      * The current request path, normalized for the aggregate key.
      *
      * @return string
@@ -277,6 +321,7 @@ class Ai_Traffic_Tracker {
         $trend     = [];
         $pages     = [];
         $crawlers  = [];
+        $markdown  = 0;
 
         foreach ((array) $rows as $row) {
             $hits = (int) $row['hits'];
@@ -294,6 +339,9 @@ class Ai_Traffic_Tracker {
                     break;
                 case 'crawler':
                     $crawlers[$row['source']] = ($crawlers[$row['source']] ?? 0) + $hits;
+                    break;
+                case 'markdown':
+                    $markdown += $hits;
                     break;
             }
         }
@@ -315,6 +363,9 @@ class Ai_Traffic_Tracker {
             // Whether llms.txt is being served, so the crawler panel can pair
             // "bots are coming" with "and here's what we feed them".
             'llms_txt'     => file_exists(ABSPATH . 'llms.txt'),
+            // Pages served as Markdown by Pro's Markdown for AI feature
+            // (kind 'markdown', written via record_served_markdown()).
+            'markdown_served' => $markdown,
         ];
     }
 

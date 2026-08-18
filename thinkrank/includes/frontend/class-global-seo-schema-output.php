@@ -115,8 +115,10 @@ class Global_SEO_Schema_Output {
             return;
         }
 
-        // Output the schema markup
-        $this->output_schema_markup($schema, $schema_type);
+        // Register as a candidate for the page's single page-level entity. The
+        // Schema Manager's per-post deployment outranks this post-type-wide
+        // default when both describe the same page (#355).
+        $this->register_schema($schema, $schema_type, 'global_seo');
     }
 
     /**
@@ -195,7 +197,7 @@ class Global_SEO_Schema_Output {
             return;
         }
 
-        $this->output_schema_markup($schema, 'CollectionPage');
+        $this->register_schema($schema, 'CollectionPage', 'global_seo');
     }
 
     /**
@@ -310,10 +312,12 @@ class Global_SEO_Schema_Output {
             case 'TechArticle':
                 return $this->generate_article_schema($type, $post);
 
+            case 'FAQPage':
+                return $this->generate_faq_schema($post);
+
             case 'WebPage':
             case 'AboutPage':
             case 'ContactPage':
-            case 'FAQPage':
             case 'ProfilePage':
                 return $this->generate_webpage_schema($type, $post);
 
@@ -402,6 +406,94 @@ class Global_SEO_Schema_Output {
         ];
 
         return $schema;
+    }
+
+    /**
+     * Generate FAQPage schema markup
+     *
+     * FAQPage previously fell through to generate_webpage_schema(), which emits a
+     * WebPage-shaped object labelled @type FAQPage with no mainEntity — invalid for
+     * rich results. Delegate to Schema_Builder instead, which owns the FAQ question
+     * extraction already used by the deploy path, rather than growing a second
+     * FAQ implementation here.
+     *
+     * Unlike the deploy path, this runs automatically on every post of the type with
+     * no human reviewing the result, so questions that don't actually read as
+     * questions are dropped and a page with none left falls back to WebPage — an
+     * FAQPage with an empty mainEntity is worse than a valid WebPage.
+     *
+     * @since 1.32.0
+     * @param \WP_Post $post WordPress post object
+     * @return array Schema markup
+     */
+    private function generate_faq_schema(\WP_Post $post): array {
+        if (!class_exists('ThinkRank\\SEO\\Schema_Builder')) {
+            $builder_file = THINKRANK_PLUGIN_DIR . 'includes/seo/class-schema-builder.php';
+            if (!file_exists($builder_file)) {
+                return $this->generate_webpage_schema('WebPage', $post);
+            }
+            require_once $builder_file;
+        }
+
+        $excerpt = get_the_excerpt($post);
+
+        $builder = new \ThinkRank\SEO\Schema_Builder();
+        $schema  = $builder->build_schema(
+            'FAQPage',
+            [
+                'title'   => get_the_title($post),
+                'content' => $post->post_content,
+                'excerpt' => $excerpt ? wp_strip_all_tags($excerpt) : '',
+                'url'     => get_permalink($post),
+            ],
+            get_post_type($post) === 'page' ? 'page' : 'post'
+        );
+
+        if (!empty($schema['_error'])) {
+            return $this->generate_webpage_schema('WebPage', $post);
+        }
+
+        $schema['mainEntity'] = $this->filter_faq_entities($schema['mainEntity'] ?? []);
+
+        // No usable Q&A pairs — emit a valid WebPage rather than an empty FAQPage.
+        if (empty($schema['mainEntity'])) {
+            return $this->generate_webpage_schema('WebPage', $post);
+        }
+
+        $schema['datePublished'] = get_the_date('c', $post);
+        $schema['dateModified']  = get_the_modified_date('c', $post);
+
+        return $schema;
+    }
+
+    /**
+     * Keep only FAQ entities that genuinely read as a question/answer pair.
+     *
+     * Schema_Builder's content extraction falls back to a heading-followed-by-paragraph
+     * pattern, which on an ordinary page matches every section and would fabricate Q&A
+     * that never appears on the page as such.
+     *
+     * @since 1.32.0
+     * @param array $entities Candidate mainEntity entries
+     * @return array Filtered entries
+     */
+    private function filter_faq_entities(array $entities): array {
+        $filtered = [];
+
+        foreach ($entities as $entity) {
+            $question = isset($entity['name']) ? trim((string) $entity['name']) : '';
+            $answer   = isset($entity['acceptedAnswer']['text'])
+                ? trim((string) $entity['acceptedAnswer']['text'])
+                : '';
+
+            if ($question === '' || $answer === '' || strpos($question, '?') === false) {
+                continue;
+            }
+
+            $filtered[] = $entity;
+        }
+
+        return array_values($filtered);
     }
 
     /**
@@ -922,22 +1014,27 @@ class Global_SEO_Schema_Output {
     }
 
     /**
-     * Output schema markup as JSON-LD
+     * Register generated schema with the request's schema graph.
      *
-     * @since 1.0.0
-     * @param array  $schema      Schema data
-     * @param string $schema_type Schema type name
+     * Replaces the direct echo this class used to do: the graph arbitrates
+     * between this post-type-wide schema and the Schema Manager's per-post
+     * deployment, then emits one linked @graph (#355).
+     *
+     * @since 1.32.0
+     * @param array  $schema      Schema markup array
+     * @param string $schema_type Schema @type
+     * @param string $source      Producer key used for precedence
      * @return void
      */
-    private function output_schema_markup(array $schema, string $schema_type): void {
+    private function register_schema(array $schema, string $schema_type, string $source): void {
         if (empty($schema)) {
             return;
         }
 
-        echo '<!-- ThinkRank Global SEO: ' . esc_html($schema_type) . ' Schema -->' . "\n";
-        echo '<script type="application/ld+json">' . "\n";
-        echo wp_json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . "\n";
-        echo '</script>' . "\n";
-        echo '<!-- /ThinkRank Global SEO: ' . esc_html($schema_type) . ' Schema -->' . "\n";
+        if (!class_exists('ThinkRank\\Frontend\\Schema_Graph')) {
+            require_once THINKRANK_PLUGIN_DIR . 'includes/frontend/class-schema-graph.php';
+        }
+
+        Schema_Graph::instance()->add_primary($schema, $schema_type, $source);
     }
 }

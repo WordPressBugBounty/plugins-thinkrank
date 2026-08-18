@@ -251,22 +251,12 @@ class Social_Media_Endpoint extends WP_REST_Controller {
             // SECURITY: this route writes the same per-object social overrides
             // as save_social_meta(), so it needs the same object-level guard —
             // the section-level thinkrank_social_media capability alone would
-            // let a delegated user write to any post (IDOR).
+            // let a delegated user write to any post (IDOR). validate_context()
+            // carries that guard for every context route in this class.
             $context_id = $context_id === null ? null : (int) $context_id;
-            if (!$this->validate_context($context_type, $context_id)) {
-                return new WP_Error(
-                    'invalid_context',
-                    'Invalid context type or ID provided',
-                    ['status' => 400]
-                );
-            }
-
-            if ($context_type !== 'site' && !current_user_can('edit_post', $context_id)) {
-                return new WP_Error(
-                    'rest_forbidden',
-                    'You are not allowed to edit this content.',
-                    ['status' => 403]
-                );
+            $context_validation = $this->validate_context($context_type, $context_id);
+            if (is_wp_error($context_validation)) {
+                return $context_validation;
             }
 
             // Drop unrecognized keys so arbitrary client-supplied keys aren't
@@ -450,13 +440,11 @@ class Social_Media_Endpoint extends WP_REST_Controller {
             $context_type = $request->get_param('context_type');
             $context_id = (int) $request->get_param('context_id');
 
-            // Validate context
-            if (!$this->validate_context($context_type, $context_id)) {
-                return new WP_Error(
-                    'invalid_context',
-                    'Invalid context type or ID provided',
-                    ['status' => 400]
-                );
+            // Validate context and the caller's access to it. Returns true or a
+            // WP_Error carrying the right status (400 shape, 403 authorization).
+            $context_validation = $this->validate_context($context_type, $context_id);
+            if (is_wp_error($context_validation)) {
+                return $context_validation;
             }
 
             // Get social meta data
@@ -493,24 +481,12 @@ class Social_Media_Endpoint extends WP_REST_Controller {
             $context_id = (int) $request->get_param('context_id');
             $social_data = $request->get_param('social_data') ?? [];
 
-            // Validate context
-            if (!$this->validate_context($context_type, $context_id)) {
-                return new WP_Error(
-                    'invalid_context',
-                    'Invalid context type or ID provided',
-                    ['status' => 400]
-                );
-            }
-
-            // SECURITY: This route writes per-post social overrides, so require
-            // object-level edit permission — the global thinkrank_social_media
-            // capability alone would allow writing to any post (IDOR).
-            if (!current_user_can('edit_post', $context_id)) {
-                return new WP_Error(
-                    'rest_forbidden',
-                    'You are not allowed to edit this content.',
-                    ['status' => 403]
-                );
+            // Validate context and the caller's access to it. validate_context()
+            // now carries the object-level edit_post guard for non-site contexts,
+            // so this write path inherits the same check it used to make inline.
+            $context_validation = $this->validate_context($context_type, $context_id);
+            if (is_wp_error($context_validation)) {
+                return $context_validation;
             }
 
             // Save social meta data (manager signature is
@@ -624,27 +600,54 @@ class Social_Media_Endpoint extends WP_REST_Controller {
     }
 
     /**
-     * Validate context type and ID
+     * Validate context type and ID, and the caller's access to that object.
      *
      * @since 1.0.0
      *
      * @param string   $context_type Context type
      * @param int|null $context_id   Context ID
-     * @return bool Validation status
+     * @return true|WP_Error True when the caller may use this context, WP_Error
+     *                       otherwise (400 for a shape error, 403 for authorization).
      */
-    private function validate_context(string $context_type, ?int $context_id): bool {
+    private function validate_context(string $context_type, ?int $context_id) {
         $valid_types = ['site', 'post', 'page', 'product'];
 
+        $invalid = new WP_Error(
+            'invalid_context',
+            'Invalid context type or ID provided',
+            ['status' => 400]
+        );
+
         if (!in_array($context_type, $valid_types, true)) {
-            return false;
+            return $invalid;
         }
 
         if ($context_type !== 'site' && (!$context_id || $context_id <= 0)) {
-            return false;
+            return $invalid;
         }
 
         if ($context_id && !get_post($context_id)) {
-            return false;
+            return $invalid;
+        }
+
+        // SECURITY: everything above establishes that the context *exists*, not
+        // that this caller may see it. `edit_post` is a meta capability, so
+        // map_meta_cap() resolves authorship, published state and
+        // edit_others_posts for this specific post — the same check the write
+        // paths in this class already make, and the one schema
+        // validate_context() makes on its own context routes. Without it a
+        // delegated Social Media user can walk context_id and read titles,
+        // descriptions, authors and dates for drafts, pending posts and other
+        // authors' content (#366).
+        //
+        // Site context is deliberately left to the route's capability gate, so
+        // a delegated Social Media user can still read site-level social meta.
+        if ($context_type !== 'site' && !current_user_can('edit_post', $context_id)) {
+            return new WP_Error(
+                'rest_forbidden',
+                'You are not allowed to access this content.',
+                ['status' => 403]
+            );
         }
 
         return true;

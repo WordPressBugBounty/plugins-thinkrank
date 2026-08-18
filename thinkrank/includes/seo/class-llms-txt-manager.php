@@ -105,6 +105,21 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
     private const MAX_FILE_SIZE = 1048576; // 1MB in bytes
 
     /**
+     * Marker used for ThinkRank's block in the site's .htaccess.
+     *
+     * The published llms.txt is a physical file, so the web server — not PHP —
+     * serves it and decides the response headers. Apache/LiteSpeed answer .txt
+     * with a bare `Content-Type: text/plain` (no charset), which makes browsers
+     * fall back to their legacy single-byte default and render UTF-8 content as
+     * mojibake ("Aktivitäten" → "AktivitÃ¤ten"); `X-Content-Type-Options:
+     * nosniff` removes even the sniffing fallback. This block pins the charset
+     * for that one file. See {@see serve_llms_txt()} for the PHP-served path.
+     *
+     * @var string
+     */
+    private const HTACCESS_MARKER = 'ThinkRank llms.txt';
+
+    /**
      * Business type templates for content generation
      *
      * @since 1.0.0
@@ -300,12 +315,161 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
 
         $llms_file = ABSPATH . 'llms.txt';
         if (!file_exists($llms_file)) {
+            $this->remove_htaccess_charset();
             return true;
         }
         if (!$this->init_filesystem()) {
             return false;
         }
-        return (bool) $this->filesystem->delete($llms_file);
+
+        $deleted = (bool) $this->filesystem->delete($llms_file);
+        if ($deleted) {
+            // Leave no orphaned rule behind once the file is gone.
+            $this->remove_htaccess_charset();
+        }
+
+        return $deleted;
+    }
+
+    /**
+     * Pin the served charset of the physical llms.txt to UTF-8 via .htaccess.
+     *
+     * Scoped to the single file with <Files>, and wrapped in <IfModule> so a
+     * server without mod_mime ignores it instead of returning a 500. Nginx does
+     * not read .htaccess — there the PHP route in {@see serve_llms_txt()} is
+     * what carries the charset, provided no physical file shadows it.
+     *
+     * @since 1.32.0
+     *
+     * @return bool True when the block is in place.
+     */
+    private function sync_htaccess_charset(): bool {
+        // $is_apache also covers LiteSpeed, which reads .htaccess the same way.
+        if (empty($GLOBALS['is_apache'])) {
+            return false;
+        }
+
+        $htaccess = ABSPATH . '.htaccess';
+
+        if (file_exists($htaccess)) {
+            if (!$this->is_file_writable($htaccess)) {
+                return false;
+            }
+        } elseif (!$this->is_directory_writable(ABSPATH)) {
+            return false;
+        }
+
+        if (!function_exists('insert_with_markers')) {
+            require_once ABSPATH . 'wp-admin/includes/misc.php';
+        }
+
+        return (bool) insert_with_markers($htaccess, self::HTACCESS_MARKER, [
+            '<IfModule mod_mime.c>',
+            '<Files "llms.txt">',
+            "ForceType 'text/plain; charset=UTF-8'",
+            '</Files>',
+            '</IfModule>',
+        ]);
+    }
+
+    /**
+     * Remove ThinkRank's charset block from .htaccess.
+     *
+     * Strips the block outright rather than calling insert_with_markers() with
+     * an empty insertion — that leaves the BEGIN/END markers behind as litter.
+     *
+     * @since 1.32.0
+     *
+     * @return void
+     */
+    private function remove_htaccess_charset(): void {
+        $htaccess = ABSPATH . '.htaccess';
+
+        if (!file_exists($htaccess) || !$this->is_file_writable($htaccess)) {
+            return;
+        }
+
+        if (!$this->init_filesystem()) {
+            return;
+        }
+
+        $contents = $this->filesystem->get_contents($htaccess);
+        if (!is_string($contents) || false === strpos($contents, '# BEGIN ' . self::HTACCESS_MARKER)) {
+            return;
+        }
+
+        $marker = preg_quote(self::HTACCESS_MARKER, '/');
+        $cleaned = preg_replace(
+            '/\R*# BEGIN ' . $marker . '.*?# END ' . $marker . '[ \t]*\R?/s',
+            '',
+            $contents
+        );
+
+        if (!is_string($cleaned)) {
+            return;
+        }
+
+        // A file left holding nothing but our (now removed) block was ours to
+        // begin with — a pre-existing .htaccess would still have content.
+        if ('' === trim($cleaned)) {
+            $this->filesystem->delete($htaccess);
+            return;
+        }
+
+        // Keep the file newline-terminated after the block is cut out.
+        $this->filesystem->put_contents($htaccess, rtrim($cleaned, "\r\n") . "\n", FS_CHMOD_FILE);
+    }
+
+    /**
+     * Serve /llms.txt from PHP with an explicit UTF-8 charset.
+     *
+     * Only reached when the request actually gets to WordPress — i.e. when no
+     * physical llms.txt shadows the route, or on a stack that routes every
+     * request through index.php. Prefers the published file's exact bytes and
+     * falls back to regenerating from the saved settings, so the response is
+     * the same document either way, just with headers PHP controls.
+     *
+     * Called by \ThinkRank\Frontend\SEO_Manager on template_redirect.
+     *
+     * @since 1.32.0
+     *
+     * @return void
+     */
+    public function serve_llms_txt(): void {
+        $settings = $this->get_settings('site');
+
+        // Never resurrect the file for a site that turned the feature off.
+        if (empty($settings['enabled'])) {
+            return;
+        }
+
+        $content = '';
+        $llms_file = ABSPATH . 'llms.txt';
+
+        if (file_exists($llms_file)) {
+            $read_result = $this->safe_file_read($llms_file);
+            if ($read_result['success']) {
+                $content = $read_result['content'];
+            }
+        }
+
+        if ('' === trim($content)) {
+            $generated = $this->generate_llms_txt([]);
+            $content = (string) ($generated['content'] ?? '');
+        }
+
+        // Nothing configured yet: leave the 404 alone rather than serving a stub.
+        if ('' === trim($content)) {
+            return;
+        }
+
+        status_header(200);
+        header('Content-Type: text/plain; charset=utf-8');
+
+        // Plain-text file body — already sanitized on save by
+        // sanitize_llms_content(); escaping it here would corrupt the markdown.
+        echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+        exit;
     }
 
     /**
@@ -377,6 +541,11 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
                 $result['success'] = true;
                 $result['message'] = 'LLMs.txt file written successfully.';
                 $result['bytes_written'] = strlen($content);
+
+                // Pin the served charset to UTF-8. Best effort: a site without a
+                // writable .htaccess (or not on Apache/LiteSpeed) still gets a
+                // correctly written file, so this must never fail the publish.
+                $result['charset_pinned'] = $this->sync_htaccess_charset();
 
                 // Invalidate file status cache since file has changed
                 delete_transient('thinkrank_llms_file_status');
@@ -890,7 +1059,20 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
             ];
         }
 
-        return $sections;
+        /**
+         * Filter the llms.txt content sections before assembly.
+         *
+         * Each entry is ['title' => string, 'content' => string]; an empty
+         * title emits the content without an H2. Pro appends a "Markdown for
+         * AI" section here when that feature is enabled. Section content is
+         * the callback's responsibility to sanitize.
+         *
+         * @since 1.32.0
+         *
+         * @param array $sections   Sections keyed by slug.
+         * @param array $user_input Validated user input for the generator.
+         */
+        return apply_filters('thinkrank_llms_txt_sections', $sections, $user_input);
     }
 
     /**

@@ -159,6 +159,15 @@ class FAQ_Widget extends \Elementor\Widget_Base {
             return;
         }
 
+        // The request's schema graph already merged this widget's questions into
+        // its single FAQPage; emitting again would duplicate it (#355).
+        if (
+            class_exists('ThinkRank\\Frontend\\Schema_Graph')
+            && \ThinkRank\Frontend\Schema_Graph::instance()->absorbed_content_faq()
+        ) {
+            return;
+        }
+
         $entities = [];
         foreach ($items as $faq) {
             $question = trim(wp_strip_all_tags((string) ($faq['question'] ?? '')));

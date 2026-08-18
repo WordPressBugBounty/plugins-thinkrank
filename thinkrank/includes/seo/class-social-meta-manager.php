@@ -1641,6 +1641,18 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
      * @return string Social media description
      */
     private function get_social_description(\WP_Post $post): string {
+        // A password-gated body must never become a social description. Core
+        // answers get_the_excerpt() with its "There is no excerpt because this
+        // is a protected post." placeholder rather than the body, so today the
+        // derive-from-content fallback below is unreachable here — but it is one
+        // core change away from leaking, and that placeholder sentence is not a
+        // description worth publishing to every crawler and unfurler either.
+        // An authored post_excerpt is written for public consumption, so it
+        // still stands (#363).
+        if (function_exists('post_password_required') && post_password_required($post)) {
+            return '' !== $post->post_excerpt ? $post->post_excerpt : get_bloginfo('description');
+        }
+
         // Try excerpt first
         $description = get_the_excerpt($post);
 

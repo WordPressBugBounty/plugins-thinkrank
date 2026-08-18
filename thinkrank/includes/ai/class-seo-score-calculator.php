@@ -1306,7 +1306,9 @@ class SEOScoreCalculator {
             'url' => $url,
             'slug' => $post->post_name,
             'post_modified' => $post->post_modified,
-            'schema_present' => $this->detect_schema_present($content) || $this->thinkrank_global_schema_active($post->post_type),
+            'schema_present' => $this->detect_schema_present($content)
+                || $this->thinkrank_global_schema_active($post->post_type)
+                || $this->thinkrank_deployed_schema_active($post),
         ];
     }
 
@@ -1610,6 +1612,43 @@ class SEOScoreCalculator {
         }
         $all_settings = get_option('thinkrank_global_seo_settings', []);
         return !empty($all_settings[$post_type]['schema_type']);
+    }
+
+    /**
+     * Whether the Schema Manager has an active deployed schema for this post.
+     *
+     * Per-post schema deployed from the editor's Schema tab is stored in the
+     * Schema Manager's own table and emitted at wp_head by
+     * Frontend\SEO_Manager::output_site_schema_markup(). Neither
+     * detect_schema_present() (body scan) nor thinkrank_global_schema_active()
+     * (post-type option) sees it, so without this the score reported "no
+     * structured data" for posts that do emit it.
+     *
+     * Mirrors the context_type whitelist the emitter and the metabox both use, so
+     * the lookup targets the same row the front end reads.
+     *
+     * @param \WP_Post $post Post being scored.
+     * @return bool
+     */
+    private function thinkrank_deployed_schema_active(\WP_Post $post): bool {
+        if (!class_exists('ThinkRank\\SEO\\Schema_Management_System')) {
+            $manager_file = THINKRANK_PLUGIN_DIR . 'includes/seo/class-schema-management-system.php';
+            if (!file_exists($manager_file)) {
+                return false;
+            }
+            require_once $manager_file;
+        }
+
+        $context_type = in_array($post->post_type, ['site', 'post', 'page', 'product'], true)
+            ? $post->post_type
+            : 'post';
+
+        try {
+            $manager = new \ThinkRank\SEO\Schema_Management_System();
+            return !empty($manager->get_deployed_schemas($context_type, (int) $post->ID));
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     private function analyze_images(string $content): array {
@@ -1916,7 +1955,9 @@ class SEOScoreCalculator {
             'url' => $url,
             'slug' => $post->post_name,
             'post_modified' => $post->post_modified,
-            'schema_present' => $this->detect_schema_present($content) || $this->thinkrank_global_schema_active($post->post_type),
+            'schema_present' => $this->detect_schema_present($content)
+                || $this->thinkrank_global_schema_active($post->post_type)
+                || $this->thinkrank_deployed_schema_active($post),
         ];
     }
 

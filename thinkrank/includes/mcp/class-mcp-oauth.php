@@ -145,6 +145,39 @@ final class Mcp_OAuth {
 		return rest_url( 'thinkrank/v1/mcp/oauth/register' );
 	}
 
+	/**
+	 * The protected-resource metadata URL the 401 challenge advertises.
+	 *
+	 * REST-served, NOT the RFC 9728 path-insert form. The path-insert URL
+	 * lives under the site root's /.well-known/ directory, and some hosts
+	 * (SiteGround shared hosting confirmed, see #374) resolve that directory
+	 * at their Nginx edge as physical files — the request 404s before
+	 * WordPress runs, and the connecting client reports "server does not
+	 * implement OAuth" on its very first fetch. The challenge parameter is an
+	 * explicit pointer (that is what it exists for), so pointing it at a
+	 * /wp-json/ URL is spec-clean and reaches WordPress on every host and
+	 * permalink structure. The well-known variants stay served for clients
+	 * that ignore the pointer and derive the URL themselves.
+	 *
+	 * @return string
+	 */
+	public static function resource_metadata_url(): string {
+		/**
+		 * Filter the resource_metadata URL advertised in the WWW-Authenticate
+		 * challenge, for hosts where neither the REST route nor the
+		 * /.well-known/ forms are reachable and the metadata must be served
+		 * from somewhere custom (a CDN, a static file, another domain).
+		 *
+		 * @since 1.32.0
+		 *
+		 * @param string $url The advertised protected-resource metadata URL.
+		 */
+		return apply_filters(
+			'thinkrank_mcp_resource_metadata_url',
+			rest_url( 'thinkrank/v1/mcp/oauth/protected-resource' )
+		);
+	}
+
 	// -- Discovery documents (RFC 8414 / RFC 9728) -----------------------
 
 	/**
