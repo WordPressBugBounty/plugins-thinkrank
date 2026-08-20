@@ -214,12 +214,22 @@ class Blocks_Manager {
                 continue;
             }
 
+            $text = wp_kses_post($answer);
+
+            // Yoast-style: a per-item image travels inside the answer HTML, so
+            // rich results can surface it without a separate ImageObject node.
+            $image_url = isset($faq['imageUrl']) ? esc_url((string) $faq['imageUrl']) : '';
+            if ($image_url !== '') {
+                $image_alt = isset($faq['imageAlt']) ? esc_attr((string) $faq['imageAlt']) : '';
+                $text     .= ' <img src="' . $image_url . '" alt="' . $image_alt . '" />';
+            }
+
             $entities[] = [
                 '@type'          => 'Question',
                 'name'           => $question,
                 'acceptedAnswer' => [
                     '@type' => 'Answer',
-                    'text'  => wp_kses_post($answer),
+                    'text'  => $text,
                 ],
             ];
         }

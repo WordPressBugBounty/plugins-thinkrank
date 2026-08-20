@@ -1,30 +1,35 @@
-=== ThinkRank – AI SEO Plugin: Keywords, Metadata, Schema, llms.txt, MCP & Search Console ===
+=== ThinkRank – The SEO Plugin Your AI Assistant Can Operate: Metadata, Schema, Sitemaps & Migration ===
 Contributors: wpdevteam, thinkrank, re_enter_rupok, rafinkhan, rudlinkon, mdnahidhasan
-Tags: seo, ai seo, focus keyword, schema, llms.txt
+Tags: seo, ai, schema, xml sitemap, meta description
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.32.0
+Stable tag: 2.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-AI SEO plugin with metadata, focus keywords, schema, XML sitemaps, llms.txt, MCP and Search Console insights.
+Switch from Yoast, Rank Math, AIOSEO or SEOPress in minutes. Run SEO from an AI chat window — every AI feature included, no credit meter.
 
 == Description ==
 
-**[ThinkRank](https://thinkrank.ai/) is an AI SEO plugin for WordPress built for the new agentic SEO workflow.** Optimize WordPress SEO with AI-generated meta titles and meta descriptions, real-time content analysis, keyword optimization, schema markup, XML sitemaps, robots meta, canonical URLs, Open Graph social previews, Google Search Console insights, GA4 analytics, llms.txt — and a built-in **MCP server** that lets Claude, ChatGPT, Cursor, and other compatible AI assistants help manage SEO directly from your site.
+**[ThinkRank](https://thinkrank.ai/) is the WordPress SEO plugin your AI assistant can operate.** Ask Claude, ChatGPT, or Cursor to write metadata, audit posts, fix schema, and run bulk SEO work on your site — in plain language, from the chat window you already use. Underneath sits a complete SEO plugin: meta titles and descriptions, real-time content analysis, keyword optimization, schema markup, XML sitemaps, robots meta, canonical URLs, Open Graph, and Google Search Console + GA4 insights.
 
-ThinkRank is not just another SEO plugin. It is an **agentic AI SEO platform for WordPress** — built for the way SEO work is moving: from manual checklists to AI-assisted action. Instead of switching between dashboards, browser tabs, SEO checklists, and AI chat windows, you can ask your AI assistant to help configure and improve your SEO in plain language.
+Two things make ThinkRank different, and both are checkable:
+
+* **Your assistant runs it directly.** ThinkRank ships a built-in connection for AI assistants (a self-hosted MCP server) — no companion plugin, no terminal. No other WordPress SEO plugin ships one.
+* **Every AI feature is included, with no credit meter.** You bring your own API key (OpenAI, Claude, Gemini, OpenRouter), so there are no monthly AI credits to buy, meter, or watch expire — in free and in Pro alike.
+
+Switching? The Setup Wizard **imports your data from Yoast SEO, Rank Math, AIOSEO, and SEOPress** and takes over cleanly — details below.
 
 It works where you already build: **Gutenberg, Elementor, Divi, Oxygen/Breakdance, and the Classic Editor** — and on multilingual sites running **WPML, Polylang or TranslatePress**.
 
-= Watch: Ranking in AI Search =
+= Watch: SEO in the Assistant Era =
 
-SEO creator Tin Rovic breaks down how to get your brand surfaced by AI search engines and LLMs:
+SEO creator Tin Rovic on how AI assistants and answer engines are changing day-to-day SEO work:
 
 https://youtu.be/TEzfS2dAMC8
 
-= Agentic AI SEO with MCP for Claude, ChatGPT and Cursor =
+= Run Your SEO From a Chat Window — Claude, ChatGPT and Cursor =
 
 ThinkRank ships a self-contained **Model Context Protocol (MCP) server** built right into the plugin — no companion plugin, no external libraries, no terminal. It turns your AI assistant into an **SEO operator, not just an SEO copywriter**.
 
@@ -47,6 +52,14 @@ ThinkRank ships a self-contained **Model Context Protocol (MCP) server** built r
 * **No companion plugin required** and **no terminal setup**.
 * **Admin-controlled and off by default** — enable it under ThinkRank → MCP whenever you're ready.
 * **Revocable in one click** — delete the connected Application Password and access is removed immediately.
+
+= Migrate from Rank Math, Yoast SEO, AIOSEO or SEOPress =
+
+A guided Setup Wizard detects your current SEO plugin and imports your metadata, schema settings, sitemap settings, image SEO data, templates, and related SEO settings from **Rank Math SEO, Yoast SEO, All in One SEO (AIOSEO), and SEOPress** — then deactivates the old plugin once its data is safely migrated.
+
+The importers go well past basic post meta: title formats per page type, Knowledge Graph and organization identity, author archive settings, role permissions, IndexNow keys and submission history, per-post sitemap exclusions, breadcrumb settings, social defaults, News/Video sitemap post types, and local business details all carry over where the source plugin has them.
+
+If you're looking for a **Rank Math, Yoast SEO, AIOSEO, or SEOPress alternative** because of upsell notices, metered AI credits, or per-site pricing, this migration path is built for exactly that switch — and our promotional surface stays confined to ThinkRank's own settings pages, where every notice is dismissible.
 
 = AI SEO Metadata Generator for Titles and Meta Descriptions =
 
@@ -115,11 +128,11 @@ Page builders store their content outside `post_content`, which is why SEO plugi
 * AI-optimized robots.txt with automatic sitemap discovery.
 * **Instant Indexing** — submit new and updated URLs straight to search engines (IndexNow) for faster indexing, in the background via WP-Cron.
 
-= llms.txt Generator for LLM SEO, GEO and AI Search Visibility =
+= llms.txt Generator =
 
-* Generate and maintain an llms.txt file for your WordPress site.
-* Built for **LLM SEO**, **generative engine optimization (GEO)**, and AI search readiness.
-* Machine-readable summaries so AI assistants and AI search engines can discover and cite your content.
+* Generate and maintain an llms.txt file — a Markdown index of your important content that AI coding agents and agentic tools read by convention.
+* Straight talk, because you deserve a vendor that gives it: Google has stated llms.txt does not affect Google Search or AI Overviews, and no reliable evidence ties the file to AI citations. We ship it as useful infrastructure for AI tooling, not as a ranking lever.
+* Auto-regenerates as your content changes, with full control over what's included.
 
 = Google Search Console, GA4 and SEO Insights =
 
@@ -163,14 +176,6 @@ Page builders store their content outside `post_content`, which is why SEO plugi
 * A role × capability matrix, so editors, authors, contributors, and custom roles get exactly the SEO access you intend.
 * Access rules are enforced on the REST API too, not just hidden in the menu.
 
-= Migrate from Rank Math, Yoast SEO, AIOSEO or SEOPress =
-
-A guided Setup Wizard detects your current SEO plugin and imports your metadata, schema settings, sitemap settings, image SEO data, templates, and related SEO settings from **Rank Math SEO, Yoast SEO, All in One SEO (AIOSEO), and SEOPress** — then deactivates the old plugin once its data is safely migrated.
-
-The importers go well past basic post meta: title formats per page type, Knowledge Graph and organization identity, author archive settings, role permissions, IndexNow keys and submission history, per-post sitemap exclusions, breadcrumb settings, social defaults, News/Video sitemap post types, and local business details all carry over where the source plugin has them.
-
-If you're looking for a **Rank Math alternative, Yoast SEO alternative, AIOSEO alternative, or SEOPress alternative** with stronger AI SEO and MCP-based agentic workflows, ThinkRank is built for that transition.
-
 = Bring Your Own AI Provider Key =
 
 ThinkRank works with **OpenAI, Anthropic Claude, Google Gemini, OpenRouter, and compatible custom endpoints** — you bring your own key, so you keep direct control over model selection, cost, and privacy.
@@ -202,12 +207,13 @@ Upgrade to **ThinkRank Pro** for advanced, agentic-ready SEO automation:
 * Elementor, Divi, and Oxygen/Breakdance site builders
 * Multilingual sites running WPML or Polylang
 * Content teams, developers, and AI power users
-* Any site preparing for AI search, LLM SEO, and GEO
+* Teams that run their work through an AI assistant
 
 = Why Choose ThinkRank? =
 
-* An AI SEO plugin with real on-page and technical SEO — not just an AI writer
-* A built-in MCP server for Claude, ChatGPT, Cursor, and compatible clients
+* The only WordPress SEO plugin your AI assistant can operate directly (built-in MCP server)
+* Every AI feature included at a flat price — your own API key, no monthly credit meter
+* Real on-page and technical SEO — not just an AI writer
 * AI-generated meta titles and descriptions with SERP preview
 * SEO content analysis and keyword optimization with one-click fixes
 * A whole-site SEO Analyzer that needs no Google connection
@@ -313,7 +319,7 @@ Yes. ThinkRank includes an XML sitemap generator with Basic, Complete, E-commerc
 
 = What is llms.txt and why does ThinkRank support it? =
 
-llms.txt is an emerging file format that helps AI systems, AI search engines, and large language models discover and understand important website content. ThinkRank can generate and maintain llms.txt for WordPress, helping prepare your content for LLM SEO, generative engine optimization (GEO), and AI search visibility.
+llms.txt is an emerging convention: a Markdown index of your important content, kept at a fixed URL, that AI coding agents and agentic tools read to discover site content. ThinkRank generates and maintains it automatically. To be straight with you: Google has said llms.txt does not affect Google Search or AI Overviews, and we don't claim it earns AI citations — it is useful infrastructure for AI tooling, and that is the claim we stand behind.
 
 = Does ThinkRank work with Google Search Console and GA4? =
 
@@ -325,7 +331,7 @@ Yes. ThinkRank includes Open Graph and social meta controls for Facebook, Linked
 
 = Is ThinkRank a Yoast, Rank Math, AIOSEO or SEOPress alternative? =
 
-Yes. ThinkRank can be used as a Rank Math or Yoast SEO alternative for sites that want core SEO — metadata, schema, XML sitemaps, robots meta, canonical URLs, Search Console and GA4 insights, and llms.txt — plus AI-powered generation and an MCP server for Claude, ChatGPT, and Cursor. The Setup Wizard imports your existing Rank Math, Yoast, AIOSEO, or SEOPress data.
+Yes. ThinkRank covers the core SEO those plugins cover — metadata, schema, XML sitemaps, robots meta, canonical URLs, Search Console and GA4 insights — plus two things they don't sell at any price: an AI-assistant connection that operates the plugin directly, and AI features at a flat price with your own key instead of metered credits. The Setup Wizard imports your existing Rank Math, Yoast, AIOSEO, or SEOPress data and can deactivate the old plugin once migration completes.
 
 = Can I migrate from AIOSEO or SEOPress? =
 
@@ -345,7 +351,7 @@ For best results, use only one primary SEO plugin at a time — running two can 
 
 = Is ThinkRank free? =
 
-Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI features — your AI provider usage is billed by the provider you choose, giving you direct control over model, cost, and privacy. ThinkRank Pro adds advanced automation such as the redirect manager, 404 monitor, internal linking, and rank tracker.
+Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI features — your AI provider usage is billed by the provider you choose, giving you direct control over model, cost, and privacy. There are no ThinkRank AI credits to buy and no monthly meter, in free or in Pro. ThinkRank Pro adds advanced automation such as the redirect manager, 404 monitor, internal linking, and rank tracker.
 
 == Screenshots ==
 
@@ -355,11 +361,19 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 4. SEO content analysis dashboard — 13-factor score, focus keyword, and one-click apply suggestions.
 5. Schema Manager — choose Article, FAQ, Local Business, or Review schema with validation.
 6. XML Sitemap generator — Basic, Complete, E-commerce, and Segmented modes with post-type controls.
-7. llms.txt generator for LLM SEO and AI search visibility.
+7. llms.txt generator — a maintained Markdown index of your content for AI agents and tools.
 8. Google Search Console & GA4 insights with Core Web Vitals inside WordPress.
 9. AI Content Brief Generator with competitor analysis and content gaps.
 
 == Changelog ==
+
+= 2.0.0 =
+Release Date: 2026-08-20
+
+- New: The FAQ block has a new accordion design and each answer can now carry its own image. The question sits on its own row with a plus that becomes a minus when the answer opens, a line separates the open question from its answer, and the image you add shows with the answer — and travels into the FAQ structured data, so search engines can use it
+- Fixed: While editing an FAQ block the question and answer fields did not line up — the question was pushed to the right edge while the answer stayed on the left, which made an empty item look broken
+- Fixed: Changing a page's address from ThinkRank's Permalink field looked like it did nothing. The new address was saved, but the editor went on showing the old one until the page was reloaded, so it read as though nothing had happened. In Elementor, Divi and Oxygen it genuinely did nothing: the address was never saved at all
+- Fixed: The check for whether your keyword appears in the page address was wrong in both directions. On a draft it always reported the keyword as missing, whatever the address said, and only began passing once the post was published. On a published page it could report a match that actually came from a parent page, a category or a date in the address rather than from the page's own address. Each line of the keyword breakdown now states plainly whether it matched or not, instead of leaving you to read it out of a list of words
 
 = 1.32.0 =
 Release Date: 2026-08-18
@@ -531,6 +545,9 @@ Release Date: 2026-08-02
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
+
+= 2.0.0 =
+Redesigns the FAQ block and lets every answer carry its own image, both on the page and in its structured data. Fixes the FAQ editor's misaligned question and answer fields, a permalink change that looked like it had not saved (and in Elementor, Divi and Oxygen genuinely had not), and a keyword-in-address check that always failed on drafts while reporting false matches from parent pages, categories and dates on published ones. Recommended for all sites.
 
 = 1.32.0 =
 Publishes all of ThinkRank's structured data as one linked graph, with every FAQ on the page merged into a single FAQPage. Rebuilds the Instant Indexing Submit URLs and History screens, makes every feature switch save itself, and fixes AI assistant connections on hosts that intercept /.well-known/ addresses. Includes five security fixes: password-protected post content published as meta and social descriptions, unsanitized AI content briefs, and three cases where a user with access to one ThinkRank section could read or write SEO data for content they cannot edit. Also stops settings saves reporting a failure after they had saved. Recommended for all sites.

@@ -2,14 +2,14 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 1.32.0\n"
+"Project-Id-Version: ThinkRank 2.0.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-18T10:36:20+00:00\n"
+"POT-Creation-Date: 2026-08-20T07:13:01+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
@@ -1436,7 +1436,7 @@ msgid "Optimize this content for search & AI with ThinkRank."
 msgstr ""
 
 #: includes/admin/class-metabox-manager.php:442
-#: src/metabox/components/MetaboxApp.js:1383
+#: src/metabox/components/MetaboxApp.js:1460
 #: src/metabox/components/MetaboxDrawer.js:169
 msgid "Open ThinkRank SEO"
 msgstr ""
@@ -1479,7 +1479,7 @@ msgid "Insufficient permissions"
 msgstr ""
 
 #: includes/admin/class-metabox-manager.php:1274
-#: src/metabox/utils/persistSeoFields.js:117
+#: src/metabox/utils/persistSeoFields.js:121
 msgid "SEO settings saved successfully!"
 msgstr ""
 
@@ -2054,11 +2054,11 @@ msgstr ""
 msgid "You do not have permission to run the site SEO analyzer."
 msgstr ""
 
-#: includes/api/class-seo-score-endpoint.php:315
+#: includes/api/class-seo-score-endpoint.php:339
 msgid "Existing SEO score retrieved successfully"
 msgstr ""
 
-#: includes/api/class-seo-score-endpoint.php:321
+#: includes/api/class-seo-score-endpoint.php:345
 msgid "No existing SEO analysis found"
 msgstr ""
 
@@ -2099,10 +2099,10 @@ msgstr ""
 #: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:206
 #: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:219
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:256
-#: src/blocks/faq-block/edit.js:80
+#: src/blocks/faq-block/edit.js:92
 #: src/blocks/howto-block/edit.js:96
 #: src/blocks/toc-block/edit.js:103
-#: src/metabox/components/MetaboxApp.js:348
+#: src/metabox/components/MetaboxApp.js:349
 #: src/metabox/components/panels/GeneralPanel.js:70
 msgid "General"
 msgstr ""
@@ -2412,21 +2412,21 @@ msgid "FAQ"
 msgstr ""
 
 #: includes/editor/elementor/class-faq-widget.php:60
-#: src/blocks/faq-block/edit.js:91
+#: src/blocks/faq-block/edit.js:103
 #: src/blocks/howto-block/edit.js:108
 msgid "Section heading"
 msgstr ""
 
 #: includes/editor/elementor/class-faq-widget.php:62
-#: src/blocks/faq-block/edit.js:96
-#: src/blocks/faq-block/edit.js:234
+#: src/blocks/faq-block/edit.js:108
+#: src/blocks/faq-block/edit.js:257
 msgid "Frequently asked questions"
 msgstr ""
 
 #: includes/editor/elementor/class-faq-widget.php:67
 #: includes/editor/elementor/class-howto-widget.php:68
 #: includes/editor/elementor/class-toc-widget.php:70
-#: src/blocks/faq-block/edit.js:102
+#: src/blocks/faq-block/edit.js:114
 #: src/blocks/howto-block/edit.js:122
 #: src/blocks/toc-block/edit.js:114
 msgid "Heading tag"
@@ -2442,13 +2442,13 @@ msgstr ""
 #: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:1515
 #: src/admin/components/essential-seo/schema/forms/SchemaFAQForm.js:175
 #: src/admin/components/essential-seo/schema/forms/SchemaFAQForm.js:189
-#: src/blocks/faq-block/edit.js:146
+#: src/blocks/faq-block/edit.js:158
 msgid "Question"
 msgstr ""
 
 #: includes/editor/elementor/class-faq-widget.php:80
 #: src/admin/components/essential-seo/schema/forms/SchemaFAQForm.js:205
-#: src/blocks/faq-block/edit.js:154
+#: src/blocks/faq-block/edit.js:177
 msgid "Answer"
 msgstr ""
 
@@ -2457,17 +2457,17 @@ msgid "Questions"
 msgstr ""
 
 #: includes/editor/elementor/class-faq-widget.php:93
-#: src/blocks/faq-block/edit.js:110
+#: src/blocks/faq-block/edit.js:122
 msgid "Open first item by default"
 msgstr ""
 
 #: includes/editor/elementor/class-faq-widget.php:99
-#: src/blocks/faq-block/edit.js:120
+#: src/blocks/faq-block/edit.js:132
 msgid "Output FAQ schema (JSON-LD)"
 msgstr ""
 
 #: includes/editor/elementor/class-faq-widget.php:100
-#: src/blocks/faq-block/edit.js:124
+#: src/blocks/faq-block/edit.js:136
 msgid "Adds FAQPage structured data for rich results."
 msgstr ""
 
@@ -2548,7 +2548,7 @@ msgstr ""
 
 #: includes/editor/elementor/class-howto-widget.php:126
 #: src/admin/components/content-brief/ContentStructure.js:1497
-#: src/metabox/components/MetaboxApp.js:352
+#: src/metabox/components/MetaboxApp.js:353
 msgid "Schema"
 msgstr ""
 
@@ -3279,7 +3279,7 @@ msgstr ""
 #: includes/seo/class-seo-analyzer.php:59
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:667
 #: src/admin/components/seo/SEOScoreSummary.js:327
-#: src/blocks/faq-block/edit.js:87
+#: src/blocks/faq-block/edit.js:99
 #: src/blocks/howto-block/edit.js:104
 #: src/blocks/toc-block/edit.js:110
 msgid "Content"
@@ -4125,7 +4125,7 @@ msgstr ""
 #: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:639
 #: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:719
 #: src/admin/components/essential-seo/schema/forms/SchemaFAQForm.js:184
-#: src/blocks/faq-block/edit.js:286
+#: src/blocks/faq-block/edit.js:363
 #: src/blocks/howto-block/edit.js:434
 msgid "Remove"
 msgstr ""
@@ -4763,7 +4763,7 @@ msgid "SEO"
 msgstr ""
 
 #: src/admin/components/content-brief/ContentStructure.js:1492
-#: src/metabox/components/MetaboxApp.js:353
+#: src/metabox/components/MetaboxApp.js:354
 msgid "Social"
 msgstr ""
 
@@ -10067,7 +10067,7 @@ msgid "Intermediate"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaHowToForm.js:53
-#: src/metabox/components/MetaboxApp.js:356
+#: src/metabox/components/MetaboxApp.js:357
 #: src/metabox/components/panels/AdvancedPanel.js:24
 msgid "Advanced"
 msgstr ""
@@ -14505,8 +14505,12 @@ msgstr ""
 msgid "Best"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:385
-msgid "No match"
+#: src/admin/components/seo/SEOScoreSummary.js:388
+msgid "Matched"
+msgstr ""
+
+#: src/admin/components/seo/SEOScoreSummary.js:389
+msgid "Unmatched"
 msgstr ""
 
 #: src/admin/components/ui/AIButton.js:65
@@ -15605,70 +15609,89 @@ msgstr ""
 msgid "✓ HowTo yield/result is configured."
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:81
+#: src/blocks/faq-block/edit.js:93
 #: src/blocks/howto-block/edit.js:97
 #: src/blocks/toc-block/edit.js:104
 msgid "Style"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:137
+#: src/blocks/faq-block/edit.js:149
 #: src/blocks/howto-block/edit.js:190
 #: src/blocks/toc-block/edit.js:164
 msgid "Colors"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:162
+#: src/blocks/faq-block/edit.js:166
+msgid "Question background"
+msgstr ""
+
+#: src/blocks/faq-block/edit.js:185
 msgid "Item background"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:173
+#: src/blocks/faq-block/edit.js:196
 #: src/blocks/howto-block/edit.js:229
 msgid "Border"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:178
+#: src/blocks/faq-block/edit.js:201
 #: src/blocks/howto-block/edit.js:234
 msgid "Spacing & size"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:182
+#: src/blocks/faq-block/edit.js:205
 msgid "Question size (px)"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:196
+#: src/blocks/faq-block/edit.js:219
 #: src/blocks/toc-block/edit.js:182
 msgid "Space between items (px)"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:208
+#: src/blocks/faq-block/edit.js:231
 #: src/blocks/howto-block/edit.js:264
 msgid "Corner radius (px)"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:250
+#: src/blocks/faq-block/edit.js:273
 msgid "Question…"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:259
+#: src/blocks/faq-block/edit.js:282
 msgid "Answer…"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:265
+#: src/blocks/faq-block/edit.js:311
+#: src/blocks/howto-block/edit.js:379
+msgid "Replace image"
+msgstr ""
+
+#: src/blocks/faq-block/edit.js:315
+#: src/blocks/howto-block/edit.js:383
+msgid "Add image"
+msgstr ""
+
+#: src/blocks/faq-block/edit.js:329
+#: src/blocks/howto-block/edit.js:397
+msgid "Remove image"
+msgstr ""
+
+#: src/blocks/faq-block/edit.js:342
 #: src/blocks/howto-block/edit.js:413
 msgid "Move up"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:272
+#: src/blocks/faq-block/edit.js:349
 #: src/blocks/howto-block/edit.js:420
 msgid "Move down"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:279
+#: src/blocks/faq-block/edit.js:356
 #: src/blocks/howto-block/edit.js:427
 msgid "Duplicate"
 msgstr ""
 
-#: src/blocks/faq-block/edit.js:300
+#: src/blocks/faq-block/edit.js:377
 msgid "Add question"
 msgstr ""
 
@@ -15719,18 +15742,6 @@ msgstr ""
 
 #: src/blocks/howto-block/edit.js:354
 msgid "Describe this step…"
-msgstr ""
-
-#: src/blocks/howto-block/edit.js:379
-msgid "Replace image"
-msgstr ""
-
-#: src/blocks/howto-block/edit.js:383
-msgid "Add image"
-msgstr ""
-
-#: src/blocks/howto-block/edit.js:397
-msgid "Remove image"
 msgstr ""
 
 #: src/blocks/howto-block/edit.js:450
@@ -16183,39 +16194,39 @@ msgstr ""
 msgid "Generate Schema"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:351
+#: src/metabox/components/MetaboxApp.js:352
 msgid "Analysis"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1356
+#: src/metabox/components/MetaboxApp.js:1433
 msgid "Optimize this content for search & AI"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1362
+#: src/metabox/components/MetaboxApp.js:1439
 msgid "Titles, meta description, focus keywords, schema and social previews."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1372
+#: src/metabox/components/MetaboxApp.js:1449
 msgid "Current SEO score"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1452
+#: src/metabox/components/MetaboxApp.js:1529
 msgid "The General tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1477
+#: src/metabox/components/MetaboxApp.js:1554
 msgid "The Analysis tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1504
+#: src/metabox/components/MetaboxApp.js:1581
 msgid "The Schema tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1520
+#: src/metabox/components/MetaboxApp.js:1597
 msgid "The Social tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1538
+#: src/metabox/components/MetaboxApp.js:1615
 msgid "The Advanced tab encountered an error."
 msgstr ""
 
@@ -16447,6 +16458,6 @@ msgstr ""
 msgid "Failed to load ThinkRank metabox. Please refresh the page."
 msgstr ""
 
-#: src/metabox/utils/persistSeoFields.js:99
+#: src/metabox/utils/persistSeoFields.js:103
 msgid "Failed to save SEO settings."
 msgstr ""

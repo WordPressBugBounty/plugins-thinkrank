@@ -120,6 +120,21 @@ class SEOScoreEndpoint {
                     'type' => 'string',
                     'sanitize_callback' => 'sanitize_text_field',
                 ],
+                // The permalink field as it stands in the editor, so an unsaved
+                // slug edit scores immediately instead of matching the old URL.
+                'live_slug' => [
+                    'required' => false,
+                    'type' => 'string',
+                    // NOT sanitize_title: REST calls a sanitize_callback as
+                    // ($value, $request, $param), and sanitize_title()'s second
+                    // parameter is $fallback_title — so an empty slug returned
+                    // the WP_REST_Request object, which fataled on the string
+                    // cast below. The editor sends an empty slug whenever the
+                    // permalink field is blank (every draft), so this fired on
+                    // ordinary use. Sanitized with a single-argument
+                    // sanitize_title() where it is consumed instead.
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
                 'readability_score' => [
                     'required' => false,
                     'type' => 'string',
@@ -224,6 +239,15 @@ class SEOScoreEndpoint {
             // nothing about the field, which keeps the saved value.
             $live_title       = $request->get_param('live_title');
             $live_description = $request->get_param('live_description');
+
+            // Score the slug the editor is showing. Omitted (null) keeps the
+            // saved slug; an empty string means the field was cleared, which
+            // falls back to the title-derived slug exactly as an unsaved draft
+            // does inside the calculator.
+            $live_slug = $request->get_param('live_slug');
+            if ($live_slug !== null) {
+                $content_data['slug'] = sanitize_title((string) $live_slug);
+            }
 
             $raw_title = $live_title !== null
                 ? (string) $live_title

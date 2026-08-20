@@ -514,12 +514,22 @@ class Schema_Graph {
                 continue;
             }
 
+            $text = wp_kses_post($answer);
+
+            // Mirrors Blocks_Manager::build_faq_schema(): a per-item image is
+            // carried inside the answer HTML (Yoast-style).
+            $image_url = isset($pair['imageUrl']) ? esc_url((string) $pair['imageUrl']) : '';
+            if ($image_url !== '') {
+                $image_alt = isset($pair['imageAlt']) ? esc_attr((string) $pair['imageAlt']) : '';
+                $text     .= ' <img src="' . $image_url . '" alt="' . $image_alt . '" />';
+            }
+
             $entities[] = [
                 '@type'          => 'Question',
                 'name'           => $question,
                 'acceptedAnswer' => [
                     '@type' => 'Answer',
-                    'text'  => wp_kses_post($answer),
+                    'text'  => $text,
                 ],
             ];
         }

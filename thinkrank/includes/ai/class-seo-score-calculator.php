@@ -244,10 +244,23 @@ class SEOScoreCalculator {
             $alts .= ' ' . strtolower((string) ($image['alt'] ?? ''));
         }
 
-        // Build a searchable slug haystack from the URL path (hyphens/underscores
-        // become spaces so multi-word keywords can match).
-        $path = (string) (wp_parse_url((string) ($content_data['url'] ?? ''), PHP_URL_PATH) ?? '');
-        $slug = strtolower(str_replace(['-', '_', '/'], ' ', trim($path, '/')));
+        // Build a searchable slug haystack from the post's OWN slug — never the
+        // full URL path. The path carries ancestors, category bases and date
+        // segments, so a child of /clinical-trials/ reported "keyword in slug"
+        // for a page actually slugged `contact-us`. It also breaks the other
+        // way: an unpublished post has no pretty permalink (get_permalink()
+        // returns ?p=123), so the path held no slug at all and every draft
+        // scored "no match" until it was published. Hyphens/underscores become
+        // spaces so multi-word keywords can match.
+        $slug_source = (string) ($content_data['slug'] ?? '');
+        if ($slug_source === '') {
+            // Draft with no slug assigned yet: score what WordPress would
+            // generate from the title, which is what the editor shows as the
+            // proposed URL — so the check reads the same before and after
+            // publishing instead of flipping.
+            $slug_source = sanitize_title((string) ($content_data['title'] ?? ''));
+        }
+        $slug = strtolower(str_replace(['-', '_'], ' ', $slug_source));
 
         $haystacks = [
             'title'            => trim($title),
