@@ -24,6 +24,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\Mcp;
 
+use ThinkRank\Core\Secret_At_Rest;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
@@ -92,15 +94,26 @@ final class Mcp_Pairing {
 	/**
 	 * Current pairing state, defaults merged.
 	 *
-	 * @return array{site_token:string,connected:bool,connected_at:int,scopes:string[],user_id:int,last_used:int}
+	 * @return array{site_token:string,token_hash:string,connected:bool,connected_at:int,scopes:string[],user_id:int,last_used:int}
 	 */
 	public static function state(): array {
 		$stored = get_option( self::OPTION, [] );
 		if ( ! is_array( $stored ) ) {
 			$stored = [];
 		}
+		$raw = isset( $stored['site_token'] ) ? (string) $stored['site_token'] : '';
+
 		return [
-			'site_token'   => isset( $stored['site_token'] ) ? (string) $stored['site_token'] : '',
+			// Decrypted for display and for the self-test's own probe. Stored
+			// encrypted (#396) — a database read on its own no longer yields a
+			// usable admin-equivalent credential.
+			'site_token'   => '' === $raw ? '' : Secret_At_Rest::decrypt( $raw ),
+			// What authorize() compares against. Held separately so a token
+			// whose ciphertext can no longer be opened — the auth salt was
+			// rotated, the site was migrated without wp-config — keeps
+			// authenticating the clients already configured with it, instead of
+			// silently locking them out.
+			'token_hash'   => isset( $stored['token_hash'] ) ? (string) $stored['token_hash'] : '',
 			'connected'    => ! empty( $stored['connected'] ),
 			'connected_at' => isset( $stored['connected_at'] ) ? (int) $stored['connected_at'] : 0,
 			'scopes'       => isset( $stored['scopes'] ) && is_array( $stored['scopes'] )
@@ -129,6 +142,76 @@ final class Mcp_Pairing {
 			return;
 		}
 		$stored['last_used'] = $now;
+		update_option( self::OPTION, $stored, false );
+	}
+
+	/**
+	 * SHA-256 used to store the pairing token's verifier at rest.
+	 *
+	 * Mirrors Mcp_OAuth::hash(), which has always stored access and refresh
+	 * tokens this way. The pairing token was the one exception (#396).
+	 *
+	 * @since 2.0.1
+	 *
+	 * @param string $value Raw token.
+	 * @return string
+	 */
+	private static function hash( string $value ): string {
+		return hash( 'sha256', $value );
+	}
+
+	/**
+	 * Whether a presented token is the pairing token.
+	 *
+	 * Compared against the stored hash. A row written before this change holds
+	 * a plaintext token and no hash, so it is verified against the plaintext
+	 * once and then upgraded in place — an existing pairing keeps working and
+	 * no one has to re-pair.
+	 *
+	 * @since 2.0.1
+	 *
+	 * @param string $presented Token presented by the client.
+	 * @return bool
+	 */
+	public static function verify_token( string $presented ): bool {
+		if ( '' === $presented ) {
+			return false;
+		}
+
+		$state = self::state();
+
+		if ( '' !== $state['token_hash'] ) {
+			return hash_equals( $state['token_hash'], self::hash( $presented ) );
+		}
+
+		// Legacy row: plaintext, no hash.
+		if ( '' === $state['site_token'] || ! hash_equals( $state['site_token'], $presented ) ) {
+			return false;
+		}
+
+		self::upgrade_legacy_storage( $presented );
+
+		return true;
+	}
+
+	/**
+	 * Re-store a legacy plaintext token encrypted, with its hash.
+	 *
+	 * @since 2.0.1
+	 *
+	 * @param string $token Raw token, already verified.
+	 * @return void
+	 */
+	private static function upgrade_legacy_storage( string $token ): void {
+		$stored = get_option( self::OPTION, [] );
+
+		if ( ! is_array( $stored ) ) {
+			return;
+		}
+
+		$stored['site_token'] = Secret_At_Rest::encrypt( $token );
+		$stored['token_hash'] = self::hash( $token );
+
 		update_option( self::OPTION, $stored, false );
 	}
 
@@ -304,7 +387,8 @@ final class Mcp_Pairing {
 		update_option(
 			self::OPTION,
 			[
-				'site_token'   => $token,
+				'site_token'   => Secret_At_Rest::encrypt( $token ),
+				'token_hash'   => self::hash( $token ),
 				'connected'    => true,
 				'connected_at' => $existing ? $state['connected_at'] : time(),
 				'scopes'       => $scopes,
@@ -329,10 +413,13 @@ final class Mcp_Pairing {
 			? ( ! empty( $state['scopes'] ) ? $state['scopes'] : self::DEFAULT_SCOPES )
 			: self::scopes_for( $read_only );
 
+		$token = self::mint_token();
+
 		update_option(
 			self::OPTION,
 			[
-				'site_token'   => self::mint_token(),
+				'site_token'   => Secret_At_Rest::encrypt( $token ),
+				'token_hash'   => self::hash( $token ),
 				'connected'    => true,
 				'connected_at' => time(),
 				'scopes'       => $scopes,

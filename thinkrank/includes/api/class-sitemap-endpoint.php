@@ -17,6 +17,7 @@ namespace ThinkRank\API;
 
 use ThinkRank\SEO\Sitemap_Generator;
 use ThinkRank\API\Traits\CSRF_Protection;
+use ThinkRank\API\Traits\Context_Authorization;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -24,6 +25,7 @@ use WP_Error;
 
 // Load CSRF Protection trait
 require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-csrf-protection.php';
+require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-context-authorization.php';
 
 /**
  * Sitemap API Endpoints Class
@@ -36,6 +38,7 @@ require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-csrf-protection.p
  */
 class Sitemap_Endpoint extends WP_REST_Controller {
     use CSRF_Protection;
+    use Context_Authorization;
 
     /**
      * Sitemap Generator instance
@@ -165,7 +168,8 @@ class Sitemap_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'GET',
                     'callback' => [$this, 'get_sitemap_settings'],
-                    'permission_callback' => [$this, 'check_read_permissions']
+                    'permission_callback' => [$this, 'check_read_permissions'],
+                    'args' => $this->get_context_route_args()
                 ],
                 [
                     'methods' => 'POST',
@@ -664,14 +668,37 @@ class Sitemap_Endpoint extends WP_REST_Controller {
     }
 
     /**
-     * Check manage permissions
+     * Check manage permissions for the state-changing routes.
+     *
+     * Every route using this callback is a POST that writes something —
+     * /generate, /submit, /ping, /settings, /cleanup — so it is nonce-gated as
+     * well as capability-gated, matching Schema_Endpoint, Setup_Wizard_Endpoint
+     * and Email_Report_Endpoint. The class already `use`d CSRF_Protection but
+     * never called it, leaving this controller the odd one out.
      *
      * @since 1.0.0
      *
-     * @return bool Permission status
+     * @param WP_REST_Request $request Request object
+     * @return bool|WP_Error Permission status
      */
-    public function check_manage_permissions(): bool {
-        return \ThinkRank\Core\Capability_Manager::current_user_can('thinkrank_crawling');
+    public function check_manage_permissions(WP_REST_Request $request) {
+        if (!\ThinkRank\Core\Capability_Manager::current_user_can('thinkrank_crawling')) {
+            return new WP_Error(
+                'rest_forbidden',
+                __('You do not have permission to manage sitemaps.', 'thinkrank'),
+                ['status' => 403]
+            );
+        }
+
+        if (!$this->verify_request_nonce($request)) {
+            return new WP_Error(
+                'rest_forbidden',
+                __('Invalid security token. Please refresh the page and try again.', 'thinkrank'),
+                ['status' => 403]
+            );
+        }
+
+        return true;
     }
 
     /**
@@ -860,8 +887,13 @@ class Sitemap_Endpoint extends WP_REST_Controller {
      */
     public function get_sitemap_settings(WP_REST_Request $request) {
         try {
-            $context_type = $request->get_param('context_type') ?? 'site';
-            $context_id = $request->get_param('context_id') ?? null;
+            // SECURITY: the settings are stored per context, so the object has
+            // to be authorised before it is read (#385).
+            $context = $this->resolve_request_context($request);
+            if (is_wp_error($context)) {
+                return $context;
+            }
+            [$context_type, $context_id] = $context;
 
             // Get settings from Sitemap_Generator
             $settings = $this->sitemap_generator->get_settings($context_type, $context_id);
@@ -896,8 +928,14 @@ class Sitemap_Endpoint extends WP_REST_Controller {
     public function update_sitemap_settings(WP_REST_Request $request) {
         try {
             $settings = $request->get_param('settings') ?? [];
-            $context_type = $request->get_param('context_type') ?? 'site';
-            $context_id = $request->get_param('context_id') ?? null;
+
+            // SECURITY: this write is keyed by the context, so the object has to
+            // be authorised before anything is persisted (#385).
+            $context = $this->resolve_request_context($request);
+            if (is_wp_error($context)) {
+                return $context;
+            }
+            [$context_type, $context_id] = $context;
 
             if (empty($settings)) {
                 return new WP_Error(

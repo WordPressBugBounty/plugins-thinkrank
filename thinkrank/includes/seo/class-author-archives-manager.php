@@ -107,7 +107,9 @@ class Author_Archives_Manager {
             $description = wp_trim_words($description, 25, '...');
         }
 
-        echo "<!-- Search Engine Optimization by ThinkRank - https://thinkrank.ai/ -->\n";
+        // Opens the block through SEO_Manager so its closing comment, printed
+        // on wp_head at priority 99, knows an opener was emitted.
+        \ThinkRank\Frontend\SEO_Manager::note_opening_comment();
         echo "<!-- ThinkRank SEO Meta Description -->\n";
         echo '<meta name="description" content="' . esc_attr($description) . '" />' . "\n";
         echo "<!-- /ThinkRank SEO Meta Description -->\n";
@@ -128,7 +130,7 @@ class Author_Archives_Manager {
             // overrides the global template entirely.
             $custom_title = (string) get_user_meta($author_id, '_thinkrank_seo_title', true);
             if ($custom_title !== '') {
-                return $custom_title;
+                return $this->with_page_suffix($custom_title);
             }
 
             $settings = Settings::instance();
@@ -148,26 +150,41 @@ class Author_Archives_Manager {
                 $separator = \ThinkRank\SEO\Site_Identity_Manager::get_active_separator_symbol();
             }
 
-            // Page number
-            $page_str = '';
-            $paged = get_query_var('paged') ? (int) get_query_var('paged') : 1;
-            if ($paged > 1) {
-                // translators: %d is the page number for paginated author archives.
-                $page_str = sprintf(__('Page %d', 'thinkrank'), $paged);
-            }
-
+            // %page% resolves to nothing here. This filter runs at priority 15,
+            // after SEO_Manager's at priority 1, so its own page indicator was
+            // the one that reached the page — and it rendered without the
+            // separator the rest of the site uses ("admin | tr Page 2" against
+            // "Uncategorized | tr | Page 2" everywhere else). The token stays
+            // recognised so a template that already contains it does not leak
+            // the literal string; the indicator itself comes from the one
+            // helper every other context uses (#397 review).
             $replacements = [
                 '%author_name%' => $author_name,
                 '%site_title%' => $site_title,
                 '%separator%' => $separator,
-                '%page%' => $page_str
+                '%page%' => ''
             ];
 
             $rendered = str_replace(array_keys($replacements), array_values($replacements), $template);
 
-            return $this->tidy_whitespace($rendered);
+            return $this->with_page_suffix($this->tidy_whitespace($rendered));
         }
         return $title;
+    }
+
+    /**
+     * Append the shared page indicator, when SEO_Manager is available.
+     *
+     * @since 2.0.1
+     * @param string $title Rendered author-archive title.
+     * @return string
+     */
+    private function with_page_suffix(string $title): string {
+        if (!class_exists('\ThinkRank\Frontend\SEO_Manager')) {
+            return $title;
+        }
+
+        return \ThinkRank\Frontend\SEO_Manager::with_page_suffix($title);
     }
 
     /**

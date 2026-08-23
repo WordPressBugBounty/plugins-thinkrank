@@ -249,6 +249,7 @@ class Usage_Analytics_Endpoint {
             'args' => [
                 'period' => [
                     'default' => '30d',
+                    'type' => 'string',
                     'enum' => ['7d', '30d', '90d', 'all'],
                     'sanitize_callback' => 'sanitize_key'
                 ],
@@ -268,11 +269,13 @@ class Usage_Analytics_Endpoint {
             'args' => [
                 'period' => [
                     'default' => '30d',
+                    'type' => 'string',
                     'enum' => ['7d', '30d', '90d', 'all'],
                     'sanitize_callback' => 'sanitize_key'
                 ],
                 'group_by' => [
                     'default' => 'day',
+                    'type' => 'string',
                     'enum' => ['day', 'week', 'month'],
                     'sanitize_callback' => 'sanitize_key'
                 ],
@@ -292,11 +295,13 @@ class Usage_Analytics_Endpoint {
             'args' => [
                 'period' => [
                     'default' => '30d',
+                    'type' => 'string',
                     'enum' => ['7d', '30d', '90d', 'all'],
                     'sanitize_callback' => 'sanitize_key'
                 ],
                 'provider' => [
                     'default' => 'all',
+                    'type' => 'string',
                     'enum' => ['all', 'openai', 'claude', 'gemini', 'openrouter'],
                     'sanitize_callback' => 'sanitize_key'
                 ],
@@ -812,8 +817,12 @@ class Usage_Analytics_Endpoint {
         try {
             $user_id = get_current_user_id();
             $period = $request->get_param('period') ?? '30d';
-            $page = max(1, (int) $request->get_param('page') ?? 1);
-            $per_page = min(100, max(10, (int) $request->get_param('per_page') ?? 20));
+            // `(int)` binds tighter than `??`, so `(int) null` is 0 and the
+            // `?? 20` fallback was unreachable — per_page silently defaulted to
+            // the max(10, 0) floor of 10 rather than the 20 it advertises, and
+            // page to max(1, 0) = 1 by luck rather than intent (#394).
+            $page = max(1, (int) ($request->get_param('page') ?? 1));
+            $per_page = min(100, max(10, (int) ($request->get_param('per_page') ?? 20)));
             $offset = ($page - 1) * $per_page;
 
             // Get date range for queries

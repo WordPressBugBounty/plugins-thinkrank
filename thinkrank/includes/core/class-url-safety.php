@@ -141,6 +141,26 @@ class Url_Safety {
      * @return true|WP_Error True when safe to fetch, WP_Error otherwise.
      */
     public static function validate_public_url(string $url) {
+        $ips = self::validated_ips($url);
+
+        return is_wp_error($ips) ? $ips : true;
+    }
+
+    /**
+     * The addresses a URL's host resolves to, once every one has been checked
+     * against the block list.
+     *
+     * Returned rather than discarded so the fetch can be pinned to them:
+     * handing the *hostname* to the HTTP transport lets it resolve a second
+     * time, and a host answering a public address on this lookup and a private
+     * one on the fetch walks straight past the block list (#405).
+     *
+     * @since 2.0.1
+     *
+     * @param string $url URL to validate.
+     * @return string[]|WP_Error Validated IPs, or the reason the URL is refused.
+     */
+    private static function validated_ips(string $url) {
         $parts = wp_parse_url($url);
 
         if (empty($parts['scheme']) || empty($parts['host'])) {
@@ -165,7 +185,62 @@ class Url_Safety {
             }
         }
 
-        return true;
+        return $ips;
+    }
+
+    /**
+     * Perform the request against the addresses validate_public_url() approved.
+     *
+     * CURLOPT_RESOLVE pre-seeds cURL's name cache, so the connection goes to a
+     * checked address while the hostname — and therefore SNI and certificate
+     * validation — stays intact. Without it the transport performs its own
+     * lookup and a 0-TTL record can answer differently the second time.
+     *
+     * The pin only applies to the cURL transport. On a site whose HTTP requests
+     * go through the PHP streams fallback the request still runs, with the
+     * pre-flight check alone — the behaviour before this change — rather than
+     * failing closed on an install that simply lacks cURL.
+     *
+     * @since 2.0.1
+     *
+     * @param string   $url  URL to fetch.
+     * @param array    $args wp_safe_remote_get() arguments.
+     * @param string[] $ips  Validated addresses for the URL's host.
+     * @return array|WP_Error Response array on success, WP_Error otherwise.
+     */
+    private static function request_pinned(string $url, array $args, array $ips) {
+        $parts = wp_parse_url($url);
+        $host  = trim((string) ($parts['host'] ?? ''), '[]');
+
+        if ('' === $host || empty($ips)) {
+            return wp_safe_remote_get($url, $args);
+        }
+
+        $port = isset($parts['port'])
+            ? (int) $parts['port']
+            : ('https' === strtolower((string) ($parts['scheme'] ?? '')) ? 443 : 80);
+
+        // One entry per host:port, listing every validated address — pinning a
+        // single one would turn a multi-A-record host into a single point of
+        // failure, and they have all passed the same check.
+        $resolve = sprintf('%s:%d:%s', $host, $port, implode(',', $ips));
+
+        $pin = static function ($handle) use ($resolve): void {
+            if (!defined('CURLOPT_RESOLVE')) {
+                return;
+            }
+
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt -- pinning the connection to an address the block list already approved; there is no WP_Http equivalent.
+            curl_setopt($handle, CURLOPT_RESOLVE, [$resolve]);
+        };
+
+        add_action('http_api_curl', $pin, 10, 1);
+
+        try {
+            return wp_safe_remote_get($url, $args);
+        } finally {
+            remove_action('http_api_curl', $pin, 10);
+        }
     }
 
     /**
@@ -190,8 +265,13 @@ class Url_Safety {
      * wp_safe_remote_get() re-validates redirect targets with
      * wp_http_validate_url(), which shares the link-local/CGNAT blind spot, so
      * redirects are followed manually (`redirection => 0`) and each hop is
-     * checked before it is requested. That also closes the DNS-rebinding window
-     * a single pre-flight check would leave open across hops.
+     * checked before it is requested.
+     *
+     * Each hop is then *pinned* to the addresses its check approved, via
+     * CURLOPT_RESOLVE. Per-hop revalidation alone closes the rebinding window
+     * across hops but not the one inside a single hop, between resolving the
+     * host and connecting to it — the transport resolved the name a second
+     * time, and a 0-TTL record could answer differently (#405).
      *
      * @since 1.29.0
      *
@@ -205,12 +285,12 @@ class Url_Safety {
                 return new WP_Error('invalid_url', 'The URL is not allowed.', ['status' => 400]);
             }
 
-            $host_check = self::validate_public_url($url);
-            if (is_wp_error($host_check)) {
-                return $host_check;
+            $ips = self::validated_ips($url);
+            if (is_wp_error($ips)) {
+                return $ips;
             }
 
-            $response = wp_safe_remote_get($url, array_merge($args, ['redirection' => 0]));
+            $response = self::request_pinned($url, array_merge($args, ['redirection' => 0]), $ips);
 
             if (is_wp_error($response)) {
                 return $response;

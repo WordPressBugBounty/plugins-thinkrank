@@ -35,6 +35,7 @@ class Update_Llms_Txt_Settings extends Ability_Base {
 	 * String-typed llms.txt keys (multi-line content preserved).
 	 */
 	private const STRING_KEYS = [
+		'delivery_mode',
 		'site_name',
 		'website_description',
 		'key_features',
@@ -88,6 +89,9 @@ class Update_Llms_Txt_Settings extends Ability_Base {
 		foreach ( self::STRING_KEYS as $key ) {
 			$props[ $key ] = [ 'type' => 'string' ];
 		}
+
+		$props['delivery_mode']['enum']        = [ 'auto', 'static', 'dynamic' ];
+		$props['delivery_mode']['description'] = __( 'How /llms.txt is served: "static" writes a physical file the web server answers, "dynamic" keeps the document in WordPress and serves it from PHP as UTF-8, "auto" picks static on Apache/LiteSpeed and dynamic elsewhere.', 'thinkrank' );
 
 		return $props;
 	}
@@ -178,6 +182,16 @@ class Update_Llms_Txt_Settings extends Ability_Base {
 				'success'          => true,
 				'file_unpublished' => false,
 				'message'          => __( 'Settings were saved, but the published llms.txt file could not be removed and may still be served. Please remove it manually.', 'thinkrank' ),
+			];
+		}
+
+		// Likewise for a delivery-mode switch that could not move the published
+		// document — /llms.txt is still on the old path.
+		$delivery_warning = $mgr->delivery_switch_warning();
+		if ( $result && '' !== $delivery_warning ) {
+			return [
+				'success' => true,
+				'message' => $delivery_warning,
 			];
 		}
 

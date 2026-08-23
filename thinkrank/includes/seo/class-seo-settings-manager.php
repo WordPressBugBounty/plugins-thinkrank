@@ -183,6 +183,28 @@ class SEO_Settings_Manager extends Abstract_SEO_Manager {
      * @return bool|null True on success, false on failure, null when this store
      *                   does not own the category (nothing was attempted).
      */
+    /**
+     * This store's boolean keys, so a read hands them back as booleans and its
+     * own validator accepts them.
+     *
+     * validation_rules['boolean_fields'] is the source: without this, four of
+     * the five ('auto_generate', 'validation_enabled', 'output_enabled',
+     * 'cache_enabled') came back from the database as the string '1', and
+     * save_settings_by_category() — which merges the existing settings before
+     * saving — then failed its own validation. The endpoint reported HTTP 500
+     * over a write the dedicated manager had already committed (#395).
+     *
+     * @since 2.0.1
+     *
+     * @return string[] Keys to coerce to boolean on read.
+     */
+    protected function boolean_setting_keys(): array {
+        return array_values(array_unique(array_merge(
+            parent::boolean_setting_keys(),
+            $this->validation_rules['boolean_fields']
+        )));
+    }
+
     public function save_settings_by_category(string $context_type, ?int $context_id, array $settings, string $category = 'general'): ?bool {
         // Not this store's category. Callers address categories by the
         // endpoint's vocabulary (`social_media`, `site_identity`, …) while this
@@ -908,76 +930,5 @@ class SEO_Settings_Manager extends Abstract_SEO_Manager {
         $default_settings['reset_by'] = get_current_user_id();
 
         return $this->save_settings($context_type, $context_id, $default_settings);
-    }
-
-    /**
-     * Get settings migration status
-     *
-     * @since 1.0.0
-     *
-     * @return array Migration status information
-     */
-    public function get_migration_status(): array {
-        return [
-            'current_version' => '1.0.0',
-            'database_version' => get_option('thinkrank_seo_db_version', '0.0.0'),
-            'migration_needed' => version_compare(get_option('thinkrank_seo_db_version', '0.0.0'), '1.0.0', '<'),
-            'last_migration' => get_option('thinkrank_seo_last_migration', ''),
-            'migration_log' => get_option('thinkrank_seo_migration_log', [])
-        ];
-    }
-
-    /**
-     * Perform settings migration
-     *
-     * @since 1.0.0
-     *
-     * @param string $from_version Source version
-     * @param string $to_version   Target version
-     * @return array Migration results
-     */
-    public function migrate_settings(string $from_version, string $to_version): array {
-        $migration_results = [
-            'success' => false,
-            'migrated_count' => 0,
-            'errors' => [],
-            'from_version' => $from_version,
-            'to_version' => $to_version,
-            'started_at' => current_time('mysql')
-        ];
-
-        try {
-            // Perform version-specific migrations
-            switch ($from_version) {
-                case '0.0.0':
-                    // Initial migration - set up default settings
-                    $contexts = ['site', 'post', 'page', 'product'];
-                    foreach ($contexts as $context) {
-                        $defaults = $this->get_default_settings($context);
-                        $this->save_settings($context, null, $defaults);
-                        $migration_results['migrated_count']++;
-                    }
-                    break;
-                default:
-                    $migration_results['errors'][] = "No migration path defined for version {$from_version}";
-                    break;
-            }
-
-            if (empty($migration_results['errors'])) {
-                $migration_results['success'] = true;
-                update_option('thinkrank_seo_db_version', $to_version);
-                update_option('thinkrank_seo_last_migration', current_time('mysql'));
-
-                // Log migration
-                $migration_log = get_option('thinkrank_seo_migration_log', []);
-                $migration_log[] = $migration_results;
-                update_option('thinkrank_seo_migration_log', array_slice($migration_log, -10)); // Keep last 10 migrations
-            }
-        } catch (\Exception $e) {
-            $migration_results['errors'][] = 'Migration failed: ' . $e->getMessage();
-        }
-
-        $migration_results['completed_at'] = current_time('mysql');
-        return $migration_results;
     }
 }

@@ -658,7 +658,7 @@ class Content_Brief_Generator {
             'meta_description' => $json_data['meta_descriptions'][0] ?? '',
             'meta_descriptions' => $json_data['meta_descriptions'] ?? [],
             'url_slugs' => $json_data['url_slugs'] ?? [],
-            'outline' => $json_data['outline'] ?? [],
+            'outline' => self::strip_outline_level_labels($json_data['outline'] ?? []),
             'seo_recommendations' => [
                 'title_suggestions' => $json_data['title_suggestions'] ?? [],
                 'meta_description' => $json_data['meta_descriptions'][0] ?? '',
@@ -686,13 +686,123 @@ class Content_Brief_Generator {
             'competitor_gaps' => $json_data['competitor_analysis']['content_gaps'] ?? [],
             'call_to_actions' => $json_data['call_to_actions'] ?? [],
             'writing_guidelines' => $json_data['writing_guidelines'] ?? [],
-            'content_body' => $json_data['content_body'] ?? '',
+            'content_body' => self::strip_heading_level_labels((string) ($json_data['content_body'] ?? '')),
             'estimated_word_count' => $this->get_word_count_estimate($original_params['content_length'] ?? 'medium'),
             'raw_response' => '', // Will be retrieved from ai_usage table
             'generation_params' => $original_params,
             'parsing_status' => 'success',
             'created_at' => current_time('mysql')
         ];
+    }
+
+    /**
+     * Remove a leading level label from a heading string.
+     *
+     * The prompt's own JSON example labelled outline headings with their level
+     * (`"heading": "H1: Main Title"` next to a separate `"level": 1`), so the
+     * model often carried the convention into the drafted article and Pro's
+     * "Insert into post" wrote `<h2>H2: Real Heading</h2>` into published
+     * content. The prompt no longer does that, but a prompt change never fully
+     * binds a model — so the label is stripped here too (#410).
+     *
+     * Covers the label forms a model actually emits: `H2:`, `h3:`, `H2 -`,
+     * `H4.`, `H2)` and the en/em dash variants, optionally wrapped in markdown
+     * emphasis (`**H2:**`). The delimiter is anchored directly after the digit
+     * so `H10:` — a plausible heading in a numbered list — is left alone, and
+     * only a leading label is matched so body copy that mentions a level
+     * survives. Trailing emphasis is consumed only when the same marker opened
+     * the label, so `H2: *emphasised start*` keeps its asterisks.
+     *
+     * @since 2.0.1
+     *
+     * @param string $heading Heading text.
+     * @return string Heading without its level prefix.
+     */
+    public static function strip_level_label(string $heading): string {
+        // En dash and em dash as raw UTF-8 bytes, so the pattern needs no /u
+        // modifier and cannot blank a heading that is not valid UTF-8.
+        $delimiter = '(?:[:.)\-]|\xe2\x80\x93|\xe2\x80\x94)';
+        $emphasis  = '(\*{1,3}|_{1,3})';
+
+        $pattern = '/^\s*(?:'
+            . $emphasis . '\s*[Hh][1-6]\s*' . $delimiter . '\s*\1'
+            . '|[Hh][1-6]\s*' . $delimiter
+            . ')\s*/';
+
+        return (string) preg_replace($pattern, '', $heading);
+    }
+
+    /**
+     * Strip a level label from a heading's inner HTML.
+     *
+     * A model drafting publish-ready HTML often wraps the heading text in an
+     * inline tag (`<h2><strong>H2: Real Heading</strong></h2>`). That pushes a
+     * `<` in front of the label, so the leading run of inline opening tags is
+     * set aside and re-attached around the cleaned text.
+     *
+     * @since 2.0.1
+     *
+     * @param string $inner Heading inner HTML.
+     * @return string Inner HTML without the level prefix.
+     */
+    private static function strip_inner_level_label(string $inner): string {
+        $prefix = '';
+
+        if (preg_match('/^(\s*(?:<(?:strong|em|b|i|span|mark|code|u)\b[^>]*>\s*)+)(.*)$/is', $inner, $parts)) {
+            $prefix = $parts[1];
+            $inner  = $parts[2];
+        }
+
+        return $prefix . self::strip_level_label($inner);
+    }
+
+    /**
+     * Strip level labels from every heading in an outline.
+     *
+     * @since 2.0.1
+     *
+     * @param mixed $outline Outline as returned by the model.
+     * @return array Outline with clean headings.
+     */
+    public static function strip_outline_level_labels($outline): array {
+        if (!is_array($outline)) {
+            return [];
+        }
+
+        foreach ($outline as $index => $section) {
+            if (is_array($section) && isset($section['heading']) && is_string($section['heading'])) {
+                $outline[$index]['heading'] = self::strip_level_label($section['heading']);
+            } elseif (is_string($section)) {
+                $outline[$index] = self::strip_level_label($section);
+            }
+        }
+
+        return $outline;
+    }
+
+    /**
+     * Strip level labels from the heading text inside drafted HTML.
+     *
+     * This is the path that reaches published post content, so it is the one
+     * that matters most. Only the text directly inside an <h1>-<h6> is touched.
+     *
+     * @since 2.0.1
+     *
+     * @param string $html Drafted article body.
+     * @return string Body with clean headings.
+     */
+    public static function strip_heading_level_labels(string $html): string {
+        if ('' === $html || false === stripos($html, '<h')) {
+            return $html;
+        }
+
+        return (string) preg_replace_callback(
+            '/(<h([1-6])\b[^>]*>)(.*?)(<\/h\2>)/is',
+            static function (array $parts): string {
+                return $parts[1] . self::strip_inner_level_label($parts[3]) . $parts[4];
+            },
+            $html
+        );
     }
 
     /**

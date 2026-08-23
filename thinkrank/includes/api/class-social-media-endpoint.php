@@ -16,10 +16,13 @@ declare(strict_types=1);
 namespace ThinkRank\API;
 
 use ThinkRank\SEO\Social_Meta_Manager;
+use ThinkRank\API\Traits\Context_Authorization;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
+
+require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-context-authorization.php';
 
 // Prevent direct access
 if (!defined('ABSPATH')) {
@@ -36,6 +39,8 @@ if (!defined('ABSPATH')) {
  * @since 1.0.0
  */
 class Social_Media_Endpoint extends WP_REST_Controller {
+
+    use Context_Authorization;
 
     /**
      * Social Meta Manager instance
@@ -84,7 +89,8 @@ class Social_Media_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'GET',
                     'callback' => [$this, 'get_settings'],
-                    'permission_callback' => [$this, 'check_read_permissions']
+                    'permission_callback' => [$this, 'check_read_permissions'],
+                    'args' => $this->get_context_route_args()
                 ],
                 [
                     'methods' => 'POST',
@@ -192,12 +198,18 @@ class Social_Media_Endpoint extends WP_REST_Controller {
      * @since 1.0.0
      *
      * @param WP_REST_Request $request Request object
-     * @return WP_REST_Response Response object
+     * @return WP_REST_Response|WP_Error Response object, or the context error
      */
-    public function get_settings(WP_REST_Request $request): WP_REST_Response {
+    public function get_settings(WP_REST_Request $request) {
         try {
-            $context_type = $request->get_param('context_type') ?? 'site';
-            $context_id = $request->get_param('context_id');
+            // SECURITY: the settings this returns carry the object's social
+            // title, description and image. update_settings() already authorises
+            // the object; the read has to as well (#385).
+            $context = $this->resolve_request_context($request);
+            if (is_wp_error($context)) {
+                return $context;
+            }
+            [$context_type, $context_id] = $context;
 
             // Get settings from Social Meta Manager
             $settings = $this->social_manager->get_settings($context_type, $context_id);
@@ -325,7 +337,9 @@ class Social_Media_Endpoint extends WP_REST_Controller {
      */
     public function validate_settings(WP_REST_Request $request) {
         try {
-            $settings = $request->get_param('settings') ?? [];
+            // `settings` is registered required, so REST rejects the request
+            // before this runs — the old `?? []` default was unreachable.
+            $settings = $request->get_param('settings');
             $context_type = $request->get_param('context_type') ?? 'site';
             $validation_context = $request->get_param('validation_context') ?? 'all';
 
@@ -597,60 +611,6 @@ class Social_Media_Endpoint extends WP_REST_Controller {
      */
     public function check_manage_permissions(): bool {
         return \ThinkRank\Core\Capability_Manager::current_user_can('thinkrank_social_media');
-    }
-
-    /**
-     * Validate context type and ID, and the caller's access to that object.
-     *
-     * @since 1.0.0
-     *
-     * @param string   $context_type Context type
-     * @param int|null $context_id   Context ID
-     * @return true|WP_Error True when the caller may use this context, WP_Error
-     *                       otherwise (400 for a shape error, 403 for authorization).
-     */
-    private function validate_context(string $context_type, ?int $context_id) {
-        $valid_types = ['site', 'post', 'page', 'product'];
-
-        $invalid = new WP_Error(
-            'invalid_context',
-            'Invalid context type or ID provided',
-            ['status' => 400]
-        );
-
-        if (!in_array($context_type, $valid_types, true)) {
-            return $invalid;
-        }
-
-        if ($context_type !== 'site' && (!$context_id || $context_id <= 0)) {
-            return $invalid;
-        }
-
-        if ($context_id && !get_post($context_id)) {
-            return $invalid;
-        }
-
-        // SECURITY: everything above establishes that the context *exists*, not
-        // that this caller may see it. `edit_post` is a meta capability, so
-        // map_meta_cap() resolves authorship, published state and
-        // edit_others_posts for this specific post — the same check the write
-        // paths in this class already make, and the one schema
-        // validate_context() makes on its own context routes. Without it a
-        // delegated Social Media user can walk context_id and read titles,
-        // descriptions, authors and dates for drafts, pending posts and other
-        // authors' content (#366).
-        //
-        // Site context is deliberately left to the route's capability gate, so
-        // a delegated Social Media user can still read site-level social meta.
-        if ($context_type !== 'site' && !current_user_can('edit_post', $context_id)) {
-            return new WP_Error(
-                'rest_forbidden',
-                'You are not allowed to access this content.',
-                ['status' => 403]
-            );
-        }
-
-        return true;
     }
 
     /**

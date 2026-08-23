@@ -67,6 +67,8 @@ class Get_Llms_Txt_Status extends Ability_Base {
 			'type'       => 'object',
 			'properties' => [
 				'file_exists'     => [ 'type' => 'boolean' ],
+				'published'       => [ 'type' => 'boolean' ],
+				'delivery_mode'   => [ 'type' => 'string' ],
 				'file_path'       => [ 'type' => 'string' ],
 				'file_url'        => [ 'type' => 'string' ],
 				'writable'        => [ 'type' => 'boolean' ],

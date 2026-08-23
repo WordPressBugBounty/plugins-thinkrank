@@ -65,20 +65,15 @@ class Deactivator {
      * @return void
      */
     private function clear_scheduled_hooks(): void {
-        $scheduled_hooks = [
-            'thinkrank_cache_cleanup',
-            'thinkrank_usage_analytics',
-            // Email report tick (see ThinkRank\SEO\Email_Report_Scheduler::CRON_HOOK)
-            // — was previously left scheduled after deactivation.
-            'thinkrank_email_report_tick',
-            // Brand Visibility drain + its recurring stall watchdog
-            // (ThinkRank\AI\Brand_Visibility_Runner::TICK_HOOK / WATCHDOG_HOOK).
-            'thinkrank_bv_tick',
-            'thinkrank_bv_watchdog',
-        ];
-        
-        // Clear all instances of our hooks
-        foreach ($scheduled_hooks as $hook) {
+        // Read from the shared manifest rather than a local copy. Deactivation
+        // cleared 5 of the 15 hooks the plugin schedules and uninstall cleared
+        // 2, so a removal left recurring events behind — including
+        // thinkrank_google_token_refresh on the custom thinkrank_45min
+        // recurrence, whose interval no longer resolves once the plugin's
+        // cron_schedules filter is gone (#389).
+        $manifest = require THINKRANK_PLUGIN_DIR . 'includes/cleanup-manifest.php';
+
+        foreach ($manifest['cron_hooks'] as $hook) {
             wp_clear_scheduled_hook($hook);
         }
     }

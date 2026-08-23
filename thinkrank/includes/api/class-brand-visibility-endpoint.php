@@ -213,7 +213,16 @@ class Brand_Visibility_Endpoint extends WP_REST_Controller {
 
             $queries = [];
             foreach ($params['queries'] as $query) {
-                $text = sanitize_text_field((string) ($query['text'] ?? $query));
+                // `(string) $array` is the literal "Array" plus a PHP notice, so
+                // an entry that is an array without a `text` key was stored as a
+                // query reading "Array" (#394). Skip what cannot be read as text.
+                $raw = is_array($query) ? ($query['text'] ?? null) : $query;
+
+                if (!is_scalar($raw)) {
+                    continue;
+                }
+
+                $text = sanitize_text_field((string) $raw);
                 if ('' === $text) {
                     continue;
                 }

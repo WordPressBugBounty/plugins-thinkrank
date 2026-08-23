@@ -58,6 +58,28 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
     protected string $manager_type;
 
     /**
+     * Why the most recent save_settings() call failed.
+     *
+     * save_settings() returns a bare bool, so the caller that has to tell the
+     * user something ends up printing a generic "failed" string while the real
+     * reason goes only to the error log. Holding it here lets the REST layer
+     * put the actual cause in the response. First failure wins: a rejected
+     * INSERT can cascade across keys, and the first one names the root cause.
+     *
+     * @since 1.32.1
+     * @var string
+     */
+    protected string $last_save_error = '';
+
+    /**
+     * Machine-readable counterpart to $last_save_error.
+     *
+     * @since 1.32.1
+     * @var string
+     */
+    protected string $last_save_error_code = '';
+
+    /**
      * Supported context types
      *
      * @since 1.0.0
@@ -133,23 +155,8 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
         foreach ($results as $row) {
             $value = maybe_unserialize($row['setting_value']);
 
-            // Ensure proper data type conversion for common boolean fields
-            if (in_array($row['setting_key'], [
-                'enabled',
-                'auto_generate_schema',
-                'rich_snippets_optimization',
-                'performance_tracking',
-                'auto_deploy',
-                'validation_on_save',
-                'rich_snippets_testing',
-                'organization_schema',
-                'knowledge_graph',
-                'add_missing_alt',
-                'add_missing_title',
-                'save_alt_to_media',
-                'auto_fill_on_upload',
-                'media_alt_overwrite'
-            ], true)) {
+            // Ensure proper data type conversion for boolean fields
+            if (in_array($row['setting_key'], $this->boolean_setting_keys(), true)) {
                 // Convert string/numeric boolean representations to actual booleans
                 if (is_string($value)) {
                     $value = in_array(strtolower($value), ['true', '1', 'yes', 'on'], true);
@@ -188,8 +195,11 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
     public function save_settings(string $context_type, ?int $context_id, array $settings): bool {
         $context_type = sanitize_key($context_type);
 
+        $this->last_save_error      = '';
+        $this->last_save_error_code = '';
+
         if (!in_array($context_type, $this->get_supported_contexts(), true)) {
-            $this->log_save_failure("unsupported context type '{$context_type}'");
+            $this->log_save_failure("unsupported context type '{$context_type}'", 'unsupported_context');
             return false;
         }
 
@@ -198,12 +208,23 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
         // 767-byte InnoDB index limit on MySQL 5.6-era servers), every save in
         // every manager fails with a generic message while option-backed
         // features keep working — so name the cause loudly.
+        //
+        // Creation is retried on every request, so a table that stays missing
+        // means the database is refusing the statement. Database_Schema records
+        // that refusal; lead with it, because it is the only text here that
+        // names this site's actual problem.
         if (!$this->ensure_settings_table_exists()) {
+            $create_error = \ThinkRank\Database\Database_Schema::get_last_create_failure();
+
             $this->log_save_failure(
                 "settings table '{$this->settings_table}' does not exist. " .
-                'ThinkRank re-attempts creation on every load, so no reactivation is needed — and on the server most likely to be causing this, ' .
-                'reactivation fails outright and leaves the plugin deactivated. If the table never appears, the database is rejecting the CREATE TABLE: ' .
-                'ask your host for the MySQL/MariaDB version, as 5.6-era servers cap an index at 767 bytes and reject wider schemas.'
+                ('' !== $create_error
+                    ? 'The database refused to create it: ' . $create_error
+                    : 'ThinkRank re-attempts creation on every load, so no reactivation is needed. ' .
+                        'If the table never appears, the database is rejecting the CREATE TABLE: check that the ' .
+                        'database user holds the CREATE privilege, and ask your host for the MySQL/MariaDB version, ' .
+                        'as 5.6-era servers cap an index at 767 bytes and reject wider schemas.'),
+                'settings_table_missing'
             );
             return false;
         }
@@ -211,12 +232,15 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
         // Validate settings before saving
         $validation = $this->validate_settings($settings);
         if (!$validation['valid']) {
-            $this->log_save_failure('validation failed: ' . wp_json_encode($validation['errors'] ?? []));
+            $this->log_save_failure(
+                'validation failed: ' . wp_json_encode($validation['errors'] ?? []),
+                'validation_failed'
+            );
             return false;
         }
 
         // Sanitize settings
-        $sanitized_settings = $this->sanitize_settings($settings);
+        $sanitized_settings = $this->sanitize_settings($settings, $context_type);
 
         $success = true;
         foreach ($sanitized_settings as $key => $value) {
@@ -255,7 +279,8 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
             if (false === $result) {
                 $this->log_save_failure(
                     "insert failed for key '{$sanitized_key}'" .
-                    ('' !== (string) $this->wpdb->last_error ? ' — ' . $this->wpdb->last_error : '')
+                    ('' !== (string) $this->wpdb->last_error ? ' — ' . $this->wpdb->last_error : ''),
+                    'db_insert_failed'
                 );
                 $success = false;
             }
@@ -377,6 +402,126 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
     ];
 
     /**
+     * REST envelope keys that must never become stored settings.
+     *
+     * Every settings endpoint answers with
+     * {settings, schema, context_type, context_id}. A caller that posts that
+     * whole envelope back as `settings` writes those four keys as rows, and
+     * because get_settings() returns every stored row, they then round-trip
+     * into the next request forever — the Site Identity payload carried ~6KB
+     * of a serialized copy of itself plus its own JSON schema on every save.
+     * They are not settings in any manager, so drop them on the way in.
+     *
+     * @var string[]
+     */
+    protected const RESERVED_ENVELOPE_KEYS = ['settings', 'schema', 'context_type', 'context_id'];
+
+    /**
+     * Setting keys this manager stores that its defaults do not name.
+     *
+     * get_default_settings() is the natural allow-list, but it is not complete
+     * in every manager: Site Identity declares 16 defaults while the screens
+     * behind it legitimately store 55 keys, and gating on defaults alone would
+     * stop title formats, breadcrumb configuration and business details from
+     * saving at all. A manager whose defaults are complete overrides nothing.
+     *
+     * @since 2.0.1
+     *
+     * @return string[]
+     */
+    protected function additional_setting_keys(): array {
+        return [];
+    }
+
+    /**
+     * Regular expressions matching key FAMILIES this manager stores.
+     *
+     * For settings whose key set is open by design — the schema manager's
+     * per-entity fields, the sitemap's per-post-type inclusion flags — an
+     * enumerated list would go stale the first time a post type is registered.
+     * Patterns are anchored and deliberately narrow: they must describe a
+     * family the manager owns, never a catch-all.
+     *
+     * @since 2.0.1
+     *
+     * @return string[] PCRE patterns, delimiters included.
+     */
+    protected function dynamic_setting_key_patterns(): array {
+        return [];
+    }
+
+    /**
+     * The setting keys this manager accepts.
+     *
+     * @since 2.0.1
+     *
+     * @param string $context_type Context the save is for.
+     * @return string[]
+     */
+    public function get_known_setting_keys(string $context_type = 'site'): array {
+        $keys = array_merge(
+            array_keys($this->get_default_settings($context_type)),
+            $this->additional_setting_keys()
+        );
+
+        $keys = array_values(array_unique(array_filter($keys, 'is_string')));
+
+        /**
+         * Filters the keys a settings category accepts.
+         *
+         * Shared with Settings_Management_Endpoint so an add-on registering
+         * settings against an existing category declares them once.
+         *
+         * @since 2.0.1
+         *
+         * @param string[] $keys         Accepted setting keys.
+         * @param string   $category     Settings category (the manager type).
+         * @param string   $context_type Context the save is for.
+         */
+        return apply_filters('thinkrank_known_setting_keys', $keys, $this->manager_type, $context_type);
+    }
+
+    /**
+     * Whether this manager stores a setting under this key.
+     *
+     * Public counterpart of is_known_setting_key() for callers outside the
+     * save path — the schema upgrade that clears rows written before the
+     * allow-list existed, and tests.
+     *
+     * @since 2.0.1
+     *
+     * @param string $key          Setting key.
+     * @param string $context_type Context to judge it in.
+     * @return bool
+     */
+    public function accepts_setting_key(string $key, string $context_type = 'site'): bool {
+        return $this->is_known_setting_key(sanitize_key($key), $this->get_known_setting_keys($context_type));
+    }
+
+    /**
+     * Whether a key is one this manager stores.
+     *
+     * @since 2.0.1
+     *
+     * @param string $key          Sanitized setting key.
+     * @param array  $known        Known keys for the context.
+     * @return bool
+     */
+    protected function is_known_setting_key(string $key, array $known): bool {
+        if (in_array($key, $known, true)) {
+            return true;
+        }
+
+        foreach ($this->dynamic_setting_key_patterns() as $pattern) {
+            if (preg_match($pattern, $key)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Sanitize settings array
      *
      * @since 1.0.0
@@ -384,11 +529,25 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
      * @param array $settings Settings to sanitize
      * @return array Sanitized settings
      */
-    protected function sanitize_settings(array $settings): array {
+    protected function sanitize_settings(array $settings, string $context_type = 'site'): array {
         $sanitized = [];
+        $known     = $this->get_known_setting_keys($context_type);
 
         foreach ($settings as $key => $value) {
             $sanitized_key = sanitize_key($key);
+
+            if (in_array($sanitized_key, self::RESERVED_ENVELOPE_KEYS, true)) {
+                continue;
+            }
+
+            // A key no manager declares is not a setting. Stored, it becomes a
+            // row that get_settings() returns forever, so it round-trips into
+            // every later response and is re-posted by the UI on the next save
+            // — which is how the REST envelope came to be stored (#452).
+            if (!$this->is_known_setting_key($sanitized_key, $known)) {
+                $this->log_unknown_setting_key($sanitized_key);
+                continue;
+            }
 
             if (is_string($value)) {
                 // Multi-line fields must keep their newlines; sanitize_text_field
@@ -412,6 +571,28 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
         }
 
         return $sanitized;
+    }
+
+    /**
+     * Record a rejected setting key.
+     *
+     * Dropping silently is the hazard this gate carries: a legitimate key
+     * missing from a manager's declarations would disappear with no trace. On
+     * a debug install it says so; in production it stays quiet, since the
+     * common source is a client posting fields that were never settings.
+     *
+     * @since 2.0.1
+     *
+     * @param string $key Key that was dropped.
+     * @return void
+     */
+    private function log_unknown_setting_key(string $key): void {
+        if (!defined('WP_DEBUG') || !WP_DEBUG) {
+            return;
+        }
+
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- debug-only diagnostic; a dropped key is otherwise invisible.
+        error_log(sprintf('ThinkRank [%s]: dropped unknown setting key "%s"', $this->manager_type, $key));
     }
 
     /**
@@ -508,6 +689,39 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
      * @param int|null $context_id   Optional. Context ID
      * @return string Cache key
      */
+    /**
+     * Setting keys stored as booleans, so a read hands them back as booleans.
+     *
+     * The database stores them as '1' / '', and a manager whose validator
+     * demands a real boolean will then reject its own stored values — which is
+     * exactly what made every save routed through
+     * Seo_Settings_Manager::save_settings_by_category() fail after it merged
+     * the existing settings back in (#395). Subclasses override this so the
+     * read and the validator cannot drift apart.
+     *
+     * @since 2.0.1
+     *
+     * @return string[] Keys to coerce to boolean on read.
+     */
+    protected function boolean_setting_keys(): array {
+        return [
+            'enabled',
+            'auto_generate_schema',
+            'rich_snippets_optimization',
+            'performance_tracking',
+            'auto_deploy',
+            'validation_on_save',
+            'rich_snippets_testing',
+            'organization_schema',
+            'knowledge_graph',
+            'add_missing_alt',
+            'add_missing_title',
+            'save_alt_to_media',
+            'auto_fill_on_upload',
+            'media_alt_overwrite',
+        ];
+    }
+
     protected function get_cache_key(string $context_type, ?int $context_id): string {
         // Normalise NULL to 0 so reads (which pass NULL for site-wide) and writes
         // (which pass 0) resolve to the SAME cache entry — otherwise a save would
@@ -531,14 +745,48 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
      * without this — the missing-table case (wizard blocked after migration,
      * every settings screen failing) looked identical to a validation problem.
      *
+     * The reason is also kept on the instance so the REST layer can put it in
+     * the response instead of a fixed string — see get_last_save_error().
+     *
      * @since 1.28.0
      *
      * @param string $reason Why the save failed.
+     * @param string $code   Optional. Machine-readable failure code.
      * @return void
      */
-    protected function log_save_failure(string $reason): void {
+    protected function log_save_failure(string $reason, string $code = 'save_failed'): void {
+        if ('' === $this->last_save_error) {
+            $this->last_save_error      = $reason;
+            $this->last_save_error_code = $code;
+        }
+
         // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- deliberate diagnostic; the UI only shows a generic failure message.
         error_log(sprintf('ThinkRank [%s]: settings save failed — %s', $this->manager_type, $reason));
+    }
+
+    /**
+     * Why the last save_settings() call returned false.
+     *
+     * @since 1.32.1
+     *
+     * @return string Failure reason, or '' if the last save succeeded.
+     */
+    public function get_last_save_error(): string {
+        return $this->last_save_error;
+    }
+
+    /**
+     * Machine-readable code for the last save failure.
+     *
+     * One of: unsupported_context, settings_table_missing, validation_failed,
+     * db_insert_failed, save_failed.
+     *
+     * @since 1.32.1
+     *
+     * @return string Failure code, or '' if the last save succeeded.
+     */
+    public function get_last_save_error_code(): string {
+        return $this->last_save_error_code;
     }
 
     protected function ensure_settings_table_exists(): bool {

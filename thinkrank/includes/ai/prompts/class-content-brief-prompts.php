@@ -167,7 +167,11 @@ class Content_Brief_Prompts {
         $prompt .= "  \"url_slugs\": [\"slug-1\", \"slug-2\", \"slug-3\"],\n";
         $prompt .= "  \"outline\": [\n";
         $prompt .= "    {\n";
-        $prompt .= "      \"heading\": \"H1: Main Title\",\n";
+        // No level label in the value. It duplicated the `level` field on the
+        // next line and taught the model that a heading string begins with its
+        // own level, which it then carried into content_body — so drafted
+        // articles came back with <h2>H2: Real Heading</h2> (#410).
+        $prompt .= "      \"heading\": \"Main Title\",\n";
         $prompt .= "      \"level\": 1,\n";
         $prompt .= "      \"word_count\": 50,\n";
         $prompt .= "      \"key_points\": [\"Point 1\", \"Point 2\", \"Point 3\"],\n";

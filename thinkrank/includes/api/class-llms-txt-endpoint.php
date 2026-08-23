@@ -19,6 +19,7 @@ namespace ThinkRank\API;
 use ThinkRank\SEO\LLMs_Txt_Manager;
 use ThinkRank\AI\Manager as AI_Manager;
 use ThinkRank\API\Traits\CSRF_Protection;
+use ThinkRank\API\Traits\Context_Authorization;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -31,6 +32,7 @@ if (!defined('ABSPATH')) {
 
 // Load CSRF Protection trait
 require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-csrf-protection.php';
+require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-context-authorization.php';
 
 /**
  * LLMs.txt API Endpoints Class
@@ -43,6 +45,7 @@ require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-csrf-protection.p
  */
 class LLMs_Txt_Endpoint extends WP_REST_Controller {
     use CSRF_Protection;
+    use Context_Authorization;
 
     /**
      * LLMs.txt Manager instance
@@ -125,7 +128,8 @@ class LLMs_Txt_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'GET',
                     'callback' => [$this, 'get_settings'],
-                    'permission_callback' => [$this, 'check_permissions']
+                    'permission_callback' => [$this, 'check_permissions'],
+                    'args' => $this->get_context_route_args()
                 ],
                 [
                     'methods' => 'POST',
@@ -201,7 +205,19 @@ class LLMs_Txt_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'GET',
                     'callback' => [$this, 'get_optimization_results'],
-                    'permission_callback' => [$this, 'check_permissions']
+                    'permission_callback' => [$this, 'check_permissions'],
+                    // The handler reads `limit` and forwards it to a prepared
+                    // LIMIT %d. Not injectable, but unbounded — and unregistered
+                    // means no coercion either (#394).
+                    'args' => [
+                        'limit' => [
+                            'required' => false,
+                            'type' => 'integer',
+                            'default' => 20,
+                            'minimum' => 1,
+                            'maximum' => 100,
+                        ],
+                    ]
                 ]
             ]
         );
@@ -226,12 +242,17 @@ class LLMs_Txt_Endpoint extends WP_REST_Controller {
      * @since 1.0.0
      *
      * @param WP_REST_Request $request Request object
-     * @return WP_REST_Response Response object
+     * @return WP_REST_Response|WP_Error Response object, or the context error
      */
-    public function get_settings(WP_REST_Request $request): WP_REST_Response {
+    public function get_settings(WP_REST_Request $request) {
         try {
-            $context_type = $request->get_param('context_type') ?? 'site';
-            $context_id = $request->get_param('context_id');
+            // SECURITY: the settings are stored per context, so the object has
+            // to be authorised before it is read (#385).
+            $context = $this->resolve_request_context($request);
+            if (is_wp_error($context)) {
+                return $context;
+            }
+            [$context_type, $context_id] = $context;
 
             // Get settings from LLMs.txt Manager
             $settings = $this->llms_txt_manager->get_settings($context_type, $context_id);
@@ -269,8 +290,14 @@ class LLMs_Txt_Endpoint extends WP_REST_Controller {
     public function update_settings(WP_REST_Request $request) {
         try {
             $settings = $request->get_param('settings');
-            $context_type = $request->get_param('context_type') ?? 'site';
-            $context_id = $request->get_param('context_id');
+
+            // SECURITY: this write is keyed by the context, so the object has to
+            // be authorised before anything is persisted (#385).
+            $context = $this->resolve_request_context($request);
+            if (is_wp_error($context)) {
+                return $context;
+            }
+            [$context_type, $context_id] = $context;
 
             // Validate settings
             if (empty($settings) || !is_array($settings)) {
@@ -319,6 +346,23 @@ class LLMs_Txt_Endpoint extends WP_REST_Controller {
                         'validation' => $validation
                     ],
                     'message' => 'Settings were saved, but the published llms.txt file could not be removed and may still be served. Please remove it manually.'
+                ], 200);
+            }
+
+            // A delivery-mode switch that could not move the already-published
+            // document leaves /llms.txt on the old path; say so instead of
+            // reporting a clean save.
+            $delivery_warning = $this->llms_txt_manager->delivery_switch_warning();
+
+            if ('' !== $delivery_warning) {
+                return new WP_REST_Response([
+                    'success' => true,
+                    'delivery_switch_failed' => true,
+                    'data' => [
+                        'settings' => $settings,
+                        'validation' => $validation
+                    ],
+                    'message' => $delivery_warning
                 ], 200);
             }
 
@@ -895,7 +939,12 @@ class LLMs_Txt_Endpoint extends WP_REST_Controller {
                 ]
             ], 200);
 
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
+            // Was `catch (Exception $e)` inside `namespace ThinkRank\API;` with
+            // no `use Exception;`, so it resolved to ThinkRank\API\Exception —
+            // a class that does not exist. The catch never matched and every
+            // exception escaped as a fatal. Every other catch in this file
+            // already uses the leading backslash (#394).
             return new WP_REST_Response([
                 'success' => false,
                 'error' => 'Failed to load overview data: ' . $e->getMessage()

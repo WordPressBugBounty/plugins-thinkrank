@@ -357,26 +357,44 @@ class Content_Brief_Endpoint {
      * @return string Formatted content
      */
     private function format_brief_for_export(array $brief, string $format): string {
-        $brief_data = $brief['brief_data'];
-        
-        $content = "Content Brief: " . $brief['title'] . "\n\n";
-        $content .= "Target Keywords: " . implode(', ', $brief['target_keywords']) . "\n";
-        $content .= "Content Type: " . $brief['content_type'] . "\n\n";
-        
-        if (!empty($brief_data['outline'])) {
+        // Every read here is a field of json_decode() output, so nothing about
+        // its shape is guaranteed. implode() on null and str_repeat() on a
+        // negative count are a TypeError and a ValueError respectively, and
+        // neither is an \Exception — so the catch around this call never
+        // matched and an export of a malformed brief was a fatal (#394).
+        $brief_data = is_array($brief['brief_data'] ?? null) ? $brief['brief_data'] : [];
+        $keywords   = is_array($brief['target_keywords'] ?? null) ? $brief['target_keywords'] : [];
+
+        $content  = "Content Brief: " . (string) ($brief['title'] ?? '') . "\n\n";
+        $content .= "Target Keywords: " . implode(', ', array_map('strval', $keywords)) . "\n";
+        $content .= "Content Type: " . (string) ($brief['content_type'] ?? '') . "\n\n";
+
+        if (!empty($brief_data['outline']) && is_array($brief_data['outline'])) {
             $content .= "Content Outline:\n";
+
             foreach ($brief_data['outline'] as $item) {
-                $indent = str_repeat('  ', $item['level'] - 1);
-                $content .= $indent . "H{$item['level']}: " . $item['heading'];
-                if ($item['word_count'] > 0) {
-                    $content .= " ({$item['word_count']} words)";
+                if (!is_array($item)) {
+                    continue;
                 }
+
+                // Clamped: a level of 0 or a missing one made the repeat count
+                // negative.
+                $level      = max(1, min(6, (int) ($item['level'] ?? 1)));
+                $word_count = (int) ($item['word_count'] ?? 0);
+                $indent     = str_repeat('  ', $level - 1);
+
+                $content .= $indent . "H{$level}: " . (string) ($item['heading'] ?? '');
+
+                if ($word_count > 0) {
+                    $content .= " ({$word_count} words)";
+                }
+
                 $content .= "\n";
             }
         }
-        
-        $content .= "\nGenerated on: " . $brief['created_at'];
-        
+
+        $content .= "\nGenerated on: " . (string) ($brief['created_at'] ?? '');
+
         return $content;
     }
 

@@ -1003,6 +1003,10 @@ final class Mcp_Manager {
 		// strict client can pin it. We answer JSON (a spec-permitted response
 		// type); we never open an SSE stream, so no session header is needed.
 		header( 'MCP-Protocol-Version: ' . Mcp_Server::PROTOCOL_VERSION );
+		// Never cached. The pretty endpoint can carry the pairing token in its
+		// path, so a shared cache or proxy holding a response keyed on that URL
+		// would keep an admin-equivalent credential in its store (#396).
+		header( 'Cache-Control: no-store, private' );
 		// Forward any headers the handler set (notably WWW-Authenticate on a
 		// 401, which drives the OAuth discovery flow).
 		foreach ( $response->get_headers() as $name => $value ) {

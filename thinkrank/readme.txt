@@ -2,9 +2,9 @@
 Contributors: wpdevteam, thinkrank, re_enter_rupok, rafinkhan, rudlinkon, mdnahidhasan
 Tags: seo, ai, schema, xml sitemap, meta description
 Requires at least: 6.0
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.0.0
+Stable tag: 2.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -367,6 +367,44 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 
 == Changelog ==
 
+= 2.0.1 =
+Release Date: 2026-08-23
+
+- New: A Delivery Method setting for your llms.txt file — automatic, a static file in the site root, or served by WordPress. On Nginx the web server sends the file without naming its character set, which turns accented letters and curly quotes into mojibake; served by WordPress it always arrives as UTF-8. Automatic picks the right one for your server
+- New: The keyword breakdown — title, meta description, content, image alt, address — now shows on posts with a single focus keyword. It was being calculated and then hidden unless you had two or more keywords, which is the least common setup. Each row now states plainly whether it Matched or not
+- New: Page 2 and beyond of an archive or a multi-page post now describes itself: its own title, its own address, and previous/next links, instead of repeating page 1
+- Fixed: Settings that saved and then did nothing. The breadcrumb "Show current page" switch, the %site_description% and %tagline% variables, the sitemap include toggles for anything other than the admin screen, and the Open Graph type and Twitter card type choices all persisted without changing what your site published
+- Fixed: Saving settings for a category could answer with an error after the save had already succeeded, so you re-entered settings that were never lost
+- Fixed: If a settings screen failed to load it silently filled the form with defaults. Pressing Save then wrote those defaults over everything you had stored — on the Robots.txt screen that emptied a saved robots.txt. The screen now shows an error with a Retry button and refuses to save until a load succeeds
+- Fixed: Flipping two switches quickly made the first one silently revert and stay reverted after a reload
+- Fixed: The Local SEO switch could not be turned on — the save was rejected for a business name whose field only appears after the switch is on
+- Fixed: Saving Site Identity stored a copy of the whole response back into your settings, growing the payload on every save
+- Fixed: A settings screen would store any stray field a client sent it, and once stored it came back in every later response and was written again on every save, so the settings table and every settings request grew and never shrank. Only settings ThinkRank actually defines are stored now, and strays already saved are cleared on upgrade
+- Fixed: An SEO title or meta description saved on a category, tag or custom taxonomy term was ignored on the archive page — the theme's own title was used and no description was published, while the admin screen showed the value as saved. Open Graph and Twitter values stored on a term now render too
+- Fixed: Category, tag, author, date and search archives published no address or description to social networks, and an author archive's title lost its separator
+- Fixed: A Twitter-specific description saved on a post was never used; the card showed the Open Graph description instead
+- Fixed: Pages built with shortcodes or page builders published their own shortcode source as the meta description
+- Fixed: WooCommerce product pages carried two aggregate ratings, which Search Console reports as a critical error on every reviewed product. ThinkRank now stands aside from WooCommerce's own product markup when it publishes its own
+- Fixed: The sitemap listed the cart, checkout and account pages that ThinkRank's own robots.txt blocks, so Search Console reported "Submitted URL blocked by robots.txt" on every store
+- Fixed: robots.txt put a blank line between each Sitemap line, which ends the record for a crawler, and listed child sitemaps the index already covers. The screen also reported the served file as in sync when it was not
+- Fixed: On WPML sites every translation in the sitemap pointed at the default language's address
+- Fixed: The readability score could report "Very Difficult (0)" on ordinary writing, because silent letters were counted as extra syllables
+- Fixed: SEO suggestions are now ordered by how many points they can actually recover, and advice for a factor already scoring full marks is no longer listed
+- Fixed: Core Web Vitals your site has no field data for were counted as failures, pushing the performance score down by 15–30 points for data you do not control. Unmeasured metrics are now reported as unmeasured
+- Fixed: AI-drafted articles could carry heading labels ("H2: ") into the published heading text
+- Fixed: Uninstalling the free plugin deleted an active ThinkRank Pro installation's license and settings. Uninstall also left scheduled tasks and term data behind, and on a network install only cleaned the current site
+- Fixed: Bulk SEO Optimization could show one post type's settings under another and save them there if you switched post types quickly
+- Fixed: An imported schema field could not be edited — the text snapped back as soon as it stopped being valid JSON — Print as PDF did nothing under a pop-up blocker, and the social preview could repaint with an out-of-date result
+- Fixed: A failed save on Site Identity reported the literal word "undefined" instead of the reason
+- Fixed: On sites whose database is not utf8mb4, none of ThinkRank's tables could be created: every settings save failed with a generic error and Quick Setup could not be completed. Affected sites heal on upgrade, and the real database error is now reported instead of a generic message
+- Fixed: A page that does not exist advertised your homepage as its address and carried social tags
+- Fixed: Every page carried a second viewport tag beside the theme's
+- Fixed: FAQ blocks on a blog or archive listing published their own FAQ structured data beside the page's, and a block theme could publish the same questions twice
+- Fixed: The MCP connection token was stored in the database in plain text. It is admin-equivalent, so it is now stored hashed and encrypted; existing connections keep working
+- Fixed: Several REST routes accepted any post or page id from a user with only a section permission, exposing titles and descriptions from other authors' drafts, and four of them wrote settings onto content the caller could not edit
+- Fixed: The protection against fetching internal addresses checked one address and then connected to whatever the hostname resolved to a moment later
+- Performance: Anonymous page views make fewer database queries — a Google token refresh no longer runs on the front end, AI traffic counting is batched instead of locking a row on every visitor, and schema and settings lookups are cached properly
+
 = 2.0.0 =
 Release Date: 2026-08-20
 
@@ -545,6 +583,9 @@ Release Date: 2026-08-02
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
+
+= 2.0.1 =
+A large correctness release. Settings that saved and then did nothing now take effect, a failed settings load can no longer overwrite what you had stored, and SEO titles and descriptions saved on categories and tags finally render. Fixes double aggregate ratings on WooCommerce products, cart and checkout pages in the sitemap, garbled accented characters in llms.txt on Nginx, paginated archives describing themselves as page 1, and an uninstall that damaged an active Pro install. Also hardens the AI-assistant connection token and object permissions on several REST routes. Recommended for all sites.
 
 = 2.0.0 =
 Redesigns the FAQ block and lets every answer carry its own image, both on the page and in its structured data. Fixes the FAQ editor's misaligned question and answer fields, a permalink change that looked like it had not saved (and in Elementor, Divi and Oxygen genuinely had not), and a keyword-in-address check that always failed on drafts while reporting false matches from parent pages, categories and dates on published ones. Recommended for all sites.

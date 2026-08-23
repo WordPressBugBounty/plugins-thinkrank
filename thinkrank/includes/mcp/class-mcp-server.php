@@ -267,8 +267,11 @@ final class Mcp_Server {
 
 		// Path 1: the static per-site pairing token. Leave the tool scope
 		// override cleared so Mcp_Tools defers to the pairing token's scope.
-		$stored = Mcp_Pairing::site_token();
-		if ( '' !== $stored && hash_equals( $stored, $presented ) ) {
+		//
+		// Compared through Mcp_Pairing::verify_token(), which checks the stored
+		// hash rather than a plaintext copy — the token is encrypted at rest and
+		// only its hash is used to authenticate (#396).
+		if ( Mcp_Pairing::verify_token( $presented ) ) {
 			Mcp_Tools::set_read_only_override( null );
 			if ( self::impersonate( Mcp_Pairing::user_id() ) ) {
 				// Record activity for the "Static token connections" row.

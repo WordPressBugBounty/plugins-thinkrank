@@ -54,6 +54,97 @@ class Global_SEO_Schema_Output {
     public function init(): void {
         // Hook into wp_head to output schema markup
         add_action('wp_head', [$this, 'output_global_seo_schema'], 15);
+
+        // One Product entity per product page: when ThinkRank emits the
+        // Product schema (the default for WooCommerce products), WooCommerce
+        // core's own JSON-LD must stand down, or the page carries two
+        // aggregateRating blocks and Search Console raises the critical
+        // "Review has multiple aggregate ratings" error. Registered eagerly
+        // and decided lazily inside the callback, because WooCommerce
+        // generates its data during the product template render — which on
+        // block themes can run before wp_head, too early for a flag set at
+        // output time to exist yet.
+        add_filter('woocommerce_structured_data_product', [$this, 'suppress_woocommerce_product_schema'], 20, 2);
+    }
+
+    /**
+     * Yield WooCommerce's Product structured data when ThinkRank emits the
+     * Product entity for the page being viewed.
+     *
+     * Mirrors what other SEO plugins do with WC_Structured_Data: exactly one
+     * plugin may describe the product. Suppression is surgical — only the
+     * queried product on its own singular view, only when this class's
+     * settings resolution says a Product schema will be generated (explicit
+     * or the WooCommerce default), and WooCommerce's breadcrumb and other
+     * structured data are never touched. With ThinkRank's product schema
+     * disabled or set to another type, WooCommerce's markup passes through
+     * unchanged.
+     *
+     * @since 2.0.1
+     * @param array $markup  WooCommerce's generated Product markup.
+     * @param mixed $product WC_Product being described.
+     * @return array Original markup, or empty to suppress.
+     */
+    public function suppress_woocommerce_product_schema($markup, $product = null) {
+        if (!is_array($markup) || !is_singular()) {
+            return $markup;
+        }
+
+        // Only the main product of this page — a card grid or related-products
+        // widget describing other products is not ours to silence.
+        $queried_id = (int) get_queried_object_id();
+        $product_id = is_object($product) && method_exists($product, 'get_id') ? (int) $product->get_id() : 0;
+        if (!$queried_id || !$product_id || $queried_id !== $product_id) {
+            return $markup;
+        }
+
+        $post_type = (string) get_post_type($queried_id);
+        if ($post_type === '') {
+            return $markup;
+        }
+
+        $settings = $this->get_global_seo_settings($post_type);
+        if (($settings['schema_type'] ?? '') === 'Product') {
+            return [];
+        }
+
+        // A per-post DEPLOYED Product schema duplicates WooCommerce's markup
+        // just the same, even when the post-type-wide setting points elsewhere.
+        // Checked second because the default path above answers without a
+        // query; this one is a single indexed lookup and only runs on the
+        // rare configured-away sites.
+        if ($this->post_has_deployed_product_schema($queried_id)) {
+            return [];
+        }
+
+        return $markup;
+    }
+
+    /**
+     * Whether an active per-post Product schema deployment exists for a post.
+     *
+     * Reads the deployment table directly rather than constructing
+     * Schema_Management_System — this runs inside WooCommerce's structured
+     * data filter on product pages, where spinning up the full manager (and
+     * its builder) to answer a yes/no question would be waste. Query shape
+     * matches get_deployed_schemas(): active rows for the post context.
+     *
+     * @since 2.0.1
+     * @param int $post_id Post to check.
+     * @return bool
+     */
+    private function post_has_deployed_product_schema(int $post_id): bool {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'thinkrank_seo_schema';
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one indexed EXISTS-style lookup on the render path; the deployment cache layer belongs to the full manager this deliberately avoids constructing.
+        $found = $wpdb->get_var($wpdb->prepare(
+            "SELECT 1 FROM {$table} WHERE context_type = 'post' AND context_id = %d AND schema_type = 'Product' AND is_active = 1 LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix.
+            $post_id
+        ));
+
+        return '1' === (string) $found;
     }
 
     /**
@@ -166,6 +257,15 @@ class Global_SEO_Schema_Output {
         if (empty($url)) {
             return;
         }
+
+        // Page 2 of an archive is a different URL and must be a different node.
+        // The link above is always the un-paginated one, so Schema_Graph::base_url()
+        // minted the identical #collectionpage and #breadcrumb @id on every
+        // page — distinct URLs claiming the same node identity (#397).
+        $url = \ThinkRank\Frontend\SEO_Manager::with_pagination(
+            (string) $url,
+            \ThinkRank\Frontend\SEO_Manager::current_page_number()
+        );
 
         $schema = [
             '@context' => self::SCHEMA_CONTEXT,
@@ -757,7 +857,7 @@ class Global_SEO_Schema_Output {
         }
 
         if (empty($description)) {
-            $description = wp_trim_words(wp_strip_all_tags($post->post_content), 30);
+            $description = \ThinkRank\SEO\Pattern_Resolver::derive_excerpt((string) $post->post_content, 30);
         }
 
         return wp_strip_all_tags($description);

@@ -31,7 +31,7 @@ class Publish_Llms_Txt extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/publish-llms-txt';
 		$this->label       = __( 'Publish ThinkRank llms.txt', 'thinkrank' );
-		$this->description = __( 'Generate the llms.txt content and write it to the site root (llms.txt) so it is served publicly. Pass an empty user_input object to publish using the currently saved settings. Unlike generate-llms-txt, this persists the file to disk; afterwards get-llms-txt-status reports file_exists: true.', 'thinkrank' );
+		$this->description = __( 'Generate the llms.txt content and publish it so it is served publicly at /llms.txt. Pass an empty user_input object to publish using the currently saved settings. Depending on the delivery_mode setting this writes a physical file to the site root or stores the document for WordPress to serve; unlike generate-llms-txt it persists either way, and afterwards get-llms-txt-status reports published: true.', 'thinkrank' );
 	}
 
 	/**

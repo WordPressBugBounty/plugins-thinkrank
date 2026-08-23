@@ -565,7 +565,19 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
      * @param string $site_url Site URL to validate
      * @return bool|WP_Error Validation result
      */
-    public function validate_site_url(string $site_url) {
+    public function validate_site_url($site_url) {
+        // Not a `string` type hint: this is a validate_callback, so it runs on
+        // the raw pre-sanitize parameter. `?site_url[]=x` handed it an array
+        // and PHP raised an uncaught TypeError — a 500 where the API owes the
+        // caller a 400 (#394).
+        if (!is_string($site_url)) {
+            return new WP_Error(
+                'invalid_site_url',
+                'Site URL must be a string',
+                ['status' => 400]
+            );
+        }
+
         if (empty($site_url)) {
             return new WP_Error(
                 'invalid_site_url',

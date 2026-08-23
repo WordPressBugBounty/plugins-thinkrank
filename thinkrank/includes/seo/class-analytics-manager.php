@@ -89,6 +89,43 @@ class Analytics_Manager {
     private static bool $token_refreshed_this_request = false;
 
     /**
+     * Single-flight lock for the OAuth refresh exchange.
+     *
+     * @var string
+     */
+    private const REFRESH_LOCK = 'thinkrank_token_refresh_lock';
+
+    /**
+     * How long a held refresh lock stays valid. Longer than the request
+     * timeout below, so a request that dies mid-exchange still frees it.
+     *
+     * @var int
+     */
+    private const REFRESH_LOCK_TTL = 60;
+
+    /**
+     * Set after a failed exchange; suppresses retries until it expires.
+     *
+     * @var string
+     */
+    private const REFRESH_BACKOFF = 'thinkrank_token_refresh_backoff';
+
+    /**
+     * How long to stay quiet after a failed exchange.
+     *
+     * @var int
+     */
+    private const REFRESH_BACKOFF_TTL = 300;
+
+    /**
+     * Timeout for the refresh exchange. A healthy proxy answers in ~1s; the
+     * old 30s meant one outage held a request open for half a minute.
+     *
+     * @var int
+     */
+    private const REFRESH_TIMEOUT = 10;
+
+    /**
      * Constructor
      *
      * @param Settings_Manager|null $settings_manager Settings manager instance
@@ -109,8 +146,9 @@ class Analytics_Manager {
         // Register custom cron interval (45 minutes)
         add_filter('cron_schedules', [$this, 'add_cron_intervals']);
 
-        // Initialize Google API clients
-        add_action('init', [$this, 'initialize_clients']);
+        // Initialize Google API clients — but only in the contexts that can use
+        // them. See maybe_initialize_clients().
+        add_action('init', [$this, 'maybe_initialize_clients']);
 
         // Initialize token refresh scheduling
         add_action('init', [$this, 'init_token_refresh']);
@@ -175,6 +213,41 @@ class Analytics_Manager {
      */
     public function get_property_url(): string {
         return $this->get_setting('search_console_property', get_site_url());
+    }
+
+    /**
+     * Initialize the Google clients on `init`, in the contexts that use them.
+     *
+     * initialize_clients() refreshes the OAuth token, which is a blocking
+     * outbound POST to the OAuth proxy. Hooked unconditionally it ran on every
+     * anonymous front-end request, so a proxy outage became a site-wide TTFB
+     * collapse — with each visitor waiting for the network call, and none of
+     * them able to use a Google client anyway. No front-end code path reads
+     * one: every consumer is a REST endpoint, a cron callback or WP-CLI, and
+     * each either calls initialize_clients() itself or goes through
+     * get_search_console_client(), which initializes lazily (#383).
+     *
+     * @since 2.0.1
+     * @return void
+     */
+    public function maybe_initialize_clients(): void {
+        $wanted = is_admin()
+            || wp_doing_cron()
+            || (defined('REST_REQUEST') && REST_REQUEST)
+            || (defined('WP_CLI') && WP_CLI);
+
+        /**
+         * Filter whether the Google API clients are initialized for this request.
+         *
+         * @since 2.0.1
+         *
+         * @param bool $wanted Whether to initialize the clients.
+         */
+        if (!apply_filters('thinkrank_initialize_google_clients', $wanted)) {
+            return;
+        }
+
+        $this->initialize_clients();
     }
 
     /**
@@ -376,8 +449,28 @@ class Analytics_Manager {
         $expiration_time = $created + $expires_in;
 
         // Refresh if forced, expired, or expiring within 5 minutes (300 seconds)
-        if ($force || $current_time >= ($expiration_time - 300)) {
+        if (!$force && $current_time < ($expiration_time - 300)) {
+            return;
+        }
 
+        // A failed exchange leaves google_token_created untouched, so the
+        // expiry condition above stays true and the next request tries again.
+        // Without a backoff a proxy outage means one blocking network call per
+        // request, forever. A forced refresh — the user reconnecting — is a
+        // deliberate act and skips the wait (#383).
+        if (!$force && get_transient(self::REFRESH_BACKOFF)) {
+            return;
+        }
+
+        // One exchange at a time. Concurrent callers past the expiry threshold
+        // would otherwise all refresh at once and invalidate each other's
+        // in-flight grants; the losers fall through with the current token and
+        // pick up the new one on their next read.
+        if (!$force && !$this->acquire_refresh_lock()) {
+            return;
+        }
+
+        try {
             // The proxy owns the Google app credentials; we only ever hand it
             // the refresh token and let it perform the exchange.
             $response = wp_remote_post(Google_OAuth_Proxy::get_proxy_url(), [
@@ -390,10 +483,11 @@ class Analytics_Manager {
                     'refresh_token' => $refresh_token,
                     'site' => home_url(),
                 ]),
-                'timeout' => 30
+                'timeout' => self::REFRESH_TIMEOUT
             ]);
 
             if (is_wp_error($response)) {
+                $this->back_off_refresh();
                 return;
             }
 
@@ -408,10 +502,13 @@ class Analytics_Manager {
                 // while every API call 401s.
                 if (($data['error'] ?? '') === 'invalid_grant') {
                     Google_OAuth_Proxy::mark_revoked();
+                    return;
                 }
 
                 // Any other failure (network blip, proxy 502) is transient;
-                // leave the credentials alone and let the next run retry.
+                // leave the credentials alone and let the next run retry —
+                // after the backoff, not on the very next request.
+                $this->back_off_refresh();
                 return;
             }
 
@@ -429,10 +526,74 @@ class Analytics_Manager {
                 ], 'integrations');
             }
 
+            // A success clears any backoff a previous failure left behind.
+            delete_transient(self::REFRESH_BACKOFF);
+
             // Drop the memoized settings merge so subsequent reads (e.g.
             // re-initializing clients) see the fresh token.
             $this->merged_settings = null;
+        } finally {
+            $this->release_refresh_lock();
         }
+    }
+
+    /**
+     * Take the single-flight lock for the refresh exchange.
+     *
+     * @since 2.0.1
+     * @return bool True when this request holds the lock.
+     */
+    private function acquire_refresh_lock(): bool {
+        // With a persistent object cache, add is atomic — memcached and Redis
+        // both fail an ADD on an existing key — so exactly one caller wins.
+        if (wp_using_ext_object_cache()) {
+            return (bool) wp_cache_add(self::REFRESH_LOCK, time(), 'thinkrank', self::REFRESH_LOCK_TTL);
+        }
+
+        // Without one, the options table is the shared store, and the unique
+        // index on option_name gives add_option() the same all-or-nothing
+        // result. set_transient() would not: it is an update, so every
+        // concurrent caller would "win".
+        if (add_option(self::REFRESH_LOCK, time(), '', 'no')) {
+            return true;
+        }
+
+        // Reclaim a lock whose holder died before releasing it.
+        $held = (int) get_option(self::REFRESH_LOCK);
+
+        if ($held > 0 && (time() - $held) > self::REFRESH_LOCK_TTL) {
+            delete_option(self::REFRESH_LOCK);
+
+            return (bool) add_option(self::REFRESH_LOCK, time(), '', 'no');
+        }
+
+        return false;
+    }
+
+    /**
+     * Release the single-flight lock.
+     *
+     * @since 2.0.1
+     * @return void
+     */
+    private function release_refresh_lock(): void {
+        if (wp_using_ext_object_cache()) {
+            wp_cache_delete(self::REFRESH_LOCK, 'thinkrank');
+
+            return;
+        }
+
+        delete_option(self::REFRESH_LOCK);
+    }
+
+    /**
+     * Stop retrying the exchange for a while after a failure.
+     *
+     * @since 2.0.1
+     * @return void
+     */
+    private function back_off_refresh(): void {
+        set_transient(self::REFRESH_BACKOFF, time(), self::REFRESH_BACKOFF_TTL);
     }
 
     /**

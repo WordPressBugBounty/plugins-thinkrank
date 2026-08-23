@@ -88,6 +88,14 @@ class Manager {
     public function init(): void {
         add_action('rest_api_init', [$this, 'register_routes']);
         add_action('rest_api_init', [$this, 'register_endpoint_classes']);
+
+        // Make declared schema constraints mean something. Applied once over
+        // the whole namespace rather than at 70-odd call sites, because that is
+        // exactly how the enum on /setup-wizard/migrated-plugins and the one on
+        // /seo-analytics/dashboard came to be inert while the route next door
+        // was fine (#394). Late priority so it sees every route, including any
+        // an add-on registered.
+        add_filter('rest_endpoints', [Rest_Args::class, 'enforce_namespace'], 99);
     }
 
     /**

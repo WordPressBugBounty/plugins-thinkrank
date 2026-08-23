@@ -36,6 +36,35 @@ class ThinkRank_Uninstaller {
      * @return void
      */
     public static function uninstall(): void {
+        // Everything below resolves through $wpdb->prefix and $wpdb->options,
+        // i.e. the current blog. On a network install WordPress runs this once,
+        // so every other site kept its tables, its options and its stored
+        // credentials — API keys and Google refresh tokens included (#399).
+        if (is_multisite()) {
+            $site_ids = get_sites([
+                'fields'                 => 'ids',
+                'number'                 => 0,
+                'update_site_meta_cache' => false,
+            ]);
+
+            foreach ($site_ids as $site_id) {
+                switch_to_blog((int) $site_id);
+                self::uninstall_site();
+                restore_current_blog();
+            }
+
+            return;
+        }
+
+        self::uninstall_site();
+    }
+
+    /**
+     * Remove everything ThinkRank created on the current blog.
+     *
+     * @return void
+     */
+    private static function uninstall_site(): void {
         // Check if user wants to keep data. Default to TRUE (preserve) to match the
         // Settings class default and the documented UI behavior — only nuke data when
         // the user has explicitly enabled "Delete all data on uninstall".
@@ -46,12 +75,26 @@ class ThinkRank_Uninstaller {
             self::remove_options();
             self::remove_user_meta();
             self::remove_post_meta();
+            self::remove_term_meta();
         }
         
         self::clear_caches();
         self::remove_cron_jobs();
         self::remove_capabilities();
         self::mark_uninstalled();
+    }
+
+    /**
+     * The shared cleanup manifest.
+     *
+     * There is no autoloader here — WP_UNINSTALL_PLUGIN loads this file without
+     * the plugin — so the cron-hook and capability lists come from a plain
+     * array file that the deactivator reads too.
+     *
+     * @return array{cron_hooks: string[], capabilities: string[]}
+     */
+    private static function manifest(): array {
+        return require __DIR__ . '/includes/cleanup-manifest.php';
     }
 
     /**
@@ -104,14 +147,10 @@ class ThinkRank_Uninstaller {
             $wpdb->prefix . 'thinkrank_brand_visibility_checks',
             $wpdb->prefix . 'thinkrank_bv_runs',
             $wpdb->prefix . 'thinkrank_bv_tasks',
-            // Rank Tracker Tables
-            $wpdb->prefix . 'thinkrank_rank_tracking',
-            $wpdb->prefix . 'thinkrank_tracked_keywords',
-            // Pro feature tables (redirections, broken links, local SEO)
-            $wpdb->prefix . 'thinkrank_redirects',
-            $wpdb->prefix . 'thinkrank_404_logs',
-            $wpdb->prefix . 'thinkrank_broken_links',
-            $wpdb->prefix . 'thinkrank_locations',
+            // Rank Tracker, Redirections, Broken Links and Local SEO tables are
+            // created and dropped by ThinkRank Pro's own uninstaller. Free used to
+            // drop them here, which destroyed a still-active Pro install's data
+            // when only the free plugin was removed (#384).
         ];
 
         foreach ($tables as $table) {
@@ -136,15 +175,21 @@ class ThinkRank_Uninstaller {
      * @return void
      */
     private static function remove_options(): void {
-        // Remove all ThinkRank options using wildcard delete for completeness
+        // Remove all ThinkRank options using wildcard delete for completeness.
+        //
+        // `thinkrank_%` also matches `thinkrank_pro_%`, so this used to delete a
+        // still-active Pro install's license key and every module setting (#384).
+        // Pro ships its own uninstaller and owns that namespace exclusively, so
+        // every pattern here excludes it.
         global $wpdb;
         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Uninstall cleanup requires direct database access to remove all plugin options
         $wpdb->query(
             $wpdb->prepare(
                 "DELETE FROM {$wpdb->options}
-                 WHERE option_name LIKE %s
+                 WHERE (option_name LIKE %s AND option_name NOT LIKE %s)
                  OR option_name LIKE %s",
                 $wpdb->esc_like('thinkrank_') . '%',
+                $wpdb->esc_like('thinkrank_pro_') . '%',
                 // Appsero / WP Insights telemetry options (wpins_thinkrank_*)
                 $wpdb->esc_like('wpins_thinkrank_') . '%'
             )
@@ -156,10 +201,12 @@ class ThinkRank_Uninstaller {
         $wpdb->query(
             $wpdb->prepare(
                 "DELETE FROM {$wpdb->options}
-                 WHERE option_name LIKE %s
-                 OR option_name LIKE %s",
+                 WHERE (option_name LIKE %s AND option_name NOT LIKE %s)
+                 OR (option_name LIKE %s AND option_name NOT LIKE %s)",
                 $wpdb->esc_like('_transient_thinkrank_') . '%',
-                $wpdb->esc_like('_transient_timeout_thinkrank_') . '%'
+                $wpdb->esc_like('_transient_thinkrank_pro_') . '%',
+                $wpdb->esc_like('_transient_timeout_thinkrank_') . '%',
+                $wpdb->esc_like('_transient_timeout_thinkrank_pro_') . '%'
             )
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -209,6 +256,33 @@ class ThinkRank_Uninstaller {
     
 
     /**
+     * Remove term meta data
+     *
+     * The plugin writes term meta from the term UI, the abilities API
+     * (Update_Term_Seo) and the importer (Snapshot_Migrator) — SEO title,
+     * meta description, the robots payload and the `_thinkrank_imported_from`
+     * marker — and there was no counterpart to remove_post_meta(), so all of
+     * it outlived the plugin (#399).
+     *
+     * @return void
+     */
+    private static function remove_term_meta(): void {
+        global $wpdb;
+
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Core table name is safe, uninstall cleanup requires direct database access
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$wpdb->termmeta}
+                 WHERE meta_key LIKE %s
+                 OR meta_key LIKE %s",
+                $wpdb->esc_like('thinkrank_') . '%',
+                $wpdb->esc_like('_thinkrank_') . '%'
+            )
+        );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+    }
+
+    /**
      * Clear all caches
      * 
      * @return void
@@ -226,12 +300,10 @@ class ThinkRank_Uninstaller {
      * @return void
      */
     private static function remove_cron_jobs(): void {
-        $cron_jobs = [
-            'thinkrank_cache_cleanup',
-            'thinkrank_usage_analytics',
-        ];
-        
-        foreach ($cron_jobs as $job) {
+        // Was 2 hooks against the 15 the plugin schedules, and weaker than the
+        // deactivator's 5 — so uninstalling without deactivating first left
+        // even more behind (#389).
+        foreach (self::manifest()['cron_hooks'] as $job) {
             wp_clear_scheduled_hook($job);
         }
     }
@@ -248,33 +320,14 @@ class ThinkRank_Uninstaller {
         // locking administrators out of the admin menu.
         delete_option('thinkrank_caps_version');
 
-        // Keep in sync with ThinkRank\Core\Capability_Manager::capabilities().
-        // The plugin autoloader isn't available during uninstall, so the slugs are
-        // mirrored here. The trailing legacy slugs were granted by older versions
-        // and are removed too so historical roles are fully cleaned.
-        $capabilities = [
-            'thinkrank_access',
-            'thinkrank_site_identity',
-            'thinkrank_analytics',
-            'thinkrank_performance',
-            'thinkrank_global_seo',
-            'thinkrank_image_seo',
-            'thinkrank_schema',
-            'thinkrank_social_media',
-            'thinkrank_crawling',
-            'thinkrank_instant_indexing',
-            'thinkrank_author_archives',
-            'thinkrank_content_tools',
-            'thinkrank_internal_links',
-            'thinkrank_settings',
-            'thinkrank_manage_roles',
-            // Legacy slugs (pre-Role Manager) — remove if still present.
-            'thinkrank_manage_settings',
-            'thinkrank_view_analytics',
-            'thinkrank_manage_credits',
-            'thinkrank_use_ai_features',
-        ];
-        
+        // From the shared manifest. The hand-mirrored copy that used to live
+        // here had drifted from Capability_Manager::capabilities() by four
+        // slugs — thinkrank_ai_insights, thinkrank_redirections,
+        // thinkrank_broken_links and thinkrank_woocommerce were still granted
+        // to every role after an uninstall (#399). The manifest also carries
+        // the pre-Role-Manager slugs so historical roles are fully cleaned.
+        $capabilities = self::manifest()['capabilities'];
+
         $roles = wp_roles();
         
         foreach ($roles->roles as $role_name => $role_info) {

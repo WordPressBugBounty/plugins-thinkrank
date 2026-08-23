@@ -359,7 +359,25 @@ class Metadata_Generator {
         $syllables = 0;
         
         foreach ($words as $word) {
-            $syllables += max(1, preg_match_all('/[aeiouy]+/i', $word));
+            $word = preg_replace('/[^a-z]/', '', strtolower($word));
+            if ($word === '') {
+                continue;
+            }
+
+            $groups = preg_match_all('/[aeiouy]+/', $word);
+
+            // Standard Flesch heuristic: a trailing silent e does not form a
+            // syllable ("make", "time", "these") — but only when a consonant
+            // precedes it (a vowel+e ending like "movie" already shares its
+            // group) and never for consonant-le ("table"), which does count.
+            // Without this the counter inflated syllables/word by ~0.2-0.3 on
+            // ordinary prose, driving raw Flesch negative and the UI to a
+            // clamped "Very Difficult (0)" (#407).
+            if ($groups > 1 && preg_match('/[^aeiouy]e$/', $word) && !str_ends_with($word, 'le')) {
+                $groups--;
+            }
+
+            $syllables += max(1, $groups);
         }
         
         return $syllables;

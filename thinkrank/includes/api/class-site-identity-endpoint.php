@@ -20,6 +20,7 @@ namespace ThinkRank\API;
 use ThinkRank\SEO\Site_Identity_Manager;
 use ThinkRank\AI\Manager as AI_Manager;
 use ThinkRank\API\Traits\CSRF_Protection;
+use ThinkRank\API\Traits\Context_Authorization;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -32,6 +33,7 @@ if (!defined('ABSPATH')) {
 
 // Load CSRF Protection trait
 require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-csrf-protection.php';
+require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-context-authorization.php';
 
 /**
  * Site Identity API Endpoints Class
@@ -45,6 +47,7 @@ require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-csrf-protection.p
  */
 class Site_Identity_Endpoint extends WP_REST_Controller {
     use CSRF_Protection;
+    use Context_Authorization;
 
     /**
      * Site Identity Manager instance
@@ -127,7 +130,8 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'GET',
                     'callback' => [$this, 'get_settings'],
-                    'permission_callback' => [$this, 'check_permissions']
+                    'permission_callback' => [$this, 'check_permissions'],
+                    'args' => $this->get_context_route_args()
                 ],
                 [
                     'methods' => 'POST',
@@ -279,12 +283,17 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
      * @since 1.0.0
      *
      * @param WP_REST_Request $request Request object
-     * @return WP_REST_Response Response object
+     * @return WP_REST_Response|WP_Error Response object, or the context error
      */
-    public function get_settings(WP_REST_Request $request): WP_REST_Response {
+    public function get_settings(WP_REST_Request $request) {
         try {
-            $context_type = $request->get_param('context_type') ?? 'site';
-            $context_id = $request->get_param('context_id');
+            // SECURITY: the settings are stored per context, so the object has
+            // to be authorised before it is read (#385).
+            $context = $this->resolve_request_context($request);
+            if (is_wp_error($context)) {
+                return $context;
+            }
+            [$context_type, $context_id] = $context;
 
             // Get settings from Site Identity Manager
             $settings = $this->identity_manager->get_settings($context_type, $context_id);
@@ -322,8 +331,14 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
     public function update_settings(WP_REST_Request $request) {
         try {
             $settings = $request->get_param('settings');
-            $context_type = $request->get_param('context_type') ?? 'site';
-            $context_id = $request->get_param('context_id');
+
+            // SECURITY: this write is keyed by the context, so the object has to
+            // be authorised before anything is persisted (#385).
+            $context = $this->resolve_request_context($request);
+            if (is_wp_error($context)) {
+                return $context;
+            }
+            [$context_type, $context_id] = $context;
 
             // Validate settings
             if (empty($settings) || !is_array($settings)) {
@@ -355,8 +370,11 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             if (!$update_result) {
                 return new WP_Error(
                     'update_failed',
-                    'Failed to update site identity settings',
-                    ['status' => 500]
+                    $this->describe_save_failure('Failed to update site identity settings'),
+                    [
+                        'status' => 500,
+                        'failure_code' => $this->identity_manager->get_last_save_error_code()
+                    ]
                 );
             }
 
@@ -387,7 +405,7 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
                 'message' => 'Site identity settings updated successfully'
             ], 200);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return new WP_Error(
                 'update_failed',
                 'Settings update failed: ' . $e->getMessage(),
@@ -538,6 +556,11 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             // the auto-generated comment/timestamp never lands in the textarea.
             $robots_data['content'] = $this->identity_manager->get_served_robots_body();
 
+            // Keep `rules` describing that same body. generate_robots_txt()
+            // returned the rules it generated, which stopped matching `content`
+            // the moment a stored override or a physical file supplied it.
+            $robots_data['rules'] = $this->identity_manager->parse_robots_txt_rules($robots_data['content']);
+
             // How /robots.txt is actually delivered right now, so the screen can
             // show the served output next to the editable body and flag a
             // physical file in the web root that has drifted from the settings.
@@ -625,8 +648,11 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             if (!$update_result) {
                 return new WP_Error(
                     'update_failed',
-                    'Failed to update robots.txt settings',
-                    ['status' => 500]
+                    $this->describe_save_failure('Failed to update robots.txt settings'),
+                    [
+                        'status' => 500,
+                        'failure_code' => $this->identity_manager->get_last_save_error_code()
+                    ]
                 );
             }
 
@@ -651,6 +677,7 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             // Return the header-stripped body so the client textarea reflects
             // exactly what it should hold (the header is added only at render).
             $robots_data['content'] = $this->identity_manager->get_served_robots_body();
+            $robots_data['rules'] = $this->identity_manager->parse_robots_txt_rules($robots_data['content']);
 
             // Re-read delivery after the write above so the screen reflects the
             // file that now exists rather than the state it was in on load.
@@ -668,7 +695,7 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
                     : 'Robots.txt configuration updated (file not written: ' . $file_write_result['message'] . ')'
             ], 200);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return new WP_Error(
                 'update_failed',
                 'Robots.txt update failed: ' . $e->getMessage(),
@@ -869,10 +896,12 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
     public function validate_identity_settings(WP_REST_Request $request): WP_REST_Response {
         try {
             $settings = $request->get_param('settings');
-            $tab_context = $request->get_param('tab_context') ?? '';
+            $tab_context = $request->get_param('tab_context');
 
-            // Validate settings using Site Identity Manager with tab context
-            $validation = $this->identity_manager->validate_settings($settings ?? [], $tab_context);
+            // Validate settings using Site Identity Manager with tab context.
+            // `settings` is registered required, so REST rejects a missing value
+            // before this point and the old `?? []` fallback was unreachable.
+            $validation = $this->identity_manager->validate_settings($settings, $tab_context);
 
             return new WP_REST_Response([
                 'success' => true,
@@ -933,6 +962,26 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
      */
 
     /**
+     * Build a save-failure message that names the actual cause.
+     *
+     * The manager knows why the save failed — missing settings table, rejected
+     * INSERT with the MySQL error attached — and used to write that to the
+     * error log and throw it away, leaving the client a fixed string that told
+     * nobody anything. Append the reason so the response is diagnosable on its
+     * own. Status stays 500: a rejected INSERT is a server-side failure.
+     *
+     * @since 1.32.1
+     *
+     * @param string $fallback Message to use when no reason was recorded.
+     * @return string Failure message.
+     */
+    private function describe_save_failure(string $fallback): string {
+        $reason = $this->identity_manager->get_last_save_error();
+
+        return '' !== $reason ? $fallback . ': ' . $reason : $fallback;
+    }
+
+    /**
      * Get arguments for settings endpoints
      *
      * @since 1.0.0
@@ -974,7 +1023,10 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             'template_name' => [
                 'required' => false,
                 'type' => 'string',
-                'enum' => ['default', 'simple', 'reverse', 'category', 'author'],
+                // Must match get_available_title_templates(), which returns
+                // 'default' and nothing else. The extra names advertised
+                // templates the resolver has never been able to produce.
+                'enum' => ['default'],
                 'default' => 'default',
                 'description' => 'Title template to use'
             ],
@@ -1005,7 +1057,9 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             'breadcrumb_type' => [
                 'required' => false,
                 'type' => 'string',
-                'enum' => ['hierarchical', 'taxonomy', 'path', 'custom'],
+                // Must match get_available_breadcrumb_types(), which returns
+                // 'hierarchical' and nothing else.
+                'enum' => ['hierarchical'],
                 'default' => 'hierarchical',
                 'description' => 'Type of breadcrumb navigation to generate'
             ],
@@ -1045,6 +1099,18 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
                 'type' => 'boolean',
                 'default' => true,
                 'description' => 'Rebuild content from rules (Generate). When false, only re-sync the physical file to the stored content.'
+            ],
+            // The handler reads this and the route never declared it, so it
+            // arrived as whatever string the client sent. RobotsManagement.js
+            // sends it, and "false" is a non-empty string — truthy — so the
+            // file was written when the caller had asked it not to be. ("0" is
+            // falsy, which is why the failure was asymmetric.) Registering it
+            // gets core's boolean coercion (#394).
+            'write_to_file' => [
+                'required' => false,
+                'type' => 'boolean',
+                'default' => true,
+                'description' => 'Write the generated content to the physical robots.txt file.'
             ]
         ];
     }
@@ -1062,6 +1128,14 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
                 'required' => true,
                 'type' => 'object',
                 'description' => 'Site identity data to optimize'
+            ],
+            // Read by optimize_site_identity(); previously unregistered, so it
+            // never appeared in the published schema.
+            'options' => [
+                'required' => false,
+                'type' => 'object',
+                'default' => [],
+                'description' => 'Additional optimization options'
             ]
         ];
     }
@@ -1210,6 +1284,16 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
                 'required' => true,
                 'type' => 'object',
                 'description' => 'Settings to validate'
+            ],
+            // Read by validate_identity_settings() to scope validation to one
+            // tab; it was never registered, so it was absent from the published
+            // schema and got no type or sanitization.
+            'tab_context' => [
+                'required' => false,
+                'type' => 'string',
+                'default' => '',
+                'sanitize_callback' => 'sanitize_key',
+                'description' => 'Limit validation to a single settings tab'
             ]
         ];
     }

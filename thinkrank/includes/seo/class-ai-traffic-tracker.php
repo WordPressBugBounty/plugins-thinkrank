@@ -44,6 +44,27 @@ class Ai_Traffic_Tracker {
     private const PRUNE_HOOK = 'thinkrank_ai_traffic_prune';
 
     /**
+     * Object-cache group for the buffered hit counters.
+     */
+    private const COUNTER_GROUP = 'thinkrank_traffic';
+
+    /**
+     * Key prefix for those counters.
+     */
+    private const COUNTER_PREFIX = 'tr_traffic_';
+
+    /**
+     * Flush a bucket once it has this many buffered hits.
+     */
+    private const FLUSH_AT = 50;
+
+    /**
+     * ...or once its oldest buffered hit is this many seconds old, so a quiet
+     * site still records its traffic.
+     */
+    private const FLUSH_AFTER = 300;
+
+    /**
      * Days of history to keep. The dashboard reads 30; keep 6 months so a
      * longer range is possible later without changing collection.
      */
@@ -272,21 +293,78 @@ class Ai_Traffic_Tracker {
      * @return void
      */
     private function bump(string $kind, string $source, string $path = ''): void {
+        // Without a persistent object cache there is nowhere to buffer, so keep
+        // the direct write rather than counting into per-request memory that is
+        // thrown away — that would lose hits outright.
+        if (!wp_using_ext_object_cache()) {
+            $this->write_bucket($kind, $source, $path, 1);
+
+            return;
+        }
+
+        // With one, buffer and flush in batches. The unique key is
+        // (day, kind, source, path), so all baseline traffic funnels into a
+        // single row per day: InnoDB took an exclusive row lock on it for every
+        // visitor, serialising concurrent anonymous traffic, and made every
+        // pageview a write even when the response was fully cacheable (#402).
+        $bucket = self::COUNTER_PREFIX . md5($kind . '|' . $source . '|' . $path);
+        $since  = $bucket . '_since';
+
+        $hits = wp_cache_incr($bucket, 1, self::COUNTER_GROUP);
+
+        if (false === $hits) {
+            wp_cache_add($bucket, 1, self::COUNTER_GROUP, 0);
+            wp_cache_add($since, time(), self::COUNTER_GROUP, 0);
+            $hits = 1;
+        }
+
+        $started = (int) wp_cache_get($since, self::COUNTER_GROUP);
+
+        // Flush on either bound, so a busy site writes rarely and a quiet one
+        // still lands its hits — an eviction can cost at most one window.
+        if ($hits < self::FLUSH_AT && $started > 0 && (time() - $started) < self::FLUSH_AFTER) {
+            return;
+        }
+
+        wp_cache_set($bucket, 0, self::COUNTER_GROUP, 0);
+        wp_cache_set($since, time(), self::COUNTER_GROUP, 0);
+
+        $this->write_bucket($kind, $source, $path, (int) $hits);
+    }
+
+    /**
+     * Add hits to a bucket's row.
+     *
+     * @since 2.0.1
+     *
+     * @param string $kind   'referral' | 'crawler' | 'baseline'.
+     * @param string $source Platform/bot slug, or 'all' for baseline.
+     * @param string $path   Landing path (referrals only).
+     * @param int    $hits   How many hits to add.
+     * @return void
+     */
+    private function write_bucket(string $kind, string $source, string $path, int $hits): void {
+        if ($hits < 1) {
+            return;
+        }
+
         global $wpdb;
 
         $table = $wpdb->prefix . 'thinkrank_ai_traffic';
 
-        // Single cheap upsert per pageview; the unique key is the bucket.
+        // Aggregate counter upsert; the unique key is the bucket.
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- aggregate counter upsert; table name is prefix-derived.
         $wpdb->query(
             // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $wpdb->prepare(
-                "INSERT INTO {$table} (day, kind, source, path, hits) VALUES (%s, %s, %s, %s, 1)
-                 ON DUPLICATE KEY UPDATE hits = hits + 1",
+                "INSERT INTO {$table} (day, kind, source, path, hits) VALUES (%s, %s, %s, %s, %d)
+                 ON DUPLICATE KEY UPDATE hits = hits + %d",
                 current_time('Y-m-d'),
                 $kind,
                 $source,
-                $path
+                $path,
+                $hits,
+                $hits
             )
         );
             // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared

@@ -35,6 +35,7 @@ class Get_Llms_Txt_Settings extends Ability_Base {
 	 * String-typed llms.txt keys.
 	 */
 	private const STRING_KEYS = [
+		'delivery_mode',
 		'site_name',
 		'website_description',
 		'key_features',
@@ -88,6 +89,9 @@ class Get_Llms_Txt_Settings extends Ability_Base {
 		foreach ( self::STRING_KEYS as $key ) {
 			$props[ $key ] = [ 'type' => 'string' ];
 		}
+
+		$props['delivery_mode']['enum']        = [ 'auto', 'static', 'dynamic' ];
+		$props['delivery_mode']['description'] = __( 'How /llms.txt is served: "static" writes a physical file the web server answers, "dynamic" keeps the document in WordPress and serves it from PHP as UTF-8, "auto" picks static on Apache/LiteSpeed and dynamic elsewhere.', 'thinkrank' );
 
 		return $props;
 	}

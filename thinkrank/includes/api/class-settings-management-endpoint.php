@@ -416,6 +416,54 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
      * @param array $settings Flat key => value map from the request.
      * @return array Map with masked secret values removed.
      */
+    /**
+     * Drop setting keys the category does not define.
+     *
+     * The known set is whatever describes the category: the generic store's key
+     * list, and the dedicated manager's default settings when one owns it.
+     * Fails open — if neither store can describe the category there is nothing
+     * to check against, and silently dropping everything would be worse than
+     * storing an unknown key.
+     *
+     * @since 2.0.1
+     *
+     * @param array  $settings     Incoming settings.
+     * @param string $category     Settings category.
+     * @param string $context_type Context the write is scoped to.
+     * @return array Settings limited to recognised keys.
+     */
+    private function filter_known_setting_keys(array $settings, string $category, string $context_type): array {
+        $known = [];
+
+        // $this->setting_categories maps category => label; the key lists live
+        // in the generic store.
+        $known = array_merge($known, $this->settings_manager->get_category_keys($category));
+
+        if ($this->has_seo_manager($category)) {
+            $known = array_merge(
+                $known,
+                array_keys($this->get_seo_manager($category)->get_default_settings($context_type))
+            );
+        }
+
+        /**
+         * Filter the setting keys a category accepts.
+         *
+         * @since 2.0.1
+         *
+         * @param string[] $known        Recognised setting keys.
+         * @param string   $category     Settings category.
+         * @param string   $context_type Context the write is scoped to.
+         */
+        $known = apply_filters('thinkrank_known_setting_keys', $known, $category, $context_type);
+
+        if (empty($known)) {
+            return $settings;
+        }
+
+        return array_intersect_key($settings, array_flip($known));
+    }
+
     private function strip_masked_secrets(array $settings): array {
         foreach ($settings as $key => $value) {
             if (!in_array($key, self::SENSITIVE_SETTING_KEYS, true)) {
@@ -728,6 +776,22 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
 
             // Reads mask secrets; never persist a mask back over the real one.
             $settings = $this->strip_masked_secrets($settings);
+
+            // Drop keys the category does not define. This route persisted any
+            // key it was handed — a probe key written through it is still
+            // readable in the settings table afterwards — which bloats the
+            // store and lets a client invent settings the plugin will never
+            // read (#395). Mirrors the same guard on the schema and
+            // social-media routes.
+            $settings = $this->filter_known_setting_keys($settings, $category, $context_type);
+
+            if (empty($settings)) {
+                return new WP_Error(
+                    'invalid_settings',
+                    "No recognized settings were provided for category: {$category}",
+                    ['status' => 400]
+                );
+            }
 
             $validation_result = ['valid' => true];
 

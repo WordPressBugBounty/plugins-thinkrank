@@ -83,6 +83,91 @@ class Pattern_Resolver {
     }
 
     /**
+     * Derive a description from raw post content.
+     *
+     * wp_strip_all_tags() removes HTML but not shortcodes, so a page built with
+     * them published its shortcode source as the description — `[woocommerce_cart]`
+     * as the meta description, og:description and twitter:description of the
+     * cart page. Core's own wp_trim_excerpt() runs strip_shortcodes() and
+     * excerpt_remove_blocks() first; this path did neither, which is why the
+     * two disagreed about the same post (#387).
+     *
+     * @since 2.0.1
+     *
+     * @param string $content Raw post content.
+     * @param int    $words   Word cap.
+     * @return string Derived description, or '' when nothing survives.
+     */
+    public static function derive_excerpt(string $content, int $words = 25): string {
+        if ('' === trim($content)) {
+            return '';
+        }
+
+        $text = excerpt_remove_blocks($content);
+        $text = strip_shortcodes($text);
+        $text = wp_strip_all_tags($text);
+
+        return trim(wp_trim_words($text, $words, '...'));
+    }
+
+    /**
+     * Resolve any variable-tag string against a term's values.
+     *
+     * The term counterpart of resolve_value(). Term SEO fields reach the
+     * frontend from three writers — the term UI, the abilities API and the
+     * Yoast/RankMath/AIOSEO/SEOPress importer — and the importers already
+     * substitute their own term tokens (%%term_title%%, %term%) with the term
+     * name at export time, so what lands here is either literal text or
+     * ThinkRank's own tags.
+     *
+     * @since 2.0.1
+     *
+     * @param string $value   Raw string, possibly containing variable tags.
+     * @param int    $term_id Term ID.
+     * @return string Resolved string.
+     */
+    public static function resolve_term_value(string $value, int $term_id): string {
+        if (strpos($value, '%') === false) {
+            return $value;
+        }
+        return self::process($value, self::placeholders_for_term($term_id));
+    }
+
+    /**
+     * Token => value map for a term.
+     *
+     * The post-only tokens resolve to an empty string rather than being left
+     * unreplaced: they have no meaning on an archive, and process() collapses
+     * the separators an empty token leaves behind. A raw "%author%" in the
+     * rendered title would be worse than nothing.
+     *
+     * @since 2.0.1
+     *
+     * @param int $term_id Term ID.
+     * @return array<string,string> Placeholder map.
+     */
+    private static function placeholders_for_term(int $term_id): array {
+        $term = get_term($term_id);
+
+        $name        = ($term && !is_wp_error($term)) ? $term->name : '';
+        $description = ($term && !is_wp_error($term)) ? (string) $term->description : '';
+
+        return [
+            '%title%'     => $name,
+            '%term%'      => $name,
+            '%sitename%'  => get_bloginfo('name'),
+            '%sep%'       => self::separator(),
+            '%excerpt%'   => $description !== ''
+                ? wp_trim_words(wp_strip_all_tags($description), 25, '...')
+                : '',
+            '%date%'      => '',
+            '%modified%'  => '',
+            '%author%'    => '',
+            '%category%'  => '',
+        ];
+    }
+
+    /**
      * Token => value map for a post, keyed WITHOUT the surrounding percents
      * (e.g. 'title' => 'My Post'). Used by the editor for live client-side
      * preview of a pattern as the user types.
@@ -229,7 +314,7 @@ class Pattern_Resolver {
         if ($post) {
             $excerpt = !empty($post->post_excerpt)
                 ? $post->post_excerpt
-                : wp_trim_words(wp_strip_all_tags($post->post_content), 25, '...');
+                : self::derive_excerpt((string) $post->post_content);
         }
 
         $author_id = (int) get_post_field('post_author', $post_id);

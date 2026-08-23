@@ -81,6 +81,7 @@ class Multilingual_Manager {
         // and front end alike: the sitemap can be generated from either.
         add_filter('thinkrank_sitemap_query_args', [$this, 'filter_sitemap_query_args']);
         add_filter('thinkrank_sitemap_term_query_args', [$this, 'filter_sitemap_term_query_args']);
+        add_filter('thinkrank_sitemap_post_permalink', [$this, 'localize_sitemap_permalink'], 10, 2);
 
         if (!is_admin()) {
             // WPML prints at wp_head priority 1 and Polylang at 10, so run
@@ -599,6 +600,52 @@ class Multilingual_Manager {
      * @param array<string, mixed> $args Query args.
      * @return array<string, mixed>
      */
+    /**
+     * Resolve a sitemap entry's permalink in the post's own language.
+     *
+     * The sitemap query runs with suppress_filters pinned (see
+     * filter_sitemap_query_args) so every language's rows are fetched — but
+     * that also strips WPML's chance to contextualise the permalink, and the
+     * debounced cron rebuild runs with no language context at all. Each
+     * translation therefore resolved to the default-language URL: N sitemap
+     * entries with different lastmod and images sharing one identical <loc>
+     * (#409).
+     *
+     * WPML's stateless conversion API fixes it per row: look up the post's
+     * own language, then ask wpml_permalink for the URL in that language.
+     * Both are documented WPML hooks and no-op safely when absent. Polylang
+     * needs none of this — its permalink filtering rides post_link, which
+     * get_permalink() applies regardless of suppress_filters — and
+     * TranslatePress translates rendered output without duplicating posts.
+     *
+     * @since 2.0.1
+     * @param string   $url  Permalink as WordPress resolved it.
+     * @param \WP_Post $post Post the entry describes.
+     * @return string
+     */
+    public function localize_sitemap_permalink(string $url, \WP_Post $post): string {
+        if ($this->provider !== 'wpml') {
+            return $url;
+        }
+
+        // WPML's own documented filters; the prefix rule does not apply to a
+        // third-party hook we are consuming rather than declaring.
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+        $lang = apply_filters('wpml_element_language_code', null, [
+            'element_id'   => $post->ID,
+            'element_type' => 'post_' . $post->post_type,
+        ]);
+
+        if (!is_string($lang) || $lang === '') {
+            return $url;
+        }
+
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+        $localized = apply_filters('wpml_permalink', $url, $lang, true);
+
+        return is_string($localized) && $localized !== '' ? $localized : $url;
+    }
+
     public function filter_sitemap_query_args(array $args): array {
         if ($this->provider === 'polylang') {
             // Polylang filters through parse_query, which suppress_filters does

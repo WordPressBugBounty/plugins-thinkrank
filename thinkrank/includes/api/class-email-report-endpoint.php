@@ -213,9 +213,13 @@ final class Email_Report_Endpoint extends WP_REST_Controller {
      * isn't allowed to set). Heavy sanitization happens in
      * Email_Report_Config::sanitize() so the cron path benefits too.
      *
-     * Don't add `sanitize_callback` here for nullable fields — REST
-     * runs sanitize before validate, and `esc_url_raw(null)` would
-     * coerce to '', defeating the point of preserving "unset".
+     * Don't add `sanitize_callback` here for nullable fields — the
+     * sanitized value is what reaches the handler, and
+     * `esc_url_raw(null)` coerces to '', defeating the point of
+     * preserving "unset". (WP_REST_Server::respond_to_request runs
+     * has_valid_params() first and sanitize_params() second, so the
+     * ['string','null'] type above is what admits the null; sanitizing
+     * afterwards would throw it away.)
      */
     private function save_args(): array {
         $nullable_string = ['type' => ['string', 'null']];

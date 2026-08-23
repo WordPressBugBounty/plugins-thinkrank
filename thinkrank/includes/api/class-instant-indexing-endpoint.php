@@ -160,7 +160,23 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
                             'required' => false,
                             'type' => 'integer',
                             'default' => -1
-                        ]
+                        ],
+                        // Both are read by get_submission_history() and neither
+                        // was registered, so they arrived uncoerced and
+                        // unbounded (#394).
+                        'page' => [
+                            'required' => false,
+                            'type' => 'integer',
+                            'default' => 1,
+                            'minimum' => 1,
+                        ],
+                        'per_page' => [
+                            'required' => false,
+                            'type' => 'integer',
+                            'default' => 20,
+                            'minimum' => 1,
+                            'maximum' => 100,
+                        ],
                     ]
                 ],
                 [

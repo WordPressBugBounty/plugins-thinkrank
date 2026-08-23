@@ -170,10 +170,22 @@ class Update_Site_Identity_Settings extends Ability_Base {
 
 		$result = $mgr->save_settings( 'site', null, $merged );
 
+		if ( $result ) {
+			return [
+				'success' => true,
+				'message' => __( 'Site identity settings updated.', 'thinkrank' ),
+			];
+		}
+
+		// The manager recorded why the save failed; pass it on rather than
+		// leaving the caller with a fixed string it cannot act on.
+		$reason = $mgr->get_last_save_error();
+
 		return [
-			'success' => (bool) $result,
-			'message' => (bool) $result
-				? __( 'Site identity settings updated.', 'thinkrank' )
+			'success' => false,
+			'message' => '' !== $reason
+				/* translators: %s: reason the save failed. */
+				? sprintf( __( 'Failed to update site identity settings: %s', 'thinkrank' ), $reason )
 				: __( 'Failed to update site identity settings.', 'thinkrank' ),
 		];
 	}

@@ -115,6 +115,7 @@ class Pillar_Content_Endpoint extends WP_REST_Controller {
 
         $taxonomies = get_object_taxonomies($post_type);
         $tax_query = [];
+        $has_terms = false;
 
         if (!empty($taxonomies)) {
             $tax_query['relation'] = 'OR';
@@ -133,6 +134,13 @@ class Pillar_Content_Endpoint extends WP_REST_Controller {
                     }
                 }
             }
+        }
+
+        // Without this the query kept a tax_query holding nothing but
+        // 'relation' => 'OR' whenever the post had no terms — $has_terms was
+        // assigned and never read.
+        if (!$has_terms) {
+            $tax_query = [];
         }
 
         $args = [

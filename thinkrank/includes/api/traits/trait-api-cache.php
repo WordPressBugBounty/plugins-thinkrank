@@ -217,9 +217,12 @@ trait API_Cache {
         // Sort parameters for consistent key generation
         ksort($params);
         
-        // Build key components
+        // Build key components. The prefix is stored with a trailing underscore
+        // so the "_transient_{$this->cache_prefix}%" LIKE patterns above keep a
+        // word boundary; implode() supplies the separator here, so trim it off
+        // rather than emitting keys like `thinkrank_seo_analytics__totals_<md5>`.
         $key_parts = [
-            $this->cache_prefix,
+            rtrim($this->cache_prefix, '_'),
             $endpoint,
             md5(wp_json_encode($params))
         ];

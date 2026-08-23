@@ -34,11 +34,51 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Sitemap_Generator extends Abstract_SEO_Manager {
 
     /**
+     * Memoised WooCommerce page IDs kept out of the sitemap. Null until resolved.
+     *
+     * @since 2.0.1
+     * @var int[]|null
+     */
+    private ?array $woocommerce_excluded_page_ids = null;
+
+    /**
+     * Inclusion flag -> the child sitemap it controls.
+     *
+     * Shared by the child-list builder and by the "did the caller change what
+     * the sitemap includes?" check in maybe_promote_to_index().
+     *
+     * @since 1.31.0
+     * @var array<string, string>
+     */
+    private const INCLUSION_CHILD_TYPES = [
+        'include_posts'      => 'posts',
+        'include_pages'      => 'pages',
+        'include_categories' => 'categories',
+        'include_tags'       => 'tags',
+    ];
+
+    /**
      * Supported sitemap types
      *
      * @since 1.0.0
      * @var array
      */
+    /**
+     * How many post IDs to hydrate at a time while walking the sitemap set.
+     *
+     * @since 2.0.1
+     * @var int
+     */
+    private const ID_WALK_CHUNK = 500;
+
+    /**
+     * How many term IDs to hydrate at a time while walking a taxonomy.
+     *
+     * @since 2.0.1
+     * @var int
+     */
+    private const TERM_WALK_CHUNK = 1000;
+
     private array $sitemap_types = [
         'posts' => [
             'name' => 'Posts',
@@ -282,6 +322,32 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             'last_generated' => $settings['last_generated'] ?? '',
             'total_urls' => $this->count_sitemap_urls($settings)
         ];
+    }
+
+    /**
+     * Sitemap keys outside the defaults.
+     *
+     * @since 2.0.1
+     *
+     * @return string[]
+     */
+    protected function additional_setting_keys(): array {
+        return ['selected_preset'];
+    }
+
+    /**
+     * Inclusion flags are per post type and per taxonomy.
+     *
+     * A site registering a `product` post type stores `include_product`; an
+     * enumerated list would go stale on the next registration, so the family
+     * is matched instead.
+     *
+     * @since 2.0.1
+     *
+     * @return string[]
+     */
+    protected function dynamic_setting_key_patterns(): array {
+        return ['/^include_[a-z0-9_]+$/', '/^exclude_[a-z0-9_]+$/'];
     }
 
     /**
@@ -540,7 +606,16 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             return;
         }
 
-        foreach (array_chunk($all_ids, 500) as $chunk) {
+        // Walk the ID list with a moving window rather than array_chunk().
+        // array_chunk() builds a second array holding every element again, so
+        // peak memory was twice the ID list — on a 100k-post site that is ~16MB
+        // where ~8MB is needed, and this walk is the one part of an otherwise
+        // well-bounded routine with no ceiling (#402).
+        $total = count($all_ids);
+
+        for ($offset = 0; $offset < $total; $offset += self::ID_WALK_CHUNK) {
+            $chunk = array_slice($all_ids, $offset, self::ID_WALK_CHUNK);
+
             $posts = get_posts($this->filter_query_args([
                 'post_type'   => $post_types,
                 'post_status' => 'publish',
@@ -551,7 +626,21 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
 
             foreach ($posts as $post) {
                 if ($this->should_include_in_sitemap($post, $settings)) {
-                    $url = get_permalink($post);
+                    /**
+                     * Filter a sitemap entry's permalink.
+                     *
+                     * The multilingual manager uses this to generate each
+                     * translation's URL in its OWN language: the sitemap query
+                     * deliberately runs with suppress_filters, and the cron
+                     * rebuild runs with no language context at all, so a bare
+                     * get_permalink() resolved every translation to the
+                     * default-language URL — N entries sharing one <loc> (#409).
+                     *
+                     * @since 2.0.1
+                     * @param string   $url  Permalink as WordPress resolved it.
+                     * @param \WP_Post $post Post the entry describes.
+                     */
+                    $url = apply_filters('thinkrank_sitemap_post_permalink', get_permalink($post), $post);
                     $lastmod = gmdate('c', strtotime($post->post_modified_gmt));
                     $priority = $this->calculate_intelligent_priority($post, $post->post_type);
                     $changefreq = $this->calculate_change_frequency($post, $post->post_type);
@@ -620,7 +709,12 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             return;
         }
 
-        foreach (array_chunk($all_ids, 1000) as $chunk) {
+        // Same moving window as the post walk above, for the same reason.
+        $total = count($all_ids);
+
+        for ($offset = 0; $offset < $total; $offset += self::TERM_WALK_CHUNK) {
+            $chunk = array_slice($all_ids, $offset, self::TERM_WALK_CHUNK);
+
             $terms = get_terms($this->filter_term_query_args([
                 'taxonomy'   => $taxonomy,
                 'include'    => $chunk,
@@ -1062,6 +1156,15 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return bool Whether to include in sitemap
      */
     private function should_include_in_sitemap(\WP_Post $post, array $settings): bool {
+        // The WooCommerce cart, checkout and account pages are transactional,
+        // never indexable, and generate_default_robots_rules() already emits a
+        // Disallow for each of them. Listing them here submitted URLs our own
+        // robots.txt blocks, which Search Console reports as "Submitted URL
+        // blocked by robots.txt". Yoast and Rank Math exclude the same three.
+        if (in_array($post->ID, $this->woocommerce_excluded_page_ids(), true)) {
+            return false;
+        }
+
         // Respect user setting for password protected content
         if (!empty($post->post_password) && !empty($settings['exclude_password_protected'])) {
             return false;
@@ -1096,6 +1199,40 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         }
 
         return true;
+    }
+
+    /**
+     * WooCommerce pages that must never reach the sitemap.
+     *
+     * Resolved through wc_get_page_id() so a store that moved or renamed its
+     * cart/checkout/account pages is still matched. Returns an empty list when
+     * WooCommerce is not active. Memoised — should_include_in_sitemap() runs
+     * once per post.
+     *
+     * @since 2.0.1
+     *
+     * @return int[] Page IDs to exclude.
+     */
+    private function woocommerce_excluded_page_ids(): array {
+        if ($this->woocommerce_excluded_page_ids !== null) {
+            return $this->woocommerce_excluded_page_ids;
+        }
+
+        $ids = [];
+
+        if (function_exists('wc_get_page_id')) {
+            foreach (['cart', 'checkout', 'myaccount'] as $page) {
+                $id = (int) wc_get_page_id($page);
+                // wc_get_page_id() returns -1 when the page is not configured.
+                if ($id > 0) {
+                    $ids[] = $id;
+                }
+            }
+        }
+
+        $this->woocommerce_excluded_page_ids = $ids;
+
+        return $ids;
     }
 
     /**
@@ -1621,6 +1758,20 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $urls_supplied = is_array($settings['sitemap_urls'] ?? null);
         $has_children = count($urls_supplied ? $settings['sitemap_urls'] : []) > 1;
 
+        // Which inclusion flags did the caller actually name? The child list is
+        // the only thing that reads them, and inheriting a saved one skipped
+        // that — so on an index-mode site the include_* flags were enforced
+        // nowhere but in the browser, where SitemapGeneration.js recomputes
+        // sitemap_urls itself. Every non-UI client, the shipped
+        // `update-sitemap-settings` ability included, saved the flag and changed
+        // nothing (#398). Read from the payload for the same reason as above:
+        // after the merge every saved flag would look like one the caller named.
+        $named_inclusions    = array_intersect(
+            array_keys(self::INCLUSION_CHILD_TYPES),
+            array_keys($settings)
+        );
+        $inclusions_supplied = (bool) $named_inclusions;
+
         // Inclusion flags may be absent from a partial payload (e.g. the manual
         // generate endpoint) — fall back to saved settings so synthesized child
         // sitemaps reflect the real include_posts/pages/categories choices.
@@ -1658,10 +1809,24 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
 
             // Inheriting the mode means inheriting its children too, unless the
             // caller named its own set.
+            $saved_children = (is_array($saved['sitemap_urls'] ?? null) ? $saved['sitemap_urls'] : []);
             if (!empty($settings['use_sitemap_index'])
                 && !$urls_supplied
-                && count((is_array($saved['sitemap_urls'] ?? null) ? $saved['sitemap_urls'] : [])) > 1) {
-                $settings['sitemap_urls'] = $saved['sitemap_urls'];
+                && count($saved_children) > 1) {
+                // A named inclusion flag is applied *to* the inherited list, not
+                // used to regenerate it. build_segmented_sitemap_urls() also adds
+                // a child for every public custom post type, so rebuilding here
+                // would make `{include_pages: false}` — one thing off — silently
+                // switch on children the saved list never had (an Elementor
+                // internal CPT, a WooCommerce product feed). Only the flags the
+                // caller actually named change anything.
+                $settings['sitemap_urls'] = $inclusions_supplied
+                    ? $this->apply_inclusion_flags_to_children($saved_children, $named_inclusions, $inclusions)
+                    : $saved_children;
+
+                // The children are resolved either way — including when the
+                // caller switched the last one off, which leaves a bare index and
+                // is what they asked for.
                 $has_children = true;
             }
         }
@@ -1820,47 +1985,117 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     public function build_segmented_sitemap_urls(array $inclusions): array {
         $pattern = $inclusions['custom_url_pattern'] ?? 'sitemap-{type}.xml';
 
-        $entry = static function (string $url, string $type): array {
-            return [
-                'url'          => $url,
-                'type'         => $type,
-                'enabled'      => true,
-                'last_checked' => null,
-                'status'       => 'unknown',
-            ];
-        };
-        $child = static function (string $type) use ($pattern, $entry): array {
-            $file = str_replace('{type}', $type, $pattern);
-            if (strpos($file, '/') !== 0) {
-                $file = '/' . $file;
+        $urls = [$this->sitemap_child_entry('/sitemap_index.xml', 'index')];
+
+        foreach (self::INCLUSION_CHILD_TYPES as $flag => $type) {
+            if (!empty($inclusions[$flag])) {
+                $urls[] = $this->build_child_sitemap_entry($type, $pattern);
             }
-            return $entry($file, $type);
-        };
-
-        $urls = [$entry('/sitemap_index.xml', 'index')];
-
-        if (!empty($inclusions['include_posts'])) {
-            $urls[] = $child('posts');
-        }
-        if (!empty($inclusions['include_pages'])) {
-            $urls[] = $child('pages');
-        }
-        if (!empty($inclusions['include_categories'])) {
-            $urls[] = $child('categories');
-        }
-        if (!empty($inclusions['include_tags'])) {
-            $urls[] = $child('tags');
         }
 
         // Public custom post types each get a child sitemap (parity with the
         // "complete" preset and with Rank Math, which lists every public CPT).
         foreach (get_post_types(['public' => true, '_builtin' => false], 'names') as $cpt) {
             if ($this->should_include_post_type($cpt)) {
-                $urls[] = $child($cpt);
+                $urls[] = $this->build_child_sitemap_entry($cpt, $pattern);
             }
         }
 
         return $urls;
+    }
+
+    /**
+     * Apply only the inclusion flags the caller named to an existing child list.
+     *
+     * The narrow counterpart to build_segmented_sitemap_urls(): that one
+     * regenerates the whole set from scratch, which is right when there is no set
+     * yet and wrong when there is. Rebuilding an existing list would add a child
+     * for every public custom post type it had never contained, so a payload that
+     * switches one thing off would switch others on. Here a flag adds or removes
+     * exactly its own child and leaves every other entry — custom post types,
+     * hand-added URLs, per-child enabled/status state — untouched (#398).
+     *
+     * @since 1.31.0
+     *
+     * @param array    $children         Existing child sitemap entries.
+     * @param string[] $named_inclusions Inclusion flag keys present in the payload.
+     * @param array    $inclusions       Merged settings, for the resolved flag
+     *                                   values and custom_url_pattern.
+     * @return array Updated child sitemap entries.
+     */
+    private function apply_inclusion_flags_to_children(
+        array $children,
+        array $named_inclusions,
+        array $inclusions
+    ): array {
+        $pattern = $inclusions['custom_url_pattern'] ?? 'sitemap-{type}.xml';
+
+        foreach ($named_inclusions as $flag) {
+            $type = self::INCLUSION_CHILD_TYPES[$flag];
+
+            $present = false;
+            foreach ($children as $entry) {
+                if (($entry['type'] ?? '') === $type) {
+                    $present = true;
+                    break;
+                }
+            }
+
+            if (empty($inclusions[$flag])) {
+                if ($present) {
+                    $children = array_values(array_filter(
+                        $children,
+                        static function ($entry) use ($type): bool {
+                            return (is_array($entry) ? ($entry['type'] ?? '') : '') !== $type;
+                        }
+                    ));
+                }
+                continue;
+            }
+
+            if (!$present) {
+                $children[] = $this->build_child_sitemap_entry($type, $pattern);
+            }
+        }
+
+        return $children;
+    }
+
+    /**
+     * Build one child sitemap entry, resolving its filename from the url pattern.
+     *
+     * @since 1.31.0
+     *
+     * @param string $type    Child sitemap type (posts, pages, a post type name).
+     * @param string $pattern Filename pattern containing {type}.
+     * @return array Sitemap URL config.
+     */
+    private function build_child_sitemap_entry(string $type, string $pattern): array {
+        $file = str_replace('{type}', $type, $pattern);
+        if (strpos($file, '/') !== 0) {
+            $file = '/' . $file;
+        }
+
+        return $this->sitemap_child_entry($file, $type);
+    }
+
+    /**
+     * The shape generate_multiple_sitemaps() expects of a sitemap_urls entry.
+     *
+     * @since 1.31.0
+     *
+     * @param string $url  Sitemap path.
+     * @param string $type Entry type.
+     * @return array Sitemap URL config.
+     */
+    private function sitemap_child_entry(string $url, string $type): array {
+        return [
+            'url'          => $url,
+            'type'         => $type,
+            'enabled'      => true,
+            'last_checked' => null,
+            'status'       => 'unknown',
+        ];
     }
 
     /**

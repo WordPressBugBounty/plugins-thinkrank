@@ -23,6 +23,7 @@ if (!defined('ABSPATH')) {
 use ThinkRank\SEO\Schema_Management_System;
 use ThinkRank\SEO\Schema_Input_Validator;
 use ThinkRank\API\Traits\Rate_Limiter;
+use ThinkRank\API\Traits\Context_Authorization;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -30,6 +31,7 @@ use WP_Error;
 
 // Load Rate Limiter trait
 require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-rate-limiter.php';
+require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-context-authorization.php';
 
 /**
  * Schema API Endpoints Class
@@ -43,6 +45,7 @@ require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-rate-limiter.php'
 class Schema_Endpoint extends WP_REST_Controller {
 
     use Rate_Limiter;
+    use Context_Authorization;
 
     /**
      * Maximum number of items a single /bulk request may process synchronously.
@@ -164,7 +167,8 @@ class Schema_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'GET',
                     'callback' => [$this, 'get_deployed_schemas'],
-                    'permission_callback' => [$this, 'check_read_permissions']
+                    'permission_callback' => [$this, 'check_read_permissions'],
+                    'args' => $this->get_context_route_args()
                 ]
             ]
         );
@@ -269,7 +273,8 @@ class Schema_Endpoint extends WP_REST_Controller {
                 [
                     'methods' => 'GET',
                     'callback' => [$this, 'get_settings'],
-                    'permission_callback' => [$this, 'check_read_permissions']
+                    'permission_callback' => [$this, 'check_read_permissions'],
+                    'args' => $this->get_context_route_args()
                 ],
                 [
                     'methods' => 'POST',
@@ -901,15 +906,15 @@ class Schema_Endpoint extends WP_REST_Controller {
      */
     public function get_deployed_schemas(WP_REST_Request $request) {
         try {
-            $context_type = $request->get_param('context_type') ?? 'site';
-            $context_id = $request->get_param('context_id');
-
-            // Convert context_id to int if it's a valid numeric string, otherwise null
-            if ($context_id !== null && is_numeric($context_id)) {
-                $context_id = (int) $context_id;
-            } else {
-                $context_id = null;
+            // SECURITY: this route reads the schema deployed against a specific
+            // object. The thinkrank_schema capability authorises the section, not
+            // every post on the site, so the object itself has to be authorised
+            // before the read (#385).
+            $context = $this->resolve_request_context($request);
+            if (is_wp_error($context)) {
+                return $context;
             }
+            [$context_type, $context_id] = $context;
 
             $deployed_schemas = $this->schema_manager->get_deployed_schemas($context_type, $context_id);
 
@@ -1500,61 +1505,6 @@ class Schema_Endpoint extends WP_REST_Controller {
     }
 
     /**
-     * Validate context type and ID
-     *
-     * @since 1.0.0
-     *
-     * @param string   $context_type Context type
-     * @param int|null $context_id   Context ID
-     * @return bool Validation status
-     */
-    private function validate_context(string $context_type, ?int $context_id) {
-        $valid_types = ['site', 'post', 'page', 'product'];
-
-        $invalid = new WP_Error(
-            'invalid_context',
-            'Invalid context type or ID provided',
-            ['status' => 400]
-        );
-
-        if (!in_array($context_type, $valid_types, true)) {
-            return $invalid;
-        }
-
-        if ($context_type !== 'site' && (!$context_id || $context_id <= 0)) {
-            return $invalid;
-        }
-
-        if ($context_id && !get_post($context_id)) {
-            return $invalid;
-        }
-
-        // SECURITY: everything above establishes that the context *exists*, not
-        // that this caller may see it. `edit_post` is a meta capability, so
-        // map_meta_cap() resolves authorship, published state and
-        // edit_others_posts for this specific post — the same check
-        // Schema_Input_Validator::validate_context_ownership() makes on the
-        // write paths, and the one class-social-media-endpoint.php already makes
-        // on its own context routes. Without it a delegated Schema Manager can
-        // walk context_id and read SEO data for drafts, pending posts and other
-        // authors' content.
-        //
-        // Site context is deliberately left to the route's capability gate.
-        // The write paths demand manage_options for it, but applying that here
-        // would stop a delegated Schema Manager reading site-level schema at
-        // all, which is the point of delegating the section.
-        if ($context_type !== 'site' && !current_user_can('edit_post', $context_id)) {
-            return new WP_Error(
-                'rest_forbidden',
-                'You are not allowed to access this content.',
-                ['status' => 403]
-            );
-        }
-
-        return true;
-    }
-
-    /**
      * Generate schema preview
      *
      * @since 1.0.0
@@ -1731,8 +1681,11 @@ class Schema_Endpoint extends WP_REST_Controller {
                 'description' => 'Context ID (not required for site context)'
             ],
             'schema_types' => [
-                'required' => false,
+                // generate_schema() rejects a missing or empty value with a 400,
+                // so the schema has to say so too.
+                'required' => true,
                 'type' => 'array',
+                'minItems' => 1,
                 'items' => [
                     'type' => 'string',
                     'enum' => [
@@ -1936,8 +1889,13 @@ class Schema_Endpoint extends WP_REST_Controller {
      */
     public function get_settings(WP_REST_Request $request) {
         try {
-            $context_type = $request->get_param('context_type') ?? 'site';
-            $context_id = $request->get_param('context_id') ?? null;
+            // SECURITY: the settings this returns are per-object. save_settings()
+            // already authorises the object; the read has to as well (#385).
+            $context = $this->resolve_request_context($request);
+            if (is_wp_error($context)) {
+                return $context;
+            }
+            [$context_type, $context_id] = $context;
 
             // Get settings from schema manager
             $settings = $this->schema_manager->get_settings($context_type, $context_id);

@@ -44,7 +44,7 @@ class Database_Schema {
      * @since 1.0.0
      * @var string
      */
-    private string $db_version = '1.9.0';
+    private string $db_version = '1.9.2';
 
     /**
      * Widest single indexed COLUMN InnoDB accepts on a COMPACT/REDUNDANT row
@@ -92,6 +92,32 @@ class Database_Schema {
      * @var string
      */
     private const TABLES_VERIFIED_TRANSIENT = 'thinkrank_schema_verified';
+
+    /**
+     * Option holding why the last create_tables() run left a table missing.
+     *
+     * A rejected CREATE TABLE is the one schema failure the plugin cannot
+     * recover from on its own: needs_update() re-runs creation on every request
+     * precisely because a missing table is normally self-healing, so a database
+     * that refuses the statement loops silently forever while every settings
+     * screen fails. dbDelta swallows the error, so capture it here — it names
+     * the cause (denied CREATE privilege, unsupported collation, index width)
+     * that nothing else on the site reports.
+     *
+     * @since 1.32.1
+     * @var string
+     */
+    private const CREATE_FAILURE_OPTION = 'thinkrank_schema_create_error';
+
+    /**
+     * Throttle for the create-failure log line. Creation is re-attempted on
+     * every request while a table is missing, and one log entry per request
+     * per table would bury the error it is meant to surface.
+     *
+     * @since 1.32.1
+     * @var string
+     */
+    private const CREATE_FAILURE_LOGGED_TRANSIENT = 'thinkrank_schema_create_error_logged';
 
     /**
      * Database table definitions with specifications
@@ -277,10 +303,14 @@ class Database_Schema {
         $this->wpdb = $wpdb;
 
         // Set database configuration
-        $this->db_config = [
-            'charset' => $wpdb->charset ?: 'utf8mb4',
-            'collate' => $wpdb->collate ?: 'utf8mb4_unicode_ci'
-        ];
+        // Ask WordPress for the clause rather than assembling one. Charset and
+        // collation are not independent: DB_COLLATE is empty on most installs,
+        // so a per-value fallback pairs the site's real charset with a default
+        // collation that may not belong to it — `CHARACTER SET utf8 COLLATE
+        // utf8mb4_unicode_ci` is rejected outright (MySQL 1253), and dbDelta
+        // reports nothing, so every table silently fails to be created.
+        // get_charset_collate() omits COLLATE when there is none to state.
+        $this->db_config = ['charset_collate' => $wpdb->get_charset_collate()];
     }
 
     /**
@@ -322,8 +352,13 @@ class Database_Schema {
                     // Add constraints if needed
                     $this->add_table_constraints($table_name);
                 } else {
+                    // dbDelta reports nothing when the database refuses the
+                    // statement, so wpdb's own error is the only account of why.
+                    $db_error = (string) $this->wpdb->last_error;
+
                     $results['tables_failed'][] = $full_table_name;
-                    $results['errors'][] = "Failed to create table: {$full_table_name}";
+                    $results['errors'][] = "Failed to create table: {$full_table_name}"
+                        . ('' !== $db_error ? ' — ' . $db_error : '');
                     $results['success'] = false;
                 }
             } catch (\Exception $e) {
@@ -337,10 +372,19 @@ class Database_Schema {
         // replacements are in place.
         $this->drop_replaced_wide_indexes();
 
+        // Evict REST envelope keys that earlier saves stored as settings.
+        $this->purge_envelope_setting_rows();
+
+        // And every other key no manager declares, stored the same way.
+        $this->purge_unknown_setting_rows();
+
         // Update database version
         if ($results['success']) {
             update_option('thinkrank_seo_db_version', $this->db_version);
             update_option('thinkrank_seo_db_created', current_time('mysql'));
+            delete_option(self::CREATE_FAILURE_OPTION);
+        } else {
+            $this->record_create_failure($results['errors']);
         }
 
         // The schema just changed, so any cached "verified complete" answer is
@@ -348,6 +392,47 @@ class Database_Schema {
         delete_transient(self::TABLES_VERIFIED_TRANSIENT);
 
         return $results;
+    }
+
+    /**
+     * Keep the reason a table could not be created, and say it out loud once.
+     *
+     * @since 1.32.1
+     *
+     * @param string[] $errors Failure messages from create_tables().
+     * @return void
+     */
+    private function record_create_failure(array $errors): void {
+        $reason = implode('; ', array_filter($errors));
+
+        if ('' === $reason) {
+            return;
+        }
+
+        update_option(self::CREATE_FAILURE_OPTION, $reason, false);
+
+        if (get_transient(self::CREATE_FAILURE_LOGGED_TRANSIENT)) {
+            return;
+        }
+
+        set_transient(self::CREATE_FAILURE_LOGGED_TRANSIENT, 1, HOUR_IN_SECONDS);
+
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- deliberate diagnostic; the UI can only report that a table is missing, never why.
+        error_log('ThinkRank [schema]: table creation failed — ' . $reason);
+    }
+
+    /**
+     * Why the last table creation attempt failed, if it did.
+     *
+     * Read by the SEO managers so a "settings table does not exist" message can
+     * name the database error behind it instead of guessing at causes.
+     *
+     * @since 1.32.1
+     *
+     * @return string Failure reason, or '' if creation last succeeded.
+     */
+    public static function get_last_create_failure(): string {
+        return (string) get_option(self::CREATE_FAILURE_OPTION, '');
     }
 
     /**
@@ -595,7 +680,7 @@ class Database_Schema {
      */
     private function get_table_sql(string $table_name): string {
         $full_table_name = $this->get_table_name($table_name);
-        $charset_collate = "DEFAULT CHARACTER SET {$this->db_config['charset']} COLLATE {$this->db_config['collate']}";
+        $charset_collate = $this->db_config['charset_collate'];
 
         switch ($table_name) {
             // SEO Tables
@@ -1458,6 +1543,154 @@ class Database_Schema {
      *
      * @return void
      */
+    /**
+     * Delete settings rows that hold a REST envelope instead of a setting.
+     *
+     * A caller that posted a settings endpoint's whole response body back as
+     * `settings` wrote `settings`, `schema`, `context_type` and `context_id`
+     * as rows. get_settings() returns every stored row, so those four then
+     * round-tripped into every later request — a serialized copy of the
+     * settings plus their JSON schema, several KB per save. Nothing reads
+     * them; sanitize_settings() now drops them on the way in, and this clears
+     * what is already stored.
+     *
+     * @since 2.0.1
+     *
+     * @return void
+     */
+    private function purge_envelope_setting_rows(): void {
+        $table = $this->get_table_name('seo_settings');
+
+        if (!$this->table_exists($table)) {
+            return;
+        }
+
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- one-off cleanup; the table name comes from $wpdb->prefix and the keys are placeholders.
+        $this->wpdb->query(
+            $this->wpdb->prepare(
+                "DELETE FROM `{$table}` WHERE `setting_key` IN (%s, %s, %s, %s)",
+                'settings',
+                'schema',
+                'context_type',
+                'context_id'
+            )
+        );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+        if (function_exists('wp_cache_flush_group')) {
+            wp_cache_flush_group('thinkrank_seo');
+        }
+    }
+
+    /**
+     * Settings categories owned by an SEO manager, and the class that owns them.
+     *
+     * Used only by purge_unknown_setting_rows(). A category absent here is left
+     * alone rather than guessed at.
+     *
+     * @since 2.0.1
+     *
+     * @var array<string, string>
+     */
+    private const SETTINGS_CATEGORY_MANAGERS = [
+        'site_identity'                  => \ThinkRank\SEO\Site_Identity_Manager::class,
+        'sitemap'                        => \ThinkRank\SEO\Sitemap_Generator::class,
+        'image_seo'                      => \ThinkRank\SEO\Image_SEO_Manager::class,
+        'schema_management_system'       => \ThinkRank\SEO\Schema_Management_System::class,
+        'llms_txt'                       => \ThinkRank\SEO\LLMs_Txt_Manager::class,
+        'social_meta'                    => \ThinkRank\SEO\Social_Meta_Manager::class,
+        'seo_settings'                   => \ThinkRank\SEO\SEO_Settings_Manager::class,
+        'content_optimization_manager'   => \ThinkRank\SEO\Content_Optimization_Manager::class,
+        'performance_monitoring_manager' => \ThinkRank\SEO\Performance_Monitoring_Manager::class,
+        'ai_content_analyzer'            => \ThinkRank\SEO\AI_Content_Analyzer::class,
+    ];
+
+    /**
+     * Delete settings rows holding keys no manager declares.
+     *
+     * The envelope purge above cleared four specific keys; this clears the
+     * general case behind them (#452). Any key a client posted was written as
+     * a row, and because get_settings() returns every row for a category — and
+     * save_settings() merges what it read before writing — a stray was echoed
+     * into every later response and rewritten on every save, so it never aged
+     * out on its own.
+     *
+     * Deliberately conservative: a category with no manager in the map, and a
+     * manager that cannot be constructed, are skipped rather than cleared, and
+     * the judgement is the manager's own accepts_setting_key() — the same gate
+     * the save path now applies, so the migration cannot delete a row the
+     * plugin would accept today.
+     *
+     * @since 2.0.1
+     *
+     * @return void
+     */
+    private function purge_unknown_setting_rows(): void {
+        $table = $this->get_table_name('seo_settings');
+
+        if (!$this->table_exists($table)) {
+            return;
+        }
+
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- one-off cleanup; the table name comes from $wpdb->prefix and every value is a placeholder.
+        foreach (self::SETTINGS_CATEGORY_MANAGERS as $category => $class) {
+            if (!class_exists($class)) {
+                continue;
+            }
+
+            try {
+                $manager = new $class();
+            } catch (\Throwable $e) {
+                continue;
+            }
+
+            if (!method_exists($manager, 'accepts_setting_key')) {
+                continue;
+            }
+
+            $rows = $this->wpdb->get_results(
+                $this->wpdb->prepare(
+                    "SELECT DISTINCT `setting_key`, `context_type` FROM `{$table}` WHERE `setting_category` = %s",
+                    $category
+                )
+            );
+
+            if (empty($rows)) {
+                continue;
+            }
+
+            $unknown = [];
+
+            foreach ($rows as $row) {
+                $context = (string) $row->context_type;
+
+                if (!$manager->accepts_setting_key((string) $row->setting_key, $context)) {
+                    $unknown[] = (string) $row->setting_key;
+                }
+            }
+
+            $unknown = array_values(array_unique($unknown));
+
+            if (empty($unknown)) {
+                continue;
+            }
+
+            $placeholders = implode(', ', array_fill(0, count($unknown), '%s'));
+
+            $this->wpdb->query(
+                $this->wpdb->prepare(
+                    "DELETE FROM `{$table}` WHERE `setting_category` = %s AND `setting_key` IN ({$placeholders})",
+                    array_merge([$category], $unknown)
+                )
+            );
+        }
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+        if (function_exists('wp_cache_flush_group')) {
+            wp_cache_flush_group('thinkrank_seo');
+        }
+    }
+
     private function drop_replaced_wide_indexes(): void {
         foreach (self::REPLACED_WIDE_INDEXES as $table => $renames) {
             $full_table_name = $this->get_table_name($table);

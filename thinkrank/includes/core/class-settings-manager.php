@@ -455,6 +455,21 @@ class Settings_Manager {
      *
      * @return array Categories information
      */
+    /**
+     * The setting keys a category defines.
+     *
+     * Exposed so callers can reject keys a category does not define instead of
+     * persisting whatever they are handed (#395).
+     *
+     * @since 2.0.1
+     *
+     * @param string $category Category name.
+     * @return string[] Setting keys, or [] when the category is unknown here.
+     */
+    public function get_category_keys(string $category): array {
+        return $this->settings_categories[$category]['keys'] ?? [];
+    }
+
     public function get_categories(): array {
         $categories = [];
 
@@ -630,6 +645,26 @@ class Settings_Manager {
      */
     private function get_core_settings_by_category(string $category): array {
         $category_config = $this->settings_categories[$category];
+
+        // Prime the option cache in one query before the loop. Every
+        // thinkrank_* option is autoload=off, so WordPress cannot serve them
+        // from `alloptions` and each Settings->get() below was its own
+        // round-trip — 16 of them on every anonymous front-end request, on
+        // pages that use none of the values. Settings::get() memoizes within a
+        // request, so only the first read of each key ever hit the database;
+        // this collapses those first reads into a single query (#393).
+        //
+        // wp_prime_option_caches() is WP 6.4+; the plugin supports 6.0, so an
+        // older site simply keeps the previous behaviour.
+        if (function_exists('wp_prime_option_caches')) {
+            wp_prime_option_caches(array_map(
+                static function (string $key): string {
+                    return 'thinkrank_' . $key;
+                },
+                $category_config['keys']
+            ));
+        }
+
         $settings = [];
 
         foreach ($category_config['keys'] as $key) {

@@ -37,6 +37,24 @@ class Image_SEO_Endpoint extends WP_REST_Controller {
     use CSRF_Protection;
 
     /**
+     * Sanitizer per schema type, for settings args built from the schema.
+     *
+     * Only scalar types appear here. An array or object type deliberately gets
+     * no `sanitize_callback` — core falls back to `rest_parse_request_arg`,
+     * which sanitizes against the declared schema, where a string sanitizer
+     * would flatten the value to "Array" or "".
+     *
+     * @since 2.0.1
+     * @var array<string, string>
+     */
+    private const SANITIZERS = [
+        'boolean' => 'rest_sanitize_boolean',
+        'string'  => 'sanitize_text_field',
+        'integer' => 'absint',
+        'number'  => 'floatval',
+    ];
+
+    /**
      * Image SEO Manager instance
      *
      * @since 1.0.0
@@ -130,6 +148,11 @@ class Image_SEO_Endpoint extends WP_REST_Controller {
                             'type' => 'integer',
                             'required' => false,
                             'default' => 50,
+                            // Bounded: ?limit=100000 walked the whole media
+                            // library synchronously, and with alt_source=ai
+                            // that is one AI call per image (#394).
+                            'minimum' => 1,
+                            'maximum' => 500,
                             'sanitize_callback' => 'absint'
                         ],
                         'overwrite' => [
@@ -236,8 +259,28 @@ class Image_SEO_Endpoint extends WP_REST_Controller {
             $args[$key] = [
                 'type' => $config['type'],
                 'required' => false,
-                'sanitize_callback' => $config['type'] === 'boolean' ? 'rest_sanitize_boolean' : 'sanitize_text_field'
             ];
+
+            // Pick the sanitizer from the declared type. `sanitize_text_field`
+            // for everything non-boolean was a trap for the first array- or
+            // object-typed setting added to the schema: it casts an array to
+            // the string "Array" (PHP notice) or an empty string, so the value
+            // would arrive at the handler destroyed rather than rejected.
+            // A type with no scalar sanitizer gets none — core then falls back
+            // to `rest_parse_request_arg`, which sanitizes against this very
+            // schema instead of flattening it.
+            $sanitizer = self::SANITIZERS[$config['type']] ?? null;
+
+            if (null !== $sanitizer) {
+                $args[$key]['sanitize_callback'] = $sanitizer;
+            }
+
+            // A structural type is unusable to core without its shape.
+            foreach (['items', 'properties', 'additionalProperties'] as $keyword) {
+                if (isset($config[$keyword])) {
+                    $args[$key][$keyword] = $config[$keyword];
+                }
+            }
 
             // Carry through any constraint the schema already declares. Copying
             // only type/required/sanitize_callback silently dropped the

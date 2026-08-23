@@ -131,8 +131,14 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         $platform_spec = $this->supported_platforms[$platform];
         $og_tags = [];
 
-        // Determine OG type based on context
-        $og_type = $this->determine_og_type($context, $data);
+        // OG type: the type the user explicitly chose, otherwise derived from
+        // the context. This used to call determine_og_type() unconditionally,
+        // overwriting the value extract_social_content_data() had already read
+        // from the setting — so the Content Type dropdown, the abilities API
+        // and every imported og:type were silently discarded (#398).
+        $og_type = ($data['type'] ?? '') !== ''
+            ? $data['type']
+            : $this->determine_og_type($context, $data);
         $og_tags['og:type'] = $og_type;
 
         // Required OG tags
@@ -141,7 +147,11 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         // search results and does not apply to the og:title social tag, so use the
         // resolved title verbatim (falling back to the site name when empty).
         $og_tags['og:title'] = ($data['title'] ?? '') !== '' ? $data['title'] : get_bloginfo('name');
-        $og_tags['og:url'] = $data['url'] ?? $this->get_current_url();
+        // `?:` rather than `??`: the key is always present, seeded as '', so the
+        // null-coalesce could never reach the fallback. og:url was emitted empty
+        // and then dropped by the !empty() guard in output_social_og_tags(),
+        // which is why archives carried no og:url at all (#388).
+        $og_tags['og:url'] = ($data['url'] ?? '') !== '' ? $data['url'] : $this->get_current_url();
         
         // Image handling with optimization
         if (!empty($data['image'])) {
@@ -212,13 +222,20 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         $twitter_title = ($data['twitter_title'] ?? '') !== '' ? $data['twitter_title'] : ($data['title'] ?? '');
         $twitter_tags['twitter:title'] = $twitter_title !== '' ? $twitter_title : get_bloginfo('name');
 
-        // Recommended tags
-        if (!empty($data['description'])) {
-            $twitter_tags['twitter:description'] = $this->optimize_description_for_platform($data['description'], 'twitter');
+        // Recommended tags. Prefer a per-object Twitter-specific description,
+        // falling back to the resolved OG/meta description — mirroring the
+        // twitter:title cascade above. This lookup did not exist, so a Twitter
+        // description saved on the Social tab persisted, read back, and was
+        // then dropped in favour of the OG description (#406).
+        $twitter_description = ($data['twitter_description'] ?? '') !== ''
+            ? $data['twitter_description']
+            : (string) ($data['description'] ?? '');
+        if ($twitter_description !== '') {
+            $twitter_tags['twitter:description'] = $this->optimize_description_for_platform($twitter_description, 'twitter');
         }
 
         // Image handling - prioritize Twitter-specific image
-        $twitter_image = !empty($data['twitter_image']) ? $data['twitter_image'] : $data['image'];
+        $twitter_image = !empty($data['twitter_image']) ? $data['twitter_image'] : ($data['image'] ?? '');
         if (!empty($twitter_image)) {
             $optimized_image = $this->optimize_image_for_platform($twitter_image, 'twitter');
             $twitter_tags['twitter:image'] = $optimized_image['url'];
@@ -1407,13 +1424,22 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             'url' => '',
             'image' => '',
             'twitter_title' => '', // Separate field for a Twitter-specific title
+            'twitter_description' => '', // Separate field for a Twitter-specific description
             'twitter_image' => '', // Separate field for Twitter-specific images
-            'type' => 'website',
+            // '' rather than 'website' means "derive it from the context".
+            // Seeding a concrete type here made an explicit choice
+            // indistinguishable from the shipped default (#398).
+            'type' => '',
+            'twitter_card_type' => '',
             'author' => [],
             'published_time' => '',
             'modified_time' => '',
             'site_name' => $settings['og_site_name'] ?? get_bloginfo('name')
         ];
+
+        // Explicit type choices, resolved once for whichever context this is.
+        $data['type']              = $this->configured_og_type($settings);
+        $data['twitter_card_type'] = $this->configured_twitter_card_type($settings);
 
         if ($context_type === 'site') {
             // Site-wide data with Social Media tab settings priority.
@@ -1439,8 +1465,14 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             // (class-seo-manager.php) and the WebSite schema, which both include
             // the trailing slash. A bare home_url() would key a different URL in
             // social caches than the canonical.
-            $data['url'] = home_url('/');
-            $data['type'] = $settings['og_type'] ?? 'website';
+            //
+            // Except when this is not the site home. detect_current_context()
+            // collapses is_home() && !is_front_page() into 'homepage', so a
+            // static posts page — and page 2 of any blog listing — advertised
+            // the site home as its og:url while its own canonical said
+            // otherwise (#397).
+            $data['url'] = self::current_home_url();
+
             // Leaving this null lets generate_og_tags() fall through to
             // get_og_locale(), which is what every other context already does.
             //
@@ -1491,6 +1523,16 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                     $post->ID
                 );
 
+                // Per-post Twitter-specific description. twitter:description
+                // falls back to the OG/meta description when this is empty, so
+                // only capture it here; generate_twitter_tags() applies the
+                // fallback. There was no counterpart to the title lookup above,
+                // so the stored value never entered $data at all (#406).
+                $data['twitter_description'] = \ThinkRank\SEO\Pattern_Resolver::resolve_value(
+                    (string) get_post_meta($post->ID, '_thinkrank_twitter_description', true),
+                    $post->ID
+                );
+
                 // Title priority: per-post OG override > effective SEO title
                 // (document <title> / metabox preview) > post title.
                 if ($og_title_override !== '') {
@@ -1509,8 +1551,12 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 } else {
                     $data['description'] = $this->get_social_description($post);
                 }
-                $data['url'] = get_permalink($post);
-                $data['type'] = $settings['og_type'] ?? $this->determine_og_type($context_type, []);
+                // The canonical carries the <!--nextpage--> sub-page and the
+                // comment page; og:url said page 1 regardless, which is the
+                // same contradiction #397 fixed for the blog listing, one page
+                // type over (#397 review).
+                $data['url'] = self::with_singular_page((string) get_permalink($post));
+
                 $data['published_time'] = get_the_date('c', $post);
                 $data['modified_time'] = get_the_modified_date('c', $post);
                 $data['post_id'] = $post->ID;
@@ -1540,9 +1586,171 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             // configured default OG image.
             $data['image'] = $this->get_og_image_for_context($settings, null);
             $data['twitter_image'] = $this->get_twitter_image_for_context($settings, null);
+
+            // A term archive owns SEO values of its own, and the caller has
+            // already resolved them into the fallbacks — the same strings
+            // rendered as the document <title> and the description tag. Leaving
+            // title and description empty here published the bare site name as
+            // og:title on every archive and no og:description at all, so a term
+            // SEO title never reached a social surface (#386).
+            // Archives have a URL of their own. The seed leaves it '', and the
+            // og:url emitter could not fall through to get_current_url() while
+            // the key existed, so no archive carried an og:url at all (#388).
+            // A search archive's URL is the search link, not the bare request
+            // path — get_current_url() reads $wp->request, which is empty for a
+            // search served from the front page, so og:url pointed at the site
+            // home while the page was a search result.
+            // The non-search archive URL is the page's own canonical, so og:url
+            // and <link rel="canonical"> agree on the paginated page rather than
+            // both claiming page 1 (#397).
+            // `?:` keeps the #388 guarantee that an archive always carries an
+            // og:url: get_non_singular_canonical_url() returns '' for a view it
+            // has no canonical rule for, and the request URL is still better
+            // than no tag at all.
+            $data['url'] = is_search()
+                ? get_search_link()
+                : (self::current_archive_url() ?: $this->get_current_url());
+
+            $term    = get_queried_object();
+            $term_id = ($term instanceof \WP_Term) ? (int) $term->term_id : 0;
+
+            $og_title_override       = '';
+            $og_description_override = '';
+
+            if ($term_id > 0) {
+                // Terms carry the same social override keys as posts — the
+                // abilities API and the metabox both write them.
+                $og_title_override = Pattern_Resolver::resolve_term_value(
+                    (string) get_term_meta($term_id, '_thinkrank_og_title', true),
+                    $term_id
+                );
+                $og_description_override = Pattern_Resolver::resolve_term_value(
+                    (string) get_term_meta($term_id, '_thinkrank_og_description', true),
+                    $term_id
+                );
+
+                // Twitter Cards fall back to og:title when this is empty, so
+                // only capture it; generate_twitter_tags() applies the fallback.
+                $data['twitter_title'] = Pattern_Resolver::resolve_term_value(
+                    (string) get_term_meta($term_id, '_thinkrank_twitter_title', true),
+                    $term_id
+                );
+                $data['twitter_description'] = Pattern_Resolver::resolve_term_value(
+                    (string) get_term_meta($term_id, '_thinkrank_twitter_description', true),
+                    $term_id
+                );
+
+                $term_og_image = (string) get_term_meta($term_id, '_thinkrank_og_image', true);
+                if ('' !== $term_og_image) {
+                    $data['image'] = $term_og_image;
+                }
+
+                $term_twitter_image = (string) get_term_meta($term_id, '_thinkrank_twitter_image', true);
+                if ('' !== $term_twitter_image) {
+                    $data['twitter_image'] = $term_twitter_image;
+                }
+            }
+
+            // Author, date and search archives have no ThinkRank-managed title
+            // to inherit — Author_Archives_Manager owns the author one, and the
+            // rest have no template — so the caller's fallback arrives empty and
+            // og:title used to collapse to the bare site name. Fall through to
+            // what the page itself is called (#388).
+            if ($og_title_override !== '') {
+                $data['title'] = $og_title_override;
+            } elseif ($fallback_title !== null && $fallback_title !== '') {
+                $data['title'] = $fallback_title;
+            } else {
+                $data['title'] = $this->archive_fallback_title();
+            }
+
+            if ($og_description_override !== '') {
+                $data['description'] = $og_description_override;
+            } elseif ($fallback_description !== null && $fallback_description !== '') {
+                $data['description'] = $fallback_description;
+            } else {
+                $data['description'] = $this->archive_fallback_description($term_id);
+            }
         }
 
         return $data;
+    }
+
+    /**
+     * The canonical URL of the archive currently being rendered.
+     *
+     * Deliberately the same value class-seo-manager.php puts in
+     * <link rel="canonical">: an og:url that disagrees with the canonical is
+     * the bug this is fixing, so the two read from one source.
+     *
+     * @since 2.0.1
+     *
+     * @return string Archive URL, '' when there is none (search, 404).
+     */
+    private static function current_archive_url(): string {
+        if (!class_exists('\ThinkRank\Frontend\SEO_Manager')) {
+            return '';
+        }
+
+        return \ThinkRank\Frontend\SEO_Manager::get_non_singular_canonical_url();
+    }
+
+    /**
+     * A permalink with the current sub-page or comment page appended.
+     *
+     * @since 2.0.1
+     *
+     * @param string $url Permalink.
+     * @return string
+     */
+    private static function with_singular_page(string $url): string {
+        if ('' === $url || !class_exists('\ThinkRank\Frontend\SEO_Manager')) {
+            return $url;
+        }
+
+        return \ThinkRank\Frontend\SEO_Manager::with_singular_page($url);
+    }
+
+    /**
+     * The URL of the page the 'site' context is actually being rendered for.
+     *
+     * home_url('/') for the front page, the posts page's own permalink when the
+     * site uses a static front page, and the paginated variant on page 2+.
+     *
+     * @since 2.0.1
+     *
+     * @return string
+     */
+    private static function current_home_url(): string {
+        $url = home_url('/');
+
+        if (function_exists('is_home') && is_home() && !is_front_page()) {
+            $posts_page = (int) get_option('page_for_posts');
+
+            if ($posts_page > 0) {
+                $permalink = get_permalink($posts_page);
+
+                if (is_string($permalink) && '' !== $permalink) {
+                    $url = $permalink;
+                }
+            }
+        }
+
+        if (!class_exists('\ThinkRank\Frontend\SEO_Manager')) {
+            return $url;
+        }
+
+        // A static front page is a singular view, so its page number lives in
+        // `page`, not `paged` — the canonical already reads it that way, and
+        // og:url has to agree or the two describe different URLs.
+        if (function_exists('is_singular') && is_singular()) {
+            return \ThinkRank\Frontend\SEO_Manager::with_singular_page($url);
+        }
+
+        return \ThinkRank\Frontend\SEO_Manager::with_pagination(
+            $url,
+            \ThinkRank\Frontend\SEO_Manager::current_page_number()
+        );
     }
 
     /**
@@ -1656,10 +1864,11 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         // Try excerpt first
         $description = get_the_excerpt($post);
 
-        // If no excerpt, generate from content
+        // If no excerpt, generate from content. Shortcodes and block delimiters
+        // are removed the way core's wp_trim_excerpt() does, so a shortcode-built
+        // page does not publish its source as og:description (#387).
         if (empty($description)) {
-            $content = wp_strip_all_tags($post->post_content);
-            $description = wp_trim_words($content, 30, '...');
+            $description = Pattern_Resolver::derive_excerpt((string) $post->post_content, 30);
         }
 
         // If still empty, use site description
@@ -1702,11 +1911,116 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
      * @return string Twitter Card type
      */
     private function determine_twitter_card_type(array $data, string $context): string {
+        // An explicitly chosen card type wins. Without this the setting was
+        // inert and the `app` and `player` options in the UI could never be
+        // emitted at all (#398).
+        $chosen = (string) ($data['twitter_card_type'] ?? '');
+        if ('' !== $chosen) {
+            return $chosen;
+        }
+
         // Use a large-image card when a Twitter image will actually be emitted.
         // twitter:image resolves to the twitter-specific image first, then the OG
         // image, so key the card type off the same precedence.
         $twitter_image = !empty($data['twitter_image']) ? $data['twitter_image'] : ($data['image'] ?? '');
         return !empty($twitter_image) ? 'summary_large_image' : 'summary';
+    }
+
+    /**
+     * What an archive calls itself, for the og:title of last resort.
+     *
+     * Deliberately not wp_get_document_title(): that re-enters the
+     * pre_get_document_title filter this plugin short-circuits, so it would
+     * recurse. get_the_archive_title() wraps its subject in a <span>, hence the
+     * strip.
+     *
+     * @since 2.0.1
+     *
+     * @return string Archive title, or '' when there is nothing sensible to say.
+     */
+    private function archive_fallback_title(): string {
+        if (is_search()) {
+            /* translators: %s: search query. */
+            return trim(sprintf(__('Search Results for "%s"', 'thinkrank'), get_search_query()));
+        }
+
+        if (!function_exists('get_the_archive_title')) {
+            return '';
+        }
+
+        return trim(wp_strip_all_tags((string) get_the_archive_title()));
+    }
+
+    /**
+     * What an archive says about itself, for the og:description of last resort.
+     *
+     * @since 2.0.1
+     *
+     * @param int $term_id Queried term, or 0 when the archive is not a term.
+     * @return string Archive description, or '' when there is none.
+     */
+    private function archive_fallback_description(int $term_id): string {
+        if ($term_id > 0) {
+            $description = trim(wp_strip_all_tags((string) term_description($term_id)));
+
+            if ('' !== $description) {
+                return $description;
+            }
+        }
+
+        if (is_author()) {
+            $bio = trim(wp_strip_all_tags((string) get_the_author_meta('description', (int) get_query_var('author'))));
+
+            if ('' !== $bio) {
+                return $bio;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * The Open Graph type the user explicitly chose, or '' when they did not.
+     *
+     * `og_type` ships a default of 'website' that is merged into every settings
+     * read, so a stored 'website' cannot be told apart from "never touched" —
+     * the same trap the `og_locale` note above documents. Treating it as unset
+     * keeps determine_og_type() reachable, so a post is still `article`, while
+     * any other stored value is a genuine override and wins.
+     *
+     * @since 2.0.1
+     *
+     * @param array $settings Social meta settings.
+     * @return string The chosen type, or '' for "derive it".
+     */
+    private function configured_og_type(array $settings): string {
+        $type = trim((string) ($settings['og_type'] ?? ''));
+
+        return ('' === $type || 'website' === $type) ? '' : $type;
+    }
+
+    /**
+     * The Twitter card type the user explicitly chose, or '' when they did not.
+     *
+     * Same reasoning as configured_og_type(): the shipped default is
+     * 'summary_large_image', which is also what the automatic rule produces
+     * whenever an image is available, so it is treated as "not chosen" and the
+     * automatic rule stays in charge. `summary`, `app` and `player` are real
+     * choices and are honoured.
+     *
+     * @since 2.0.1
+     *
+     * @param array $settings Social meta settings.
+     * @return string The chosen card type, or '' for "derive it".
+     */
+    private function configured_twitter_card_type(array $settings): string {
+        $type = trim((string) ($settings['twitter_card_type'] ?? ''));
+
+        if (!in_array($type, ['summary', 'app', 'player'], true)) {
+            return '';
+        }
+
+        return $type;
     }
 
     /**

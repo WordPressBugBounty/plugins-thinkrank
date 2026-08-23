@@ -1923,15 +1923,24 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
 
         return [
             'seo_score' => $seo_impact['seo_score'],
+            // Kept under its historical key for existing MCP consumers; the
+            // methodology field says what it actually is (#432): a
+            // page-experience composite, not a search-optimisation score.
+            'seo_score_methodology' => 'Page-experience composite: 60% Core Web Vitals pass rate (measured metrics only) + 40% Lighthouse performance score. Contains no ranking, keyword or on-page SEO input.',
             'performance_impact' => $seo_impact['impact_level'],
             'ranking_factors' => [
                 'core_web_vitals' => $this->get_cwv_ranking_impact($core_web_vitals),
                 'page_speed' => $performance_score >= 90 ? 'positive_factor' : 'needs_improvement',
-                'mobile_usability' => $this->assess_mobile_usability($core_web_vitals)
+                'mobile_usability' => $this->assess_mobile_usability($core_web_vitals),
+                'mobile_usability_basis' => 'CLS and INP only; unmeasured metrics are never counted in favour.'
             ],
             'recommendations' => $this->generate_seo_recommendations($core_web_vitals, $performance_score),
             'correlation_strength' => $seo_impact['correlation_strength'],
-            'potential_ranking_change' => $seo_impact['ranking_change_estimate']
+            'potential_ranking_change' => $seo_impact['ranking_change_estimate'],
+            // How much evidence the composite stands on — a two-of-four result
+            // should not present with four-of-four confidence (#432).
+            'metrics_measured' => $seo_impact['metrics_measured'],
+            'metrics_unmeasured' => $seo_impact['metrics_unmeasured']
         ];
     }
 
@@ -1945,28 +1954,45 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
     private function calculate_seo_impact(array $core_web_vitals, int $performance_score): array {
         $good_metrics = 0;
         $total_metrics = 0;
+        $unmeasured   = 0;
 
         foreach ($core_web_vitals as $metric => $data) {
-            if (is_array($data) && isset($data['status'])) {
-                $total_metrics++;
-                if ($data['status'] === 'good') {
-                    $good_metrics++;
-                }
+            if (!is_array($data) || !isset($data['status'])) {
+                continue;
+            }
+
+            // An unavailable metric is not a failed one (#432). Counting
+            // 'unknown' in the denominator scored every unmeasured metric as
+            // a failure and depressed the composite by 15-30 points on sites
+            // with no INP/FCP field data — which is most small sites.
+            if ('unknown' === $data['status']) {
+                $unmeasured++;
+                continue;
+            }
+
+            $total_metrics++;
+            if ($data['status'] === 'good') {
+                $good_metrics++;
             }
         }
 
-        $cwv_pass_rate = $total_metrics > 0 ? ($good_metrics / $total_metrics) * 100 : 0;
+        // With nothing measured there is no pass rate to weight in — the
+        // composite falls back to the Lighthouse score alone rather than
+        // averaging against a fabricated 0%.
+        $cwv_pass_rate = $total_metrics > 0 ? ($good_metrics / $total_metrics) * 100 : null;
 
-        // Calculate SEO score based on CWV pass rate and performance score
-        $seo_score = (int) round(($cwv_pass_rate * 0.6) + ($performance_score * 0.4));
+        $seo_score = null === $cwv_pass_rate
+            ? (int) round($performance_score)
+            : (int) round(($cwv_pass_rate * 0.6) + ($performance_score * 0.4));
 
         // Determine impact level
         $impact_level = 'minimal';
-        if ($cwv_pass_rate >= 75) {
+        $rate_for_bands = $cwv_pass_rate ?? 0;
+        if ($rate_for_bands >= 75) {
             $impact_level = 'positive';
-        } elseif ($cwv_pass_rate >= 50) {
+        } elseif ($rate_for_bands >= 50) {
             $impact_level = 'moderate';
-        } elseif ($cwv_pass_rate >= 25) {
+        } elseif ($rate_for_bands >= 25) {
             $impact_level = 'negative';
         } else {
             $impact_level = 'critical';
@@ -1974,9 +2000,11 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
 
         return [
             'seo_score' => $seo_score,
-            'impact_level' => $impact_level,
-            'correlation_strength' => $cwv_pass_rate >= 75 ? 'strong' : ($cwv_pass_rate >= 50 ? 'moderate' : 'weak'),
-            'ranking_change_estimate' => $this->estimate_ranking_change($cwv_pass_rate, $performance_score)
+            'impact_level' => null === $cwv_pass_rate ? 'unknown' : $impact_level,
+            'correlation_strength' => null === $cwv_pass_rate ? 'unknown' : ($cwv_pass_rate >= 75 ? 'strong' : ($cwv_pass_rate >= 50 ? 'moderate' : 'weak')),
+            'ranking_change_estimate' => $this->estimate_ranking_change($rate_for_bands, $performance_score),
+            'metrics_measured' => $total_metrics,
+            'metrics_unmeasured' => $unmeasured
         ];
     }
 
@@ -2037,6 +2065,24 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
      * @return string Mobile usability assessment
      */
     private function assess_mobile_usability(array $core_web_vitals): string {
+        // A positive label needs actual measurements behind it (#432): with
+        // INP unavailable — common, it needs field data — the old OR branch
+        // awarded good_mobile_experience on the strength of one metric, on
+        // pages Lighthouse graded D. One measured-and-poor metric is still a
+        // real negative signal; one measured-and-good metric plus an unknown
+        // is not enough evidence for a positive one.
+        $cls_measured = isset($core_web_vitals['cls']['status']) && 'unknown' !== $core_web_vitals['cls']['status'];
+        $inp_measured = isset($core_web_vitals['inp']['status']) && 'unknown' !== $core_web_vitals['inp']['status'];
+
+        if (!$cls_measured && !$inp_measured) {
+            return 'insufficient_data';
+        }
+
+        if (!$cls_measured || !$inp_measured) {
+            $measured_status = $cls_measured ? $core_web_vitals['cls']['status'] : $core_web_vitals['inp']['status'];
+            return 'good' === $measured_status ? 'insufficient_data' : 'needs_mobile_optimization';
+        }
+
         // Focus on CLS and INP for mobile usability
         $cls_good = isset($core_web_vitals['cls']['status']) && $core_web_vitals['cls']['status'] === 'good';
         $inp_good = isset($core_web_vitals['inp']['status']) && $core_web_vitals['inp']['status'] === 'good';
@@ -2059,7 +2105,10 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
         $recommendations = [];
 
         foreach ($core_web_vitals as $metric => $data) {
-            if (is_array($data) && isset($data['status']) && $data['status'] !== 'good') {
+            // Allow-list of actionable states: 'unknown' is not 'good', so the
+            // old "not good" test recommended optimising metrics that were
+            // never measured (#432).
+            if (is_array($data) && isset($data['status']) && in_array($data['status'], ['poor', 'needs_improvement', 'needs-improvement'], true)) {
                 switch ($metric) {
                     case 'lcp':
                         $recommendations[] = 'Improve LCP to enhance page experience ranking signal';
@@ -2407,15 +2456,22 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
      * @return array Empty metric data structure
      */
     private function get_empty_metric_data(string $name, string $unit, float $good_threshold, float $needs_improvement_threshold): array {
+        // Shaped so absence cannot be mistaken for measurement (#432): a
+        // null value is distinguishable from a genuine perfect CLS of 0, a
+        // null score from a genuine total failure, and `available` gives
+        // consumers a real signal to branch on instead of a magic zero.
+        // get_performance_score()'s isset($data['score']) guard correctly
+        // skips null where it passed for 0.
         return [
             'name' => $name,
-            'value' => 0,
+            'value' => null,
             'unit' => $unit,
             'good_threshold' => $good_threshold,
             'needs_improvement_threshold' => $needs_improvement_threshold,
             'description' => 'Data not available',
-            'score' => 0,
-            'status' => 'unknown'
+            'score' => null,
+            'status' => 'unknown',
+            'available' => false
         ];
     }
 

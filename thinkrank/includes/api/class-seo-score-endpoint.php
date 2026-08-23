@@ -287,11 +287,15 @@ class SEOScoreEndpoint {
                 $score_options
             );
 
-            // Add readability_score and content_quality from frontend if provided
-            if (!empty($readability_score)) {
+            // Add readability_score and content_quality from frontend if
+            // provided. `!== null`, not `!empty()`: 0 is a legitimate score and
+            // empty() discarded it, so a post the editor scored as 0 kept
+            // whatever the calculator had produced instead (#394). Both params
+            // already default to null above, so null means "not sent".
+            if (null !== $readability_score) {
                 $score_data['readability_score'] = $readability_score;
             }
-            if (!empty($content_quality)) {
+            if (null !== $content_quality) {
                 $score_data['content_quality'] = $content_quality;
             }
 

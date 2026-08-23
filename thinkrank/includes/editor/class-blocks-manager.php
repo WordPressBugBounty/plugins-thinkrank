@@ -147,6 +147,15 @@ class Blocks_Manager {
 
         switch ($name) {
             case self::FAQ_BLOCK:
+                // Only the post being viewed may claim to be an FAQPage. On an
+                // archive or the blog home the graph's collection pass skips
+                // (it is not is_singular()), so absorption never happens and
+                // every listed post carrying an FAQ block used to emit its own
+                // standalone FAQPage beside a head that already declares
+                // CollectionPage — N FAQPage scripts on one URL.
+                if (!$this->is_faq_schema_context()) {
+                    return $block_content;
+                }
                 // The request's schema graph already merged this block's questions
                 // into its single FAQPage, so emitting here would recreate the
                 // duplicate FAQPage the graph exists to prevent (#355).
@@ -175,6 +184,31 @@ class Blocks_Manager {
         }
 
         return $block_content . "\n" . '<script type="application/ld+json">' . $json . '</script>';
+    }
+
+    /**
+     * Whether this render may emit a page-level FAQPage.
+     *
+     * True only while rendering the singular post that is actually being
+     * viewed. A listing (archive, blog home, search) renders many posts under
+     * one URL, and an FAQPage there would describe a document that does not
+     * exist. Outside a front-end query — the editor, a REST render — there is no
+     * page to describe either.
+     *
+     * @since 2.0.1
+     * @return bool
+     */
+    private function is_faq_schema_context(): bool {
+        if (!function_exists('is_singular') || !is_singular()) {
+            return false;
+        }
+
+        $queried_id = (int) get_queried_object_id();
+        $current_id = (int) get_the_ID();
+
+        // A secondary loop inside a singular template can render other posts;
+        // their FAQ content is not this URL's FAQ content.
+        return $queried_id > 0 && $queried_id === $current_id;
     }
 
     /**

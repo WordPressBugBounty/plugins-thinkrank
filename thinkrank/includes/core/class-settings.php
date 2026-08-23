@@ -672,23 +672,10 @@ class Settings {
         if (!in_array($key, $this->encrypted_keys, true) || !is_string($value) || '' === $value) {
             return $value;
         }
-        if (!function_exists('sodium_crypto_secretbox')) {
-            return $value; // sodium unavailable — store as-is
-        }
 
-        $enc_key = $this->encryption_key();
-        if ('' === $enc_key) {
-            return $value;
-        }
-
-        try {
-            $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-            $cipher = sodium_crypto_secretbox($value, $nonce, $enc_key);
-            // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- transport encoding for a sodium ciphertext, not obfuscation.
-            return self::ENC_PREFIX . base64_encode($nonce . $cipher);
-        } catch (\Exception $e) {
-            return $value;
-        }
+        // Same scheme, same key, same prefix — it just lives in Secret_At_Rest
+        // now so the MCP pairing token can use it too (#396).
+        return Secret_At_Rest::encrypt($value);
     }
 
     /**
@@ -703,26 +690,10 @@ class Settings {
         if (!is_string($value) || strncmp($value, self::ENC_PREFIX, strlen(self::ENC_PREFIX)) !== 0) {
             return $value; // legacy plaintext or non-string
         }
-        if (!function_exists('sodium_crypto_secretbox_open')) {
-            return $value;
-        }
 
-        $enc_key = $this->encryption_key();
-        if ('' === $enc_key) {
-            return $value;
-        }
+        $plain = Secret_At_Rest::decrypt($value);
 
-        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes our own ciphertext envelope; strict mode is on.
-        $decoded = base64_decode(substr($value, strlen(self::ENC_PREFIX)), true);
-        if (false === $decoded || strlen($decoded) <= SODIUM_CRYPTO_SECRETBOX_NONCEBYTES) {
-            return $value;
-        }
-
-        $nonce = substr($decoded, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-        $cipher = substr($decoded, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-        $plain = sodium_crypto_secretbox_open($cipher, $nonce, $enc_key);
-
-        if (false === $plain) {
+        if ('' === $plain) {
             // We reach here only when sodium is available and a key was
             // derivable, so this is a genuine failure: the auth salt changed
             // (config rotated, or the site was migrated without wp-config) or
@@ -736,19 +707,5 @@ class Settings {
         }
 
         return $plain;
-    }
-
-    /**
-     * Derive a 32-byte encryption key from the site's auth salt.
-     *
-     * @return string Raw 32-byte key, or '' if salts are unavailable.
-     */
-    private function encryption_key(): string {
-        if (!function_exists('wp_salt')) {
-            return '';
-        }
-        // 32 raw bytes from a site-specific secret — SHA-256 output length
-        // matches SODIUM_CRYPTO_SECRETBOX_KEYBYTES.
-        return hash('sha256', 'thinkrank-settings|' . wp_salt('auth'), true);
     }
 }

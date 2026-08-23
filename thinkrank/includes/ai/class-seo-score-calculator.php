@@ -402,7 +402,7 @@ class SEOScoreCalculator {
         $suggestions = array_merge($suggestions, $technical_result['suggestions']);
 
         try {
-            $prioritized_suggestions = $this->prioritize_suggestions($suggestions);
+            $prioritized_suggestions = $this->prioritize_suggestions($suggestions, $scores);
             $grade = $this->get_grade_from_score($total_score);
 
             return [
@@ -829,25 +829,67 @@ class SEOScoreCalculator {
         // Consider it a semantic match if 70% of keyword parts are present
         return ($matches / count($keyword_parts)) >= 0.7;
     }
-    private function prioritize_suggestions(array $suggestions): array {
+    private function prioritize_suggestions(array $suggestions, array $scores = []): array {
+        // Map each suggestion back to the factor that emitted it, so priority
+        // can rank by the points the factor actually lost instead of keyword-
+        // matching the advice text — which sorted a 2-point title tweak above
+        // a 6-point thin-content loss and contradicted the row's own impact
+        // tag (#408).
+        $by_text = [];
+        foreach ($scores as $factor => $result) {
+            if (!is_array($result) || empty($result['suggestions']) || !is_array($result['suggestions'])) {
+                continue;
+            }
+            $lost = max(0, (float) ($result['max_score'] ?? 0) - (float) ($result['score'] ?? 0));
+            foreach ($result['suggestions'] as $text) {
+                if (is_string($text) && !isset($by_text[$text])) {
+                    $by_text[$text] = ['factor' => (string) $factor, 'lost' => $lost];
+                }
+            }
+        }
+
         $prioritized = [];
-        
+
         foreach ($suggestions as $suggestion) {
-            $priority = $this->determine_suggestion_priority($suggestion);
+            $origin = $by_text[$suggestion] ?? null;
+
+            // A factor already at full marks loses nothing to this advice —
+            // it was occupying list positions (sometimes at "High") while
+            // recovering zero points. Dropped rather than sorted last.
+            if (null !== $origin && $origin['lost'] <= 0) {
+                continue;
+            }
+
+            if (null !== $origin) {
+                $priority = $origin['lost'] >= 4 ? 'High' : ($origin['lost'] >= 2 ? 'Medium' : 'Low');
+            } else {
+                // No factor attached (defensive: a filter-added or legacy
+                // suggestion) — the old keyword map is the fallback.
+                $priority = $this->determine_suggestion_priority($suggestion);
+            }
+
             $prioritized[] = [
                 'text' => $suggestion,
                 'priority' => $priority,
                 'impact' => $this->estimate_impact($suggestion),
                 'effort' => $this->estimate_effort($suggestion),
+                'factor' => $origin['factor'] ?? null,
+                'points_recoverable' => $origin['lost'] ?? null,
             ];
         }
-        
-        // Sort by priority (High > Medium > Low)
+
+        // Biggest recoverable loss first; keyword-mapped stragglers (no
+        // factor) sort within their priority band after the measured rows.
         usort($prioritized, function($a, $b) {
+            $al = $a['points_recoverable'] ?? -1;
+            $bl = $b['points_recoverable'] ?? -1;
+            if ($al !== $bl) {
+                return $bl <=> $al;
+            }
             $priority_order = ['High' => 3, 'Medium' => 2, 'Low' => 1];
             return $priority_order[$b['priority']] - $priority_order[$a['priority']];
         });
-        
+
         return $prioritized;
     }
     
@@ -1506,7 +1548,25 @@ class SEOScoreCalculator {
         $syllables = 0;
 
         foreach ($words as $word) {
-            $syllables += max(1, preg_match_all('/[aeiouy]+/', $word));
+            $word = preg_replace('/[^a-z]/', '', $word);
+            if ($word === '') {
+                continue;
+            }
+
+            $groups = preg_match_all('/[aeiouy]+/', $word);
+
+            // Standard Flesch heuristic: a trailing silent e does not form a
+            // syllable ("make", "time", "these") — but only when a consonant
+            // precedes it (a vowel+e ending like "movie" already shares its
+            // group) and never for consonant-le ("table"), which does count.
+            // Without this the counter inflated syllables/word by ~0.2-0.3 on
+            // ordinary prose, driving raw Flesch negative and the UI to a
+            // clamped "Very Difficult (0)" (#407).
+            if ($groups > 1 && preg_match('/[^aeiouy]e$/', $word) && !str_ends_with($word, 'le')) {
+                $groups--;
+            }
+
+            $syllables += max(1, $groups);
         }
 
         return $syllables;

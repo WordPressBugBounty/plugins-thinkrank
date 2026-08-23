@@ -1040,6 +1040,45 @@ class Schema_Management_System extends Abstract_SEO_Manager {
     }
 
     /**
+     * Schema keys outside the shared config defaults.
+     *
+     * @since 2.0.1
+     *
+     * @return string[]
+     */
+    protected function additional_setting_keys(): array {
+        return [
+            'enable_article_schema', 'enable_product_schema',
+            'enable_faq_schema', 'enable_howto_schema',
+        ];
+    }
+
+    /**
+     * Per-entity schema fields are an open set.
+     *
+     * Each schema type the UI can edit contributes its own field family —
+     * organization_*, person_*, website_*, business_*, software_*, howto_* —
+     * and a new type adds another. The families this manager owns are matched
+     * rather than enumerated, so adding a form does not silently start
+     * dropping its fields (#452).
+     *
+     * @since 2.0.1
+     *
+     * @return string[]
+     */
+    protected function dynamic_setting_key_patterns(): array {
+        return [
+            '/^organization_[a-z0-9_]+$/',
+            '/^person_[a-z0-9_]+$/',
+            '/^website_[a-z0-9_]+$/',
+            '/^business_[a-z0-9_]+$/',
+            '/^software_[a-z0-9_]+$/',
+            '/^howto_[a-z0-9_]+$/',
+            '/^product_[a-z0-9_]+$/',
+        ];
+    }
+
+    /**
      * Get default settings for a context type (implements interface)
      *
      * @since 1.0.0
@@ -1793,9 +1832,12 @@ class Schema_Management_System extends Abstract_SEO_Manager {
 		);
         }
 
-        if (empty($deployed_schemas)) {
-            return [];
-        }
+        // Deliberately no early return on an empty result: it has to reach the
+        // cache write below. Most URLs have no deployed schema, so gating the
+        // write on a non-empty result made the majority of front-end requests
+        // permanent cache misses, re-running a ROW_NUMBER() OVER (PARTITION BY
+        // ...) query with two filesorts on every pageview (#392).
+        $deployed_schemas = $deployed_schemas ?: [];
 
         // Process schemas for return
         $processed_schemas = [];
@@ -1817,8 +1859,11 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             }
         }
 
-        // CACHE LAYER: Store result in cache for future requests
-        if ($this->cache_manager && !empty($processed_schemas)) {
+        // CACHE LAYER: Store result in cache for future requests — including
+        // an empty one. Cache_Manager::set() wraps the payload in a metadata
+        // envelope, so an empty result is still stored as a truthy value and
+        // reads back as a hit rather than a miss (#392).
+        if ($this->cache_manager) {
             $cache_key = $this->cache_manager->generate_deployed_schemas_key($context_type, $context_id);
             $this->cache_manager->set($cache_key, $processed_schemas);
         }

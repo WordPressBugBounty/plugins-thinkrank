@@ -39,7 +39,23 @@ class SEO_Manager {
      *
      * @var array
      */
+    /**
+     * Page-specific schemas the free tier renders on one page.
+     *
+     * @since 2.0.1
+     * @var int
+     */
+    private const FREE_PAGE_SCHEMA_LIMIT = 2;
+
     private array $current_metadata = [];
+
+    /**
+     * Term ID of the archive being rendered, when the request is a term archive.
+     *
+     * @since 2.0.1
+     * @var int|null
+     */
+    private ?int $current_term_id = null;
 
     /**
      * Site Identity Manager instance
@@ -89,6 +105,22 @@ class SEO_Manager {
      * @var string
      */
     private string $current_context = 'site';
+
+    /**
+     * Whether the opening "Search Engine Optimization by ThinkRank" comment has
+     * already been printed for this request.
+     *
+     * Shared across the request rather than kept as a local `static` inside the
+     * emitter, because the closing comment is printed from a different method
+     * (and the opening one can also come from Author_Archives_Manager). Without
+     * that, output_closing_comment() decided on its own always-false local
+     * static and emitted an orphan `<!-- /ThinkRank SEO -->` on every page whose
+     * meta description was empty.
+     *
+     * @since 2.0.1
+     * @var bool
+     */
+    private static bool $opening_comment_output = false;
 
     /**
      * Memoised "should core's sitemap be disabled" flag. Null until resolved.
@@ -377,6 +409,21 @@ class SEO_Manager {
             }
         }
 
+        // Term archives. Category, tag and custom-taxonomy pages store their SEO
+        // title and description as term meta — written by the term UI, by the
+        // abilities API and by the Yoast/RankMath/AIOSEO/SEOPress importer — but
+        // nothing here ever read them, so the whole title/description cascade
+        // fell through to the theme default and no description tag was printed
+        // at all. Term robots was fixed for the same reason in 1.31.0 (#290);
+        // this is the title and description half (#386).
+        if (is_category() || is_tag() || is_tax()) {
+            $queried = get_queried_object();
+            if ($queried instanceof \WP_Term) {
+                $this->current_term_id  = $queried->term_id;
+                $this->current_metadata = $this->get_term_seo_metadata($queried->term_id);
+            }
+        }
+
         // Load site identity data
         $this->load_site_identity_data();
     }
@@ -387,6 +434,15 @@ class SEO_Manager {
      * @return string Current context type
      */
     private function detect_current_context(): string {
+        // 404 first: a not-found request matches none of the branches below and
+        // used to fall through to 'site', which handed crawlers the homepage's
+        // social identity for an error page. It gets its own context so the
+        // social layer can skip it, matching get_non_singular_canonical_url(),
+        // which already suppresses the canonical for 404 and search.
+        if (is_404()) {
+            return '404';
+        }
+
         if (is_home() || is_front_page()) {
             return 'homepage';
         } elseif (is_single()) {
@@ -444,6 +500,35 @@ class SEO_Manager {
     }
 
     /**
+     * Get SEO metadata for a term.
+     *
+     * Mirrors get_post_seo_metadata(): the stored values may carry variable
+     * tags, so they are resolved against the term's own values. Focus keyword
+     * and score have no term equivalent on the frontend and stay empty.
+     *
+     * @since 2.0.1
+     *
+     * @param int $term_id Term ID.
+     * @return array SEO metadata.
+     */
+    private function get_term_seo_metadata(int $term_id): array {
+        $title       = get_term_meta($term_id, '_thinkrank_seo_title', true);
+        $description = get_term_meta($term_id, '_thinkrank_meta_description', true);
+
+        return [
+            'title' => $title
+                ? \ThinkRank\SEO\Pattern_Resolver::resolve_term_value((string) $title, $term_id)
+                : '',
+            'description' => $description
+                ? \ThinkRank\SEO\Pattern_Resolver::resolve_term_value((string) $description, $term_id)
+                : '',
+            'focus_keyword'  => '',
+            'focus_keywords' => [],
+            'seo_score'      => '',
+        ];
+    }
+
+    /**
      * Resolve the effective SEO title for the current request.
      *
      * Same priority chain as override_document_title() — post-specific
@@ -472,16 +557,48 @@ class SEO_Manager {
     public function override_document_title($title): string {
         // First priority: Post-specific ThinkRank metadata
         if ($this->has_thinkrank_metadata() && !empty($this->current_metadata['title'])) {
-            return $this->current_metadata['title'];
+            return self::with_page_suffix($this->current_metadata['title']);
         }
 
         // Second priority: Global SEO templates, Third priority: Site Identity templates
         $generated_title = $this->generate_context_title();
         if ($generated_title) {
-            return $generated_title;
+            return self::with_page_suffix($generated_title);
         }
 
         return $title;
+    }
+
+    /**
+     * Append a page indicator to a title on page 2 and beyond.
+     *
+     * This filter short-circuits pre_get_document_title at priority 1, which
+     * drops the " – Page 2" core would otherwise add — so every page of an
+     * archive, and every part of a multi-page post, shared one <title> (#397).
+     * The templates have no %page% token, so the suffix is added here rather
+     * than asking every site to edit its title format.
+     *
+     * @since 2.0.1
+     *
+     * @param string $title Resolved title.
+     * @return string Title with the page indicator, when there is one.
+     */
+    public static function with_page_suffix(string $title): string {
+        $page = self::current_page_number();
+
+        if ($page <= 1 || '' === $title) {
+            return $title;
+        }
+
+        $separator = class_exists('\ThinkRank\SEO\Site_Identity_Manager')
+            ? \ThinkRank\SEO\Site_Identity_Manager::get_active_separator_symbol()
+            : '|';
+
+        return $title . ' ' . $separator . ' ' . sprintf(
+            /* translators: %d: page number. */
+            __('Page %d', 'thinkrank'),
+            $page
+        );
     }
 
     /**
@@ -496,13 +613,15 @@ class SEO_Manager {
         // First priority: Post-specific ThinkRank metadata
         if ($this->has_thinkrank_metadata() && !empty($this->current_metadata['title'])) {
             $site_name = get_bloginfo('name');
-            return $this->current_metadata['title'] . ($sep ? " $sep " : ' | ') . $site_name;
+            return self::with_page_suffix(
+                $this->current_metadata['title'] . ($sep ? " $sep " : ' | ') . $site_name
+            );
         }
 
         // Second priority: Global SEO templates, Third priority: Site Identity templates
         $generated_title = $this->generate_context_title();
         if ($generated_title) {
-            return $generated_title;
+            return self::with_page_suffix($generated_title);
         }
 
         return $title;
@@ -529,11 +648,7 @@ class SEO_Manager {
 
         if ($description) {
             // Output main ThinkRank SEO header comment (only once)
-            static $header_output = false;
-            if (!$header_output) {
-                echo "<!-- Search Engine Optimization by ThinkRank - https://thinkrank.ai/ -->\n";
-                $header_output = true;
-            }
+            self::note_opening_comment();
 
             // Ensure description is within optimal length (150-160 characters)
             if (strlen($description) > 160) {
@@ -581,10 +696,12 @@ class SEO_Manager {
         // Output generator meta tag
         echo '<meta name="generator" content="ThinkRank ' . esc_attr(THINKRANK_VERSION) . '" />' . "\n";
 
-        // Output viewport meta tag if not already present
-        if (!has_action('wp_head', 'wp_site_icon') || !wp_is_mobile()) {
-            echo '<meta name="viewport" content="width=device-width, initial-scale=1.0" />' . "\n";
-        }
+        // No viewport tag here. The viewport is the theme's responsibility and
+        // every modern theme ships one, so emitting our own only ever produced a
+        // second <meta name="viewport"> in the document. The old guard could not
+        // prevent that either: has_action() returns the registered priority
+        // (truthy), so its first operand was always false, and !wp_is_mobile() is
+        // true for every desktop request.
         echo "<!-- /ThinkRank SEO Meta Tags -->\n";
     }
 
@@ -696,10 +813,28 @@ class SEO_Manager {
         }
 
         // Check for archive pages (search is handled by the early return above)
-        if (is_archive()) {
+        //
+        // is_home() is deliberately included: the blog listing is not an
+        // is_archive(), so page 2 of a term archive was noindex while page 2 of
+        // the blog listing was index — the same kind of page, treated two
+        // different ways, on the same site (#397).
+        if (is_archive() || is_home()) {
             // Allow indexing of category/tag archives but be more conservative
             if (is_paged()) {
-                $robots = ['noindex', 'follow'];
+                /**
+                 * Filter whether a paginated archive is set noindex.
+                 *
+                 * Rank Math and Yoast now index paginated archives with a
+                 * self-referential canonical by default, so a site that wants
+                 * that can have it without patching.
+                 *
+                 * @since 2.0.1
+                 *
+                 * @param bool $noindex Whether to noindex this paginated page.
+                 */
+                if (apply_filters('thinkrank_noindex_paged_archives', true)) {
+                    $robots = ['noindex', 'follow'];
+                }
             }
 
             // Honor the global date-archive noindex toggle (written by the
@@ -1150,6 +1285,12 @@ class SEO_Manager {
      * @return void
      */
     public function output_open_graph_tags(): void {
+        // An error page has no shareable identity. Emitting Open Graph here
+        // advertised the homepage as the og:url of a URL that does not exist.
+        if ($this->current_context === '404') {
+            return;
+        }
+
         // Priority 1: Try Social Meta Manager (Social Media tab settings)
         if ($this->social_manager) {
             // Map context for Social Meta Manager (homepage -> site for site-wide settings)
@@ -1202,6 +1343,19 @@ class SEO_Manager {
                 $this->current_post_id
             );
             $og_image_override = get_post_meta($this->current_post_id, '_thinkrank_og_image', true);
+        } elseif ($this->current_term_id) {
+            // Terms carry the same social override keys — the abilities API
+            // writes them — so honour them here rather than letting the term's
+            // SEO title stand in for an explicit og:title.
+            $og_title_override = \ThinkRank\SEO\Pattern_Resolver::resolve_term_value(
+                (string) get_term_meta($this->current_term_id, '_thinkrank_og_title', true),
+                $this->current_term_id
+            );
+            $og_description_override = \ThinkRank\SEO\Pattern_Resolver::resolve_term_value(
+                (string) get_term_meta($this->current_term_id, '_thinkrank_og_description', true),
+                $this->current_term_id
+            );
+            $og_image_override = get_term_meta($this->current_term_id, '_thinkrank_og_image', true);
         }
 
         // Get title using priority system: OG override > post-specific > Global SEO > Site Identity > default
@@ -1345,6 +1499,11 @@ class SEO_Manager {
      * @return void
      */
     public function output_twitter_card_tags(): void {
+        // Same reasoning as the Open Graph block: nothing on a 404 is shareable.
+        if ($this->current_context === '404') {
+            return;
+        }
+
         // Priority 1: Try Social Meta Manager (Social Media tab settings)
         if ($this->social_manager) {
             // Map context for Social Meta Manager (homepage -> site for site-wide settings)
@@ -1393,6 +1552,12 @@ class SEO_Manager {
             $twitter_description_override = \ThinkRank\SEO\Pattern_Resolver::resolve_value((string) get_post_meta($pid, '_thinkrank_twitter_description', true), $pid);
             $og_title_override = \ThinkRank\SEO\Pattern_Resolver::resolve_value((string) get_post_meta($pid, '_thinkrank_og_title', true), $pid);
             $og_description_override = \ThinkRank\SEO\Pattern_Resolver::resolve_value((string) get_post_meta($pid, '_thinkrank_og_description', true), $pid);
+        } elseif ($this->current_term_id) {
+            $tid = $this->current_term_id;
+            $twitter_title_override = \ThinkRank\SEO\Pattern_Resolver::resolve_term_value((string) get_term_meta($tid, '_thinkrank_twitter_title', true), $tid);
+            $twitter_description_override = \ThinkRank\SEO\Pattern_Resolver::resolve_term_value((string) get_term_meta($tid, '_thinkrank_twitter_description', true), $tid);
+            $og_title_override = \ThinkRank\SEO\Pattern_Resolver::resolve_term_value((string) get_term_meta($tid, '_thinkrank_og_title', true), $tid);
+            $og_description_override = \ThinkRank\SEO\Pattern_Resolver::resolve_term_value((string) get_term_meta($tid, '_thinkrank_og_description', true), $tid);
         }
 
         // Title cascade: Twitter override > OG override > Global SEO > Site Identity > default
@@ -1487,9 +1652,16 @@ class SEO_Manager {
 
             if (empty($canonical_url)) {
                 $canonical_url = $this->current_post_id ? get_permalink($this->current_post_id) : get_permalink();
+
+                // Core's rel_canonical() keeps the page number; this replaced
+                // it with a bare permalink, so every <!--nextpage--> sub-page
+                // and every /comment-page-N/ canonicalised to page 1 — a
+                // regression against core behaviour (#397). A custom canonical
+                // is left exactly as the user typed it.
+                $canonical_url = self::with_singular_page($canonical_url);
             }
         } else {
-            $canonical_url = $this->get_non_singular_canonical_url();
+            $canonical_url = self::get_non_singular_canonical_url();
         }
 
         /**
@@ -1508,6 +1680,102 @@ class SEO_Manager {
         echo "<!-- ThinkRank SEO Canonical URL -->\n";
         echo "<link rel=\"canonical\" href=\"" . esc_url($canonical_url) . "\" />\n";
         echo "<!-- /ThinkRank SEO Canonical URL -->\n";
+
+        $this->output_pagination_links();
+    }
+
+    /**
+     * Emit rel="prev" / rel="next" on a paginated archive.
+     *
+     * Nothing emitted these at all (#397). Google stopped using them as an
+     * indexing signal in 2019, so this is not an SEO win with Google — Bing
+     * still reads them, and they are the standard way to describe a sequence,
+     * which is what the pages are.
+     *
+     * @since 2.0.1
+     *
+     * @return void
+     */
+    private function output_pagination_links(): void {
+        // Page 1 still wants a rel="next" when there is a page 2, so only
+        // singular views are skipped outright.
+        if (is_singular()) {
+            return;
+        }
+
+        global $wp_query;
+
+        $total = $wp_query ? (int) $wp_query->max_num_pages : 0;
+
+        if ($total < 2) {
+            return;
+        }
+
+        $base = self::get_non_singular_canonical_url();
+
+        if ('' === $base) {
+            return;
+        }
+
+        // get_non_singular_canonical_url() already carries the current page —
+        // strip it back to page 1 before building the neighbours.
+        $current = self::current_page_number();
+        $base    = self::without_pagination($base);
+
+        if ($current > 1) {
+            printf(
+                "<link rel=\"prev\" href=\"%s\" />\n",
+                esc_url(self::with_pagination($base, $current - 1))
+            );
+        }
+
+        if ($current < $total) {
+            printf(
+                "<link rel=\"next\" href=\"%s\" />\n",
+                esc_url(self::with_pagination($base, $current + 1))
+            );
+        }
+    }
+
+    /**
+     * The rewrite base WordPress uses for page numbers ('page' by default).
+     *
+     * @since 2.0.1
+     *
+     * @return string
+     */
+    private static function pagination_base(): string {
+        global $wp_rewrite;
+
+        return $wp_rewrite && $wp_rewrite->pagination_base ? $wp_rewrite->pagination_base : 'page';
+    }
+
+    /**
+     * Append the sub-page or comment-page number to a singular canonical.
+     *
+     * @since 2.0.1
+     *
+     * @param string $url Permalink.
+     * @return string Permalink with the current page appended, when there is one.
+     */
+    public static function with_singular_page(string $url): string {
+        global $wp_rewrite;
+
+        $page = (int) get_query_var('page');
+
+        if ($page > 1) {
+            return $wp_rewrite && $wp_rewrite->using_permalinks()
+                ? trailingslashit($url) . user_trailingslashit($page, 'single_paged')
+                : add_query_arg('page', $page, $url);
+        }
+
+        $comment_page = (int) get_query_var('cpage');
+
+        if ($comment_page > 1) {
+            return get_comments_pagenum_link($comment_page);
+        }
+
+        return $url;
     }
 
     /**
@@ -1520,7 +1788,7 @@ class SEO_Manager {
      *
      * @return string Canonical URL or '' when none applies
      */
-    private function get_non_singular_canonical_url(): string {
+    public static function get_non_singular_canonical_url(): string {
         if (is_404() || is_search()) {
             return '';
         }
@@ -1553,15 +1821,87 @@ class SEO_Manager {
         }
 
         // Point paginated archives at their own page, not page 1.
-        $paged = (int) get_query_var('paged');
-        if ($paged > 1) {
-            global $wp_rewrite;
-            $canonical_url = $wp_rewrite->using_permalinks()
-                ? trailingslashit($canonical_url) . user_trailingslashit($wp_rewrite->pagination_base . '/' . $paged, 'paged')
-                : add_query_arg('paged', $paged, $canonical_url);
+        return self::with_pagination($canonical_url, (int) get_query_var('paged'));
+    }
+
+    /**
+     * Append a page number to a URL the way WordPress does.
+     *
+     * Extracted so the archive canonical is not the only thing that knows how
+     * to build a paged URL: the schema graph derived its @id from the
+     * un-paginated link, so every page of an archive claimed the same node
+     * identity, and the singular canonical dropped the page entirely (#397).
+     *
+     * @since 2.0.1
+     *
+     * @param string $url  Base URL.
+     * @param int    $page Page number; 1 or less returns the URL unchanged.
+     * @return string
+     */
+    public static function with_pagination(string $url, int $page): string {
+        if ($page <= 1 || '' === $url) {
+            return $url;
         }
 
-        return $canonical_url;
+        global $wp_rewrite;
+
+        if ($wp_rewrite && $wp_rewrite->using_permalinks()) {
+            return trailingslashit($url) . user_trailingslashit(
+                $wp_rewrite->pagination_base . '/' . $page,
+                'paged'
+            );
+        }
+
+        return add_query_arg('paged', $page, $url);
+    }
+
+    /**
+     * Strip a page number from a URL, whichever form it takes.
+     *
+     * The inverse of with_pagination(). Pretty permalinks carry the page as a
+     * /page/N/ path segment, plain permalinks as a `paged` query arg, and a
+     * regex over the path alone silently left the latter in place — so
+     * rel="prev" on page 2 pointed at page 2 (#397 review).
+     *
+     * @since 2.0.1
+     *
+     * @param string $url URL that may carry a page number.
+     * @return string URL for page 1.
+     */
+    public static function without_pagination(string $url): string {
+        if ('' === $url) {
+            return $url;
+        }
+
+        $url = remove_query_arg('paged', $url);
+
+        return (string) preg_replace(
+            '#/' . preg_quote(self::pagination_base(), '#') . '/\d+/?$#',
+            '/',
+            $url
+        );
+    }
+
+    /**
+     * The page number of the current request, archive or multi-page post.
+     *
+     * `paged` counts archive pages; `page` counts the <!--nextpage--> parts of
+     * a single post. They are never both set.
+     *
+     * @since 2.0.1
+     *
+     * @return int Page number, 1 when this is the first page.
+     */
+    public static function current_page_number(): int {
+        $paged = (int) get_query_var('paged');
+
+        if ($paged > 1) {
+            return $paged;
+        }
+
+        $page = (int) get_query_var('page');
+
+        return $page > 1 ? $page : 1;
     }
 
 
@@ -1571,10 +1911,11 @@ class SEO_Manager {
      * @return bool True if has ThinkRank metadata
      */
     private function has_thinkrank_metadata(): bool {
-        if (!is_singular()) {
-            return false;
-        }
-
+        // Populated by initialize_current_context() for singular views and for
+        // term archives, and left empty everywhere else — so the emptiness
+        // check is the whole test. The `!is_singular()` early return this
+        // replaced is what made every stored term title and description inert:
+        // the entire title/description cascade hangs off this method (#386).
         return !empty($this->current_metadata['title']) || !empty($this->current_metadata['description']);
     }
 
@@ -1719,7 +2060,9 @@ class SEO_Manager {
                 if (!empty($post->post_excerpt)) {
                     $placeholders['%excerpt%'] = $post->post_excerpt;
                 } elseif (!$this->is_content_password_protected($post->ID)) {
-                    $placeholders['%excerpt%'] = wp_trim_words(wp_strip_all_tags($post->post_content), 25, '...');
+                    $placeholders['%excerpt%'] = \ThinkRank\SEO\Pattern_Resolver::derive_excerpt(
+                        (string) $post->post_content
+                    );
                 }
             }
 
@@ -1782,6 +2125,15 @@ class SEO_Manager {
 
         switch ($this->current_context) {
             case 'homepage':
+                // detect_current_context() collapses the static posts page into
+                // 'homepage', so it rendered the front page's title template and
+                // the two pages shipped the same <title> — a duplicate title on
+                // the site's two most-linked URLs (#397 review). It is a page,
+                // and it has its own name, so it gets the page template.
+                if (self::is_static_posts_page()) {
+                    return $settings['page_title'] ?? $settings['homepage_title'] ?? null;
+                }
+
                 return $settings['homepage_title'] ?? null;
             case 'post':
                 return $settings['post_title'] ?? null;
@@ -1814,10 +2166,16 @@ class SEO_Manager {
         $separator = $this->get_title_separator($settings['title_separator'] ?? 'pipe');
 
         $placeholders = [
-            '%site_title%' => $settings['site_name'] ?? get_bloginfo('name'),
-            '%site_name%' => $settings['site_name'] ?? get_bloginfo('name'),
-            '%site_description%' => $settings['site_description'] ?? get_bloginfo('description'),
-            '%tagline%' => $settings['tagline'] ?? get_bloginfo('description'),
+            // first_non_empty(), not `??`: Site Identity persists these as ''
+            // rather than leaving them unset, and '' is not null — so the
+            // null-coalesce stopped dead on the empty string and the WordPress
+            // fallback was unreachable. A site with a tagline set in Settings →
+            // General rendered "%site_description%" as nothing (#398). This is
+            // the same reasoning first_non_empty()'s own docblock records.
+            '%site_title%' => $this->first_non_empty($settings['site_name'] ?? '', get_bloginfo('name')),
+            '%site_name%' => $this->first_non_empty($settings['site_name'] ?? '', get_bloginfo('name')),
+            '%site_description%' => $this->first_non_empty($settings['site_description'] ?? '', get_bloginfo('description')),
+            '%tagline%' => $this->first_non_empty($settings['tagline'] ?? '', get_bloginfo('description')),
             '%separator%' => ' ' . $separator . ' ',
             '%sep%' => ' ' . $separator . ' ',
             '%date%' => gmdate('F Y'),
@@ -1872,11 +2230,38 @@ class SEO_Manager {
                 break;
 
             case 'archive':
-                $placeholders['%archive_title%'] = get_the_archive_title();
+                // Stripped: get_the_archive_title() wraps its subject in a
+                // <span>, and this placeholder feeds the document <title> as
+                // well as og:title and twitter:title — a date archive rendered
+                // as "Month: <span>August 2026</span> | Site".
+                $placeholders['%archive_title%'] = wp_strip_all_tags((string) get_the_archive_title());
+                break;
+
+            case 'homepage':
+                // The page template resolved for a static posts page needs the
+                // page's own name; without it %title%/%page_title% would render
+                // empty and collapse back to the site title.
+                if (self::is_static_posts_page()) {
+                    $posts_page_title = get_the_title((int) get_option('page_for_posts'));
+                    $placeholders['%title%']      = $posts_page_title;
+                    $placeholders['%page_title%'] = $posts_page_title;
+                    $placeholders['%post_title%'] = $posts_page_title;
+                }
                 break;
         }
 
         return $placeholders;
+    }
+
+    /**
+     * Whether this request is a static posts page rather than the front page.
+     *
+     * @since 2.0.1
+     *
+     * @return bool
+     */
+    private static function is_static_posts_page(): bool {
+        return is_home() && !is_front_page() && (int) get_option('page_for_posts') > 0;
     }
 
     /**
@@ -1994,7 +2379,7 @@ class SEO_Manager {
         if (is_singular() && $this->current_post_id && !$this->is_content_password_protected()) {
             $post_content = get_post_field('post_content', $this->current_post_id);
             if ($post_content) {
-                $excerpt = wp_trim_words(wp_strip_all_tags($post_content), 25, '...');
+                $excerpt = \ThinkRank\SEO\Pattern_Resolver::derive_excerpt((string) $post_content);
                 if (!empty($excerpt)) {
                     return $excerpt;
                 }
@@ -2152,7 +2537,6 @@ class SEO_Manager {
 
             if (!empty($page_specific_schemas)) {
                 // Apply filter for Pro to allow multiple schemas
-                // In free version, it's limited to 1 schema if not filtered
                 $page_specific_schemas = apply_filters(
                     'thinkrank_page_schemas_to_render',
                     $page_specific_schemas,
@@ -2160,10 +2544,23 @@ class SEO_Manager {
                     $context_id
                 );
 
-                // If still multiple schemas and not Pro, limit to 1 (enforcing free limit)
-                $is_pro = \ThinkRank\Core\Plan_Config::is_pro();
-                if (!$is_pro && count($page_specific_schemas) > 2) {
-                    $page_specific_schemas = array_slice($page_specific_schemas, 0, 2, true);
+                // Free tier renders at most self::FREE_PAGE_SCHEMA_LIMIT
+                // page-specific schemas; Pro renders all of them.
+                //
+                // Both comments here used to say the free limit was 1 while the
+                // code allowed 2 (#405). The number the code enforces is what
+                // has shipped, so that is what stands — lowering it would take
+                // a schema away from every free site on upgrade — and it now
+                // lives in one named place instead of twice in prose and twice
+                // in a literal.
+                if (!\ThinkRank\Core\Plan_Config::is_pro()
+                    && count($page_specific_schemas) > self::FREE_PAGE_SCHEMA_LIMIT) {
+                    $page_specific_schemas = array_slice(
+                        $page_specific_schemas,
+                        0,
+                        self::FREE_PAGE_SCHEMA_LIMIT,
+                        true
+                    );
                 }
 
                 foreach ($page_specific_schemas as $schema_type => $schema_info) {
@@ -2471,23 +2868,32 @@ class SEO_Manager {
      * @return void
      */
     public function output_closing_comment(): void {
-        // Only output if we've output any SEO content
-        static $header_output = false;
-        if ($header_output || $this->has_seo_output()) {
+        // Close only what was actually opened. has_seo_output() is true on
+        // nearly every page, so testing it here printed a closing comment with
+        // no matching opener whenever the meta description was empty (search
+        // results, author archives without a description).
+        if (self::$opening_comment_output) {
             echo "<!-- /ThinkRank SEO -->\n";
         }
     }
 
     /**
-     * Check if any SEO content has been output
+     * Print the opening ThinkRank comment, once per request.
      *
-     * @return bool True if SEO content was output
+     * Public and static so Author_Archives_Manager — which prints its own meta
+     * description on wp_head at priority 5 — opens the block through the same
+     * flag the closing comment reads.
+     *
+     * @since 2.0.1
+     * @return void
      */
-    private function has_seo_output(): bool {
-        // Check if we have meta description or any other SEO data
-        return !empty($this->get_meta_description()) ||
-            $this->has_thinkrank_metadata() ||
-            ($this->site_identity_data && $this->site_identity_data['enabled']);
+    public static function note_opening_comment(): void {
+        if (self::$opening_comment_output) {
+            return;
+        }
+
+        echo "<!-- Search Engine Optimization by ThinkRank - https://thinkrank.ai/ -->\n";
+        self::$opening_comment_output = true;
     }
 
     /**
@@ -3037,8 +3443,14 @@ class SEO_Manager {
                     }
                 }
 
-                // Add current post
-                if (empty($settings['show_current_page']) || $settings['show_current_page']) {
+                // Add current post. `empty($x) || $x` is true for every possible
+                // value — an unset key, false, 0, '' and any truthy value alike —
+                // so the setting had no effect on the rendered breadcrumb or on
+                // the BreadcrumbList JSON-LD, while the admin preview honoured it
+                // and disagreed with live output (#398). Site_Identity_Manager
+                // already had the correct form: default to on, respect an
+                // explicit off.
+                if ($settings['show_current_page'] ?? true) {
                     $items[] = [
                         'title' => get_the_title($current_post_id),
                         'url' => get_permalink($current_post_id),
@@ -3079,7 +3491,7 @@ class SEO_Manager {
                 }
 
                 // Add current page
-                if (empty($settings['show_current_page']) || $settings['show_current_page']) {
+                if ($settings['show_current_page'] ?? true) {
                     $items[] = [
                         'title' => get_the_title($current_post_id),
                         'url' => get_permalink($current_post_id),
@@ -3119,7 +3531,7 @@ class SEO_Manager {
             }
 
             // Add current category
-            if (empty($settings['show_current_page']) || $settings['show_current_page']) {
+            if ($settings['show_current_page'] ?? true) {
                 $items[] = [
                     'title' => $category->name,
                     'url' => get_category_link($category->term_id),

@@ -508,25 +508,48 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      *
      * @since 1.31.0
      *
-     * @return array{content: string, source: string, is_default: bool, in_sync: bool, url: string}
+     * @return array{content: string, source: string, is_default: bool, in_sync: bool, out_of_sync_reason: string, url: string}
      *         The served content and its origin, whether it still reflects the
-     *         saved settings, and the public URL it is served from.
+     *         body the editor is showing, why it does not when it does not
+     *         ('file_drift' or 'crawl_blocked'), and the public URL it is
+     *         served from.
      */
     public function get_robots_txt_delivery(): array {
         $effective = $this->get_effective_robots_txt();
+        $settings  = $this->get_settings('site');
 
         // Compare bodies, not raw strings: the auto-generated header carries a
         // regeneration timestamp that always differs and means nothing here.
         $served = $this->strip_robots_header($effective['content']);
-        $expected = $this->strip_robots_header($this->render_robots_txt());
+
+        // Measure against the body the editor is displaying — get_served_robots_body()
+        // — not against render_robots_txt(). Two things made the old comparison
+        // report "in sync" while the screen showed rules no crawler receives:
+        // a physical file was compared to a freshly rendered body rather than
+        // to the stored override the textarea shows, and a site-wide crawl
+        // block makes render_robots_txt() return the generated "Disallow: /"
+        // on both sides of the comparison, so it always matched.
+        $expected = $this->get_served_robots_body();
+
+        // Management off: WordPress serves its own default and the editor is not
+        // claiming anything is live, so there is nothing to be out of sync with.
+        $managed = !empty($settings['robots_txt_enabled']);
+        $in_sync = !$managed || $served === $expected;
+
+        $reason = '';
+        if (!$in_sync) {
+            // A crawl block is a deliberate override, not a stale file, and the
+            // admin needs to be told which of the two they are looking at.
+            $blocked = empty($settings['allow_search_engines'] ?? true) || !get_option('blog_public');
+            $reason  = $blocked ? 'crawl_blocked' : 'file_drift';
+        }
 
         return [
             'content' => $effective['content'],
             'source' => $effective['source'],
             'is_default' => $effective['is_default'],
-            // Only a physical file can drift. Every other source is rendered
-            // from the settings on demand, so it is in sync by construction.
-            'in_sync' => $effective['source'] !== 'file' || $served === $expected,
+            'in_sync' => $in_sync,
+            'out_of_sync_reason' => $reason,
             'url' => home_url('/robots.txt'),
         ];
     }
@@ -2297,10 +2320,13 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             'suggestions' => []
         ];
 
-        // Validate business name (required for local SEO)
+        // Business name is what makes the LocalBusiness schema useful, but it
+        // cannot be a blocking error: the toggle is what reveals the business
+        // fields, so requiring the name up front makes enabling Local SEO
+        // impossible. The frontend already skips the output while the name is
+        // empty (see Seo_Manager::output_local_seo_meta_tags()).
         if (empty($settings['business_name'])) {
-            $validation['errors'][] = 'Business name is required when local SEO is enabled';
-            $validation['valid'] = false;
+            $validation['warnings'][] = 'Business name is missing - required before local business schema is output';
         } elseif (strlen($settings['business_name']) > 100) {
             $validation['warnings'][] = 'Business name is very long, consider shortening for better display';
         }
@@ -2440,6 +2466,46 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         }
 
         return $output;
+    }
+
+    /**
+     * Keys the Site Identity screens store beyond the 16 defaults.
+     *
+     * Title formats, breadcrumb configuration, the hero fields, the business
+     * block and the wizard's identity fields are all real settings written by
+     * this manager, none of which get_default_settings() names — it seeds only
+     * the values a fresh install needs. Gating on defaults alone would stop
+     * every one of them saving (#452).
+     *
+     * @since 2.0.1
+     *
+     * @return string[]
+     */
+    protected function additional_setting_keys(): array {
+        return [
+            // Title formats, one per context.
+            'homepage_title', 'post_title', 'page_title', 'category_title',
+            'tag_title', 'author_title', 'search_title', 'archive_title',
+            // Breadcrumbs.
+            'breadcrumb_prefix', 'show_current_page',
+            // Identity, as written by the setup wizard and the importers.
+            'alternate_name', 'identity_type', 'represents',
+            'default_meta_description', 'default_social_image',
+            'social_media_accounts',
+            // Schema toggles that live on this screen.
+            'organization_schema', 'knowledge_graph',
+            // Robots rules composed by the Robots.txt panel.
+            'custom_robots_rules',
+            // Hero section.
+            'hero_title', 'hero_subtitle', 'hero_cta_text', 'hero_cta_url',
+            'hero_background_image',
+            // Local SEO / business details.
+            'local_seo_enabled', 'business_type', 'business_name',
+            'business_address', 'business_city', 'business_state',
+            'business_postal_code', 'business_country', 'business_phone',
+            'business_email', 'business_latitude', 'business_longitude',
+            'business_price_range', 'business_hours',
+        ];
     }
 
     /**
@@ -2585,8 +2651,11 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
     private function prepare_title_placeholders(array $data, string $context, array $settings): array {
         $placeholders = [
             '%title%' => $data['title'] ?? '',
-            '%sitename%' => $settings['site_name'] ?? get_bloginfo('name'),
-            '%tagline%' => $settings['tagline'] ?? get_bloginfo('description'),
+            // `?:` rather than `??`: these are persisted as '' rather than left
+            // unset, and '' is not null, so the null-coalesce never reached the
+            // WordPress fallback (#398).
+            '%sitename%' => ($settings['site_name'] ?? '') ?: get_bloginfo('name'),
+            '%tagline%' => ($settings['tagline'] ?? '') ?: get_bloginfo('description'),
             '%separator%' => '', // Will be replaced with actual separator
             '%category%' => '',
             '%author%' => '',
@@ -3084,13 +3153,30 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             $sitemap_urls = [];
             $site_url = home_url();
 
-            // Extract enabled sitemap URLs
+            // Extract enabled sitemap URLs. When the index is enabled it is the
+            // only entry worth advertising: every child sitemap is already
+            // listed inside it, so naming them again in robots.txt is pure
+            // redundancy and drifts out of date as soon as a post type is added.
+            $index_url = '';
             if (!empty($sitemap_settings['sitemap_urls']) && is_array($sitemap_settings['sitemap_urls'])) {
                 foreach ($sitemap_settings['sitemap_urls'] as $sitemap) {
-                    if (!empty($sitemap['enabled']) && !empty($sitemap['url'])) {
-                        $sitemap_urls[] = $site_url . $sitemap['url'];
+                    if (empty($sitemap['enabled']) || empty($sitemap['url'])) {
+                        continue;
                     }
+
+                    if (($sitemap['type'] ?? '') === 'index') {
+                        $index_url = $site_url . $sitemap['url'];
+                        continue;
+                    }
+
+                    $sitemap_urls[] = $site_url . $sitemap['url'];
                 }
+            }
+
+            if ($index_url !== '') {
+                // The index alone — it covers the children and, on a segmented
+                // install, the local business sitemap too.
+                return [$index_url];
             }
 
             // Fallback to default if no URLs found
@@ -3098,9 +3184,8 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
                 $sitemap_urls[] = home_url('/sitemap.xml');
             }
 
-            // Advertise the local business sitemap when it exists. In segmented
-            // mode it is already listed inside the sitemap index; in single mode
-            // there is no index, so robots.txt is its discovery path.
+            // No index on this install, so the local business sitemap has no
+            // other discovery path — advertise it directly.
             if (file_exists(ABSPATH . 'local-sitemap.xml')) {
                 $local_url = home_url('/local-sitemap.xml');
                 if (!in_array($local_url, $sitemap_urls, true)) {
@@ -3196,6 +3281,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         $content = '';
 
         $current_user_agent = '';
+        $sitemap_started = false;
 
         foreach ($rules as $rule) {
             $directive = $rule['directive'] ?? '';
@@ -3218,12 +3304,75 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
                     $content .= "Crawl-delay: {$value}\n";
                     break;
                 case 'sitemap':
-                    $content .= "\nSitemap: {$value}\n";
+                    // One blank line separates the Sitemap block from the
+                    // preceding group, and none appear inside it. A blank line
+                    // terminates a record in the robots.txt grammar, so putting
+                    // one between every directive was invalid formatting.
+                    if (!$sitemap_started) {
+                        $content .= "\n";
+                        $sitemap_started = true;
+                    }
+                    $content .= "Sitemap: {$value}\n";
                     break;
             }
         }
 
         return ltrim($content, "\n");
+    }
+
+    /**
+     * Parse a robots.txt body back into the {directive, value} rule shape.
+     *
+     * generate_robots_txt() returns `rules` alongside `content`, but callers
+     * replace `content` with the body actually being served (a stored override
+     * or a physical file). The generated rules then described something the
+     * response no longer contained. Re-deriving them from the served body keeps
+     * the two halves of the payload describing the same document.
+     *
+     * @since 2.0.1
+     *
+     * @param string $content Robots.txt body (header optional).
+     * @return array<int, array{directive: string, value: string}> Parsed rules.
+     */
+    public function parse_robots_txt_rules(string $content): array {
+        $map = [
+            'user-agent'  => 'user_agent',
+            'disallow'    => 'disallow',
+            'allow'       => 'allow',
+            'crawl-delay' => 'crawl_delay',
+            'sitemap'     => 'sitemap',
+        ];
+
+        $rules = [];
+
+        foreach (preg_split('/\r\n|\r|\n/', $this->strip_robots_header($content)) as $line) {
+            $line = trim($line);
+
+            // Blank lines separate groups and `#` starts a comment; neither is
+            // a rule.
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+
+            $parts = explode(':', $line, 2);
+            if (count($parts) !== 2) {
+                continue;
+            }
+
+            $field = strtolower(trim($parts[0]));
+            if (!isset($map[$field])) {
+                continue;
+            }
+
+            $rules[] = [
+                'directive' => $map[$field],
+                // Sitemap values are absolute URLs and contain the `:` the
+                // limited explode above deliberately preserved.
+                'value' => trim($parts[1]),
+            ];
+        }
+
+        return $rules;
     }
 
     /**

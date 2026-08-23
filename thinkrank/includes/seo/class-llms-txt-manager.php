@@ -52,6 +52,15 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
     private bool $last_unpublish_failed = false;
 
     /**
+     * Message from the last save that switched delivery mode but could not move
+     * the published document, or an empty string when the switch was clean.
+     *
+     * @since 2.1.0
+     * @var string
+     */
+    private string $last_delivery_warning = '';
+
+    /**
      * LLMs.txt content sections configuration
      *
      * @since 1.0.0
@@ -118,6 +127,34 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
      * @var string
      */
     private const HTACCESS_MARKER = 'ThinkRank llms.txt';
+
+    /**
+     * Option holding the published llms.txt document.
+     *
+     * The published content lives here regardless of delivery mode, so the
+     * dynamic route has an authoritative source that does not depend on a
+     * physical file, and switching modes never loses the published document.
+     *
+     * @since 2.1.0
+     * @var string
+     */
+    private const CONTENT_OPTION = 'thinkrank_llms_txt_content';
+
+    /**
+     * Option holding the Unix timestamp of the last publish.
+     *
+     * @since 2.1.0
+     * @var string
+     */
+    private const PUBLISHED_AT_OPTION = 'thinkrank_llms_txt_published_at';
+
+    /**
+     * Delivery modes accepted by the `delivery_mode` setting.
+     *
+     * @since 2.1.0
+     * @var string[]
+     */
+    private const DELIVERY_MODES = ['auto', 'static', 'dynamic'];
 
     /**
      * Business type templates for content generation
@@ -280,7 +317,14 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
      */
     public function save_settings(string $context_type, ?int $context_id, array $settings): bool {
         $this->last_unpublish_failed = false;
+        $this->last_delivery_warning = '';
+        $previous_mode = $this->resolve_delivery_mode();
+
         $result = parent::save_settings($context_type, $context_id, $settings);
+
+        // The cached status carries the resolved delivery mode, so it goes stale
+        // the moment settings change — even when nothing needs republishing.
+        delete_transient('thinkrank_llms_file_status');
 
         // When a save explicitly disables the feature, delete the published file.
         if ($result && array_key_exists('enabled', $settings) && empty($settings['enabled'])) {
@@ -290,9 +334,98 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
                 // report a partial failure instead of an unqualified success.
                 $this->last_unpublish_failed = true;
             }
+
+            return $result;
+        }
+
+        // The published document has to sit where the active mode serves it from,
+        // or the site keeps answering on the old path: a leftover physical file
+        // shadows the dynamic route on every stack, and a database-only document
+        // is invisible to a stack now expecting a file. Reconciled on any save,
+        // not just an explicit mode change, so a site whose auto-detection now
+        // resolves differently — an nginx install upgrading into this fix with a
+        // static file already on disk — heals the next time settings are saved.
+        if ($result && $this->delivery_needs_reconcile($previous_mode)) {
+            $this->republish_for_delivery_mode();
         }
 
         return $result;
+    }
+
+    /**
+     * Whether the published document is out of step with the active mode.
+     *
+     * @since 2.1.0
+     *
+     * @param string $previous_mode Mode in force before the save.
+     * @return bool
+     */
+    private function delivery_needs_reconcile(string $previous_mode): bool {
+        $mode = $this->resolve_delivery_mode();
+        $file_exists = file_exists(ABSPATH . 'llms.txt');
+
+        if ('dynamic' === $mode) {
+            // A physical file would be served instead of the PHP route.
+            return $file_exists;
+        }
+
+        // Static: a stored document with no file behind it is unreachable on a
+        // stack that expects one. A mode flip also forces the charset block to
+        // be (re)written for a file that predates it.
+        return (!$file_exists && '' !== trim($this->get_published_content()))
+            || $mode !== $previous_mode;
+    }
+
+    /**
+     * Re-publish the current document under the active delivery mode.
+     *
+     * A no-op when nothing is published yet — this only moves an existing
+     * document, it never publishes on the user's behalf.
+     *
+     * @since 2.1.0
+     *
+     * @return void
+     */
+    private function republish_for_delivery_mode(): void {
+        $content = $this->get_published_content();
+
+        if ('' === trim($content)) {
+            // Published before the stored copy existed: recover it from the file.
+            $llms_file = ABSPATH . 'llms.txt';
+            if (file_exists($llms_file)) {
+                $read_result = $this->safe_file_read($llms_file);
+                if ($read_result['success']) {
+                    $content = $read_result['content'];
+                }
+            }
+        }
+
+        if ('' === trim($content)) {
+            return;
+        }
+
+        $write = $this->write_llms_txt_to_file($content);
+
+        // The switch itself failed (an unwritable root on the way to static, a
+        // stuck file on the way to dynamic). The settings are saved, so report
+        // it rather than letting the mode read as applied when it is not.
+        if (empty($write['success'])) {
+            $this->last_delivery_warning = isset($write['message']) && '' !== (string) $write['message']
+                ? (string) $write['message']
+                : 'The delivery method was saved, but the published llms.txt could not be moved to it.';
+        }
+    }
+
+    /**
+     * Message from the last save whose delivery-mode switch could not be
+     * applied to the already-published document, or '' when there was none.
+     *
+     * @since 2.1.0
+     *
+     * @return string
+     */
+    public function delivery_switch_warning(): string {
+        return $this->last_delivery_warning;
     }
 
     /**
@@ -306,13 +439,122 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
     }
 
     /**
-     * Remove the published llms.txt file and bust the status transient.
+     * Resolve the effective delivery mode for /llms.txt.
      *
-     * @return bool True if the file is absent or was removed.
+     * `static` publishes a physical ABSPATH/llms.txt and lets the web server
+     * answer it; `dynamic` keeps the document in the database and lets the PHP
+     * route in {@see serve_llms_txt()} answer it. `auto` picks static only on
+     * Apache/LiteSpeed, the stacks that read the .htaccess charset block — on
+     * nginx a physical file is served with a bare `Content-Type: text/plain`
+     * that neither fix path can reach, which renders UTF-8 as mojibake (#419).
+     *
+     * Layered hosts (e.g. an nginx front end reporting as something else) can
+     * defeat the detection, which is why the setting also accepts an explicit
+     * override rather than relying on $is_apache alone.
+     *
+     * @since 2.1.0
+     *
+     * @param string|null $mode Optional. Raw setting value; read from the saved
+     *                          settings when null.
+     * @return string Either 'static' or 'dynamic'.
+     */
+    public function resolve_delivery_mode(?string $mode = null): string {
+        if (null === $mode) {
+            $settings = $this->get_settings('site');
+            $mode = (string) ($settings['delivery_mode'] ?? 'auto');
+        }
+
+        if ('static' === $mode || 'dynamic' === $mode) {
+            return $mode;
+        }
+
+        // $is_apache also covers LiteSpeed, which reads .htaccess the same way.
+        return !empty($GLOBALS['is_apache']) ? 'static' : 'dynamic';
+    }
+
+    /**
+     * The published llms.txt document, or an empty string when unpublished.
+     *
+     * @since 2.1.0
+     *
+     * @return string
+     */
+    public function get_published_content(): string {
+        $content = get_option(self::CONTENT_OPTION, '');
+
+        return is_string($content) ? $content : '';
+    }
+
+    /**
+     * Ask the common page/CDN cache layers to drop their copy of /llms.txt.
+     *
+     * A cached response outlives a republish, so without this a mode switch or
+     * a content change keeps serving the old document (and, on the static path,
+     * the old headers). Every call is guarded — a site running none of these
+     * simply gets the action hook, which integrations can use.
+     *
+     * @since 2.1.0
+     *
+     * @return void
+     */
+    private function purge_llms_txt_caches(): void {
+        $url = home_url('/llms.txt');
+
+        /**
+         * Fires after the published llms.txt changes, so cache layers ThinkRank
+         * does not know about can drop their copy.
+         *
+         * @since 2.1.0
+         *
+         * @param string $url Public URL of the llms.txt document.
+         */
+        do_action('thinkrank_llms_txt_updated', $url);
+
+        // LiteSpeed Cache and Nginx Helper both listen on their own actions.
+        // These are third-party hook names we fire, not ours to prefix.
+        do_action('litespeed_purge_url', $url); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+        do_action('rt_nginx_helper_purge_all'); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+
+        if (function_exists('rocket_clean_files')) {
+            rocket_clean_files([$url]);
+        }
+        if (function_exists('w3tc_flush_url')) {
+            w3tc_flush_url($url);
+        }
+        if (function_exists('wpsc_delete_url_cache')) {
+            wpsc_delete_url_cache($url);
+        }
+    }
+
+    /**
+     * Unpublish llms.txt: drop the stored document and any physical file.
+     *
+     * Both delivery modes are cleared, not just the active one, so a site that
+     * published under one mode and switched to the other is left with nothing
+     * still being served.
+     *
+     * @return bool True once nothing is left to serve.
      */
     public function delete_llms_txt_file(): bool {
         delete_transient('thinkrank_llms_file_status');
 
+        delete_option(self::CONTENT_OPTION);
+        delete_option(self::PUBLISHED_AT_OPTION);
+
+        $removed = $this->delete_static_file();
+        $this->purge_llms_txt_caches();
+
+        return $removed;
+    }
+
+    /**
+     * Remove the physical ABSPATH/llms.txt and its .htaccess charset block.
+     *
+     * @since 2.1.0
+     *
+     * @return bool True if the file is absent or was removed.
+     */
+    private function delete_static_file(): bool {
         $llms_file = ABSPATH . 'llms.txt';
         if (!file_exists($llms_file)) {
             $this->remove_htaccess_charset();
@@ -446,11 +688,18 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
         $content = '';
         $llms_file = ABSPATH . 'llms.txt';
 
-        if (file_exists($llms_file)) {
+        // In static mode a physical file is what the server would normally hand
+        // back, so prefer its exact bytes; in dynamic mode there is no file and
+        // the stored document is the authoritative copy.
+        if ('static' === $this->resolve_delivery_mode() && file_exists($llms_file)) {
             $read_result = $this->safe_file_read($llms_file);
             if ($read_result['success']) {
                 $content = $read_result['content'];
             }
+        }
+
+        if ('' === trim($content)) {
+            $content = $this->get_published_content();
         }
 
         if ('' === trim($content)) {
@@ -497,7 +746,36 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
             return $result;
         }
 
+        $mode = $this->resolve_delivery_mode();
+        $result['delivery_mode'] = $mode;
+
         $llms_file = ABSPATH . 'llms.txt';
+        $result['file_path'] = $llms_file;
+
+        // Dynamic delivery: the document lives in the database and /llms.txt is
+        // answered by serve_llms_txt(), which sets `charset=utf-8` itself. A
+        // physical file would shadow that route on every stack, so any leftover
+        // from a previous static publish has to go.
+        if ('dynamic' === $mode) {
+            if (!$this->delete_static_file()) {
+                $result['message'] = 'A physical llms.txt is still present and could not be removed. It would be served instead of the dynamic route.';
+                return $result;
+            }
+
+            $this->store_published_content($content);
+
+            $result['success'] = true;
+            $result['message'] = 'LLMs.txt published. It is served by WordPress as UTF-8 text.';
+            $result['bytes_written'] = strlen($content);
+            $result['charset_pinned'] = true;
+            $result['permissions'] = [
+                'directory_writable' => $this->is_directory_writable(ABSPATH),
+                'file_exists' => false,
+                'file_writable' => null,
+            ];
+
+            return $result;
+        }
 
         // Security: Validate file path to prevent path traversal attacks
         $real_llms_file = realpath(dirname($llms_file)) . DIRECTORY_SEPARATOR . basename($llms_file);
@@ -507,8 +785,6 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
             $result['message'] = 'Invalid file path detected for security reasons.';
             return $result;
         }
-
-        $result['file_path'] = $llms_file;
 
         // Check directory permissions
         $result['permissions'] = [
@@ -529,31 +805,49 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
             return $result;
         }
 
-            // Write new content using WP_Filesystem
-            if (!$this->init_filesystem()) {
-                $result['message'] = 'Could not initialize WordPress filesystem.';
-                return $result;
-            }
+        // Write new content using WP_Filesystem
+        if (!$this->init_filesystem()) {
+            $result['message'] = 'Could not initialize WordPress filesystem.';
+            return $result;
+        }
 
-            $write_success = $this->filesystem->put_contents($llms_file, $content, FS_CHMOD_FILE);
+        if (!$this->filesystem->put_contents($llms_file, $content, FS_CHMOD_FILE)) {
+            $result['message'] = 'Failed to write llms.txt file.';
+            return $result;
+        }
 
-            if ($write_success) {
-                $result['success'] = true;
-                $result['message'] = 'LLMs.txt file written successfully.';
-                $result['bytes_written'] = strlen($content);
+        $result['success'] = true;
+        $result['message'] = 'LLMs.txt file written successfully.';
+        $result['bytes_written'] = strlen($content);
 
-                // Pin the served charset to UTF-8. Best effort: a site without a
-                // writable .htaccess (or not on Apache/LiteSpeed) still gets a
-                // correctly written file, so this must never fail the publish.
-                $result['charset_pinned'] = $this->sync_htaccess_charset();
+        // Pin the served charset to UTF-8. Best effort: a site without a
+        // writable .htaccess (or not on Apache/LiteSpeed) still gets a
+        // correctly written file, so this must never fail the publish.
+        $result['charset_pinned'] = $this->sync_htaccess_charset();
 
-                // Invalidate file status cache since file has changed
-                delete_transient('thinkrank_llms_file_status');
-            } else {
-                $result['message'] = 'Failed to write llms.txt file.';
-            }
+        // Keep the stored copy in step with the file so a later switch to
+        // dynamic delivery serves the same document.
+        $this->store_published_content($content);
 
         return $result;
+    }
+
+    /**
+     * Persist the published document and bust the caches that mirror it.
+     *
+     * @since 2.1.0
+     *
+     * @param string $content Published llms.txt content.
+     * @return void
+     */
+    private function store_published_content(string $content): void {
+        update_option(self::CONTENT_OPTION, $content, false);
+        update_option(self::PUBLISHED_AT_OPTION, time(), false);
+
+        // Invalidate file status cache since the published document has changed
+        delete_transient('thinkrank_llms_file_status');
+
+        $this->purge_llms_txt_caches();
     }
 
     /**
@@ -575,10 +869,16 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
         }
 
         $llms_file = ABSPATH . 'llms.txt';
+        $mode = $this->resolve_delivery_mode();
+        $stored = $this->get_published_content();
 
         $status = [
             'file_exists' => file_exists($llms_file),
-            'file_path' => $llms_file,
+            // Whether /llms.txt is actually being served, either mode. Prefer
+            // this over file_exists, which is only meaningful in static mode.
+            'published' => file_exists($llms_file) || '' !== trim($stored),
+            'delivery_mode' => $mode,
+            'file_path' => 'dynamic' === $mode ? '' : $llms_file,
             'file_url' => home_url('/llms.txt'),
             'writable' => $this->is_directory_writable(dirname($llms_file)),
             'last_modified' => null,
@@ -586,20 +886,31 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
             'content_preview' => ''
         ];
 
+        $content = null;
+
         if ($status['file_exists']) {
             $status['last_modified'] = filemtime($llms_file);
             $status['file_size'] = filesize($llms_file);
 
-            // Get content preview (first 200 characters) with size safety
             $read_result = $this->safe_file_read($llms_file);
             if ($read_result['success']) {
-                $status['content_preview'] = substr($read_result['content'], 0, 200);
-                if (strlen($read_result['content']) > 200) {
-                    $status['content_preview'] .= '...';
-                }
+                $content = $read_result['content'];
             } else {
                 $status['content_preview'] = 'Error: ' . $read_result['error'];
                 $status['read_error'] = $read_result['error'];
+            }
+        } elseif ('' !== trim($stored)) {
+            $published_at = (int) get_option(self::PUBLISHED_AT_OPTION, 0);
+            $status['last_modified'] = $published_at > 0 ? $published_at : null;
+            $status['file_size'] = strlen($stored);
+            $content = $stored;
+        }
+
+        if (null !== $content) {
+            // Get content preview (first 200 characters) with size safety
+            $status['content_preview'] = substr($content, 0, 200);
+            if (strlen($content) > 200) {
+                $status['content_preview'] .= '...';
             }
         }
 
@@ -749,11 +1060,13 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
      *
      * @since 1.0.0
      *
-     * @param array $settings Settings to sanitize
+     * @param array  $settings     Settings to sanitize
+     * @param string $context_type Context the save is for.
      * @return array Sanitized settings
      */
-    protected function sanitize_settings(array $settings): array {
+    protected function sanitize_settings(array $settings, string $context_type = 'site'): array {
         $sanitized = [];
+        $known     = $this->get_known_setting_keys($context_type);
 
         // Fields that should preserve line breaks
         $preserve_linebreaks = [
@@ -771,6 +1084,25 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
 
         foreach ($settings as $key => $value) {
             $sanitized_key = sanitize_key($key);
+
+            // Never store the REST envelope back as settings (see
+            // Abstract_Seo_Manager::RESERVED_ENVELOPE_KEYS).
+            if (in_array($sanitized_key, self::RESERVED_ENVELOPE_KEYS, true)) {
+                continue;
+            }
+
+            // And nothing this manager does not declare (#452).
+            if (!$this->is_known_setting_key($sanitized_key, $known)) {
+                continue;
+            }
+
+            // Constrain the delivery mode to the known enum so an unexpected
+            // value falls back to auto-detection rather than being stored.
+            if ('delivery_mode' === $sanitized_key) {
+                $mode = is_string($value) ? sanitize_key($value) : '';
+                $sanitized[$sanitized_key] = in_array($mode, self::DELIVERY_MODES, true) ? $mode : 'auto';
+                continue;
+            }
 
             if (is_string($value)) {
                 if (in_array($key, $preserve_linebreaks, true)) {
@@ -1237,10 +1569,14 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
             }
         }
 
-        // Check file permissions if enabled
-        if (!empty($settings['enabled'])) {
+        // Check file permissions if enabled. Only the static delivery mode needs
+        // a writable root — dynamic delivery keeps the document in the database.
+        $mode = $this->resolve_delivery_mode(
+            isset($settings['delivery_mode']) ? (string) $settings['delivery_mode'] : null
+        );
+        if (!empty($settings['enabled']) && 'static' === $mode) {
             if (!$this->is_directory_writable(ABSPATH)) {
-                $validation['warnings'][] = 'WordPress root directory is not writable, llms.txt cannot be automatically managed';
+                $validation['warnings'][] = 'WordPress root directory is not writable, llms.txt cannot be automatically managed. Switch delivery to "Served by WordPress" to publish without writing a file.';
                 $validation['score'] -= 10;
             }
         }
@@ -1277,7 +1613,8 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
         // Get file status
         $output['file_status'] = $this->get_llms_txt_status();
 
-        // If file exists, get current content safely
+        // If a file is published, get its current content safely; otherwise fall
+        // back to the stored document that dynamic delivery serves.
         if ($output['file_status']['file_exists']) {
             $llms_file = ABSPATH . 'llms.txt';
             $read_result = $this->safe_file_read($llms_file);
@@ -1287,6 +1624,8 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
                 $output['llms_txt_content'] = '';
                 $output['file_read_error'] = $read_result['error'];
             }
+        } else {
+            $output['llms_txt_content'] = $this->get_published_content();
         }
 
         // Add metadata
@@ -1320,6 +1659,7 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
             'setup_instructions' => '',
             'ai_context_custom' => '',
             'auto_generate' => false,
+            'delivery_mode' => 'auto',
             'last_generated' => null,
             // Structured sections for llms.txt spec compliance
             'documentation_links' => '',
@@ -1425,6 +1765,13 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
                 'title' => 'Auto-generate',
                 'description' => 'Automatically regenerate llms.txt when settings change',
                 'default' => false
+            ],
+            'delivery_mode' => [
+                'type' => 'string',
+                'title' => 'Delivery Method',
+                'description' => 'How /llms.txt is served: "static" writes a physical file the web server answers, "dynamic" keeps the document in WordPress and serves it from PHP as UTF-8, "auto" picks static on Apache/LiteSpeed and dynamic elsewhere.',
+                'enum' => self::DELIVERY_MODES,
+                'default' => 'auto'
             ],
             'last_generated' => [
                 'type' => 'string',

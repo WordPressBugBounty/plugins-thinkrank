@@ -53,11 +53,25 @@ final class Mcp_Self_Test {
 	 * key on. A site that answers WordPress's own UA but 403s these is
 	 * unreachable for every AI client while looking perfectly healthy from
 	 * inside.
+	 *
+	 * DO NOT replace these with a descriptive agent such as
+	 * `ThinkRank-SelfTest/1.0`. An affected host allowlists a named agent and
+	 * keeps refusing `python-requests/…`, so the check would go green while
+	 * ChatGPT stays blocked — the exact false pass this test exists to catch.
+	 * SiteGround support has recommended that change; declining it is
+	 * deliberate. See #379.
 	 */
 	private const CLIENT_USER_AGENTS = [
 		'python-requests/2.32.3',
 		'node-fetch/3.3.2',
 	];
+
+	/**
+	 * Where an affected site owner is sent for the workaround list. The plugin
+	 * cannot fix an edge block, so the failing check hands over the diagnostic
+	 * and the host-side options instead.
+	 */
+	private const HOSTING_DOC_URL = 'https://thinkrank.ai/docs/mcp/hosting-compatibility/';
 
 	/**
 	 * Run the round-trip self-test.
@@ -126,7 +140,7 @@ final class Mcp_Self_Test {
 		// not measure is the failure mode this whole test exists to avoid.
 		$user_agent = self::probe_user_agent( $endpoint );
 		if ( null !== $user_agent ) {
-			$result['checks'][] = self::check( 'user_agent', __( 'Client access', 'thinkrank' ), $user_agent['stage'], $user_agent['detail'] );
+			$result['checks'][] = self::check( 'user_agent', __( 'Client access', 'thinkrank' ), $user_agent['stage'], $user_agent['detail'], $user_agent['doc_url'] ?? '' );
 		}
 
 		// Locked-out clients. The loopback below can pass while a REMOTE client
@@ -707,8 +721,9 @@ final class Mcp_Self_Test {
 				continue;
 			}
 			return [
-				'stage'  => 'ua_filter',
-				'detail' => sprintf(
+				'stage'   => 'ua_filter',
+				'doc_url' => self::HOSTING_DOC_URL,
+				'detail'  => sprintf(
 					/* translators: 1: user agent string, 2: HTTP status returned for it, 3: HTTP status returned for WordPress's own user agent. */
 					__( 'The endpoint answered %3$d for WordPress but %2$d for an AI client\'s User-Agent (%1$s). ThinkRank deliberately tests with the generic agents real MCP backends send; this refusal means a security plugin, firewall or host-level "block bad bots" rule (SiteGround\'s edge protection does this) will also refuse the real AI client. Ask the host to exempt the MCP and /.well-known/ paths, or allowlist these User-Agents.', 'thinkrank' ),
 					$agent,
@@ -764,18 +779,26 @@ final class Mcp_Self_Test {
 	/**
 	 * Shape one check for the UI list.
 	 *
-	 * @param string $id     Check id.
-	 * @param string $label  Human label.
-	 * @param string $stage  Resulting stage ('ok' when it passed).
-	 * @param string $detail Explanatory line.
-	 * @return array{id:string,label:string,ok:bool,detail:string}
+	 * @param string $id      Check id.
+	 * @param string $label   Human label.
+	 * @param string $stage   Resulting stage ('ok' when it passed).
+	 * @param string $detail  Explanatory line.
+	 * @param string $doc_url Optional docs page for a failure the user has to
+	 *                        fix outside WordPress. Omitted when empty.
+	 * @return array{id:string,label:string,ok:bool,detail:string,doc_url?:string}
 	 */
-	private static function check( string $id, string $label, string $stage, string $detail ): array {
-		return [
+	private static function check( string $id, string $label, string $stage, string $detail, string $doc_url = '' ): array {
+		$check = [
 			'id'     => $id,
 			'label'  => $label,
 			'ok'     => 'ok' === $stage,
 			'detail' => $detail,
 		];
+
+		if ( '' !== $doc_url ) {
+			$check['doc_url'] = $doc_url;
+		}
+
+		return $check;
 	}
 }

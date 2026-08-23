@@ -233,24 +233,51 @@ add_action('wp_enqueue_scripts', function() {
         return;
     }
 
-    // Lightweight breadcrumb check — query the DB directly to avoid loading
-    // the full Site_Identity_Manager (115KB) on every frontend page
-    global $wpdb;
-    $table = $wpdb->prefix . 'thinkrank_seo_settings';
+    // Both checks below read the site_identity settings category. Loading the
+    // full Site_Identity_Manager (115KB) on every front-end page to get them
+    // would be worse, but the two ad-hoc queries that replaced it did not share
+    // the object cache the manager populates on `wp` — so the category was
+    // fetched twice per request, uncached, on top of the manager's own read
+    // (#402).
+    //
+    // Read that cache entry directly. Abstract_SEO_Manager caches the merged
+    // settings under this key on every get_settings('site') call, and `wp` runs
+    // before wp_enqueue_scripts, so on a normal front-end render this is a hit
+    // and costs nothing. The fallback is one query for the whole category
+    // rather than two for parts of it.
+    $identity = wp_cache_get('seo_settings_site_identity_site_0', 'thinkrank_seo');
 
-    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Lightweight frontend check avoids loading heavy manager class
-    $breadcrumbs_enabled = $wpdb->get_var(
-        $wpdb->prepare(
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Table name uses WordPress prefix, safe to interpolate
-            "SELECT setting_value FROM `{$table}` WHERE context_type = %s AND context_id = %d AND setting_category = %s AND setting_key = %s AND is_active = 1",
-            'site',
-            0,
-            'site_identity',
-            'breadcrumbs_enabled'
-        )
-    );
+    if (!is_array($identity)) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'thinkrank_seo_settings';
 
-    if ($breadcrumbs_enabled) {
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Lightweight frontend check avoids loading heavy manager class
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Table name uses WordPress prefix, safe to interpolate
+                "SELECT setting_key, setting_value FROM `{$table}` WHERE context_type = %s AND context_id = %d AND setting_category = %s AND is_active = 1",
+                'site',
+                0,
+                'site_identity'
+            ),
+            ARRAY_A
+        );
+
+        $identity = [];
+        foreach ((array) $rows as $row) {
+            $identity[$row['setting_key']] = $row['setting_value'];
+        }
+
+        // Deliberately not written back to the object cache: the manager caches
+        // the values *merged with its defaults* under this key, and seeding it
+        // with raw rows would hand every later reader a partial record.
+    }
+
+    $identity_value = static function (string $key) use ($identity): string {
+        return isset($identity[$key]) ? trim((string) $identity[$key]) : '';
+    };
+
+    if (!empty($identity['breadcrumbs_enabled'])) {
         wp_enqueue_style(
             'thinkrank-breadcrumbs',
             THINKRANK_PLUGIN_URL . 'static/css/breadcrumbs.css',
@@ -259,33 +286,13 @@ add_action('wp_enqueue_scripts', function() {
         );
     }
 
-    // Lightweight hero check — only load hero CSS when the hero will actually
-    // render. Mirrors the render gate in SEO_Manager::generate_hero_html():
-    // a title, a subtitle, or a COMPLETE CTA (both text and URL). A CTA with
-    // text but no URL renders nothing, so it must not pull in the stylesheet.
-    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Lightweight frontend check avoids loading heavy manager class
-    $hero_fields = $wpdb->get_results(
-        $wpdb->prepare(
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Table name uses WordPress prefix, safe to interpolate
-            "SELECT setting_key, setting_value FROM `{$table}` WHERE context_type = %s AND context_id = %d AND setting_category = %s AND setting_key IN (%s, %s, %s, %s) AND is_active = 1",
-            'site',
-            0,
-            'site_identity',
-            'hero_title',
-            'hero_subtitle',
-            'hero_cta_text',
-            'hero_cta_url'
-        ),
-        OBJECT_K
-    );
-
-    $hero_value = static function ($key) use ($hero_fields) {
-        return isset($hero_fields[$key]) ? trim((string) $hero_fields[$key]->setting_value) : '';
-    };
-
-    $hero_renders = '' !== $hero_value('hero_title')
-        || '' !== $hero_value('hero_subtitle')
-        || ('' !== $hero_value('hero_cta_text') && '' !== $hero_value('hero_cta_url'));
+    // Hero check — only load hero CSS when the hero will actually render.
+    // Mirrors the render gate in SEO_Manager::generate_hero_html(): a title, a
+    // subtitle, or a COMPLETE CTA (both text and URL). A CTA with text but no
+    // URL renders nothing, so it must not pull in the stylesheet.
+    $hero_renders = '' !== $identity_value('hero_title')
+        || '' !== $identity_value('hero_subtitle')
+        || ('' !== $identity_value('hero_cta_text') && '' !== $identity_value('hero_cta_url'));
 
     if ($hero_renders) {
         wp_enqueue_style(
