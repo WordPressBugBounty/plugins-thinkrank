@@ -76,7 +76,7 @@ class Get_Seo_Opportunities extends Ability_Base {
 		return [
 			'type'                 => 'object',
 			'additionalProperties' => true,
-			'properties'           => [],
+			'properties'           => self::empty_properties(),
 		];
 	}
 

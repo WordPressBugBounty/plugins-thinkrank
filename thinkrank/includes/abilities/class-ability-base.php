@@ -62,6 +62,28 @@ abstract class Ability_Base {
 	protected $capability = 'manage_options';
 
 	/**
+	 * An empty JSON Schema `properties` map.
+	 *
+	 * A schema that takes no arguments still has to say so, and the shape it
+	 * says it in matters twice over:
+	 *
+	 * - `[]` JSON-encodes as `[]`. JSON Schema requires an object there, and
+	 *   strict MCP clients reject the array form (#476).
+	 * - `(object) []` encodes as `{}` but is not array-accessible, and
+	 *   `rest_validate_object_value_from_schema()` indexes into the map —
+	 *   `isset( $args['properties'][ $key ] )`. On PHP 8 that is a fatal
+	 *   `Error`, so a single unexpected input key turns a clean 400 into a 500.
+	 *
+	 * `ArrayObject` is the shape that satisfies both: it JSON-encodes as `{}`
+	 * and still answers array access, so core validation runs as it always did.
+	 *
+	 * @return \ArrayObject<string, mixed> Empty properties map.
+	 */
+	protected static function empty_properties() {
+		return new \ArrayObject();
+	}
+
+	/**
 	 * Get the JSON Schema for ability input.
 	 *
 	 * @return array<string, mixed>

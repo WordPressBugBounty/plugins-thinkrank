@@ -205,9 +205,9 @@ class Schema_Builder {
 
         // Date published - prioritize user-configured date
         if (!empty($data['site_data']['article_date_published'])) {
-            $schema['datePublished'] = $data['site_data']['article_date_published'];
+            $schema['datePublished'] = $this->to_iso8601($data['site_data']['article_date_published']);
         } elseif (!empty($data['date'])) {
-            $schema['datePublished'] = $data['date'];
+            $schema['datePublished'] = $this->to_iso8601($data['date']);
         } else {
             $schema['datePublished'] = current_time('c');
         }
@@ -230,9 +230,9 @@ class Schema_Builder {
 
         // Date modified - prioritize user-configured date
         if (!empty($data['site_data']['article_date_modified'])) {
-            $schema['dateModified'] = $data['site_data']['article_date_modified'];
+            $schema['dateModified'] = $this->to_iso8601($data['site_data']['article_date_modified']);
         } elseif (!empty($data['modified'])) {
-            $schema['dateModified'] = $data['modified'];
+            $schema['dateModified'] = $this->to_iso8601($data['modified']);
         } else {
             $schema['dateModified'] = $schema['datePublished'];
         }
@@ -507,29 +507,43 @@ class Schema_Builder {
             }
         }
 
-        // Contact point from Business Info or contact configuration
-        $contact_point = ['@type' => 'ContactPoint'];
-        $has_contact_info = false;
+        // Contact point: the Schema Manager's own fields win, then Business
+        // Info. Reading telephone/email from Business Info alone and hard-coding
+        // contactType left the Organization form's Contact Type, Phone and Email
+        // inert — they saved but never reached the deployed markup, even though
+        // Seo_Manager already applied this precedence for the same entity.
+        $site_data = $data['site_data'] ?? [];
 
-        // Use Business Info phone as primary contact
-        if (!empty($business_data['business_phone'])) {
-            $contact_point['telephone'] = $business_data['business_phone'];
-            $has_contact_info = true;
-        }
+        $contact_phone = $this->first_non_empty(
+            $site_data['organization_contact_phone'] ?? null,
+            $business_data['business_phone'] ?? null
+        );
 
-        // Use Business Info email as primary contact
-        if (!empty($business_data['business_email'])) {
-            $contact_point['email'] = $business_data['business_email'];
-            $has_contact_info = true;
-        }
+        $contact_email = $this->first_non_empty(
+            $site_data['organization_contact_email'] ?? null,
+            $business_data['business_email'] ?? null
+        );
 
-        // Add contact type and hours if available
-        if ($has_contact_info) {
-            $contact_point['contactType'] = 'customer service';
+        if ('' !== $contact_phone || '' !== $contact_email) {
+            $contact_point = [
+                '@type' => 'ContactPoint',
+                'contactType' => $this->first_non_empty(
+                    $site_data['organization_contact_type'] ?? null,
+                    'customer service'
+                ),
+            ];
+
+            if ('' !== $contact_phone) {
+                $contact_point['telephone'] = $contact_phone;
+            }
+
+            if ('' !== $contact_email) {
+                $contact_point['email'] = $contact_email;
+            }
 
             // Add contact hours if available from organization settings
-            if (!empty($data['site_data']['organization_contact_hours'])) {
-                $contact_point['hoursAvailable'] = $data['site_data']['organization_contact_hours'];
+            if (!empty($site_data['organization_contact_hours'])) {
+                $contact_point['hoursAvailable'] = $site_data['organization_contact_hours'];
             }
 
             $schema['contactPoint'] = $contact_point;
@@ -629,7 +643,7 @@ class Schema_Builder {
 
         // datePublished + url from content context.
         if (!empty($data['date'])) {
-            $schema['datePublished'] = $data['date'];
+            $schema['datePublished'] = $this->to_iso8601($data['date']);
         }
         if (!empty($data['url'])) {
             $schema['url'] = $data['url'];
@@ -720,10 +734,50 @@ class Schema_Builder {
      */
     private function truncate_text(string $text, int $length): string {
         $text = wp_strip_all_tags($text);
-        if (strlen($text) <= $length) {
+
+        // Multibyte-aware. strlen()/substr() count bytes, so a cut landing
+        // mid-character produced invalid UTF-8 — wp_json_encode()'s sanity
+        // check then replaced the tail with "?", mojibaking every non-Latin
+        // site's description and headline (#473).
+        if (mb_strlen($text) <= $length) {
             return $text;
         }
-        return substr($text, 0, $length - 3) . '...';
+
+        return mb_substr($text, 0, max(0, $length - 3)) . '...';
+    }
+
+    /**
+     * Normalise a date into ISO 8601 with a timezone offset.
+     *
+     * Deployed schema is a stored snapshot, so rows written before #465 still
+     * hold raw MySQL datetimes ("2026-08-23 10:19:10"). Google reports those as
+     * an invalid date value and drops the Article rich result, so normalise on
+     * the way out as well as on the way in.
+     *
+     * @since 1.16.0
+     *
+     * @param mixed $date Date in any parseable form.
+     * @return string ISO 8601 date, or '' when the input cannot be parsed.
+     */
+    private function to_iso8601($date): string {
+        if (empty($date) || !is_scalar($date)) {
+            return '';
+        }
+
+        $date = (string) $date;
+
+        // Already ISO 8601 (has the date/time separator) — leave it alone.
+        if (preg_match('/^\d{4}-\d{2}-\d{2}T/', $date)) {
+            return $date;
+        }
+
+        $timestamp = strtotime($date);
+
+        if (false === $timestamp) {
+            return '';
+        }
+
+        return (string) wp_date('c', $timestamp);
     }
 
     /**
@@ -830,8 +884,17 @@ class Schema_Builder {
      * @return array Social media profile URLs
      */
     private function get_social_profiles(): array {
-        // Get Schema Manager settings for organization social profiles
-        $schema_manager = new \ThinkRank\SEO\Schema_Management_System();
+        // Reuse one manager for the whole request. This method runs from inside
+        // the foreign-settings listener, and constructing a fresh
+        // Schema_Management_System on every Organization build was what let the
+        // listener count double per save (#463). The constructor's static guard
+        // stops the doubling; this stops the needless re-construction.
+        static $schema_manager = null;
+
+        if (null === $schema_manager) {
+            $schema_manager = new \ThinkRank\SEO\Schema_Management_System();
+        }
+
         $settings = $schema_manager->get_settings('site', null);
 
         $social_profiles = [];
@@ -966,8 +1029,16 @@ class Schema_Builder {
      */
     private function populate_website_schema(array $schema, array $data, string $context): array {
         // Required properties - prioritize user-configured Website schema fields
-        $schema['name'] = $data['site_data']['website_name'] ?? $data['title'] ?? get_bloginfo('name');
-        $schema['url'] = $data['site_data']['website_url'] ?? $data['url'] ?? home_url();
+        $schema['name'] = $this->first_non_empty(
+            $data['site_data']['website_name'] ?? '',
+            $data['title'] ?? '',
+            get_bloginfo('name')
+        );
+        $schema['url'] = $this->first_non_empty(
+            $data['site_data']['website_url'] ?? '',
+            $data['url'] ?? '',
+            home_url()
+        );
 
         // Recommended properties - prioritize user-configured Website schema description
         if (!empty($data['site_data']['website_description'])) {
@@ -1035,7 +1106,10 @@ class Schema_Builder {
 
         // Search action for sitelinks search box (optional but recommended)
         if ($data['site_data']['website_enable_search'] ?? true) {
-            $search_url = $data['site_data']['website_search_url'] ?? home_url('/?s={search_term_string}');
+            $search_url = $this->first_non_empty(
+                $data['site_data']['website_search_url'] ?? '',
+                home_url('/?s={search_term_string}')
+            );
             $schema['potentialAction'] = [
                 '@type' => 'SearchAction',
                 'target' => [
@@ -1053,7 +1127,8 @@ class Schema_Builder {
         }
 
         // Language
-        $schema['inLanguage'] = get_locale();
+        // BCP-47, not the WP locale: schema.org expects en-US, get_locale() gives en_US (#473).
+            $schema['inLanguage'] = get_bloginfo('language');
 
         return $schema;
     }
@@ -1082,11 +1157,11 @@ class Schema_Builder {
         }
 
         if (!empty($data['date'])) {
-            $schema['datePublished'] = $data['date'];
+            $schema['datePublished'] = $this->to_iso8601($data['date']);
         }
 
         if (!empty($data['modified'])) {
-            $schema['dateModified'] = $data['modified'];
+            $schema['dateModified'] = $this->to_iso8601($data['modified']);
         }
 
         $schema['isPartOf'] = [
@@ -1146,14 +1221,20 @@ class Schema_Builder {
 
         $schema['mainEntity'] = $faq_data;
 
-        // Optional properties
-        $schema['name'] = $data['title'] ?? 'Frequently Asked Questions';
+        // Optional properties. The FAQ form's own Page Title / Page URL fields
+        // win over the post's title and permalink — they were collected by the
+        // form and then never read, so typing in them changed nothing.
+        $schema['name'] = !empty($data['site_data']['faq_page_name'])
+            ? $data['site_data']['faq_page_name']
+            : ($data['title'] ?? 'Frequently Asked Questions');
         if (!empty($data['excerpt'])) {
             $schema['description'] = $this->truncate_text($data['excerpt'], 160);
         }
 
         // URL for the FAQ page
-        if (!empty($data['url'])) {
+        if (!empty($data['site_data']['faq_page_url'])) {
+            $schema['url'] = $data['site_data']['faq_page_url'];
+        } elseif (!empty($data['url'])) {
             $schema['url'] = $data['url'];
         }
 
@@ -1390,7 +1471,11 @@ class Schema_Builder {
      */
     private function populate_person_schema(array $schema, array $data, string $context): array {
         // Required properties - prioritize user-configured fields
-        $schema['name'] = $data['site_data']['person_name'] ?? $data['author']['name'] ?? $data['title'] ?? '';
+        $schema['name'] = $this->first_non_empty(
+            $data['site_data']['person_name'] ?? '',
+            $data['author']['name'] ?? '',
+            $data['title'] ?? ''
+        );
 
         // Image from user configuration or fallback
         if (!empty($data['site_data']['person_image'])) {
@@ -1467,8 +1552,24 @@ class Schema_Builder {
             $social_profiles = array_merge($social_profiles, $global_social_profiles);
         }
 
-        // Remove duplicates and empty values
-        $social_profiles = array_unique(array_filter($social_profiles));
+        // Remove duplicates, empties and anything that is not a URL. schema.org
+        // types sameAs as a URL, and the person social fields are free text, so
+        // without this a typed-in note shipped as a sameAs member and made the
+        // whole Person invalid (#480). get_social_profiles() above already
+        // filters its own values the same way.
+        $social_profiles = array_values(array_unique(array_filter(
+            $social_profiles,
+            static function ($url) {
+                return is_string($url)
+                    && '' !== trim($url)
+                    && filter_var($url, FILTER_VALIDATE_URL)
+                    && in_array(
+                        strtolower((string) wp_parse_url($url, PHP_URL_SCHEME)),
+                        ['http', 'https'],
+                        true
+                    );
+            }
+        )));
 
         if (!empty($social_profiles)) {
             $schema['sameAs'] = $social_profiles;

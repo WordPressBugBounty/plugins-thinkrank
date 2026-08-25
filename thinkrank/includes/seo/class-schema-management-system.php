@@ -168,6 +168,18 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             'context_types' => ['post', 'page'],
             'priority' => 'medium'
         ],
+        // Offered by the metabox dropdown and registered in Schema_Factory, but
+        // absent here — generate_schema_markup() keys off this array, so a
+        // Review request was silently skipped (#462).
+        'Review' => [
+            'name' => 'Review',
+            'description' => 'Reviews and ratings of a product, service or place',
+            'required_properties' => ['itemReviewed', 'reviewRating', 'author'],
+            'recommended_properties' => ['reviewBody', 'datePublished', 'publisher'],
+            'rich_snippets' => ['review', 'review_snippet'],
+            'context_types' => ['post', 'page'],
+            'priority' => 'medium'
+        ],
         'Recipe' => [
             'name' => 'Recipe',
             'description' => 'Cooking recipes and food preparation',
@@ -310,6 +322,17 @@ class Schema_Management_System extends Abstract_SEO_Manager {
     private ?Schema_Cache_Manager $cache_manager = null;
 
     /**
+     * Whether the foreign-settings listener has been registered this request.
+     *
+     * Static because `thinkrank_seo_settings_saved` is a global hook — one
+     * listener serves every instance. See the constructor for why (#463).
+     *
+     * @since 1.16.0
+     * @var bool
+     */
+    private static bool $foreign_settings_listener_registered = false;
+
+    /**
      * Constructor
      *
      * @since 1.0.0
@@ -327,6 +350,96 @@ class Schema_Management_System extends Abstract_SEO_Manager {
 
         // Initialize Schema Cache Manager for performance optimization
         $this->initialize_cache_manager();
+
+        // LocalBusiness and Organization both read Business Info, which Site
+        // Identity owns. Without this, editing an address or phone number never
+        // refreshed the deployed schema (#455).
+        //
+        // Registered at most once per request. WordPress keys callbacks by
+        // object hash, so binding $this here added a fresh listener for every
+        // instance — and this class is constructed from inside the very callback
+        // it registers, which doubled the listener count on every settings save
+        // (#463). The guard is static because the hook itself is global.
+        if (!self::$foreign_settings_listener_registered) {
+            self::$foreign_settings_listener_registered = true;
+            add_action('thinkrank_seo_settings_saved', [$this, 'refresh_schema_for_foreign_settings'], 10, 4);
+        }
+    }
+
+    /**
+     * Regenerate schema when another manager saves settings this schema reads.
+     *
+     * Site Identity owns the Business Info fields that feed LocalBusiness and
+     * the Organization address/contactPoint, so a save there has to refresh the
+     * deployed schema even though no schema setting changed.
+     *
+     * @since 2.0.2
+     *
+     * @param string   $manager_type Settings category that was saved.
+     * @param array    $settings     Settings that were written.
+     * @param string   $context_type Context type.
+     * @param int|null $context_id   Context ID.
+     * @return void
+     */
+    public function refresh_schema_for_foreign_settings(
+        string $manager_type,
+        array $settings,
+        string $context_type,
+        ?int $context_id
+    ): void {
+        if ('site_identity' !== $manager_type) {
+            return;
+        }
+
+        $business_keys = [
+            'business_name', 'business_type', 'business_address', 'business_city',
+            'business_state', 'business_postal_code', 'business_country',
+            'business_phone', 'business_email', 'business_hours',
+            'business_latitude', 'business_longitude', 'business_price_range',
+        ];
+
+        if (empty(array_intersect_key($settings, array_flip($business_keys)))) {
+            return;
+        }
+
+        $schema_settings = $this->get_settings($context_type, $context_id);
+        if (empty($schema_settings['auto_deploy'])) {
+            return;
+        }
+
+        // Only refresh types that are actually deployed, so this never adds a
+        // type the admin did not enable.
+        $deployed = array_keys((array) $this->get_deployed_schemas($context_type, $context_id));
+        $affected = array_values(array_intersect($deployed, ['LocalBusiness', 'Organization']));
+
+        if (empty($affected)) {
+            return;
+        }
+
+        try {
+            $generation = $this->generate_schema_markup($context_type, $context_id, $affected);
+
+            // Deploy the types that validated, not all-or-nothing. Gating on
+            // deployment_ready meant one invalid type blocked every valid one
+            // in the same batch (#470).
+            $deployable = [];
+            foreach ($affected as $type) {
+                if (!empty($generation['generated_schemas'][$type])
+                    && !empty($generation['validation_results'][$type]['is_valid'])
+                ) {
+                    $deployable[$type] = $generation['generated_schemas'][$type];
+                }
+            }
+
+            if (!empty($deployable)) {
+                $this->deploy_schema_markup($context_type, $context_id, $deployable);
+            }
+        } catch (\Exception $e) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log('ThinkRank: Business Info schema refresh failed: ' . $e->getMessage());
+            }
+        }
     }
 
     /**
@@ -357,8 +470,18 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         }
 
         if (class_exists('ThinkRank\\SEO\\Schema_Cache_Manager')) {
-            // Get cache duration from deployment config
+            // Honour the stored cache_duration setting. It is exposed in
+            // get_settings_schema() (min 300 / max 86400), validated, persisted
+            // and surfaced through both abilities — but the cache manager was
+            // always built from the hardcoded config value, so the setting had
+            // no effect (#473). Falls back to the config default.
             $cache_duration = $this->deployment_config['caching']['duration'] ?? 3600;
+
+            $stored = $this->get_settings('site', null)['cache_duration'] ?? null;
+            if (is_numeric($stored) && (int) $stored > 0) {
+                $cache_duration = (int) $stored;
+            }
+
             $this->cache_manager = new Schema_Cache_Manager($cache_duration);
         }
     }
@@ -368,10 +491,17 @@ class Schema_Management_System extends Abstract_SEO_Manager {
      *
      * @since 1.0.0
      *
+     * Generation is read-only by default. Persisting the result is opt-in via
+     * `$options['persist']`, because this method is also reached from the
+     * front-end read path (get_output_data()) and from GET routes — where a
+     * DELETE + INSERT would destroy the admin's deployed rows and publish
+     * types nobody deployed (#460).
+     *
      * @param string   $context_type Context type
      * @param int|null $context_id   Context ID
      * @param array    $schema_types Schema types to generate
-     * @param array    $options      Generation options
+     * @param array    $options      Generation options. Pass `persist => true`
+     *                               from explicit write paths only.
      * @return array Comprehensive schema generation results
      */
     public function generate_schema_markup(string $context_type, ?int $context_id, array $schema_types = [], array $options = []): array {
@@ -444,8 +574,14 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         // Check deployment readiness
         $generation['deployment_ready'] = $this->check_deployment_readiness($generation['validation_results']);
 
-        // Store schema data
-        $this->store_schema_data($context_type, $context_id, $generation);
+        // Persistence belongs to deployment, not generation. Every write path
+        // (refresh_schema_for_foreign_settings(), auto_deploy_schema_on_settings_change(),
+        // the deploy route) calls deploy_schema_markup() straight after generating,
+        // so nothing needs to opt in today — the flag exists to keep this an
+        // explicit decision rather than an accident.
+        if (!empty($options['persist'])) {
+            $this->store_schema_data($context_type, $context_id, $generation);
+        }
 
         return $generation;
     }
@@ -575,6 +711,22 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         // Determine deployment method
         $deployment['deployment_method'] = $this->determine_deployment_method($options);
 
+        // When the caller owns the whole context — the user pressing Deploy, where
+        // the payload is exactly what the preview showed — anything not in that
+        // payload should come off the page (#464). Incremental callers such as
+        // auto_deploy_schema_on_settings_change() pass only the types they
+        // regenerated, so they must NOT retire the rest.
+        if (!empty($options['authoritative'])) {
+            $deployment['retired_schemas'] = $this->retire_schema_types(
+                $context_type,
+                $context_id,
+                array_diff(
+                    array_keys($this->get_deployed_schemas($context_type, $context_id)),
+                    array_keys($schema_data)
+                )
+            );
+        }
+
         // Deploy each schema
         foreach ($schema_data as $schema_type => $schema) {
             $deploy_result = $this->deploy_single_schema($schema, $schema_type, $deployment['deployment_method'], $context_type, $context_id);
@@ -662,7 +814,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
 
         return [
             'validation_passed' => true,
-            'message' => __('Schema deployed and verified on the front end', 'thinkrank'),
+            'message' => __('Schema deployed and read back from storage', 'thinkrank'),
             'missing_types' => []
         ];
     }
@@ -784,7 +936,9 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             'rich_snippets_preview' => [],
             'performance_data' => [],
             'recommendations' => [],
-            'enabled' => true
+            // Report the real setting. Hardcoding true here told every consumer
+            // the feature was on even when the master switch was off (#461).
+            'enabled' => (bool) ($settings['enabled'] ?? true)
         ];
 
         // Get enabled schema types
@@ -1172,35 +1326,56 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             $schema_types_to_regenerate[] = 'Person';
         }
 
+        // Honour the user's Schema Types selection. Without this the payload
+        // shape alone decided what shipped, so every save deployed all four
+        // types — including ones the user had explicitly deselected (#461).
+        // An empty selection means "auto", so only filter when one is set.
+        $enabled_types = $settings['enabled_schema_types'] ?? $this->get_settings($context_type, $context_id)['enabled_schema_types'] ?? [];
+
+        if (!empty($enabled_types) && is_array($enabled_types)) {
+            $schema_types_to_regenerate = array_values(
+                array_intersect($schema_types_to_regenerate, $enabled_types)
+            );
+        }
+
+        // Types that were deployed but are no longer wanted must come back off
+        // the page — deployment used to be additive-only (#464).
+        $this->retire_unselected_schema_types($context_type, $context_id, $enabled_types);
+
         // If no schema types need regeneration, return early
         if (empty($schema_types_to_regenerate)) {
             return;
         }
 
-        // Generate and deploy each schema type
-        foreach ($schema_types_to_regenerate as $schema_type) {
-            try {
-                // Generate schema using generate_schema_markup
-                $generation_result = $this->generate_schema_markup(
-                    $context_type,
-                    $context_id,
-                    [$schema_type]
-                );
+        // Generate every affected type in ONE call. Generating them one at a
+        // time re-entered store_schema_data() per type, and each pass replaced
+        // the rows written by the previous one, so only the last type survived
+        // (#454). One batch also means one delete and one cache flush.
+        try {
+            $generation_result = $this->generate_schema_markup(
+                $context_type,
+                $context_id,
+                $schema_types_to_regenerate
+            );
 
-                // Deploy if generation was successful
-                if (!empty($generation_result['generated_schemas'][$schema_type]) && $generation_result['deployment_ready']) {
-                    $this->deploy_schema_markup(
-                        $context_type,
-                        $context_id,
-                        [$schema_type => $generation_result['generated_schemas'][$schema_type]]
-                    );
+            $deployable = [];
+            foreach ($schema_types_to_regenerate as $schema_type) {
+                // Only deploy what validated — see #470.
+                if (!empty($generation_result['generated_schemas'][$schema_type])
+                    && !empty($generation_result['validation_results'][$schema_type]['is_valid'])
+                ) {
+                    $deployable[$schema_type] = $generation_result['generated_schemas'][$schema_type];
                 }
-            } catch (\Exception $e) {
-                // Log error but don't fail the settings save
-                if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                    error_log('ThinkRank: Auto-deploy failed for ' . $schema_type . ': ' . $e->getMessage());
-                }
+            }
+
+            if (!empty($deployable)) {
+                $this->deploy_schema_markup($context_type, $context_id, $deployable);
+            }
+        } catch (\Exception $e) {
+            // Log error but don't fail the settings save
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log('ThinkRank: Auto-deploy failed for ' . implode(', ', $schema_types_to_regenerate) . ': ' . $e->getMessage());
             }
         }
     }
@@ -1241,7 +1416,13 @@ class Schema_Management_System extends Abstract_SEO_Manager {
      * @return bool True if website settings changed
      */
     private function has_website_settings_changed(array $settings): bool {
-        $website_keys = ['site_name', 'site_description', 'site_url'];
+        // These are the keys the Website tab actually stores. It previously
+        // looked for site_name/site_description/site_url, which belong to Site
+        // Identity and never appear in a schema settings payload — so WebSite
+        // schema never auto-deployed no matter what was edited (#455).
+        $website_keys = [
+            'website_name', 'website_url', 'website_description', 'website_author',
+        ];
 
         foreach ($website_keys as $key) {
             if (isset($settings[$key])) {
@@ -1261,9 +1442,18 @@ class Schema_Management_System extends Abstract_SEO_Manager {
      * @return bool True if business settings changed
      */
     private function has_business_settings_changed(array $settings): bool {
+        // Only the keys this manager actually stores. business_name/address/
+        // phone/hours live in the site_identity category and never reach a
+        // schema settings save, so keying off them meant LocalBusiness never
+        // auto-deployed (#455). Edits to those fields refresh LocalBusiness
+        // through the Site Identity save path instead — see
+        // refresh_schema_for_foreign_settings().
         $business_keys = [
-            'business_name', 'business_type', 'business_address', 'business_phone',
-            'business_hours', 'business_price_range'
+            'enable_local_business',
+            'business_price_range',
+            'business_geo_latitude',
+            'business_geo_longitude',
+            'business_opening_hours',
         ];
 
         foreach ($business_keys as $key) {
@@ -1309,6 +1499,27 @@ class Schema_Management_System extends Abstract_SEO_Manager {
 
         switch ($context_type) {
             case 'site':
+                // The admin's Schema Types selection is the answer to "what
+                // does this site need"; detection is only the fallback for an
+                // install that has not chosen yet (#456).
+                $settings = $this->get_settings($context_type, $context_id);
+                $enabled  = array_values(array_filter(
+                    array_map('strval', (array) ($settings['enabled_schema_types'] ?? [])),
+                    'strlen'
+                ));
+
+                // Drop stale names the factory no longer registers rather than
+                // handing them to the builder to silently skip.
+                $enabled = array_values(array_filter(
+                    $enabled,
+                    fn($type) => isset($this->schema_types[$type])
+                ));
+
+                if (!empty($enabled)) {
+                    $detected_types = $enabled;
+                    break;
+                }
+
                 $detected_types = ['Organization'];
                 // Check if it's a local business
                 if ($this->is_local_business()) {
@@ -1382,8 +1593,12 @@ class Schema_Management_System extends Abstract_SEO_Manager {
                         'name' => get_the_author_meta('display_name', $post->post_author),
                         'url' => get_author_posts_url($post->post_author)
                     ],
-                    'date' => $post->post_date,
-                    'modified' => $post->post_modified,
+                    // ISO 8601 with offset. post_date/post_modified are raw
+                    // MySQL columns in site-local time with no timezone, which
+                    // Google rejects as "Invalid value in field datePublished"
+                    // and drops the Article rich result (#465).
+                    'date' => get_the_date('c', $post),
+                    'modified' => get_the_modified_date('c', $post),
                     'image' => get_the_post_thumbnail_url($post->ID, 'full'),
                     'focus_keywords' => Focus_Keywords::get($post->ID),
                     'business_data' => $this->get_business_data_from_local_seo(),
@@ -1480,8 +1695,14 @@ class Schema_Management_System extends Abstract_SEO_Manager {
 
         $table_name = $wpdb->prefix . 'thinkrank_seo_schema';
 
-        // First, delete all existing schemas for this context to ensure clean storage
-        $this->delete_existing_schemas($context_type, $context_id);
+        // Replace only the types in this batch. Clearing the whole context
+        // destroyed types the caller never asked about — and callers do
+        // regenerate a subset, one type at a time (#454).
+        $generated_types = array_keys($generation['generated_schemas'] ?? []);
+        if (empty($generated_types)) {
+            return false;
+        }
+        $this->delete_existing_schemas($context_type, $context_id, $generated_types);
 
         foreach ($generation['generated_schemas'] as $schema_type => $schema_data) {
             // Prepare schema data with validation status embedded
@@ -1499,7 +1720,11 @@ class Schema_Management_System extends Abstract_SEO_Manager {
                 'schema_type' => $schema_type,
                 'schema_data' => wp_json_encode($schema_data_with_validation),
                 'validation_status' => $generation['validation_results'][$schema_type]['is_valid'] ? 'valid' : 'invalid',
-                'is_active' => $generation['deployment_ready'] ? 1 : 0
+                // Per-type, not batch-wide. deployment_ready is only true when
+                // EVERY type in the batch validated, so one invalid type (a site
+                // with no Business Info makes LocalBusiness invalid) deactivated
+                // all the valid ones alongside it (#470).
+                'is_active' => !empty($generation['validation_results'][$schema_type]['is_valid']) ? 1 : 0
             ];
 
             // Insert new schema (existing ones were already deleted)
@@ -1851,6 +2076,24 @@ class Schema_Management_System extends Abstract_SEO_Manager {
                     unset($schema_data['_validation']);
                 }
 
+                // Deployed schema is a snapshot, so rows written before #465
+                // still carry raw MySQL datetimes. Normalise on read so the
+                // fix reaches existing sites without a migration.
+                $schema_data = $this->normalize_stored_schema($schema_data);
+
+                // The permalink was frozen at deploy time, so schema deployed
+                // while a post was a draft advertised "?p=123" as both url and
+                // mainEntityOfPage forever — contradicting the node's own @id
+                // and the canonical (#470). Resolve it live instead.
+                $schema_data = $this->refresh_schema_permalink($schema_data, $context_type, $context_id);
+
+                // schema.org types `sameAs`, `url`, `logo` and `image` as URLs,
+                // but the form stored whatever was typed, so free text entered
+                // in a social-profile field shipped as a sameAs member and made
+                // the whole entity invalid (#480). Drop bad values on read, so
+                // existing sites stop emitting them without a migration.
+                $schema_data = $this->filter_entity_urls($schema_data);
+
                 $processed_schemas[$schema_type] = [
                     'data' => $schema_data,
                     'method' => 'json_ld', // Default method
@@ -1869,6 +2112,206 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         }
 
         return $processed_schemas;
+    }
+
+    /**
+     * Properties schema.org defines as URLs.
+     *
+     * @since 2.0.2
+     * @var string[]
+     */
+    private const URL_PROPERTIES = ['sameAs', 'url', 'logo', 'image'];
+
+    /**
+     * Whether a value is a URL safe to publish in structured data.
+     *
+     * @since 2.0.2
+     *
+     * @param mixed $url Candidate value.
+     * @return bool
+     */
+    private function is_publishable_url($url): bool {
+        if (!is_string($url) || '' === trim($url)) {
+            return false;
+        }
+
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+
+        $scheme = wp_parse_url($url, PHP_URL_SCHEME);
+
+        return in_array(strtolower((string) $scheme), ['http', 'https'], true);
+    }
+
+    /**
+     * Drop values that are not URLs from URL-typed properties.
+     *
+     * An absent property is valid; one holding free text is not, and it can
+     * invalidate the entity around it. Nested objects (`logo` and `image` are
+     * frequently ImageObjects) are walked so a bad `url` inside one is caught
+     * too. A property left with nothing is removed rather than emitted empty.
+     *
+     * @since 2.0.2
+     *
+     * @param array $schema Decoded schema data.
+     * @return array Schema carrying only publishable URLs.
+     */
+    private function filter_entity_urls(array $schema): array {
+        foreach ($schema as $key => $value) {
+            if (is_array($value) && !in_array($key, self::URL_PROPERTIES, true)) {
+                $schema[$key] = $this->filter_entity_urls($value);
+                continue;
+            }
+
+            if (!in_array($key, self::URL_PROPERTIES, true)) {
+                continue;
+            }
+
+            // A nested object (ImageObject and friends) carries its own url.
+            if (is_array($value) && isset($value['@type'])) {
+                $schema[$key] = $this->filter_entity_urls($value);
+                continue;
+            }
+
+            if (is_array($value)) {
+                $kept = [];
+
+                foreach ($value as $item) {
+                    if (is_array($item)) {
+                        $kept[] = $this->filter_entity_urls($item);
+                    } elseif ($this->is_publishable_url($item)) {
+                        $kept[] = $item;
+                    }
+                }
+
+                if ([] === $kept) {
+                    unset($schema[$key]);
+                } else {
+                    $schema[$key] = array_values($kept);
+                }
+
+                continue;
+            }
+
+            if (!$this->is_publishable_url($value)) {
+                unset($schema[$key]);
+            }
+        }
+
+        return $schema;
+    }
+
+    /**
+     * Schema types whose `url` identifies the entity, not the page.
+     *
+     * On a Person or an Organization, `url` is that entity's own website, so
+     * overwriting it with the permalink of whichever post the schema happens to
+     * be deployed on is simply wrong. It also breaks graph assembly: the site
+     * identity emits the same entity with its real `url`, and once the two
+     * copies disagree they can no longer be recognised as one entity (#479).
+     *
+     * @since 2.0.2
+     * @var string[]
+     */
+    private const ENTITY_URL_TYPES = ['Person', 'Organization', 'LocalBusiness'];
+
+    /**
+     * Replace a stored permalink snapshot with the post's live permalink.
+     *
+     * Only touches `url` and `mainEntityOfPage`, and only for post-like
+     * contexts where a permalink actually exists. Identity entities are
+     * exempt from the `url` rewrite — see self::ENTITY_URL_TYPES.
+     *
+     * @since 1.16.0
+     *
+     * @param array    $schema       Decoded schema data.
+     * @param string   $context_type Context type.
+     * @param int|null $context_id   Context ID.
+     * @return array Schema with a current permalink.
+     */
+    private function refresh_schema_permalink(array $schema, string $context_type, ?int $context_id): array {
+        if ('site' === $context_type || empty($context_id)) {
+            return $schema;
+        }
+
+        $permalink = get_permalink($context_id);
+
+        if (!$permalink) {
+            return $schema;
+        }
+
+        $type = $schema['@type'] ?? '';
+        $type = is_array($type) ? reset($type) : $type;
+        $is_entity = in_array((string) $type, self::ENTITY_URL_TYPES, true);
+
+        if (isset($schema['url']) && !$is_entity) {
+            $schema['url'] = $permalink;
+        }
+
+        if (isset($schema['mainEntityOfPage'])) {
+            if (is_array($schema['mainEntityOfPage'])) {
+                if (isset($schema['mainEntityOfPage']['@id'])) {
+                    $schema['mainEntityOfPage']['@id'] = $permalink;
+                }
+            } else {
+                $schema['mainEntityOfPage'] = $permalink;
+            }
+        }
+
+        return $schema;
+    }
+
+    /**
+     * Normalise properties that stored snapshots may hold in a stale format.
+     *
+     * Deployed schema is written once and read forever, so a formatting fix in
+     * the builder never reaches rows already on disk. Correcting on read means
+     * existing sites benefit without a migration.
+     *
+     * Covers non-ISO-8601 dates (#465) and WP locales in inLanguage, which must
+     * be a BCP-47 tag — en-US, not en_US (#473). Walks nested nodes so values
+     * inside author/publisher/@graph entries are covered too.
+     *
+     * @since 1.16.0
+     *
+     * @param array $schema Decoded schema data.
+     * @return array Normalised schema.
+     */
+    private function normalize_stored_schema(array $schema): array {
+        static $date_keys = [
+            'datePublished', 'dateModified', 'dateCreated', 'uploadDate',
+            'startDate', 'endDate', 'validFrom', 'validThrough', 'expires',
+        ];
+
+        foreach ($schema as $key => $value) {
+            if (is_array($value)) {
+                $schema[$key] = $this->normalize_stored_schema($value);
+                continue;
+            }
+
+            if ('inLanguage' === $key && is_string($value) && '' !== $value) {
+                $schema[$key] = str_replace('_', '-', $value);
+                continue;
+            }
+
+            if (!in_array($key, $date_keys, true) || !is_string($value) || '' === $value) {
+                continue;
+            }
+
+            // Already ISO 8601 — leave it alone.
+            if (preg_match('/^\d{4}-\d{2}-\d{2}T/', $value)) {
+                continue;
+            }
+
+            $timestamp = strtotime($value);
+
+            if (false !== $timestamp) {
+                $schema[$key] = (string) wp_date('c', $timestamp);
+            }
+        }
+
+        return $schema;
     }
 
     /**
@@ -1925,49 +2368,152 @@ class Schema_Management_System extends Abstract_SEO_Manager {
 
         return $deleted ?: 0;
     }
+
     /**
-     * Delete all existing schemas for a context before storing new ones
+     * Deactivate deployed schema rows for the given types.
+     *
+     * Deployment was insert-only, so anything ever deployed to a context stayed
+     * on the page forever — switching a post's schema type left the old one live
+     * and deactivating a saved schema did nothing (#464). Rows are deactivated
+     * rather than deleted so a later redeploy can revive them and so there is a
+     * trail of what was published.
+     *
+     * @since 1.16.0
+     *
+     * @param string   $context_type Context type.
+     * @param int|null $context_id   Context ID.
+     * @param string[] $schema_types Types to retire.
+     * @return int Number of rows deactivated.
+     */
+    private function retire_schema_types(string $context_type, ?int $context_id, array $schema_types): int {
+        $schema_types = array_values(array_filter(array_map('strval', $schema_types), 'strlen'));
+
+        if (empty($schema_types)) {
+            return 0;
+        }
+
+        global $wpdb;
+
+        $table_name   = $wpdb->prefix . 'thinkrank_seo_schema';
+        $placeholders = implode(', ', array_fill(0, count($schema_types), '%s'));
+
+        if (null === $context_id) {
+            $sql  = sprintf(
+                'UPDATE %s SET is_active = 0 WHERE context_type = %%s AND context_id IS NULL AND schema_type IN (%s)',
+                $table_name,
+                $placeholders
+            );
+            $args = array_merge([$context_type], $schema_types);
+        } else {
+            $sql  = sprintf(
+                'UPDATE %s SET is_active = 0 WHERE context_type = %%s AND context_id = %%d AND schema_type IN (%s)',
+                $table_name,
+                $placeholders
+            );
+            $args = array_merge([$context_type, $context_id], $schema_types);
+        }
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Retiring deployed schema rows requires direct database access.
+        $updated = $wpdb->query(
+            $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- SQL is built from an internal table name and generated placeholders.
+                $sql,
+                $args
+            )
+        );
+
+        if ($updated && $this->cache_manager) {
+            $this->cache_manager->invalidate_context_cache($context_type, $context_id);
+        }
+
+        return (int) ($updated ?: 0);
+    }
+
+    /**
+     * Retire deployed types that are no longer in the user's Schema Types selection.
+     *
+     * An empty selection means "auto-detect", so nothing is retired in that case.
+     *
+     * @since 1.16.0
+     *
+     * @param string   $context_type  Context type.
+     * @param int|null $context_id    Context ID.
+     * @param array    $enabled_types The user's selected types.
+     * @return int Number of rows deactivated.
+     */
+    private function retire_unselected_schema_types(string $context_type, ?int $context_id, array $enabled_types): int {
+        if (empty($enabled_types)) {
+            return 0;
+        }
+
+        $deployed = array_keys($this->get_deployed_schemas($context_type, $context_id));
+        $stale    = array_diff($deployed, $enabled_types);
+
+        return $this->retire_schema_types($context_type, $context_id, $stale);
+    }
+
+    /**
+     * Delete stored schemas for a context before storing new ones.
+     *
+     * `$schema_types` scopes the delete to the types actually being rewritten.
+     * Without it this wiped every type in the context, which silently destroyed
+     * deployed schema whenever a caller regenerated a subset — and
+     * auto_deploy_schema_on_settings_change() regenerates one type at a time
+     * (#454). Passing an empty array keeps the original clear-the-context
+     * behaviour for callers that genuinely rewrite everything.
      *
      * @since 1.0.0
      *
      * @param string   $context_type Context type
      * @param int|null $context_id   Context ID
+     * @param string[] $schema_types Optional. Limit the delete to these types.
      * @return int Number of schemas deleted
      */
-    private function delete_existing_schemas(string $context_type, ?int $context_id): int {
+    private function delete_existing_schemas(string $context_type, ?int $context_id, array $schema_types = []): int {
         global $wpdb;
 
         $table_name = $wpdb->prefix . 'thinkrank_seo_schema';
+
+        // Build an optional `AND schema_type IN (…)` clause with one prepared
+        // placeholder per type, so the scoping cannot be injected through.
+        $type_clause = '';
+        $type_values = [];
+        $schema_types = array_values(array_filter(array_map('strval', $schema_types), 'strlen'));
+        if (!empty($schema_types)) {
+            $type_clause = ' AND schema_type IN (' . implode(', ', array_fill(0, count($schema_types), '%s')) . ')';
+            $type_values = $schema_types;
+        }
 
         if (null === $context_id) {
             // Delete all schemas for NULL context_id
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Schema deletion requires direct database access
 			$sql = sprintf(
-				'DELETE FROM %s WHERE context_type = %%s AND context_id IS NULL',
-				$table_name
+				'DELETE FROM %s WHERE context_type = %%s AND context_id IS NULL%s',
+				$table_name,
+				$type_clause
 			);
 					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Schema deletion requires direct database access
 		$deleted = $wpdb->query(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- SQL is properly prepared with placeholders
 				$sql,
-				$context_type
+				array_merge([$context_type], $type_values)
 			)
 		);
         } else {
             // Delete all schemas for specific context_id
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Schema deletion requires direct database access
 			$sql = sprintf(
-				'DELETE FROM %s WHERE context_type = %%s AND context_id = %%d',
-				$table_name
+				'DELETE FROM %s WHERE context_type = %%s AND context_id = %%d%s',
+				$table_name,
+				$type_clause
 			);
 					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Schema deletion requires direct database access
 		$deleted = $wpdb->query(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- SQL is properly prepared with placeholders
 				$sql,
-				$context_type,
-				$context_id
+				array_merge([$context_type, $context_id], $type_values)
 			)
 		);
         }

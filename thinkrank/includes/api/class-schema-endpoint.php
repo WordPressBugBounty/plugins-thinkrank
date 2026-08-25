@@ -24,6 +24,7 @@ use ThinkRank\SEO\Schema_Management_System;
 use ThinkRank\SEO\Schema_Input_Validator;
 use ThinkRank\API\Traits\Rate_Limiter;
 use ThinkRank\API\Traits\Context_Authorization;
+use ThinkRank\API\Traits\CSRF_Protection;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -32,6 +33,7 @@ use WP_Error;
 // Load Rate Limiter trait
 require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-rate-limiter.php';
 require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-context-authorization.php';
+require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-csrf-protection.php';
 
 /**
  * Schema API Endpoints Class
@@ -46,6 +48,9 @@ class Schema_Endpoint extends WP_REST_Controller {
 
     use Rate_Limiter;
     use Context_Authorization;
+    // Shared nonce check — this class used to carry a byte-identical private
+    // copy of verify_request_nonce() (#457).
+    use CSRF_Protection;
 
     /**
      * Maximum number of items a single /bulk request may process synchronously.
@@ -389,9 +394,18 @@ class Schema_Endpoint extends WP_REST_Controller {
                     $data = json_decode($json, true);
 
                     if (json_last_error() === JSON_ERROR_NONE && !empty($data)) {
-                        // Strictly set @context to https://schema.org
-                        $data['@context'] = 'https://schema.org';
-                        $found_schemas[] = $data;
+                        // A script block may hold a single entity, a bare list
+                        // of entities, or an object wrapping @graph. Treating
+                        // every block as one flat object collapsed lists into
+                        // numeric keys and never opened @graph — the shape Yoast
+                        // and Rank Math emit — so the import produced entries
+                        // with no top-level @type that deploy silently dropped
+                        // (#467).
+                        foreach ($this->extract_schema_entities($data) as $entity) {
+                            // Strictly set @context to https://schema.org
+                            $entity['@context'] = 'https://schema.org';
+                            $found_schemas[] = $entity;
+                        }
                     }
                 }
             }
@@ -421,6 +435,85 @@ class Schema_Endpoint extends WP_REST_Controller {
     }
 
     /**
+     * Sanitize schema form data of arbitrary depth.
+     *
+     * The metabox forms post nested structures — `faq_questions` is a list of
+     * `{question, answer}` objects and `howto_steps` a list of `{name, text}`
+     * objects. A flat `array_map('sanitize_text_field', $value)` handed those
+     * inner arrays to a string sanitizer, which returns '', so every question
+     * and step was blanked before the builder saw it and FAQPage generated with
+     * an empty `mainEntity` (failing its own required-property validation).
+     * Recursing keeps the shape and still sanitizes every scalar leaf.
+     *
+     * @since 2.0.2
+     *
+     * @param array $data Raw form data.
+     * @return array Sanitized form data with structure preserved.
+     */
+    private function sanitize_schema_form_data(array $data): array {
+        $sanitized = [];
+
+        foreach ($data as $key => $value) {
+            $clean_key = is_int($key) ? $key : sanitize_key($key);
+
+            if (is_array($value)) {
+                $sanitized[$clean_key] = $this->sanitize_schema_form_data($value);
+            } elseif (is_bool($value)) {
+                $sanitized[$clean_key] = $value;
+            } elseif (is_string($value)) {
+                $sanitized[$clean_key] = sanitize_text_field($value);
+            } elseif (is_numeric($value)) {
+                $sanitized[$clean_key] = floatval($value);
+            }
+        }
+
+        return $sanitized;
+    }
+
+    /**
+     * Flatten one decoded JSON-LD script block into individual entities.
+     *
+     * JSON-LD allows a script tag to carry a single object, an array of objects,
+     * or an object whose `@graph` holds the entities. Mirrors the Pro file
+     * importer's extract_schemas() so both paths agree (#467).
+     *
+     * @since 1.16.0
+     *
+     * @param array $decoded Decoded JSON-LD.
+     * @return array<int,array> One entry per entity.
+     */
+    private function extract_schema_entities(array $decoded): array {
+        // Object wrapping @graph — the shape Yoast and Rank Math emit.
+        if (!empty($decoded['@graph']) && is_array($decoded['@graph'])) {
+            $context  = $decoded['@context'] ?? null;
+            $entities = [];
+
+            foreach ($decoded['@graph'] as $entity) {
+                if (!is_array($entity) || empty($entity)) {
+                    continue;
+                }
+                // Carry the outer @context onto entities that lack their own.
+                if (null !== $context && !isset($entity['@context'])) {
+                    $entity['@context'] = $context;
+                }
+                $entities[] = $entity;
+            }
+
+            return $entities;
+        }
+
+        // Bare list of entities: [{...}, {...}]
+        if (isset($decoded[0]) && is_array($decoded[0])) {
+            return array_values(array_filter($decoded, static function ($entity) {
+                return is_array($entity) && !empty($entity);
+            }));
+        }
+
+        // Single entity.
+        return [$decoded];
+    }
+
+    /**
      * Fetch a remote URL for schema import.
      *
      * Delegates to the shared SSRF guard, which follows redirects manually and
@@ -435,6 +528,10 @@ class Schema_Endpoint extends WP_REST_Controller {
         return \ThinkRank\Core\Url_Safety::safe_remote_get($url, [
             'timeout'    => 15,
             'user-agent' => 'ThinkRank/1.0.0 (WordPress Schema Plugin)',
+            // Without a cap the whole body is buffered into memory and then
+            // handed to DOMDocument at roughly twice the size, so a hostile or
+            // simply enormous page could exhaust the request (#473).
+            'limit_response_size' => 2 * MB_IN_BYTES,
         ]);
     }
 
@@ -532,21 +629,8 @@ class Schema_Endpoint extends WP_REST_Controller {
             // SECURITY: Sanitize schema_form_data if provided
             $schema_form_data = $request->get_param('schema_form_data');
             if ($schema_form_data && is_array($schema_form_data)) {
-                // Sanitize all form fields
-                $sanitized_form_data = [];
-                foreach ($schema_form_data as $key => $value) {
-                    if (is_string($value)) {
-                        $sanitized_form_data[sanitize_key($key)] = sanitize_text_field($value);
-                    } elseif (is_array($value)) {
-                        // Handle array values (like features, steps, etc.)
-                        $sanitized_form_data[sanitize_key($key)] = array_map('sanitize_text_field', $value);
-                    } elseif (is_numeric($value)) {
-                        $sanitized_form_data[sanitize_key($key)] = floatval($value);
-                    }
-                }
-
                 // Add schema_form_data to options so schema manager can use it
-                $options['schema_form_data'] = $sanitized_form_data;
+                $options['schema_form_data'] = $this->sanitize_schema_form_data($schema_form_data);
             }
 
             // Generate schema markup with sanitized inputs
@@ -710,6 +794,7 @@ class Schema_Endpoint extends WP_REST_Controller {
 
             // SECURITY: Validate each schema in the data
             $sanitized_schema_data = [];
+            $skipped_schemas = [];
             foreach ($schema_data as $schema_key => $schema_content) {
                 $schema_key = sanitize_text_field($schema_key);
 
@@ -722,9 +807,20 @@ class Schema_Endpoint extends WP_REST_Controller {
                 }
 
                 // Ensure schema has required structure fields before validation
-                // Use @type from schema content if available, otherwise fall back to key
-                $schema_type = isset($schema_content['@type']) ? sanitize_text_field($schema_content['@type']) : $schema_key;
-                
+                // Use @type from schema content if available, otherwise fall back to key.
+                // `@type` may legitimately be an array ("@type": ["Product","Offer"]);
+                // sanitize_text_field() on an array yields '', which then failed the
+                // whitelist lookup with "Invalid schema type:" (#468). Resolve the
+                // primary type for lookup and leave the original value in the payload.
+                if (isset($schema_content['@type'])) {
+                    $raw_type = $schema_content['@type'];
+                    $schema_type = is_array($raw_type)
+                        ? sanitize_text_field((string) reset($raw_type))
+                        : sanitize_text_field((string) $raw_type);
+                } else {
+                    $schema_type = $schema_key;
+                }
+
                 if (!isset($schema_content['@type'])) {
                     $schema_content['@type'] = $schema_type;
                 }
@@ -732,26 +828,49 @@ class Schema_Endpoint extends WP_REST_Controller {
                     $schema_content['@context'] = 'https://schema.org';
                 }
 
-                // Validate using the actual schema type, not the key
+                // Validate using the actual schema type, not the key.
+                // A failure skips this entry instead of aborting the batch: the
+                // UI sends every schema in one payload, so one unsupported type
+                // used to block the valid entries alongside it (#468).
                 $input_validation = $this->input_validator->validate_schema_data($schema_content, $schema_type);
+
                 if (!$input_validation['valid']) {
-                    return new WP_Error(
-                        'schema_validation_failed',
-                        "Schema validation failed for {$schema_type}: " . implode(', ', $input_validation['errors']),
-                        [
-                            'status' => 400,
-                            'schema_type' => $schema_type,
-                            'validation_errors' => $input_validation['errors']
-                        ]
-                    );
+                    $skipped_schemas[] = [
+                        'key'    => $schema_key,
+                        'type'   => $schema_type,
+                        'errors' => $input_validation['errors'],
+                    ];
+                    continue;
                 }
 
                 // Store using the key (which may be unique like "Article-1")
                 $sanitized_schema_data[$schema_key] = $input_validation['sanitized_data'];
             }
 
+            // Every entry failed — that is a request-level error worth a 400,
+            // since there is nothing to deploy.
+            if (empty($sanitized_schema_data) && !empty($skipped_schemas)) {
+                return new WP_Error(
+                    'schema_validation_failed',
+                    sprintf(
+                        /* translators: %s: comma-separated list of schema types. */
+                        __('No schema could be deployed. Failed types: %s', 'thinkrank'),
+                        implode(', ', wp_list_pluck($skipped_schemas, 'type'))
+                    ),
+                    [
+                        'status'  => 400,
+                        'skipped' => $skipped_schemas,
+                    ]
+                );
+            }
+
             // SECURITY: Sanitize options
             $options = $this->input_validator->sanitize_options($request->get_param('options') ?? []);
+
+            // This route is the user pressing Deploy, so the payload is the full
+            // intended set for the context — types missing from it were removed
+            // deliberately and must come off the page (#464).
+            $options['authoritative'] = true;
 
             // Deploy schema markup with sanitized data
             $deployment_results = $this->schema_manager->deploy_schema_markup(
@@ -761,11 +880,25 @@ class Schema_Endpoint extends WP_REST_Controller {
                 $options
             );
 
-            return new WP_REST_Response([
+            $response = [
                 'success' => true,
                 'data' => $deployment_results,
                 'message' => 'Schema markup deployed successfully'
-            ], 200);
+            ];
+
+            // Report what was skipped so the UI can say "3 deployed, 1 skipped"
+            // rather than silently dropping entries (#468).
+            if (!empty($skipped_schemas)) {
+                $response['skipped'] = $skipped_schemas;
+                $response['message'] = sprintf(
+                    /* translators: 1: number deployed, 2: number skipped. */
+                    __('Deployed %1$d schema(s); skipped %2$d that failed validation.', 'thinkrank'),
+                    count($sanitized_schema_data),
+                    count($skipped_schemas)
+                );
+            }
+
+            return new WP_REST_Response($response, 200);
 
         } catch (\Exception $e) {
             return new WP_Error(
@@ -1358,8 +1491,11 @@ class Schema_Endpoint extends WP_REST_Controller {
      * @return bool Permission status
      */
     public function check_generate_permissions(WP_REST_Request $request): bool {
-        // Check user capability
-        if (!current_user_can('edit_posts')) {
+        // Gate on the Role Manager's schema capability, like the read and
+        // settings routes. Core post caps were both too loose in principle and
+        // too strict in practice: a role granted schema access but without
+        // publish_posts could not deploy (#457).
+        if (!\ThinkRank\Core\Capability_Manager::current_user_can('thinkrank_schema')) {
             return false;
         }
 
@@ -1376,8 +1512,11 @@ class Schema_Endpoint extends WP_REST_Controller {
      * @return bool Permission status
      */
     public function check_validate_permissions(WP_REST_Request $request): bool {
-        // Check user capability
-        if (!current_user_can('edit_posts')) {
+        // Gate on the Role Manager's schema capability, like the read and
+        // settings routes. Core post caps were both too loose in principle and
+        // too strict in practice: a role granted schema access but without
+        // publish_posts could not deploy (#457).
+        if (!\ThinkRank\Core\Capability_Manager::current_user_can('thinkrank_schema')) {
             return false;
         }
 
@@ -1394,8 +1533,11 @@ class Schema_Endpoint extends WP_REST_Controller {
      * @return bool Permission status
      */
     public function check_deploy_permissions(WP_REST_Request $request): bool {
-        // Check user capability
-        if (!current_user_can('publish_posts')) {
+        // Gate on the Role Manager's schema capability, like the read and
+        // settings routes. Core post caps were both too loose in principle and
+        // too strict in practice: a role granted schema access but without
+        // publish_posts could not deploy (#457).
+        if (!\ThinkRank\Core\Capability_Manager::current_user_can('thinkrank_schema')) {
             return false;
         }
 
@@ -1426,8 +1568,11 @@ class Schema_Endpoint extends WP_REST_Controller {
      * @return bool Permission status
      */
     public function check_optimize_permissions(WP_REST_Request $request): bool {
-        // Check user capability
-        if (!current_user_can('edit_posts')) {
+        // Gate on the Role Manager's schema capability, like the read and
+        // settings routes. Core post caps were both too loose in principle and
+        // too strict in practice: a role granted schema access but without
+        // publish_posts could not deploy (#457).
+        if (!\ThinkRank\Core\Capability_Manager::current_user_can('thinkrank_schema')) {
             return false;
         }
 
@@ -1479,30 +1624,8 @@ class Schema_Endpoint extends WP_REST_Controller {
      * Helper methods
      */
 
-    /**
-     * Verify request nonce for CSRF protection
-     *
-     * @since 1.0.0
-     *
-     * @param WP_REST_Request $request Request object
-     * @return bool Whether nonce is valid
-     */
-    private function verify_request_nonce(WP_REST_Request $request): bool {
-        // Get nonce from header (preferred method for REST API)
-        $nonce = $request->get_header('X-WP-Nonce');
-
-        // Fallback to parameter if header not present
-        if (!$nonce) {
-            $nonce = $request->get_param('_wpnonce');
-        }
-
-        // Verify nonce
-        if (!$nonce || !wp_verify_nonce($nonce, 'wp_rest')) {
-            return false;
-        }
-
-        return true;
-    }
+    // verify_request_nonce() now comes from the shared CSRF_Protection trait
+    // used by the other endpoints; the local copy was identical (#457).
 
     /**
      * Generate schema preview
@@ -1692,7 +1815,7 @@ class Schema_Endpoint extends WP_REST_Controller {
                         'Article', 'BlogPosting', 'TechnicalArticle', 'NewsArticle',
                         'ScholarlyArticle', 'Report', 'Product', 'Organization',
                         'LocalBusiness', 'Person', 'WebSite', 'FAQPage',
-                        'Event', 'HowTo', 'SoftwareApplication'
+                        'Event', 'HowTo', 'SoftwareApplication', 'Review', 'VideoObject'
                     ]
                 ],
                 'description' => 'Schema types to generate'
@@ -1739,7 +1862,7 @@ class Schema_Endpoint extends WP_REST_Controller {
                     'Article', 'BlogPosting', 'TechnicalArticle', 'NewsArticle',
                     'ScholarlyArticle', 'Report', 'Product', 'Organization',
                     'LocalBusiness', 'Person', 'WebSite', 'WebPage', 'FAQPage',
-                    'SoftwareApplication', 'Event', 'Recipe', 'HowTo'
+                    'SoftwareApplication', 'Event', 'Recipe', 'HowTo', 'Review', 'VideoObject'
                 ],
                 'description' => 'Schema type'
             ],
@@ -1805,7 +1928,7 @@ class Schema_Endpoint extends WP_REST_Controller {
                 'enum' => [
                     'Article', 'BlogPosting', 'Product', 'Organization', 'LocalBusiness',
                     'Person', 'WebSite', 'WebPage', 'FAQPage', 'SoftwareApplication',
-                    'BreadcrumbList', 'Event', 'Recipe', 'HowTo'
+                    'BreadcrumbList', 'Event', 'Recipe', 'HowTo', 'Review', 'VideoObject'
                 ],
                 'description' => 'Schema type'
             ],
@@ -1837,7 +1960,7 @@ class Schema_Endpoint extends WP_REST_Controller {
                 'enum' => [
                     'Article', 'BlogPosting', 'Product', 'Organization', 'LocalBusiness',
                     'Person', 'WebSite', 'WebPage', 'FAQPage', 'SoftwareApplication',
-                    'BreadcrumbList', 'Event', 'Recipe', 'HowTo'
+                    'BreadcrumbList', 'Event', 'Recipe', 'HowTo', 'Review', 'VideoObject'
                 ],
                 'description' => 'Schema type'
             ]
@@ -1962,6 +2085,13 @@ class Schema_Endpoint extends WP_REST_Controller {
                 }
                 $context_type = $context_validation['sanitized_data']['context_type'];
                 $context_id   = $context_validation['sanitized_data']['context_id'];
+            } else {
+                // Site settings are keyed on a NULL context_id. Passing the
+                // client's value straight through meant a stray context_id
+                // wrote a row at an arbitrary id, returned 200, and was never
+                // read back by anything (#470). validate_context_parameters()
+                // already normalises this internally for other contexts.
+                $context_id = null;
             }
 
             // Drop unrecognized keys so arbitrary client-supplied keys aren't
@@ -2041,12 +2171,30 @@ class Schema_Endpoint extends WP_REST_Controller {
      * @return array Settings limited to known keys.
      */
     private function filter_known_setting_keys(array $settings, string $context_type): array {
-        $known = array_keys(\ThinkRank\Config\Schema_Settings_Config::get_default_settings($context_type));
-        // Keys stored/consumed by adjacent features that share the settings
-        // store but aren't part of the schema defaults.
-        $known = array_merge($known, array_keys(\ThinkRank\Config\Schema_Settings_Config::get_settings_schema($context_type)), [
-            'business_name', 'site_name', 'logo_url', 'performance_tracking',
-        ]);
+        // Defer to the manager instead of maintaining a parallel list here.
+        // The endpoint's own list ignored additional_setting_keys() and
+        // dynamic_setting_key_patterns() — the mechanism #452 added so new form
+        // families stop getting dropped — so the two disagreed in both
+        // directions: the four enable_*_schema toggles and the software_/howto_/
+        // product_ families were dropped here but accepted by the manager, while
+        // deployment_method, site_name and performance_tracking survived here
+        // only to be dropped one layer down (#470).
+        $known = [];
+
+        foreach (array_keys($settings) as $key) {
+            if ($this->schema_manager->accepts_setting_key((string) $key, $context_type)) {
+                $known[] = (string) $key;
+            }
+        }
+
+        /**
+         * Filter the schema setting keys the REST endpoint will persist.
+         *
+         * @since 1.13.0
+         *
+         * @param string[] $known        Keys accepted by the schema manager.
+         * @param string   $context_type Context type.
+         */
         $known = apply_filters('thinkrank_schema_known_setting_keys', $known, $context_type);
 
         return array_intersect_key($settings, array_flip($known));

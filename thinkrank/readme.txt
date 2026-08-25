@@ -1,18 +1,18 @@
-=== ThinkRank – The SEO Plugin Your AI Assistant Can Operate: Metadata, Schema, Sitemaps & Migration ===
+=== ThinkRank AI SEO – AI SEO Plugin for WordPress: Schema, XML Sitemaps, Meta Tags, Search Console & Local SEO ===
 Contributors: wpdevteam, thinkrank, re_enter_rupok, rafinkhan, rudlinkon, mdnahidhasan
-Tags: seo, ai, schema, xml sitemap, meta description
+Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.0.1
+Stable tag: 2.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Switch from Yoast, Rank Math, AIOSEO or SEOPress in minutes. Run SEO from an AI chat window — every AI feature included, no credit meter.
+WordPress SEO plugin with AI SEO: meta descriptions, schema, XML sitemaps, Search Console, llms.txt, AEO & GEO. Your AI SEO assistant runs it via MCP.
 
 == Description ==
 
-**[ThinkRank](https://thinkrank.ai/) is the WordPress SEO plugin your AI assistant can operate.** Ask Claude, ChatGPT, or Cursor to write metadata, audit posts, fix schema, and run bulk SEO work on your site — in plain language, from the chat window you already use. Underneath sits a complete SEO plugin: meta titles and descriptions, real-time content analysis, keyword optimization, schema markup, XML sitemaps, robots meta, canonical URLs, Open Graph, and Google Search Console + GA4 insights.
+**[ThinkRank](https://thinkrank.ai/) is the AI SEO plugin for WordPress that your AI assistant can operate.** Ask Claude, ChatGPT, or Cursor to write metadata, audit posts, fix schema, and run bulk SEO work on your site — in plain language, from the chat window you already use. Underneath sits a complete SEO plugin: meta tags (SEO titles and meta descriptions), real-time on-page content analysis, keyword optimization, schema markup and structured data, XML sitemaps, robots meta, canonical URLs, Open Graph and Twitter Cards, Local SEO, llms.txt, and Google Search Console + GA4 insights — built for Google and for AI search (AEO and GEO) alike.
 
 Two things make ThinkRank different, and both are checkable:
 
@@ -42,26 +42,24 @@ ThinkRank ships a self-contained **Model Context Protocol (MCP) server** built r
   * "Review this page and suggest on-page SEO improvements."
   * "Check Search Console opportunities for pages with high impressions and low CTR."
 * **35+ SEO tools** exposed to your assistant — metadata, schema, site identity, sitemaps, robots.txt & robots meta, image SEO, social meta, instant indexing, llms.txt, SEO scores, insights and opportunities.
-* **Connection health check** — a "Test connection" button makes a real call and tells you exactly which step failed: HTTPS, authentication, permissions, or ability discovery.
+* **Connection health check** — a "Test connection" button makes a real call and tells you exactly which step failed.
 * **Safe imports** — connected assistants can preview an SEO import as a dry run before anything is written.
 
 = Easy Claude, ChatGPT, Cursor and MCP Client Setup =
 
 * **One-click Claude connection** via a guided OAuth 2.1 flow with PKCE — no API key to copy, no config file.
 * **Application Password fallback** for ChatGPT, Cursor, and other MCP-compatible clients, with ready-made configuration details.
-* **No companion plugin required** and **no terminal setup**.
-* **Admin-controlled and off by default** — enable it under ThinkRank → MCP whenever you're ready.
-* **Revocable in one click** — delete the connected Application Password and access is removed immediately.
+* **Admin-controlled, off by default, revocable in one click** — enable it under ThinkRank → MCP when you're ready; delete the connected Application Password and access ends immediately.
 
 = Migrate from Rank Math, Yoast SEO, AIOSEO or SEOPress =
 
 A guided Setup Wizard detects your current SEO plugin and imports your metadata, schema settings, sitemap settings, image SEO data, templates, and related SEO settings from **Rank Math SEO, Yoast SEO, All in One SEO (AIOSEO), and SEOPress** — then deactivates the old plugin once its data is safely migrated.
 
-The importers go well past basic post meta: title formats per page type, Knowledge Graph and organization identity, author archive settings, role permissions, IndexNow keys and submission history, per-post sitemap exclusions, breadcrumb settings, social defaults, News/Video sitemap post types, and local business details all carry over where the source plugin has them.
+The importers go well past basic post meta: title formats, Knowledge Graph identity, author archive and role settings, IndexNow keys and history, sitemap exclusions, breadcrumbs, social defaults, News/Video sitemap post types and local business details all carry over.
 
-If you're looking for a **Rank Math, Yoast SEO, AIOSEO, or SEOPress alternative** because of upsell notices, metered AI credits, or per-site pricing, this migration path is built for exactly that switch — and our promotional surface stays confined to ThinkRank's own settings pages, where every notice is dismissible.
+Looking for a **Rank Math, Yoast SEO, AIOSEO or SEOPress alternative** because of upsell notices, metered AI credits or per-site pricing? This migration path is built for exactly that switch.
 
-= AI SEO Metadata Generator for Titles and Meta Descriptions =
+= AI SEO Metadata Generator: Meta Tags, SEO Titles and Meta Descriptions =
 
 * Generate SEO title suggestions for posts, pages, products, and custom post types.
 * AI meta descriptions written for search snippets and click-through rate.
@@ -71,7 +69,7 @@ If you're looking for a **Rank Math, Yoast SEO, AIOSEO, or SEOPress alternative*
 
 = SEO Content Analysis, Focus Keywords and Keyword Optimization =
 
-* Real-time content analysis with a 13-factor SEO score.
+* Real-time on-page SEO content analysis with a 13-factor SEO score.
 * Focus keyword tracking and usage (up to 5 keywords per post) with cannibalization warnings.
 * Actionable recommendations for title, meta description, headings, links, readability, and structure.
 * One-click "Apply" for AI-suggested fixes — not just generic advice.
@@ -117,7 +115,6 @@ Page builders store their content outside `post_content`, which is why SEO plugi
 * **Correct `og:locale` and `og:locale:alternate`** — each translated page advertises its own language and links to its alternates for social crawlers.
 * **hreflang without duplicates** — ThinkRank emits hreflang tags **only** when WPML or Polylang isn't already printing them, so you never end up with two competing sets.
 * **Language-aware XML sitemaps** — the sitemap covers every language, instead of only the one that was active when it was generated.
-* **Sensible per-field behaviour** — copy for indexing intent and imagery, translate for copy, and never copy an explicit canonical onto a translation (which would point it back at the source language).
 * Detected automatically, and completely inactive on monolingual sites.
 
 = XML Sitemap Generator and Indexing Tools =
@@ -133,6 +130,15 @@ Page builders store their content outside `post_content`, which is why SEO plugi
 * Generate and maintain an llms.txt file — a Markdown index of your important content that AI coding agents and agentic tools read by convention.
 * Straight talk, because you deserve a vendor that gives it: Google has stated llms.txt does not affect Google Search or AI Overviews, and no reliable evidence ties the file to AI citations. We ship it as useful infrastructure for AI tooling, not as a ranking lever.
 * Auto-regenerates as your content changes, with full control over what's included.
+
+= Built for AI Search: AEO and GEO =
+
+**Answer Engine Optimization (AEO)** is being the answer ChatGPT, Perplexity, Gemini, Claude and Google AI Overviews give; **Generative Engine Optimization (GEO)** is being the source they cite. ThinkRank ships the groundwork both depend on — no unverifiable ranking claims:
+
+* **Structured data AI systems can parse** — Organization, Article, FAQ, HowTo, Product, Local Business and breadcrumb schema, validated before output.
+* **Consistent on-page signals** — meta titles and descriptions, canonical URLs, robots directives and Open Graph that agree everywhere, so answer engines read the page as you intend.
+* **llms.txt** — a maintained Markdown index of your key content for AI agents.
+* **An AI assistant in the loop** — over MCP, ask Claude or ChatGPT to review a page the way an answer engine reads it and apply the fixes from the same chat.
 
 = Google Search Console, GA4 and SEO Insights =
 
@@ -150,10 +156,10 @@ Page builders store their content outside `post_content`, which is why SEO plugi
 * Schema-enabled breadcrumb navigation, with context-aware titles and an optional border.
 * Site identity and title-format management, including Tag and Archive title formats with context-aware variable buttons.
 
-= Open Graph and Social Meta =
+= Open Graph, Twitter Cards and Social Media Previews =
 
-* Open Graph metadata, social titles, and descriptions.
-* Twitter/X card support.
+* Open Graph metadata, social titles, and descriptions for every social media share.
+* Twitter Cards (X) support.
 * Facebook, LinkedIn, and Pinterest previews with real-time editing.
 * Social profile fields validated before they're published as verification tags.
 
@@ -180,7 +186,7 @@ Page builders store their content outside `post_content`, which is why SEO plugi
 
 ThinkRank works with **OpenAI, Anthropic Claude, Google Gemini, OpenRouter, and compatible custom endpoints** — you bring your own key, so you keep direct control over model selection, cost, and privacy.
 
-* **No AI key needed for:** metadata fields, schema controls, XML sitemaps, robots meta, canonical URLs, breadcrumbs, Open Graph, Search Console/GA4 connections, the Site SEO Analyzer, multilingual output, page-builder integrations, and most dashboard controls.
+* **No AI key needed for:** metadata, schema, XML sitemaps, robots meta, canonical URLs, breadcrumbs, Open Graph, Search Console/GA4, the Site SEO Analyzer, multilingual output and page-builder integrations.
 * **AI key required for:** AI metadata generation, content briefs, AI insights, "Explain with AI", and the generative MCP tools.
 
 = ThinkRank Pro =
@@ -206,23 +212,20 @@ Upgrade to **ThinkRank Pro** for advanced, agentic-ready SEO automation:
 * WooCommerce stores and local businesses
 * Elementor, Divi, and Oxygen/Breakdance site builders
 * Multilingual sites running WPML or Polylang
-* Content teams, developers, and AI power users
-* Teams that run their work through an AI assistant
+* Content teams, developers, and teams that run their work through an AI assistant
+* Publishers who want to show up in AI answers and citations (AEO and GEO)
 
 = Why Choose ThinkRank? =
 
 * The only WordPress SEO plugin your AI assistant can operate directly (built-in MCP server)
 * Every AI feature included at a flat price — your own API key, no monthly credit meter
 * Real on-page and technical SEO — not just an AI writer
-* AI-generated meta titles and descriptions with SERP preview
-* SEO content analysis and keyword optimization with one-click fixes
 * A whole-site SEO Analyzer that needs no Google connection
 * Accurate scoring on Elementor, Divi, and Oxygen/Breakdance pages
 * WPML and Polylang support with correct hreflang and per-language sitemaps
 * Schema markup and structured data for rich snippets, plus FAQ/HowTo/TOC blocks
 * XML sitemap generator, robots.txt, instant indexing, and llms.txt
-* Search Console and GA4 insights inside WordPress
-* Role Manager for team and client access control
+* AEO and GEO groundwork — structured data, clean on-page signals and llms.txt for ChatGPT, Perplexity, Gemini and AI Overviews
 * One-click migration from Rank Math, Yoast, AIOSEO, and SEOPress
 
 == Installation ==
@@ -367,6 +370,35 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 
 == Changelog ==
 
+= 2.0.2 =
+Release Date: 2026-08-25
+
+- New: A master Enable Schema Markup switch in Schema Manager. While it is off, the Organization, Website and Person forms stay read-only with a notice explaining why, and no structured data is published
+- Changed: Picking an image is now the same compact control everywhere — the post Social tab, Hero & Branding, and the setup wizard
+- Fixed: Saving Schema Manager settings left a single schema type live even when four were enabled and configured
+- Fixed: Turning Knowledge Graph or Auto-Generate Schema off had no effect — both stayed on
+- Fixed: Opening a post's schema screen rewrote what you had deployed and published types you never chose
+- Fixed: Switching a post's schema type left the old type published beside the new one
+- Fixed: Structured data carried dates in a format Google reports as invalid, which drops the Article rich result
+- Fixed: The site language was published as en_US where search engines expect en-US
+- Fixed: Empty titles, descriptions and image dimensions were published as blank values instead of being left out, which fails validation harder than their absence
+- Fixed: Your business and your personal profile were given a new identity on every address, so one business looked like many to a crawler
+- Fixed: A page could carry two breadcrumb trails
+- Fixed: FAQ questions and HowTo steps typed in the editor were emptied when saved, so FAQ schema could never be deployed
+- Fixed: Schema deployed while a post was still a draft advertised the draft's temporary address forever
+- Fixed: Importing schema from a URL missed the layout Yoast and Rank Math publish, and an entry with more than one type was rejected
+- Fixed: Review and Video schema were offered in the editor and then rejected on save
+- Fixed: The Person "Profile URLs" box would not take a second URL — the new line was erased as it was typed
+- Fixed: One schema type failing validation took every valid type down with it on each save
+- Fixed: A role granted schema access was locked out of deploying and of every site-wide schema screen
+- Fixed: Schema Cache Duration was saved and then never applied
+- Fixed: WooCommerce shop archives got no schema at all
+- Fixed: Repeated settings saves made each save slower than the last, up to hundreds of extra database queries
+- Fixed: The editor's schema preview showed raw stored data after a reload, and deleting one saved schema could overwrite another
+- Fixed: An AI provider declining a request was retried, doubling the cost of a request that was never going to succeed
+- Fixed: An AI assistant sending an unexpected field to ThinkRank got a server error instead of a clear message
+- Fixed: The WordPress admin menu's fly-out panels were cut off at the bottom of the screen when opened from a low menu item such as Settings or Tools
+
 = 2.0.1 =
 Release Date: 2026-08-23
 
@@ -455,143 +487,12 @@ Release Date: 2026-08-16
 - Fixed: With some caching or optimization plugins, ThinkRank's screens and the Dashboard widget could stay stuck on "Loading" forever
 - Fixed: The AI usage overview reported empty fields on a site that had not used any AI features yet
 
-= 1.30.0 =
-Release Date: 2026-08-13
-
-- New: AI alt text for images — ThinkRank can now look at the picture and describe it, instead of only rewriting the filename. Choose it under Image SEO; the filename template stays the default because AI costs you money per image, and AI runs are capped at 10 images per click
-- New: One-click fixes in the Site SEO Audit. Where an issue is safely fixable — search visibility, XML sitemap, structured data, missing image alt text — a button applies it and the audit is re-scored on the spot. Fixes with consequences warn you before you click, and things that are your call (your titles, your permalinks, your server) are deliberately left alone with an explanation
-- New: A warning when WordPress is set to discourage search engines from indexing your site, so the setting that quietly undoes all your SEO cannot sit there unnoticed
-- Fixed: Opening the editor could hammer your site with repeated SEO requests until pages took 30-40 seconds to load, or failed outright. The panel now makes one request at a time, and only keeps checking while ThinkRank is actually writing metadata in the background
-- Fixed: SEO data imported from another plugin did not appear in an editor that was already open until you reloaded the page
-- Fixed: Saved content briefs could not be listed, exported or deleted on sites with no AI key configured — the screen failed with a server error, even though none of those actions need AI
-- Fixed: On some hosts ThinkRank's settings tables were never created, so every save in Site Identity, Sitemap, Social and Schema silently failed and the setup wizard dead-ended after a migration. The tables now fit the stricter index limit on those servers, and existing sites are migrated
-- Fixed: A settings save that fails now records why in the error log, instead of leaving you with "Failed to update settings" and nothing to act on
-- Fixed: The one-click sitemap and schema fixes reported success while saving nothing, and the audit's sitemap check could never fail no matter what your settings said
-- Fixed: Author archives printed two meta descriptions, ended their title in a stray space, ignored your chosen title separator, and would not let you clear the title or description templates — a cleared field came back on the next load
-- Fixed: The alt-text coverage panel could claim "6 of 5 images have alt text" by counting trashed images on one side only, and the bulk alt fill could spin forever on sites with private images, turning one click into thousands of requests
-- Fixed: The Alt text source setting accepted any value, so an unrecognised value silently fell back to the template and the AI batch limit stopped applying
-- Fixed: Saving Schema settings could white-screen the site on WordPress 6.0, after the settings had already been written
-- Fixed: Email reports — the Save button disappeared when you toggled the feature off, so turning it off never stuck; changing the frequency did not move the next send; a failed send still consumed the whole reporting period; the report described three different date ranges at once; "Next report" showed the wrong time outside UTC; pages and keywords that lost all their clicks were dropped from the Top Losing sections; and a report with no sections could be configured and sent empty
-- Fixed: Deleting ThinkRank with "Delete all data on uninstall" enabled while ThinkRank Pro was active silently reinstalled the free plugin and recreated all of its data
-- Fixed: Data Management could not be saved on sites without an AI API key
-- Fixed: An author or contributor granted Schema Manager access could deploy structured data onto other people's posts
-- Fixed: Alt text beginning with an accented character was corrupted
-- Changed: AI Visibility data is now removed when you delete the plugin with data deletion enabled, and old probe transcripts are aged out after 90 days instead of accumulating forever
-- Changed: The Integrations tab no longer displays or re-saves settings it has no control over, and a partial save now leaves untouched settings exactly as they were
-
-= 1.29.0 =
-Release Date: 2026-08-11
-
-- New: Show/hide your API key while typing it, and a Replace control so a saved key can be swapped without clearing it first. Saved keys are now only ever sent back to your browser masked, never in full
-- New: A social card on the dashboard with the ThinkRank community and channels in one place
-- Fixed: Content briefs that came back as "Unable to parse AI response", or saved a brief full of raw API output. When the AI refuses, is cut off at its token limit, or answers in an unexpected shape, ThinkRank now tells you what happened instead of saving the failure as a brief
-- Fixed: Short, Medium and Long content briefs all asked the AI for the same output budget, so a Long brief could be truncated while a Short one paid for room it never used. Each length now requests a budget that fits it
-- Fixed: Briefs on GPT-5 models ran at maximum reasoning effort by default — the slowest and most expensive setting, with much of the budget spent on hidden reasoning before any text was written
-- Fixed: A request that ran past the time ThinkRank allows was retried twice more, each attempt near-certain to time out again — multiplying the wait while the abandoned requests kept running, and billing, on your AI provider. A timed-out request now fails once, straight away, instead of being retried
-- Fixed: "X days ago" counts on sites outside UTC were off by the site's time offset
-- Fixed: Saving settings could send your API key back to the browser in the clear, and re-saving a form that displayed a masked key could overwrite the real key with the mask
-- Fixed: Importing SEO data from another plugin read serialized values from that plugin's tables in a way that could be abused to create PHP objects on your site; those values are now parsed without ever instantiating an object
-- Fixed: Fetching a schema or competitor URL could be pointed at private, internal or cloud-metadata addresses, including addresses disguised as IPv6. All outbound fetches now share one check, applied again on every redirect hop
-- Fixed: Dismissing a ThinkRank admin notice, importing or resetting the whole configuration, and adding database indexes no longer accept requests from users without the capability for them
-- Changed: Brand Visibility is temporarily hidden while it is reworked. Nothing is deleted — recorded runs, history and settings are kept, and the feature returns in a later release
-
-= 1.28.0 =
-Release Date: 2026-08-10
-
-- New: AI Insights — see how much of your traffic comes from AI assistants and AI crawlers, first-party. AI platforms strip referrers so Google Analytics files those visits under "Direct"; ThinkRank reads them as they arrive. Daily totals only — no IPs, no cookies, no per-visit tracking
-- New: Brand Visibility measures whether AI assistants mention your brand — asking each question several times for a real mention rate instead of a one-shot yes/no, ranking you against named competitors as share of voice, and scoring everything into a 0–100 Visibility Index
-- New: Brand Visibility uses its own API key and model per AI platform, so measuring visibility never means switching the provider that writes your metadata. Adds Perplexity, which searches the web live — the closest thing to what a person actually sees
-- New: Auto AI writes a missing SEO title or description when you publish, in the background, so publishing never waits on an AI call. It fills empty fields only and never overwrites what you wrote
-- New: Quick Edit SEO on the posts list — edit the SEO title, meta description and focus keywords straight from the posts table, without opening the post. Cleared fields fall back to your Global SEO patterns
-- New: Traffic Recovery tab on the AI Tools screen, which finds published pages losing search traffic and writes a refresh brief for each
-- New: A Migration screen for moving SEO data in from another plugin, with a re-scan control that re-detects what is installed
-- New: Social platform verification is now one tab per network, with per-card saving and masked verification codes
-- Fixed: The AI Traffic and Brand Visibility tables were never created, so AI traffic went unrecorded and every brand check spent a paid AI call without saving any history
-- Fixed: Brand Visibility failed to start on upgraded sites with "Could not start the analysis run". A missing table is now detected and repaired on load, instead of going unnoticed until a deactivate/reactivate
-- Fixed: Brand checks reported "not mentioned" for questions that could not plausibly omit your brand — the AI never actually returned an answer, and the blank was saved as a clean negative. A probe with no answer now fails visibly and is never stored
-- Fixed: A Brand Visibility run could sit at 0% forever, and progress never advanced while it was running
-- Fixed: A site that configured Brand Visibility on Pro and then lapsed to free kept running the larger Pro batch on the user's own paid API keys
-- Fixed: The SEO Overview column showed "Not Analyzed" forever on sites that never ran an analysis, even right after editing a post's SEO title and description
-- Fixed: Saving in the editor could wipe an SEO title or description that Auto AI, bulk optimization or an import had just written, and the editor kept showing the old empty value until a manual reload
-- Fixed: Google Analytics, Search Console and PageSpeed were reported as "not configured" on sites connected through Google sign-in, and a site with a perfectly working GA4 tag was told its tracking was unverified
-- Fixed: Reconnecting a different Google account kept showing the previous account's Search Console properties for up to 30 minutes, and domain properties could not be found by searching
-- Fixed: The ThinkRank data stream picker in Pro went blank on every reload
-- Fixed: ThinkRank's styles leaked into the WordPress admin and page builders
-
-= 1.27.0 =
-Release Date: 2026-08-06
-
-- New: Connected Apps page for MCP — see every AI app connected to your site, when it last used the connection, and disconnect any of them in one click
-- New: AI now writes in your site's language. Titles, descriptions and content briefs came back in English on non-English sites; they now follow the post's language, or the site language, and can be overridden with a filter
-- New: Instant Indexing checks that your IndexNow key file is actually reachable and tells you what is wrong before you submit a single URL
-- New: The MCP connection test detects hosts that block AI clients by User-Agent — the "couldn't register with the sign-in service" failure that no other check could see
-- Fixed: MCP could connect successfully and offer no tools at all, with nothing reporting a problem — the most common cause was another plugin's copy of the Abilities API loading first
-- Fixed: A connector still using an old token could lock itself out of your site permanently by retrying. The lockout window no longer extends on every retry, and the plugin now shows when clients are locked out
-- Fixed: ChatGPT rejected some sites with "MCP server does not implement OAuth" — the sign-in handshake itself was tripping the rate limiter
-- Fixed: Every IndexNow submission returned 403 on hosts with a read-only web root, because the key file could never be written. The key is now served directly by WordPress, and the error message names the file and what to check
-- Fixed: Importing from Rank Math (and Yoast, AIOSEO, SEOPress) could fail outright on a single unexpected setting value
-- Fixed: The "ThinkRank SEO" metabox was hidden by a leftover style rule — Classic Editor users never saw it, and the block editor's panel toggle appeared to do nothing
-- Fixed: Missing borders in the SEO drawer inside the Divi Visual Builder
-- Improved: The plugin package now installs as an upgrade rather than a second copy, and ships the WPML config file that earlier packages left out
-
-= 1.26.0 =
-Release Date: 2026-08-04
-
-- New: Search Console's Property field is now searchable — type to filter instead of scrolling a long site list
-- New: TranslatePress support — translated URLs now advertise their own language to social networks instead of the site's default
-- Improved: SEO scoring now uses the title and description your site actually outputs, so posts that inherit the Global or Bulk pattern are no longer scored as if they had no title or description
-- Improved: Suggestions that only offer guidance now read "How to fix" instead of "Apply", so a button never promises an edit it will not make
-- Fixed: Saving from the ThinkRank panel silently did nothing on posts with no other edits — SEO fields were never written and no error was shown
-- Fixed: The SEO score kept showing the old value for several minutes after changing the title or description, then appeared to update on its own
-- Fixed: The "ThinkRank SEO" metabox rendered empty — it now shows the current score with a way into the panel
-- Fixed: Schema edits could be lost when navigating away right after editing
-- Fixed: A focus keyword typed but not yet added was lost when saving, and the typed text lingered in the box after it was added
-- Fixed: Sites in a formal locale (such as German formal) emitted an invalid hreflang language code that search engines discard
-
-= 1.25.0 =
-Release Date: 2026-08-03
-
-- New: Redesigned AI Metadata Generator — generated title and description now come with a live Google preview, character-length indicators, one-click copy, and a result card that carries the metadata straight to the next step
-- New: Press Enter to add a keyword in the Content Brief generator instead of reaching for the mouse
-- Improved: Refreshed styling across the Content Brief generator, top navigation and form controls
-- Fixed: Signing in with Google failed on sites using Plain permalinks — the callback now completes on any permalink setting
-- Fixed: The dashboard could still show the old connection state right after finishing Google sign-in
-- Fixed: WordPress hover fly-out submenus were mispositioned and lost their pointer arrow on ThinkRank's full-page screens
-- Fixed: Posts and pages without their own social image now correctly inherit the site-wide default in every context
-- Fixed: Social meta tags and image schema no longer output zero width and height for images WordPress has no dimensions for
-- Fixed: Several crashes on unusual or malformed data — sitemap generation, custom schema validation, saving settings, Local SEO business hours, importing from another SEO plugin, and unexpected responses from AI or Google APIs
-
-= 1.24.0 =
-Release Date: 2026-08-02
-
-- New: Website Insights dashboard widget — see your last 30 days of Google Search Console traffic, top queries and headline metrics right on the WordPress dashboard
-- New: ThinkRank now works inside the Oxygen/Breakdance and Divi visual builders — a launcher button in the builder's top bar opens the full ThinkRank panel without leaving the canvas
-- New: Content briefs can now generate a complete article draft, not just an outline, in a cleaner tabbed layout
-- New: MCP Server screen has a connection health card and a "Test connection" button that makes a real call and tells you exactly which step failed — HTTPS, authentication, permissions or ability discovery
-- New: Connected AI assistants can preview an SEO import as a dry run before anything is written, and score and save many posts in a single request
-- Improved: ThinkRank's abilities are now always registered, so any AI connector can discover the plugin — the MCP switch now only controls the MCP server itself
-- Improved: Redesigned Settings page with tabs and independent saving per tab, and a card-based AI provider picker
-- Improved: Content briefs on OpenAI reasoning models no longer time out before finishing
-- Fixed: Pages built with Oxygen, Breakdance, Divi or Elementor were scored as having no content at all — a client reported published pages with over 1,000 words scoring in the 40s. ThinkRank now reads the real page content everywhere: bulk optimization, the post list SEO column, cron reports, AI assistants and the live analysis panel in the editor
-- Fixed: The SEO score shown by AI assistants is now saved, so the post list no longer keeps saying "Not Analyzed"
-- Fixed: Social profile fields accepted invalid values (like a malformed YouTube channel ID) and published them as broken verification tags — invalid values are now rejected with a clear message
-- Fixed: Homepage social sharing — the share title now matches your SEO title, your logo is used as the share image with a large card, and the share URL matches your canonical URL
-- Fixed: Search Console errors on the dashboard widget now explain what to fix instead of showing raw Google error text
-- Fixed: Divi's layout library and Theme Builder templates no longer appear in SEO screens
-- Few minor bug fixes & improvements
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.0.2 =
+Adds a master Enable Schema Markup switch and fixes a large batch of Schema Manager defects: settings saves collapsing four schema types to one, invalid dates dropping Article rich results, FAQ questions emptied on save, and duplicate business identities. Recommended for all sites.
+
 = 2.0.1 =
 A large correctness release. Settings that saved and then did nothing now take effect, a failed settings load can no longer overwrite what you had stored, and SEO titles and descriptions saved on categories and tags finally render. Fixes double aggregate ratings on WooCommerce products, cart and checkout pages in the sitemap, garbled accented characters in llms.txt on Nginx, paginated archives describing themselves as page 1, and an uninstall that damaged an active Pro install. Also hardens the AI-assistant connection token and object permissions on several REST routes. Recommended for all sites.
-
-= 2.0.0 =
-Redesigns the FAQ block and lets every answer carry its own image, both on the page and in its structured data. Fixes the FAQ editor's misaligned question and answer fields, a permalink change that looked like it had not saved (and in Elementor, Divi and Oxygen genuinely had not), and a keyword-in-address check that always failed on drafts while reporting false matches from parent pages, categories and dates on published ones. Recommended for all sites.
-
-= 1.32.0 =
-Publishes all of ThinkRank's structured data as one linked graph, with every FAQ on the page merged into a single FAQPage. Rebuilds the Instant Indexing Submit URLs and History screens, makes every feature switch save itself, and fixes AI assistant connections on hosts that intercept /.well-known/ addresses. Includes five security fixes: password-protected post content published as meta and social descriptions, unsanitized AI content briefs, and three cases where a user with access to one ThinkRank section could read or write SEO data for content they cannot edit. Also stops settings saves reporting a failure after they had saved. Recommended for all sites.
-
-= 1.31.0 =
-Adds Submission Coverage for Instant Indexing, applies a noindex set on category and tag archives, and shows what your robots.txt actually serves. ThinkRank now runs on PHP 7.4 and stops WordPress publishing a second, competing sitemap. Fixes /sitemap.xml leading crawlers to a dead page, a cleanup that deleted other plugins' sitemap files and left your site without one, Core Web Vitals failures reported as server errors, and Open Graph claiming every site is in US English. Recommended for all sites.

@@ -482,7 +482,11 @@ class SEO_Analyzer {
     private function schema_is_output(): bool {
         // 1) Newer Schema Management System (thinkrank_seo_settings table).
         if (class_exists('ThinkRank\\SEO\\Schema_Management_System')) {
-            $settings = (new Schema_Management_System())->get_settings('schema_management_system');
+            // 'site' is the context type; 'schema_management_system' is the manager
+            // NAME, which get_settings() rejects as an unsupported context and
+            // answers with bare defaults — where auto_generate_schema is true, so
+            // this always returned true and never read the site's real settings (#473).
+            $settings = (new Schema_Management_System())->get_settings('site', null);
             if (is_array($settings)) {
                 if (!empty($settings['enabled_schema_types']) && is_array($settings['enabled_schema_types'])) {
                     return true;

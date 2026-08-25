@@ -78,7 +78,7 @@ class Get_Social_Platforms_Settings extends Ability_Base {
 		return [
 			'type'                 => 'object',
 			'additionalProperties' => false,
-			'properties'           => [],
+			'properties'           => self::empty_properties(),
 		];
 	}
 

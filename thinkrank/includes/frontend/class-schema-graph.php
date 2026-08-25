@@ -44,6 +44,18 @@ class Schema_Graph {
     private const SCHEMA_CONTEXT = 'https://schema.org';
 
     /**
+     * Entity types that describe the site rather than the current page.
+     *
+     * These get a home-scoped @id so the same entity keeps one identity on
+     * every URL. WebSite and Organization are handled explicitly alongside
+     * these because they also seed isPartOf/publisher links (#471).
+     *
+     * @since 1.16.0
+     * @var string[]
+     */
+    private const SITE_LEVEL_TYPES = ['LocalBusiness', 'Person'];
+
+    /**
      * Which source wins when several subsystems describe the page.
      *
      * Lower wins. Per-post schema deployed from the editor's Schema tab is a
@@ -241,12 +253,41 @@ class Schema_Graph {
             return;
         }
 
-        if ('FAQPage' === $this->effective_type($schema, $type)) {
+        $effective_type = $this->effective_type($schema, $type);
+
+        if ('FAQPage' === $effective_type) {
             $this->add_faq_entities($schema['mainEntity'] ?? []);
             return;
         }
 
+        // One breadcrumb trail per page. A deployed BreadcrumbList lands here
+        // and output_breadcrumb_schema() adds a second on its own wp_head hook,
+        // so pages ended up with #breadcrumb and #breadcrumb-2 — two conflicting
+        // trails, with the primary node linking to only one of them (#471).
+        // First writer wins.
+        if ('BreadcrumbList' === $effective_type && $this->has_supporting_type('BreadcrumbList')) {
+            return;
+        }
+
         $this->supporting[] = $schema;
+    }
+
+    /**
+     * Whether a supporting node of the given type has already been collected.
+     *
+     * @since 1.16.0
+     *
+     * @param string $type Schema type.
+     * @return bool
+     */
+    private function has_supporting_type(string $type): bool {
+        foreach ($this->supporting as $node) {
+            if (($node['@type'] ?? '') === $type) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -558,6 +599,15 @@ class Schema_Graph {
             return;
         }
 
+        // A 404 response represents no content, so there is nothing for
+        // structured data to describe. The page-level producers already skip
+        // this context, but the site-identity entity does not, so without this
+        // guard every miss — including crawlers probing URLs that never existed
+        // — emits a Person carrying email, telephone and birthDate (#481).
+        if (is_404()) {
+            return;
+        }
+
         $this->rendered = true;
 
         $graph = $this->build_graph();
@@ -573,6 +623,13 @@ class Schema_Graph {
          * @param array $graph List of schema nodes ([] suppresses output).
          */
         $graph = apply_filters('thinkrank_schema_graph', $graph);
+
+        // Drop empty properties across every node. An empty string is worse
+        // than an absent one — "headline": "" fails Article validation harder
+        // than omitting it — and Schema_Builder::clean_schema_array(), which was
+        // written for exactly this, is never reached from the render path
+        // (#471). Runs after the filter so add-on nodes are cleaned too.
+        $graph = array_values(array_filter(array_map([$this, 'prune_empty_values'], $graph)));
 
         if (empty($graph)) {
             return;
@@ -593,6 +650,94 @@ class Schema_Graph {
         echo $json . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_json_encode with JSON_HEX_* cannot break out of the script block.
         echo '</script>' . "\n";
         echo "<!-- /ThinkRank Schema Graph -->\n";
+    }
+
+    /**
+     * Replace an inline entity with an @id reference to an equivalent node.
+     *
+     * Matches on name so a post author is never silently collapsed into the
+     * site's Person entity, and vice versa (#471).
+     *
+     * @since 1.16.0
+     *
+     * @param mixed $inline     The inline entity from the primary node.
+     * @param array $candidates Nodes already in the graph, each with an @id.
+     * @return array|null ['@id' => …] when a match is found, null otherwise.
+     */
+    private function link_to_node($inline, array $candidates): ?array {
+        if (!is_array($inline) || empty($candidates)) {
+            return null;
+        }
+
+        // Already a reference.
+        if (isset($inline['@id']) && !isset($inline['name'])) {
+            return null;
+        }
+
+        $inline_name = isset($inline['name']) ? trim((string) $inline['name']) : '';
+
+        if ('' === $inline_name) {
+            return null;
+        }
+
+        foreach ($candidates as $candidate) {
+            $candidate_name = isset($candidate['name']) ? trim((string) $candidate['name']) : '';
+
+            if ('' !== $candidate_name
+                && 0 === strcasecmp($candidate_name, $inline_name)
+                && !empty($candidate['@id'])
+            ) {
+                return ['@id' => $candidate['@id']];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Recursively drop empty properties from a schema node.
+     *
+     * Removes '', [], and null. Deliberately keeps numeric 0, boolean false and
+     * the structural keys, which are all meaningful values.
+     *
+     * @since 1.16.0
+     *
+     * @param mixed $value Node or property value.
+     * @return mixed Cleaned value.
+     */
+    private function prune_empty_values($value) {
+        if (!is_array($value)) {
+            return $value;
+        }
+
+        $cleaned = [];
+
+        foreach ($value as $key => $item) {
+            // Never prune the keys that give a node its identity.
+            if (in_array($key, ['@context', '@type', '@id'], true)) {
+                $cleaned[$key] = $item;
+                continue;
+            }
+
+            if (is_array($item)) {
+                $item = $this->prune_empty_values($item);
+
+                if ([] === $item) {
+                    continue;
+                }
+
+                $cleaned[$key] = $item;
+                continue;
+            }
+
+            if (null === $item || '' === $item) {
+                continue;
+            }
+
+            $cleaned[$key] = $item;
+        }
+
+        return $cleaned;
     }
 
     /**
@@ -662,8 +807,10 @@ class Schema_Graph {
             $nodes['faq'] = $faq;
         }
 
-        $website_id    = '';
-        $breadcrumb_id = '';
+        $website_id         = '';
+        $breadcrumb_id      = '';
+        $organization_nodes = [];
+        $person_nodes       = [];
 
         foreach ($this->supporting as $index => $node) {
             $type = $node['@type'] ?? '';
@@ -676,6 +823,31 @@ class Schema_Graph {
                 $website_id = $node['@id'];
             } elseif ('Organization' === $type) {
                 $node = $this->assign_id($node, home_url('/#organization'), $used_ids);
+                $organization_nodes[] = $node;
+            } elseif (in_array($type, self::SITE_LEVEL_TYPES, true)) {
+                // Site-level entities describe the site, not the page, so their
+                // @id must be stable across URLs. Falling through to the
+                // page-scoped branch minted a fresh identity on every URL, so
+                // one business became N entities in a crawler's graph and
+                // nothing could reference it by @id (#471).
+                // One entity, emitted once. The site identity and a per-post
+                // deployment describe the same person or business, so both
+                // arrive here claiming the same @id. assign_id() would resolve
+                // that collision by minting "#person-2", turning a duplicate
+                // into two competing entities that split the identity a
+                // knowledge graph is meant to consolidate (#479).
+                $duplicate_key = $this->find_same_entity($nodes, $type, $node);
+
+                if (null !== $duplicate_key) {
+                    $nodes[$duplicate_key] = $this->merge_entity($nodes[$duplicate_key], $node);
+                    continue;
+                }
+
+                $node = $this->assign_id($node, home_url('/#' . strtolower($type)), $used_ids);
+
+                if ('Person' === $type) {
+                    $person_nodes[] = $node;
+                }
             } elseif (is_string($type) && $type !== '') {
                 $node = $this->assign_id($node, $base . '#' . strtolower($type), $used_ids);
             }
@@ -690,6 +862,30 @@ class Schema_Graph {
             }
             if ($breadcrumb_id !== '' && !isset($nodes['primary']['breadcrumb'])) {
                 $nodes['primary']['breadcrumb'] = ['@id' => $breadcrumb_id];
+            }
+
+            // Point publisher/author at the full nodes already in the graph.
+            // They were emitted inline with no @id, so the graph described the
+            // same publisher twice — and the richer node, the one carrying the
+            // logo Google needs for Article, was not the one publisher
+            // referenced (#471).
+            //
+            // Only collapse when the inline object names the SAME entity. A post
+            // author and the site's Person entity are frequently different
+            // people, so matching on position rather than identity would
+            // misattribute authorship.
+            if (isset($nodes['primary']['publisher'])) {
+                $linked = $this->link_to_node($nodes['primary']['publisher'], $organization_nodes);
+                if (null !== $linked) {
+                    $nodes['primary']['publisher'] = $linked;
+                }
+            }
+
+            if (isset($nodes['primary']['author'])) {
+                $linked = $this->link_to_node($nodes['primary']['author'], $person_nodes);
+                if (null !== $linked) {
+                    $nodes['primary']['author'] = $linked;
+                }
             }
         }
 
@@ -737,6 +933,82 @@ class Schema_Graph {
         }
 
         return ['winner' => array_shift($kept), 'siblings' => array_values($kept)];
+    }
+
+    /**
+     * Find an already-placed node describing the same entity as $node.
+     *
+     * Identity is `email` when both carry one — two people can share a name,
+     * but not a mailbox — and a case-insensitive `name` match otherwise. A node
+     * with neither never matches, so an unidentifiable entity is kept rather
+     * than folded into an unrelated one.
+     *
+     * @since 2.0.2
+     *
+     * @param array  $nodes Nodes placed so far, keyed.
+     * @param string $type  Schema type to match within.
+     * @param array  $node  Candidate node.
+     * @return string|null Key of the matching node, or null.
+     */
+    private function find_same_entity(array $nodes, string $type, array $node): ?string {
+        $email = isset($node['email']) ? strtolower(trim((string) $node['email'])) : '';
+        $name  = isset($node['name']) ? trim((string) $node['name']) : '';
+
+        if ('' === $email && '' === $name) {
+            return null;
+        }
+
+        foreach ($nodes as $key => $placed) {
+            if (($placed['@type'] ?? '') !== $type) {
+                continue;
+            }
+
+            $placed_email = isset($placed['email']) ? strtolower(trim((string) $placed['email'])) : '';
+
+            if ('' !== $email && '' !== $placed_email) {
+                if ($email === $placed_email) {
+                    return (string) $key;
+                }
+                continue;
+            }
+
+            $placed_name = isset($placed['name']) ? trim((string) $placed['name']) : '';
+
+            if ('' !== $name && '' !== $placed_name && 0 === strcasecmp($name, $placed_name)) {
+                return (string) $key;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Fold a duplicate entity into the node already in the graph.
+     *
+     * Fills gaps only: a property the placed node already carries wins, so the
+     * node that claimed the identity first keeps it, @id included. The
+     * duplicate can still contribute properties the first copy lacked, which is
+     * the point — between them they describe the entity more completely than
+     * either does alone.
+     *
+     * @since 2.0.2
+     *
+     * @param array $placed    Node already in the graph.
+     * @param array $duplicate Node describing the same entity.
+     * @return array Merged node.
+     */
+    private function merge_entity(array $placed, array $duplicate): array {
+        foreach ($duplicate as $key => $value) {
+            if ('@id' === $key || '@type' === $key || '@context' === $key) {
+                continue;
+            }
+
+            if (!isset($placed[$key]) || '' === $placed[$key] || [] === $placed[$key]) {
+                $placed[$key] = $value;
+            }
+        }
+
+        return $placed;
     }
 
     /**

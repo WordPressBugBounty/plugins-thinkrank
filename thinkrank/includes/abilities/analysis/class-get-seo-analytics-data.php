@@ -77,7 +77,7 @@ class Get_Seo_Analytics_Data extends Ability_Base {
 		return [
 			'type'                 => 'object',
 			'additionalProperties' => true,
-			'properties'           => [],
+			'properties'           => self::empty_properties(),
 		];
 	}
 

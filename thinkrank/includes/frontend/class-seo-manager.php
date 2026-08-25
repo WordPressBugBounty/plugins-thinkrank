@@ -2494,6 +2494,17 @@ class SEO_Manager {
         $has_schema_manager_output = false;
         $has_website_schema = false;
 
+        // The master switch on Essential SEO -> Schema Manager. Until #461 this
+        // was never read here, so turning schema off left every deployed entity
+        // on the page. Read it once and bail before touching the graph.
+        if ($this->schema_manager) {
+            $schema_settings = $this->schema_manager->get_settings('site', null);
+
+            if (isset($schema_settings['enabled']) && !$schema_settings['enabled']) {
+                return;
+            }
+        }
+
         // PRIORITY 1: Always output site-wide schemas (Organization, Website, LocalBusiness, Person)
         if ($this->schema_manager) {
             $site_wide_schemas = $this->schema_manager->get_deployed_schemas('site', null);
@@ -2832,6 +2843,13 @@ class SEO_Manager {
      */
     public function output_breadcrumb_schema(): void {
         if (!$this->site_identity_data || !$this->site_identity_data['enabled']) {
+            return;
+        }
+
+        // A breadcrumb trail for a URL that does not exist, or for a search
+        // results page, describes nothing — and the plugin already emits no
+        // canonical on either (#471).
+        if (is_404() || is_search()) {
             return;
         }
 

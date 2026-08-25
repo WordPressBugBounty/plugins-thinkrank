@@ -119,6 +119,14 @@ class Schema_Input_Validator {
             'required_fields' => ['@type', 'name', 'thumbnailUrl', 'uploadDate'],
             'optional_fields' => ['description', 'contentUrl', 'embedUrl', 'duration', 'url'],
             'max_length' => ['name' => 110, 'description' => 160]
+        ],
+        // Offered by the metabox Schema Type dropdown and registered in
+        // Schema_Factory, but missing here — so a Review could be generated and
+        // never deployed (#462). Field list mirrors Schema_Factory::Review.
+        'Review' => [
+            'required_fields' => ['@type', 'itemReviewed', 'reviewRating', 'author'],
+            'optional_fields' => ['reviewBody', 'datePublished', 'publisher', 'name', 'url'],
+            'max_length' => ['name' => 110, 'reviewBody' => 500]
         ]
     ];
 
@@ -364,13 +372,27 @@ class Schema_Input_Validator {
             $result['valid'] = false;
         }
 
-        // Check for required @type
+        // Check for required @type.
+        // `@type` may be an array — "@type": ["Product","Offer"] is valid
+        // JSON-LD. Comparing an array against a string emitted an "Array to
+        // string conversion" warning and always failed (#468), so match if the
+        // expected type appears anywhere in the list.
         if (!isset($schema_data['@type'])) {
             $result['errors'][] = 'Missing required @type field';
             $result['valid'] = false;
-        } elseif ($schema_data['@type'] !== $schema_type) {
-            $result['errors'][] = "Schema @type '{$schema_data['@type']}' does not match expected type '{$schema_type}'";
-            $result['valid'] = false;
+        } else {
+            $declared_types = is_array($schema_data['@type'])
+                ? array_map('strval', $schema_data['@type'])
+                : [(string) $schema_data['@type']];
+
+            if (!in_array($schema_type, $declared_types, true)) {
+                $result['errors'][] = sprintf(
+                    "Schema @type '%s' does not match expected type '%s'",
+                    implode(', ', $declared_types),
+                    $schema_type
+                );
+                $result['valid'] = false;
+            }
         }
 
         return $result;
@@ -535,6 +557,24 @@ class Schema_Input_Validator {
         $result = ['valid' => true, 'errors' => [], 'warnings' => []];
 
         foreach ($schema_data as $field => $value) {
+            // sameAs is a list, so its members never reached the string branch
+            // below and free text entered in a social-profile field saved
+            // cleanly, then shipped as invalid structured data (#480).
+            if (is_array($value) && in_array($field, ['url', 'sameAs', 'logo', 'image'], true)) {
+                foreach ($value as $item) {
+                    if (!is_string($item) || '' === trim($item)) {
+                        continue;
+                    }
+
+                    if (!$this->is_valid_url($item)) {
+                        $result['errors'][] = "Invalid URL format for field: {$field} ({$item})";
+                        $result['valid'] = false;
+                    }
+                }
+
+                continue;
+            }
+
             if (is_string($value)) {
                 // Validate URLs
                 if (in_array($field, ['url', 'sameAs', 'logo', 'image'], true) && !empty($value)) {
@@ -722,19 +762,30 @@ class Schema_Input_Validator {
             return $result;
         }
 
-        // Check operation-specific permissions
+        // Check operation-specific permissions.
+        //
+        // #457 loosened the route permission_callbacks to the delegable
+        // `thinkrank_schema` capability, but these handler-level checks still
+        // demanded edit_posts / publish_posts / manage_options — so a role
+        // granted Schema access could generate and validate but was denied on
+        // deploy, bulk operations and everything site-context. That is exactly
+        // the symptom #457 set out to fix (#470). A holder of thinkrank_schema
+        // satisfies any schema operation; the built-in caps remain as the
+        // fallback for roles that never went through the Role Manager.
+        $has_schema_cap = user_can($user_id, 'thinkrank_schema');
+
         switch ($operation) {
             case 'generate':
             case 'validate':
             case 'optimize':
-                if (!user_can($user_id, 'edit_posts')) {
+                if (!$has_schema_cap && !user_can($user_id, 'edit_posts')) {
                     $result['errors'][] = 'Insufficient permissions for schema generation/validation';
                     return $result;
                 }
                 break;
 
             case 'deploy':
-                if (!user_can($user_id, 'publish_posts')) {
+                if (!$has_schema_cap && !user_can($user_id, 'publish_posts')) {
                     $result['errors'][] = 'Insufficient permissions for schema deployment';
                     return $result;
                 }
@@ -742,7 +793,7 @@ class Schema_Input_Validator {
 
             case 'manage_settings':
             case 'bulk_operations':
-                if (!user_can($user_id, 'manage_options')) {
+                if (!$has_schema_cap && !user_can($user_id, 'manage_options')) {
                     $result['errors'][] = 'Insufficient permissions for schema management';
                     return $result;
                 }
@@ -825,7 +876,12 @@ class Schema_Input_Validator {
             // user_can($user_id, …) rather than current_user_can() so this
             // agrees with the rest of the validator outside a REST request,
             // where the current user and $user_id can differ (cron, CLI).
-            if (!$user_id || !user_can($user_id, 'manage_options')) {
+            //
+            // Accepts the delegable `thinkrank_schema` capability as well as
+            // manage_options: /schema/settings already lets a delegated role
+            // edit site schema settings, so blocking site-context generate and
+            // deploy for the same role was inconsistent (#470).
+            if (!$user_id || (!user_can($user_id, 'thinkrank_schema') && !user_can($user_id, 'manage_options'))) {
                 $result['errors'][] = 'Access denied: You need administrator privileges for site-level schema operations';
                 return $result;
             }
@@ -902,12 +958,31 @@ class Schema_Input_Validator {
      */
     public function sanitize_options(array $options): array {
         $sanitized = [];
+        // Anything omitted here is dropped before the manager sees it, which is
+        // why apply_content_schema_settings_from_options() and the per-request
+        // schema-type opt-in were unreachable from REST (#470). The list now
+        // covers every option the generate path actually reads.
+        //
+        // `validation_level` previously allowed 'basic' and rejected 'lenient',
+        // disagreeing with Schema_Settings_Config, validate_settings() and the
+        // update-settings ability, which all use 'lenient'.
+        // `deployment_method` no longer advertises microdata/rdfa, which
+        // determine_deployment_method() hardcodes away to json_ld anyway.
         $allowed_options = [
-            'deployment_method' => ['json_ld', 'microdata', 'rdfa'],
-            'validation_level' => ['strict', 'moderate', 'basic'],
+            'deployment_method' => ['json_ld'],
+            'validation_level' => ['strict', 'moderate', 'lenient'],
             'include_meta' => 'boolean',
             'minify_output' => 'boolean',
-            'cache_duration' => 'integer'
+            'cache_duration' => 'integer',
+            'rich_snippets_optimization' => 'boolean',
+            'knowledge_graph' => 'boolean',
+            'auto_generate_schema' => 'boolean',
+            'enable_article_schema' => 'boolean',
+            'enable_faq_schema' => 'boolean',
+            'enable_howto_schema' => 'boolean',
+            'enable_product_schema' => 'boolean',
+            'enable_local_business' => 'boolean',
+            'enable_breadcrumbs_schema' => 'boolean',
         ];
 
         foreach ($options as $key => $value) {

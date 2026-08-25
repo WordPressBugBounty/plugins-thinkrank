@@ -863,8 +863,8 @@ final class Mcp_Manager {
 		$read_only    = Mcp_OAuth::scope_is_read_only( $req['scope'] );
 		$access_label = $read_only ? __( 'Read-only', 'thinkrank' ) : __( 'Read & write', 'thinkrank' );
 		$access_desc  = $read_only
-			? __( 'Review your SEO across posts and site settings — metadata, schema, sitemaps, robots, social, and SEO scores. No changes are made.', 'thinkrank' )
-			: __( 'Read and improve your SEO across posts and site settings — metadata, schema, sitemaps, robots, social, indexing, and SEO scores.', 'thinkrank' );
+			? __( 'Review your SEO across posts and site settings metadata, schema, sitemaps, robots, social, and SEO scores. No changes are made.', 'thinkrank' )
+			: __( 'Read and improve your SEO across posts and site settings metadata, schema, sitemaps, robots, social, indexing, and SEO scores.', 'thinkrank' );
 		$client     = '' !== $req['client_name'] ? $req['client_name'] : __( 'An AI assistant', 'thinkrank' );
 		$action_url = Mcp_OAuth::authorize_url();
 		$nonce      = wp_create_nonce( 'thinkrank_oauth_consent' );

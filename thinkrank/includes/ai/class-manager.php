@@ -401,6 +401,7 @@ class Manager {
         $title = $generated['title'];
         $total_tokens = $generated['tokens'];
         $ai_text = $generated['ai_text'];
+        $finish_reason = $generated['finish_reason'];
 
         // A reasoning model can still return an empty/truncated title on the
         // first pass; retry once before giving up so the "Apply" action reliably
@@ -411,6 +412,7 @@ class Manager {
             if ($retry['ai_text'] !== '') {
                 $ai_text = $retry['ai_text'];
             }
+            $finish_reason = $retry['finish_reason'];
             if ($retry['title'] !== '') {
                 $title = $retry['title'];
             }
@@ -426,12 +428,25 @@ class Manager {
             if ($retry['ai_text'] !== '') {
                 $ai_text = $retry['ai_text'];
             }
+            $finish_reason = $retry['finish_reason'];
             if ($retry['title'] !== '' && $this->title_contains_word($retry['title'], $sentiment_words)) {
                 $title = $retry['title'];
             }
         }
 
         if ($title === '') {
+            // Nothing about a raw JSON-parse failure is visible to support
+            // otherwise — log_ai_usage() below only runs on success, so a
+            // failed attempt left no trace of what the model actually sent
+            // back or why generation stopped.
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging only when WP_DEBUG is enabled.
+                error_log(sprintf(
+                    '[ThinkRank] Title improvement failed to extract a title. finish_reason=%s ai_text=%s',
+                    $finish_reason !== '' ? $finish_reason : '(none)',
+                    mb_substr($ai_text, 0, 500)
+                ));
+            }
             throw new \Exception('The AI did not return a usable title. Please try again.');
         }
 
@@ -467,6 +482,7 @@ class Manager {
             'title' => $title,
             'ai_text' => $completion['ai_text'],
             'tokens' => $completion['tokens'],
+            'finish_reason' => $completion['finish_reason'],
         ];
     }
 
@@ -946,6 +962,52 @@ class Manager {
         return $this->request_completion($prompt, $max_tokens, $options);
     }
 
+    /**
+     * Detect a provider-side refusal or content-policy block and fail with
+     * the real reason. Each provider signals these differently, and none of
+     * the signals set the content field the extraction chain looks for — left
+     * unchecked they read as an empty/unusable result with no explanation of
+     * why, and every caller here retries an empty result once, which just
+     * repeats the same refusal at the cost of more tokens.
+     *
+     * @param array $response Raw response from the AI client.
+     * @throws \Exception If the response is a refusal or policy block.
+     */
+    private function guard_against_refusal(array $response): void {
+        // --- OpenAI (Chat Completions) ---
+        // A structured refusal is HTTP 200 with message.content=null and the
+        // stated reason carried in message.refusal.
+        if (isset($response['choices'][0]['message'])) {
+            $message = $response['choices'][0]['message'];
+            $finish  = (string) ($response['choices'][0]['finish_reason'] ?? '');
+
+            if (!empty($message['refusal'])) {
+                throw new \Exception(esc_html('The AI declined this request: ' . (string) $message['refusal']));
+            }
+            if ('content_filter' === $finish) {
+                throw new \Exception('The AI blocked this request under its content policy. Try different wording.');
+            }
+        }
+
+        // --- Claude (Messages) ---
+        if (isset($response['stop_reason']) && 'refusal' === (string) $response['stop_reason']) {
+            throw new \Exception('The AI declined this request. Try different wording.');
+        }
+
+        // --- Gemini ---
+        // A prompt rejected outright returns no candidate at all, only
+        // promptFeedback.blockReason; a candidate can also finish on SAFETY or
+        // PROHIBITED_CONTENT.
+        $block_reason = (string) ($response['promptFeedback']['blockReason'] ?? '');
+        if ('' !== $block_reason) {
+            throw new \Exception(esc_html(sprintf('The AI blocked this request under its content policy (%s). Try different wording.', $block_reason)));
+        }
+        $gemini_finish = (string) ($response['candidates'][0]['finishReason'] ?? '');
+        if (in_array($gemini_finish, ['SAFETY', 'PROHIBITED_CONTENT'], true)) {
+            throw new \Exception('The AI blocked this request under its content policy. Try different wording.');
+        }
+    }
+
     private function request_completion(string $prompt, int $max_tokens = 2048, array $options = []): array {
         // "Thinking" providers (e.g. Gemini 2.5) spend output tokens on reasoning
         // before emitting text, so the cap must cover both the reasoning and the
@@ -957,6 +1019,15 @@ class Manager {
             'max_tokens' => $max_tokens,
             'temperature' => 0.4,
         ]));
+
+        // Fail fast on a genuine refusal/policy block instead of retrying the
+        // same prompt (every caller retries on an empty result) and burning
+        // more tokens on a request the model has already declined. Truncation
+        // (finish_reason length/max_tokens) is deliberately NOT treated as a
+        // hard failure here — callers' existing empty-result retries already
+        // recover from that, and a retry can succeed where the first attempt
+        // spent its budget on hidden reasoning.
+        $this->guard_against_refusal($response);
 
         $ai_text = '';
         if (isset($response['choices'][0]['message']['content'])) {
@@ -978,7 +1049,12 @@ class Manager {
         // Diagnostics for callers that must explain an empty answer (e.g. the
         // brand-visibility probe): why generation stopped, and how much of the
         // completion budget hidden reasoning consumed (OpenAI reasoning models).
-        $finish_reason    = (string) ($response['choices'][0]['finish_reason'] ?? ($response['stop_reason'] ?? ''));
+        // All three provider shapes are read — Gemini reports the stop reason
+        // per candidate, so without that arm the diagnostic was always blank
+        // for exactly the provider whose truncation it exists to explain.
+        $finish_reason    = (string) ($response['choices'][0]['finish_reason']
+            ?? ($response['stop_reason']
+            ?? ($response['candidates'][0]['finishReason'] ?? '')));
         $reasoning_tokens = (int) ($response['usage']['completion_tokens_details']['reasoning_tokens'] ?? 0);
 
         return [

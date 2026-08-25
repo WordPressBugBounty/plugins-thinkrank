@@ -59,7 +59,7 @@ class Send_Email_Report_Test extends Ability_Base {
 		return [
 			'type'                 => 'object',
 			'additionalProperties' => false,
-			'properties'           => [],
+			'properties'           => self::empty_properties(),
 		];
 	}
 

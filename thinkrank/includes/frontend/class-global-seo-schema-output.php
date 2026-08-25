@@ -232,6 +232,19 @@ class Global_SEO_Schema_Output {
             $url = $posts_page_id ? (string) get_permalink($posts_page_id) : home_url('/');
         } elseif (is_post_type_archive()) {
             $post_type_object = get_queried_object();
+
+            // WooCommerce maps the shop archive onto a real page, so
+            // get_queried_object() returns that WP_Post while
+            // is_post_type_archive() is still true. Bailing here left every
+            // store's main archive with no CollectionPage (#466). Fall back to
+            // the query var, exactly as the canonical resolver already does.
+            if (!$post_type_object instanceof \WP_Post_Type) {
+                $queried_post_type = (string) get_query_var('post_type');
+                $post_type_object  = $queried_post_type
+                    ? get_post_type_object($queried_post_type)
+                    : null;
+            }
+
             if (!$post_type_object instanceof \WP_Post_Type) {
                 return;
             }
@@ -879,13 +892,25 @@ class Global_SEO_Schema_Output {
             if ($image_url) {
                 $image_meta = wp_get_attachment_metadata($image_id);
 
-                return [
+                // SVGs, offloaded media and failed metadata regeneration all
+                // report no dimensions. Omit the keys entirely — a literal JSON
+                // null is an invalid value that Google flags, which is what the
+                // previous `: null` fallback emitted (#471). Matches
+                // Schema_Builder::format_image_schema().
+                $image_object = [
                     '@type' => 'ImageObject',
                     'url' => $image_url,
-                    // SVGs report 0x0 — send null rather than a zero dimension.
-                    'width' => !empty($image_meta['width']) ? (int) $image_meta['width'] : null,
-                    'height' => !empty($image_meta['height']) ? (int) $image_meta['height'] : null,
                 ];
+
+                if (!empty($image_meta['width'])) {
+                    $image_object['width'] = (int) $image_meta['width'];
+                }
+
+                if (!empty($image_meta['height'])) {
+                    $image_object['height'] = (int) $image_meta['height'];
+                }
+
+                return $image_object;
             }
         }
 

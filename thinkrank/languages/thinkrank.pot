@@ -2,14 +2,14 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 2.0.1\n"
+"Project-Id-Version: ThinkRank 2.0.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-23T11:58:55+00:00\n"
+"POT-Creation-Date: 2026-08-25T09:47:57+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
@@ -1403,7 +1403,7 @@ msgstr ""
 #: src/admin/components/pages/MCPConnectedApps.js:460
 #: src/admin/components/pages/MCPConnectionConfig.js:487
 #: src/admin/components/seo/SEOScoreCalculator.js:1016
-#: src/metabox/components/metabox-schema-tab/ImportSection.js:504
+#: src/metabox/components/metabox-schema-tab/ImportSection.js:510
 msgid "Cancel"
 msgstr ""
 
@@ -1477,7 +1477,7 @@ msgid "Failed to connect to AI service. Please check your API settings."
 msgstr ""
 
 #: includes/admin/class-metabox-manager.php:1241
-#: includes/ai/class-manager.php:1385
+#: includes/ai/class-manager.php:1461
 msgid "SEO metadata generated successfully!"
 msgstr ""
 
@@ -1596,7 +1596,7 @@ msgstr ""
 #: src/admin/components/essential-seo/instant-indexing/Settings.js:576
 #: src/admin/components/essential-seo/IntegrationsTab.js:457
 #: src/admin/components/essential-seo/IntegrationsTab.js:1743
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:482
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:458
 #: src/admin/components/essential-seo/site-identity/BreadcrumbSettings.js:78
 #: src/admin/components/essential-seo/site-identity/LocalSEO.js:127
 #: src/admin/components/essential-seo/SiteIdentityTab.js:1072
@@ -2026,6 +2026,18 @@ msgstr ""
 msgid "Invalid Post ID"
 msgstr ""
 
+#. translators: %s: comma-separated list of schema types.
+#: includes/api/class-schema-endpoint.php:857
+#, php-format
+msgid "No schema could be deployed. Failed types: %s"
+msgstr ""
+
+#. translators: 1: number deployed, 2: number skipped.
+#: includes/api/class-schema-endpoint.php:895
+#, php-format
+msgid "Deployed %1$d schema(s); skipped %2$d that failed validation."
+msgstr ""
+
 #: includes/api/class-seo-analytics-endpoint.php:840
 msgid "Google Search Console is not connected yet. Connect your Google account to see search data here."
 msgstr ""
@@ -2132,13 +2144,13 @@ msgstr ""
 
 #: includes/api/class-sitemap-endpoint.php:1259
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:257
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:204
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:200
 msgid "Posts"
 msgstr ""
 
 #: includes/api/class-sitemap-endpoint.php:1260
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:258
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:214
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:210
 msgid "Pages"
 msgstr ""
 
@@ -2499,7 +2511,7 @@ msgstr ""
 #: includes/editor/elementor/class-howto-widget.php:61
 #: includes/editor/elementor/class-toc-widget.php:63
 #: src/admin/components/seo/SEOScoreSummary.js:338
-#: src/metabox/components/SocialTab.js:313
+#: src/metabox/components/SocialTab.js:299
 msgid "Title"
 msgstr ""
 
@@ -2515,7 +2527,7 @@ msgstr ""
 #: src/admin/components/essential-seo/schema/forms/SchemaProductForm.js:130
 #: src/admin/components/essential-seo/schema/forms/SchemaSoftwareForm.js:259
 #: src/admin/components/essential-seo/schema/forms/SchemaVideoObjectForm.js:85
-#: src/metabox/components/SocialTab.js:350
+#: src/metabox/components/SocialTab.js:336
 msgid "Description"
 msgstr ""
 
@@ -2744,11 +2756,11 @@ msgid "Read & write"
 msgstr ""
 
 #: includes/mcp/class-mcp-manager.php:866
-msgid "Review your SEO across posts and site settings — metadata, schema, sitemaps, robots, social, and SEO scores. No changes are made."
+msgid "Review your SEO across posts and site settings metadata, schema, sitemaps, robots, social, and SEO scores. No changes are made."
 msgstr ""
 
 #: includes/mcp/class-mcp-manager.php:867
-msgid "Read and improve your SEO across posts and site settings — metadata, schema, sitemaps, robots, social, indexing, and SEO scores."
+msgid "Read and improve your SEO across posts and site settings metadata, schema, sitemaps, robots, social, indexing, and SEO scores."
 msgstr ""
 
 #: includes/mcp/class-mcp-manager.php:868
@@ -3207,13 +3219,13 @@ msgid "Collecting performance data. This can take a minute — please refresh sh
 msgstr ""
 
 #. translators: %s: comma-separated list of schema types
-#: includes/seo/class-schema-management-system.php:656
+#: includes/seo/class-schema-management-system.php:808
 #, php-format
 msgid "Deployed schema could not be read back: %s"
 msgstr ""
 
-#: includes/seo/class-schema-management-system.php:665
-msgid "Schema deployed and verified on the front end"
+#: includes/seo/class-schema-management-system.php:817
+msgid "Schema deployed and read back from storage"
 msgstr ""
 
 #: includes/seo/class-seo-analyzer-fixer.php:49
@@ -3410,140 +3422,140 @@ msgstr ""
 msgid "Choose a default schema type for each post type under Essential SEO → Bulk SEO Optimization."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:535
+#: includes/seo/class-seo-analyzer.php:539
 msgid "Posts have meta descriptions"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:553
+#: includes/seo/class-seo-analyzer.php:557
 msgid "No published content to check yet."
 msgstr ""
 
 #. translators: 1: posts with meta description, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:582
+#: includes/seo/class-seo-analyzer.php:586
 #, php-format
 msgid "%1$d of your %2$d most recent posts have a meta description."
 msgstr ""
 
 #. translators: 1: posts missing a meta description, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:591
+#: includes/seo/class-seo-analyzer.php:595
 #, php-format
 msgid "%1$d of your %2$d most recent posts are missing a meta description. Search engines fall back to arbitrary page text for their snippets."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:592
+#: includes/seo/class-seo-analyzer.php:596
 msgid "Add meta descriptions in the ThinkRank SEO panel when editing a post — or use Bulk SEO Optimization to generate them with AI."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:604
+#: includes/seo/class-seo-analyzer.php:608
 msgid "Images have alt text"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:619
+#: includes/seo/class-seo-analyzer.php:623
 msgid "No images in your media library to check yet."
 msgstr ""
 
 #. translators: 1: images with alt text, 2: total images.
-#: includes/seo/class-seo-analyzer.php:644
+#: includes/seo/class-seo-analyzer.php:648
 #, php-format
 msgid "%1$d of your %2$d images have alt text."
 msgstr ""
 
 #. translators: 1: images missing alt text, 2: total images.
-#: includes/seo/class-seo-analyzer.php:653
+#: includes/seo/class-seo-analyzer.php:657
 #, php-format
 msgid "%1$d of your %2$d images are missing alt text. Alt text drives image search rankings and is an accessibility requirement."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:654
+#: includes/seo/class-seo-analyzer.php:658
 msgid "Under Essential SEO → Image SEO, turn on \"Save alt text to the Media Library\" and run \"Fill missing alt text\" to populate them from your format, or add alt text manually in the Media Library."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:677
-#: includes/seo/class-seo-analyzer.php:687
+#: includes/seo/class-seo-analyzer.php:681
+#: includes/seo/class-seo-analyzer.php:691
 msgid "Supported PHP version"
 msgstr ""
 
 #. translators: %s: current PHP version.
-#: includes/seo/class-seo-analyzer.php:680
+#: includes/seo/class-seo-analyzer.php:684
 #, php-format
 msgid "You are running PHP %s, which no longer receives active support. Newer PHP is faster and more secure."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:681
+#: includes/seo/class-seo-analyzer.php:685
 msgid "Ask your host to upgrade to PHP 8.1 or newer."
 msgstr ""
 
 #. translators: %s: current PHP version.
-#: includes/seo/class-seo-analyzer.php:690
+#: includes/seo/class-seo-analyzer.php:694
 #, php-format
 msgid "You are running a supported PHP version (%s)."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:704
-#: includes/seo/class-seo-analyzer.php:711
+#: includes/seo/class-seo-analyzer.php:708
+#: includes/seo/class-seo-analyzer.php:715
 msgid "Persistent object cache"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:706
+#: includes/seo/class-seo-analyzer.php:710
 msgid "A persistent object cache is active, reducing database load."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:713
+#: includes/seo/class-seo-analyzer.php:717
 msgid "No persistent object cache is active. On busier sites this means more database queries per request."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:714
+#: includes/seo/class-seo-analyzer.php:718
 msgid "Enable a persistent object cache (e.g. Redis or Memcached) via your host or a caching plugin."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:738
-#: includes/seo/class-seo-analyzer.php:746
+#: includes/seo/class-seo-analyzer.php:742
+#: includes/seo/class-seo-analyzer.php:750
 msgid "Site uses HTTPS (SSL)"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:740
+#: includes/seo/class-seo-analyzer.php:744
 msgid "Your site URL is not served over HTTPS. HTTPS is a confirmed ranking signal and required for user trust."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:741
+#: includes/seo/class-seo-analyzer.php:745
 msgid "Install an SSL certificate and set your WordPress Address / Site Address to https:// under Settings → General."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:748
+#: includes/seo/class-seo-analyzer.php:752
 msgid "Your site is served securely over HTTPS."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:761
-#: includes/seo/class-seo-analyzer.php:768
+#: includes/seo/class-seo-analyzer.php:765
+#: includes/seo/class-seo-analyzer.php:772
 msgid "File editing disabled"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:763
+#: includes/seo/class-seo-analyzer.php:767
 msgid "The dashboard plugin/theme file editor is disabled, reducing your attack surface."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:770
+#: includes/seo/class-seo-analyzer.php:774
 msgid "The built-in file editor is enabled. If an admin account is compromised, an attacker could edit your PHP files from wp-admin."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:771
+#: includes/seo/class-seo-analyzer.php:775
 msgid "Add define('DISALLOW_FILE_EDIT', true); to your wp-config.php."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:790
-#: includes/seo/class-seo-analyzer.php:798
+#: includes/seo/class-seo-analyzer.php:794
+#: includes/seo/class-seo-analyzer.php:802
 msgid "Errors not shown publicly"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:792
+#: includes/seo/class-seo-analyzer.php:796
 msgid "Debug output is displayed on the front end. Visible PHP errors can leak server paths and internals."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:793
+#: includes/seo/class-seo-analyzer.php:797
 msgid "Set define('WP_DEBUG_DISPLAY', false); (or turn off WP_DEBUG) in wp-config.php on production."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:800
+#: includes/seo/class-seo-analyzer.php:804
 msgid "PHP errors are not displayed to visitors."
 msgstr ""
 
@@ -3815,10 +3827,11 @@ msgstr ""
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:798
 #: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:438
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:533
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:454
 #: src/admin/components/essential-seo/SocialMediaTab.js:1072
 #: src/metabox/components/metabox-schema-tab/SchemaTypeSection.js:111
 #: src/metabox/components/panels/AnalysisPanel.js:140
-#: src/metabox/components/SocialTab.js:512
+#: src/metabox/components/SocialTab.js:479
 msgid "Generating…"
 msgstr ""
 
@@ -3835,6 +3848,7 @@ msgid "Alternative Variations"
 msgstr ""
 
 #: src/admin/components/ai/MetadataGenerator.js:360
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:141
 #: src/admin/setup-wizard/steps/StepMcpServer.js:376
 msgid "Copied"
 msgstr ""
@@ -3843,6 +3857,7 @@ msgstr ""
 #: src/admin/components/content-brief/ContentBriefGenerator.js:1127
 #: src/admin/components/content-brief/ContentStructure.js:510
 #: src/admin/components/content-brief/ContentStructure.js:1411
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:141
 #: src/admin/components/pages/MCPConnectionConfig.js:566
 #: src/admin/components/pages/MCPConnectionConfig.js:654
 #: src/admin/components/pages/MCPConnectionConfig.js:664
@@ -4034,6 +4049,7 @@ msgstr ""
 #: src/admin/components/essential-seo/GlobalSEOTab.js:104
 #: src/admin/components/essential-seo/schema/forms/SchemaReviewForm.js:31
 #: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:156
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:164
 #: src/metabox/components/panels/AnalysisPanel.js:19
 msgid "Product"
 msgstr ""
@@ -4129,27 +4145,100 @@ msgstr ""
 msgid "Error Details (Development)"
 msgstr ""
 
-#: src/admin/components/common/MediaPicker.js:57
-#: src/admin/components/common/MediaPicker.js:186
+#: src/admin/components/common/MediaPicker.js:123
+msgid "Files"
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:127
+msgid "Images"
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:128
+msgid "Videos"
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:129
+msgid "Audio"
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:130
+msgid "Documents"
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:247
+msgid "The WordPress media library is unavailable on this screen."
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:258
+#: src/admin/components/common/MediaPicker.js:468
 msgid "Select Media"
 msgstr ""
 
-#: src/admin/components/common/MediaPicker.js:59
+#: src/admin/components/common/MediaPicker.js:260
 msgid "Use this media"
 msgstr ""
 
-#: src/admin/components/common/MediaPicker.js:185
-msgid "Change Media"
+#. translators: %s: accepted file types, e.g. "Images".
+#: src/admin/components/common/MediaPicker.js:318
+#, js-format
+msgid "Only %s can be uploaded here."
 msgstr ""
 
-#: src/admin/components/common/MediaPicker.js:196
-#: src/admin/components/content-brief/KeywordInput.js:85
-#: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:639
-#: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:719
-#: src/admin/components/essential-seo/schema/forms/SchemaFAQForm.js:184
-#: src/blocks/faq-block/edit.js:363
-#: src/blocks/howto-block/edit.js:434
-msgid "Remove"
+#. translators: %s: maximum upload size, e.g. "5 MB".
+#: src/admin/components/common/MediaPicker.js:335
+#, js-format
+msgid "That file is larger than the %s limit."
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:381
+msgid "Upload failed. Please try again."
+msgstr ""
+
+#. translators: %s: field label, e.g. "Organization Logo".
+#: src/admin/components/common/MediaPicker.js:465
+#, js-format
+msgid "Select media for %s"
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:493
+#: src/admin/components/common/MediaPicker.js:518
+msgid "Uploading…"
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:494
+msgid "Drop a file or browse"
+msgstr ""
+
+#. translators: 1: accepted types, 2: max size.
+#: src/admin/components/common/MediaPicker.js:501
+#, js-format
+msgid "%1$s · up to %2$s"
+msgstr ""
+
+#. translators: 1: width in pixels, 2: height in pixels.
+#: src/admin/components/common/MediaPicker.js:524
+#, js-format
+msgid "%1$d × %2$d px"
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:530
+#: src/metabox/components/SocialTab.js:362
+msgid "Image"
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:564
+msgid "Selected media"
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:578
+#: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:256
+#: src/admin/components/pages/Settings.js:1321
+msgid "Replace"
+msgstr ""
+
+#: src/admin/components/common/MediaPicker.js:584
+#: src/admin/components/common/MediaPicker.js:614
+msgid "Remove media"
 msgstr ""
 
 #: src/admin/components/common/OptimizationButton.js:17
@@ -4828,6 +4917,15 @@ msgstr ""
 msgid "Enter keyword…"
 msgstr ""
 
+#: src/admin/components/content-brief/KeywordInput.js:85
+#: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:639
+#: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:719
+#: src/admin/components/essential-seo/schema/forms/SchemaFAQForm.js:184
+#: src/blocks/faq-block/edit.js:363
+#: src/blocks/howto-block/edit.js:434
+msgid "Remove"
+msgstr ""
+
 #: src/admin/components/content-brief/KeywordInput.js:126
 msgid "Add More"
 msgstr ""
@@ -5388,11 +5486,6 @@ msgstr ""
 msgid "API key"
 msgstr ""
 
-#: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:256
-#: src/admin/components/pages/Settings.js:1321
-msgid "Replace"
-msgstr ""
-
 #. translators: %s: platform label, e.g. Claude.
 #: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:277
 #, js-format
@@ -5880,7 +5973,7 @@ msgstr ""
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:956
 #: src/admin/components/essential-seo/GlobalSEOTab.js:773
 #: src/admin/components/essential-seo/ImageSEOTab.js:926
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:483
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:459
 #: src/admin/components/essential-seo/SearchConsoleSettings.js:457
 #: src/admin/components/essential-seo/SiteIdentityTab.js:1073
 #: src/admin/components/essential-seo/SocialMediaTab.js:1663
@@ -6384,8 +6477,8 @@ msgstr ""
 #: src/admin/components/essential-seo/site-identity/TitleFormats.js:92
 #: src/metabox/components/panels/GeneralPanel.js:24
 #: src/metabox/components/panels/GeneralPanel.js:30
-#: src/metabox/components/SocialTab.js:30
-#: src/metabox/components/SocialTab.js:35
+#: src/metabox/components/SocialTab.js:31
+#: src/metabox/components/SocialTab.js:36
 msgid "+ Site Title"
 msgstr ""
 
@@ -6397,8 +6490,8 @@ msgstr ""
 #: src/admin/components/essential-seo/site-identity/TitleFormats.js:98
 #: src/metabox/components/panels/GeneralPanel.js:25
 #: src/metabox/components/panels/GeneralPanel.js:32
-#: src/metabox/components/SocialTab.js:31
-#: src/metabox/components/SocialTab.js:37
+#: src/metabox/components/SocialTab.js:32
+#: src/metabox/components/SocialTab.js:38
 msgid "+ Separator"
 msgstr ""
 
@@ -6450,7 +6543,7 @@ msgstr ""
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:242
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:269
 #: src/admin/components/essential-seo/GlobalSEOTab.js:316
-#: src/admin/hooks/useAutosaveSettings.js:146
+#: src/admin/hooks/useAutosaveSettings.js:158
 msgid "Couldn’t save that change."
 msgstr ""
 
@@ -6783,7 +6876,7 @@ msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:553
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:636
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:130
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:137
 msgid "Website Description"
 msgstr ""
 
@@ -7103,8 +7196,9 @@ msgid "History of your LLMs.txt AI optimization results"
 msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsTxtValidation.js:102
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:72
 #: src/admin/components/essential-seo/SocialMediaTab.js:1465
-#: src/metabox/components/SocialTab.js:551
+#: src/metabox/components/SocialTab.js:518
 msgid "Valid"
 msgstr ""
 
@@ -8104,14 +8198,14 @@ msgstr ""
 #: src/admin/components/essential-seo/GlobalSEOTab.js:367
 #: src/metabox/components/panels/GeneralPanel.js:23
 #: src/metabox/components/panels/GeneralPanel.js:31
-#: src/metabox/components/SocialTab.js:29
-#: src/metabox/components/SocialTab.js:36
+#: src/metabox/components/SocialTab.js:30
+#: src/metabox/components/SocialTab.js:37
 msgid "+ Title"
 msgstr ""
 
 #: src/admin/components/essential-seo/GlobalSEOTab.js:365
 #: src/metabox/components/panels/GeneralPanel.js:29
-#: src/metabox/components/SocialTab.js:34
+#: src/metabox/components/SocialTab.js:35
 msgid "+ Excerpt"
 msgstr ""
 
@@ -8576,7 +8670,7 @@ msgstr[1] ""
 #: src/admin/components/essential-seo/instant-indexing/History.js:297
 #: src/admin/components/pages/MCPConnectedApps.js:403
 #: src/admin/components/seo/ScoreBreakdown.js:274
-#: src/metabox/components/SocialTab.js:513
+#: src/metabox/components/SocialTab.js:480
 msgid "Refresh"
 msgstr ""
 
@@ -8900,7 +8994,6 @@ msgid "Clean up"
 msgstr ""
 
 #: src/admin/components/essential-seo/instant-indexing/SubmitURLs.js:549
-#: src/metabox/components/SocialTab.js:407
 msgid "Clear"
 msgstr ""
 
@@ -9093,10 +9186,10 @@ msgid "e.g., 1234567890, 9876543210"
 msgstr ""
 
 #: src/admin/components/essential-seo/IntegrationsTab.js:1423
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:276
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:234
 #: src/admin/components/essential-seo/SocialMediaTab.js:1431
 #: src/admin/setup-wizard/steps/Step6Social.js:25
-#: src/metabox/components/SocialTab.js:20
+#: src/metabox/components/SocialTab.js:21
 msgid "Facebook"
 msgstr ""
 
@@ -9119,7 +9212,7 @@ msgstr ""
 #: src/admin/components/essential-seo/IntegrationsTab.js:1479
 #: src/admin/components/essential-seo/SocialMediaTab.js:1443
 #: src/admin/setup-wizard/steps/Step6Social.js:49
-#: src/metabox/components/SocialTab.js:23
+#: src/metabox/components/SocialTab.js:24
 msgid "Pinterest"
 msgstr ""
 
@@ -9141,7 +9234,7 @@ msgid "e.g., abc123_verification_code_xyz789"
 msgstr ""
 
 #: src/admin/components/essential-seo/IntegrationsTab.js:1535
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:303
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:258
 #: src/admin/setup-wizard/steps/Step6Social.js:37
 msgid "Instagram"
 msgstr ""
@@ -9179,7 +9272,7 @@ msgid "e.g., UCabcDEF1234567890ghIJklMN"
 msgstr ""
 
 #: src/admin/components/essential-seo/IntegrationsTab.js:1632
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:312
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:266
 #: src/admin/setup-wizard/steps/Step6Social.js:43
 msgid "YouTube"
 msgstr ""
@@ -9565,60 +9658,60 @@ msgstr ""
 msgid "Please fix the following errors:"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:124
+#: src/admin/components/essential-seo/schema-tab/api.js:123
 msgid "Schema settings saved successfully!"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:133
-msgid "Failed to save schema settings. Please try again."
-msgstr ""
-
-#: src/admin/components/essential-seo/schema-tab/api.js:146
+#: src/admin/components/essential-seo/schema-tab/api.js:144
 msgid "Settings validation failed:"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:162
+#: src/admin/components/essential-seo/schema-tab/api.js:160
 #: src/admin/components/essential-seo/SocialMediaTab.js:1536
 msgid "Warnings:"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:277
+#: src/admin/components/essential-seo/schema-tab/api.js:182
+msgid "Failed to save schema settings. Please try again."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema-tab/api.js:279
 msgid "✓ Validation passed successfully!"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:283
+#: src/admin/components/essential-seo/schema-tab/api.js:285
 msgid "Schema is valid and ready for deployment. See detailed results below."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:300
+#: src/admin/components/essential-seo/schema-tab/api.js:302
 msgid "⚠ Validation completed with warnings"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:306
+#: src/admin/components/essential-seo/schema-tab/api.js:308
 msgid "Schema will work but could be improved. Check the warnings below for recommendations."
 msgstr ""
 
 #. translators: %d is the number of additional warnings.
-#: src/admin/components/essential-seo/schema-tab/api.js:321
+#: src/admin/components/essential-seo/schema-tab/api.js:323
 #, js-format
 msgid "… and %d more warnings"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:339
+#: src/admin/components/essential-seo/schema-tab/api.js:341
 msgid "✗ Validation failed"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:342
+#: src/admin/components/essential-seo/schema-tab/api.js:344
 msgid "Please fix the following errors before deploying schema:"
 msgstr ""
 
 #. translators: %d is the number of additional errors.
-#: src/admin/components/essential-seo/schema-tab/api.js:357
+#: src/admin/components/essential-seo/schema-tab/api.js:359
 #, js-format
 msgid "… and %d more errors"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:371
+#: src/admin/components/essential-seo/schema-tab/api.js:372
 msgid "Validation failed due to an unexpected error. Please try again."
 msgstr ""
 
@@ -9626,7 +9719,7 @@ msgstr ""
 msgid "Google Rich Results Test opened in new tab. Test your schema markup there."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:406
+#: src/admin/components/essential-seo/schema-tab/api.js:405
 msgid "Failed to open Rich Results Test. Please try again."
 msgstr ""
 
@@ -9635,121 +9728,103 @@ msgstr ""
 msgid "Schema markup generated successfully!"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:481
+#: src/admin/components/essential-seo/schema-tab/api.js:477
 #: src/metabox/components/metabox-schema-tab/api.js:349
 msgid "Schema generation failed. Please try again."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:502
+#: src/admin/components/essential-seo/schema-tab/api.js:494
 msgid "No schema markup to validate. Please generate schema first."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:550
+#: src/admin/components/essential-seo/schema-tab/api.js:540
 msgid "Schema validation completed!"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:556
+#: src/admin/components/essential-seo/schema-tab/api.js:544
 msgid "Schema validation failed. Please try again."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:658
-#: src/metabox/components/metabox-schema-tab/api.js:417
+#: src/admin/components/essential-seo/schema-tab/api.js:636
+#: src/metabox/components/metabox-schema-tab/api.js:425
 msgid "No schema markup to deploy. Please generate schema first."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:683
-#: src/metabox/components/metabox-schema-tab/api.js:450
+#: src/admin/components/essential-seo/schema-tab/api.js:660
+#: src/metabox/components/metabox-schema-tab/api.js:458
 msgid "Schema markup deployed successfully!"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:696
-#: src/metabox/components/metabox-schema-tab/api.js:463
+#: src/admin/components/essential-seo/schema-tab/api.js:669
+#: src/metabox/components/metabox-schema-tab/api.js:471
 msgid "Schema deployment failed. Please try again."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:715
+#: src/admin/components/essential-seo/schema-tab/api.js:684
 msgid "No schema markup to preview. Please generate schema first."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:831
+#. translators: %s: comma-separated schema type names.
+#: src/admin/components/essential-seo/schema-tab/api.js:730
+#, js-format
+msgid "Could not build a preview for: %s"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema-tab/api.js:738
+msgid "Could not generate the preview. Please try again."
+msgstr ""
+
+#. translators: %s: the kind of data synced, e.g. "Website".
+#: src/admin/components/essential-seo/schema-tab/api.js:774
+#, js-format
+msgid "%s data synced from Site Identity. Save to apply."
+msgstr ""
+
+#. translators: %s: the kind of data synced, e.g. "Website".
+#: src/admin/components/essential-seo/schema-tab/api.js:789
+#, js-format
+msgid "Failed to sync %s data. Please try again."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema-tab/api.js:829
 msgid "Contact hours synced successfully from Local SEO business hours!"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/api.js:844
+#: src/admin/components/essential-seo/schema-tab/api.js:841
 msgid "Failed to sync contact hours from Local SEO. Please try again."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:225
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:237
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:235
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:248
 #: src/admin/components/essential-seo/SocialMediaTab.js:1039
 msgid "Sync from Site Identity"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:254
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:416
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:449
-msgid "Redeploy Schema"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:256
-msgid "Deploy updated schema markup to replace current version"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:261
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:502
-#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:126
-msgid "Regenerate Schema"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:263
-msgid "Generate new schema markup to update deployment"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:268
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:417
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:450
-#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:61
-#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:84
-msgid "Deploy Schema"
-msgstr ""
-
 #: src/admin/components/essential-seo/schema-tab/SchemaTab.js:270
-msgid "Deploy generated schema markup to your website"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:275
-msgid "Generate Schema First"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:280
-msgid "Generate schema markup first, then deploy"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:306
 msgid "Test Rich Results"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:327
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:291
 msgid "Site Schema Manager"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:415
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:382
 msgid "Custom Schema & Display Conditions"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:419
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:386
 msgid "Go beyond the built-in schema types. Build any structured data you need and control exactly where it appears across your site."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:424
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:391
 msgid "Create custom JSON-LD schema for any content type"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:428
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:395
 msgid "Target it with display conditions (post type, taxonomy, single page)"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:432
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:399
 msgid "Add rich results like Recipe, FAQ, or JobPosting with ease"
 msgstr ""
 
@@ -9759,20 +9834,20 @@ msgstr ""
 #: src/admin/components/essential-seo/schema/forms/SchemaReviewForm.js:40
 #: src/admin/components/essential-seo/schema/forms/SchemaSoftwareForm.js:79
 #: src/admin/components/essential-seo/SidebarNavigation.js:175
-#: src/admin/config/schema-settings-config.js:200
+#: src/admin/config/schema-settings-config.js:205
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:93
 msgid "Organization"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/utils.js:40
-#: src/admin/config/schema-settings-config.js:201
+#: src/admin/config/schema-settings-config.js:206
 msgid "Corporation"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/utils.js:41
 #: src/admin/components/essential-seo/schema/forms/SchemaReviewForm.js:39
 #: src/admin/components/essential-seo/site-identity/LocalSEO.js:63
-#: src/admin/config/schema-settings-config.js:210
+#: src/admin/config/schema-settings-config.js:215
 msgid "Local Business"
 msgstr ""
 
@@ -9781,12 +9856,12 @@ msgid "Non-Profit"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/utils.js:44
-#: src/admin/config/schema-settings-config.js:204
+#: src/admin/config/schema-settings-config.js:209
 msgid "Educational Organization"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/utils.js:48
-#: src/admin/config/schema-settings-config.js:208
+#: src/admin/config/schema-settings-config.js:213
 msgid "Government Organization"
 msgstr ""
 
@@ -10278,7 +10353,7 @@ msgid "Auto-generated from your existing data"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:203
-msgid "LocalBusiness schema is built automatically from Business Info, Organization, and Site Identity settings — no extra configuration needed here."
+msgid "LocalBusiness schema is built automatically from Business Info, Organization, and Site Identity settings no extra configuration needed here."
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:215
@@ -10286,7 +10361,7 @@ msgid "Data Sources"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:218
-msgid "Schema is generated from these sections — click to manage each one"
+msgid "Schema is generated from these sections click to manage each one"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:227
@@ -10304,7 +10379,7 @@ msgid "Business name, type, and description"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:237
-msgid "Full address — street, city, state, postal code, country"
+msgid "Full address street, city, state, postal code, country"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:241
@@ -10375,7 +10450,7 @@ msgid "Enable schema generation in the main Schema Manager settings to activate 
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:348
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:133
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:131
 msgid "Logo"
 msgstr ""
 
@@ -10401,241 +10476,259 @@ msgstr ""
 msgid "None added"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:156
-msgid "Organization Identity"
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:182
+msgid "Enter the full profile URL, starting with https://"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:159
-msgid "Core details used in Organization schema markup"
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:199
+msgid "Enter a valid email address."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:167
-msgid "Organization Type"
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:218
+msgid "Enter a valid phone number."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:173
-msgid "Type of organization for schema markup"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:180
-msgid "Organization Name"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:185
-msgid "Official name of your organization"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:192
-msgid "Organization URL"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:197
-msgid "Official website URL of your organization"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:205
-msgid "Organization Description"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:213
-msgid "Brief description of your organization"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:221
-msgid "Organization Logo"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:226
-msgid "Logo image used in Organization schema markup"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:241
-msgid "Business address, phone, and email are managed in Site Identity › Business Info for consistency across all local SEO features."
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:253
-msgid "Go there"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:264
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:310
-msgid "Social Media Profiles"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:267
-msgid "Used as sameAs properties in Organization schema"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:285
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:242
 msgid "Twitter / X"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:294
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:250
 #: src/admin/components/essential-seo/SocialMediaTab.js:1439
-#: src/metabox/components/SocialTab.js:22
+#: src/metabox/components/SocialTab.js:23
 msgid "LinkedIn"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:326
-msgid "Contact Point"
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:339
+msgid "Organization Identity"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:329
-msgid "ContactPoint schema nested inside Organization"
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:342
+msgid "Core details used in Organization schema markup"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:337
-msgid "Contact Type"
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:350
+msgid "Organization Type"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:346
-msgid "Nature of this contact point"
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:356
+msgid "Type of organization for schema markup"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:353
-msgid "Contact Phone"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:361
-msgid "Contact phone number for this point"
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:363
+msgid "Organization Name"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:368
-msgid "Contact Email"
+msgid "Official name of your organization"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:376
-msgid "Contact email address"
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:375
+msgid "Organization URL"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:380
+msgid "Official website URL of your organization"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:388
+msgid "Organization Description"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:396
+msgid "Brief description of your organization"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:404
+msgid "Organization Logo"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:409
+msgid "Logo image used in Organization schema markup"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:424
+msgid "Business address, phone, and email are managed in Site Identity › Business Info for consistency across all local SEO features."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:441
+msgid "Go there"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:454
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:339
+msgid "Social Media Profiles"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:457
+msgid "Used as sameAs properties in Organization schema"
+msgstr ""
+
+#. translators: 1: profiles filled in, 2: profiles available.
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:469
+#, js-format
+msgid "%1$d of %2$d added"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:497
+msgid "Contact Point"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:500
+msgid "ContactPoint schema nested inside Organization"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:508
+msgid "Contact Type"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:517
+msgid "Nature of this contact point"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:524
+msgid "Contact Phone"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:534
+msgid "Contact phone number for this point"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:542
+msgid "Contact Email"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:551
+msgid "Contact email address"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:564
 msgid "Contact Hours"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:391
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:567
 msgid "Auto-synced from Local SEO"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:400
-msgid "No hours configured yet — set business hours in Site Identity › Business Info."
+#: src/admin/components/essential-seo/schema/forms/SchemaOrganizationForm.js:576
+msgid "No hours configured yet set business hours in Site Identity › Business Info."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:98
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:127
 msgid "Personal Information"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:102
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:131
 msgid "Core details for Person schema markup"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:110
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:139
 msgid "Full Name"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:115
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:144
 msgid "Full name of the person"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:119
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:148
 msgid "Profile Image"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:124
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:153
 msgid "Professional headshot or profile photo"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:133
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:162
 msgid "Job Title"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:141
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:170
 msgid "Professional title or position"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:148
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:177
 msgid "Nationality"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:156
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:185
 msgid "Country of citizenship"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:164
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:193
 msgid "Biography"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:172
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:201
 msgid "Brief professional biography or description"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:190
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:219
 msgid "Contact Details"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:197
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:226
 #: src/admin/components/essential-seo/schema/forms/SchemaSoftwareForm.js:215
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:116
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:123
 msgid "Website URL"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:203
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:232
 msgid "Personal or professional website"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:211
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:240
 msgid "Email Address"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:217
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:246
 msgid "Professional contact email"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:226
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:255
 msgid "Phone Number"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:235
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:264
 msgid "Professional contact number"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:242
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:271
 msgid "Birth Date"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:251
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:280
 msgid "Date of birth (optional)"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:269
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:298
 msgid "Professional Details"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:275
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:304
 msgid "Address"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:280
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:309
 msgid "Professional address (optional)"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:288
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:317
 msgid "Works For (Organization)"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:293
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:322
 msgid "Organization or company name (optional)"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:314
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:343
 msgid "Used as sameAs properties — one URL per line"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:322
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:351
 msgid "Profile URLs"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:330
-msgid "Enter social media profile URLs one per line — e.g., LinkedIn, Twitter, Wikipedia"
+#: src/admin/components/essential-seo/schema/forms/SchemaPersonForm.js:355
+msgid "Enter social media profile URLs one per line e.g., LinkedIn, Twitter, Wikipedia"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaProductForm.js:78
@@ -11179,187 +11272,273 @@ msgstr ""
 msgid "Player embed URL (e.g. a YouTube/Vimeo embed link)."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:92
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:99
 msgid "Website Identity"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:96
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:103
 msgid "Core website details for schema markup"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:104
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:111
 msgid "Website Name"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:109
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:116
 msgid "Name of your website defaults to site title if empty"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:122
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:129
 msgid "Main URL of your website defaults to home URL if empty"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:138
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:145
 msgid "Brief description defaults to site tagline if empty"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:156
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:163
 msgid "Search Configuration"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:160
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:167
 msgid "Sitelinks search box in Google search results"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:169
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:176
 msgid "Enable Sitelinks Search Box"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:170
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:177
 msgid "Show a search box directly in Google search results for your site"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:182
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:189
 msgid "Search URL Template"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:190
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:197
 msgid "Use {search_term_string} as placeholder leave empty to use default WordPress search"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:209
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:216
 msgid "Auto-managed Data"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:213
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:220
 msgid "These properties are pulled from other settings automatically"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:228
-#: src/admin/components/essential-seo/site-identity/HeroSection.js:184
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:235
+#: src/admin/components/essential-seo/site-identity/HeroSection.js:182
 msgid "Site Logo"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:232
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:239
 msgid "Logo configured — sourced from Site Identity › Site Assets"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:236
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:243
 msgid "No logo set configure in Site Identity › Site Assets"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:249
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:256
 msgid "Social Profiles (sameAs)"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:252
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:259
 msgid "Configured in Schema Manager › Organization automatically included in Website schema"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:75
-msgid "⚠ Schema Not Generated"
+#. translators: %d: number of blocking errors
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:58
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:315
+#, js-format
+msgid "%d error"
+msgid_plural "%d errors"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of recommendations
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:64
+#, js-format
+msgid "%d recommendation"
+msgid_plural "%d recommendations"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: validation score out of 100
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:84
+#, js-format
+msgid "Score %d/100"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:83
-msgid "Generate schema markup first by going to Schema Types tab and clicking \"Generate Schema\"."
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:237
+msgid "Not deployed"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:106
-msgid "✓ Schema Currently Deployed"
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:240
+msgid "Needs attention"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:114
-msgid "Schema markup is active on your website. Generate new schemas to update or redeploy existing ones."
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:244
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:254
+msgid "Ready to deploy"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:129
-msgid "Currently Deployed:"
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:248
+msgid "Update available"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:176
-msgid "⚠ Updated Schema Ready for Deployment"
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:250
+msgid "Live"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:187
-msgid "You have new generated schema markup ready to replace the currently deployed version."
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:254
+msgid "Publish your structured data to the site as JSON-LD in the document head."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:210
-msgid "⚠ Schema Not Ready for Deployment"
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:258
+msgid "Validation has to pass before this schema can be published."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:221
-msgid "Schema has validation errors. Please fix them before deployment."
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:262
+msgid "Your schema is validated and ready to publish to the site."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:236
-msgid "Validation Details:"
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:266
+msgid "Newly generated schema is waiting to replace the version currently on your site."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:327
-msgid "✓ Schema Ready for Deployment"
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:270
+msgid "Your schema markup is published and served on the front end."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:338
-msgid "Schema markup is generated and validated. Click \"Deploy Schema\" to publish it to your website."
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:278
+msgid "Redeploy Schema"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:353
-msgid "Validation Summary:"
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:279
+#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:61
+#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:84
+msgid "Deploy Schema"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:426
-msgid "Deploy your updated schema markup to replace the current version on your website."
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:285
+#: src/admin/components/essential-seo/SidebarNavigation.js:184
+msgid "Deployment"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:430
-msgid "Deploy your validated schema markup to make it active on your website."
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:298
+msgid "No schema generated yet"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:447
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:300
+msgid "Generate your schema markup first, then come back here to publish it."
+msgstr ""
+
+#. translators: %1$s: error count phrase, %2$s: schema type list
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:312
+#, js-format
+msgid "%1$s blocking deployment in %2$s"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:326
+msgid "Fix the required properties listed below, regenerate, and deploy again."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:336
+msgid "Validated and ready"
+msgstr ""
+
+#. translators: %d: number of optional recommendations
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:341
+#, js-format
+msgid "All required properties are present. %d optional recommendation is listed below."
+msgid_plural "All required properties are present. %d optional recommendations are listed below."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:349
+msgid "All required properties are present."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:359
+msgid "Update ready to publish"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:361
+msgid "The schema on your site is still the previous version until you redeploy."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:371
+msgid "Schema is live"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:373
+msgid "Regenerate after changing your schema settings to pick up the new values."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:383
+msgid "Schema Manager is disabled"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:386
+msgid "Enable Schema Manager to deploy structured data to your site."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:398
+msgid "Currently live"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:405
+msgid "Generated, pending deploy"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:420
+msgid "Validation"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:441
 #: src/metabox/components/metabox-schema-tab/DeploymentSection.js:83
 msgid "Deploying…"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:460
-#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:179
-msgid "This will update your existing schema markup with the new version."
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:456
+#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:126
+msgid "Regenerate Schema"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:464
-#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:88
-msgid "Schema markup will be deployed as JSON-LD format in the document head."
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:457
+#: src/metabox/components/metabox-schema-tab/SchemaTypeSection.js:112
+msgid "Generate Schema"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:477
-#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:103
-msgid "Schema Actions"
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:463
+msgid "Deployment stays unavailable until every required property validates."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:484
-msgid "Generate new schema markup or redeploy existing schemas."
+#: src/admin/components/essential-seo/schema/SchemaDeployment.js:467
+msgid "Schema is published as JSON-LD in the document head of your site."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:512
-#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:138
-msgid "Redeploying…"
+#: src/admin/components/essential-seo/schema/SchemaDisabledNotice.js:17
+msgid "Schema markup is off"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:513
-#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:139
-msgid "Redeploy Current"
+#: src/admin/components/essential-seo/schema/SchemaDisabledNotice.js:20
+msgid "These fields stay read-only until you enable schema markup in Schema Settings."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaDeployment.js:522
-msgid "Regenerate to create updated schema markup, or redeploy to refresh current schemas."
+#: src/admin/components/essential-seo/schema/SchemaDisabledNotice.js:31
+msgid "Go to Schema Settings"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/SchemaGeneration.js:159
-msgid "Brand, contact, logo and social profiles — applied across the entire site."
+msgid "Brand, contact, logo and social profiles applied across the entire site."
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/SchemaGeneration.js:163
-msgid "Business with a physical address, hours and service area — ideal for storefronts."
+msgid "Business with a physical address, hours and service area ideal for storefronts."
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/SchemaGeneration.js:167
@@ -11394,76 +11573,122 @@ msgstr ""
 msgid "Content-specific schemas use the actual post data plus AI optimization, so they live in the ThinkRank metabox when editing individual posts and pages."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaPreview.js:44
+#. translators: %d: number of lines of JSON-LD.
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:167
+#, js-format
+msgid "%d line"
+msgid_plural "%d lines"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: schema type, e.g. "Organization".
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:176
+#, js-format
+msgid "Copy %s schema"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:226
 msgid "Generated Schema Markup"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaPreview.js:53
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:227
+msgid "What the generator produced from your current settings."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:235
+msgid "Copy all schema"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:245
+msgid "Types"
+msgstr ""
+
+#. translators: %d: number of validation problems.
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:266
+#, js-format
+msgid "%d problem to fix"
+msgid_plural "%d problems to fix"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:287
+msgid "Recommended additions"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:319
+msgid "Rich Snippets Preview"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:320
+msgid "How your content might appear in search results with this markup."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:333
+msgid "Refresh Preview"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:334
 #: src/admin/components/essential-seo/SocialMediaTab.js:1071
 msgid "Generate Preview"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaPreview.js:64
-msgid "Schema Types Generated:"
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:344
+msgid "Generate schema first, then preview how it appears in search results."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaPreview.js:106
-msgid "✓ Schema is ready for deployment!"
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:348
+msgid "Preview how this markup appears in a Google search result."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaPreview.js:119
-msgid "Optimization Recommendations:"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/SchemaPreview.js:142
-msgid "Schema Code Preview:"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/SchemaPreview.js:185
-msgid "Rich Snippets Preview"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/SchemaPreview.js:192
-msgid "Preview of how your content might appear in search results with schema markup:"
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/SchemaPreview.js:255
-msgid "Preview data not available for this schema type."
-msgstr ""
-
-#: src/admin/components/essential-seo/schema/SchemaPreview.js:422
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:370
 msgid "No rich snippets preview available. Generate schema markup first."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaSettings.js:140
+#: src/admin/components/essential-seo/schema/SchemaPreview.js:409
+msgid "Preview data not available for this schema type."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:141
 msgid "General Schema Settings"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaSettings.js:150
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:151
 msgid "Control how ThinkRank generates and validates structured data across your site. These options apply to every site-level schema you enable."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaSettings.js:161
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:162
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:172
+msgid "Enable Schema Markup"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:163
+msgid "Master switch for site-level structured data. While this is off, the Organization, Website and Person forms stay read-only and no schema is output."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:186
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:193
 msgid "Knowledge Graph"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaSettings.js:162
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:187
 msgid "Optimize markup so Google can build a Knowledge Graph entry for your site recommended for brand and entity visibility in search."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaSettings.js:178
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:204
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:211
 msgid "Auto-Generate Schema"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaSettings.js:179
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:205
 msgid "Automatically build schema markup from your content so you do not have to maintain it by hand as posts and pages change."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaSettings.js:199
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:229
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:238
 msgid "Validation Level"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/SchemaSettings.js:200
+#: src/admin/components/essential-seo/schema/SchemaSettings.js:230
 msgid "How strictly ThinkRank validates the generated markup before it ships. Stricter levels catch more issues but may flag valid edge cases."
 msgstr ""
 
@@ -11603,10 +11828,6 @@ msgstr ""
 msgid "Custom Schema"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:184
-msgid "Deployment"
-msgstr ""
-
 #: src/admin/components/essential-seo/SidebarNavigation.js:204
 msgid "Redirects & 404s"
 msgstr ""
@@ -11629,8 +11850,8 @@ msgstr ""
 
 #: src/admin/components/essential-seo/SidebarNavigation.js:237
 #: src/admin/components/essential-seo/SocialMediaTab.js:1461
-#: src/metabox/components/SocialTab.js:486
-#: src/metabox/components/SocialTab.js:547
+#: src/metabox/components/SocialTab.js:453
+#: src/metabox/components/SocialTab.js:514
 msgid "Preview"
 msgstr ""
 
@@ -11813,7 +12034,7 @@ msgid "Hero Background Image"
 msgstr ""
 
 #: src/admin/components/essential-seo/site-identity/HeroSection.js:159
-msgid "Upload your hero section background image (recommended: 1920x1080px or larger)"
+msgid "Recommended: 1920x1080px or larger"
 msgstr ""
 
 #: src/admin/components/essential-seo/site-identity/HeroSection.js:172
@@ -11825,24 +12046,24 @@ msgstr ""
 msgid "Upload and manage your site's visual assets for branding and SEO optimization."
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/HeroSection.js:189
-msgid "Upload your site logo for branding and schema markup (recommended: 600x60px)"
+#: src/admin/components/essential-seo/site-identity/HeroSection.js:187
+msgid "Recommended: 600x60px"
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/HeroSection.js:199
+#: src/admin/components/essential-seo/site-identity/HeroSection.js:193
 msgid "Favicon"
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/HeroSection.js:204
-msgid "Upload your site favicon for browser tabs (recommended: 32x32px, ICO or PNG format)"
+#: src/admin/components/essential-seo/site-identity/HeroSection.js:198
+msgid "Recommended: 32x32px, ICO or PNG"
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/HeroSection.js:215
+#: src/admin/components/essential-seo/site-identity/HeroSection.js:207
 msgid "Apple Touch Icon"
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/HeroSection.js:223
-msgid "Upload Apple touch icon for iOS devices (recommended: 180x180px, PNG format)"
+#: src/admin/components/essential-seo/site-identity/HeroSection.js:212
+msgid "Recommended: 180x180px, PNG"
 msgstr ""
 
 #: src/admin/components/essential-seo/site-identity/LocalSEO.js:35
@@ -12829,7 +13050,7 @@ msgid "Social Media Preview"
 msgstr ""
 
 #: src/admin/components/essential-seo/SocialMediaTab.js:1435
-#: src/metabox/components/SocialTab.js:21
+#: src/metabox/components/SocialTab.js:22
 msgid "Twitter"
 msgstr ""
 
@@ -12838,7 +13059,7 @@ msgid "Issues Found"
 msgstr ""
 
 #: src/admin/components/essential-seo/SocialMediaTab.js:1499
-#: src/metabox/components/SocialTab.js:576
+#: src/metabox/components/SocialTab.js:543
 msgid "No share image set"
 msgstr ""
 
@@ -12855,7 +13076,7 @@ msgid "Suggestions:"
 msgstr ""
 
 #: src/admin/components/essential-seo/SocialMediaTab.js:1578
-#: src/metabox/components/SocialTab.js:533
+#: src/metabox/components/SocialTab.js:500
 msgid "Social preview"
 msgstr ""
 
@@ -14701,71 +14922,71 @@ msgstr ""
 msgid "Your saved settings could not be read, so this screen has nothing to edit yet. Nothing has changed — retry to load them."
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:150
+#: src/admin/config/schema-settings-config.js:155
 msgid "Strict"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:151
+#: src/admin/config/schema-settings-config.js:156
 msgid "Moderate"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:152
+#: src/admin/config/schema-settings-config.js:157
 msgid "Lenient"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:211
+#: src/admin/config/schema-settings-config.js:216
 msgid "Non-Governmental Organization"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:212
+#: src/admin/config/schema-settings-config.js:217
 msgid "Performing Group"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:215
+#: src/admin/config/schema-settings-config.js:220
 msgid "Sports Organization"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:225
+#: src/admin/config/schema-settings-config.js:230
 msgid "Customer Service"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:226
+#: src/admin/config/schema-settings-config.js:231
 msgid "Technical Support"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:227
+#: src/admin/config/schema-settings-config.js:232
 msgid "Billing Support"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:228
+#: src/admin/config/schema-settings-config.js:233
 msgid "Bill Payment"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:229
+#: src/admin/config/schema-settings-config.js:234
 msgid "Sales"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:230
+#: src/admin/config/schema-settings-config.js:235
 msgid "Reservations"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:233
+#: src/admin/config/schema-settings-config.js:238
 msgid "Credit Card Support"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:235
+#: src/admin/config/schema-settings-config.js:240
 msgid "Emergency"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:236
+#: src/admin/config/schema-settings-config.js:241
 msgid "Baggage Tracking"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:239
+#: src/admin/config/schema-settings-config.js:244
 msgid "Roadside Assistance"
 msgstr ""
 
-#: src/admin/config/schema-settings-config.js:241
+#: src/admin/config/schema-settings-config.js:246
 msgid "Package Tracking"
 msgstr ""
 
@@ -15105,43 +15326,43 @@ msgstr ""
 msgid "DEF Company"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:122
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:123
 msgid "Default social image"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:123
-msgid "Upload your Social Image for branding and schema markup (1200×630px recommended)"
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:124
+msgid "Recommended: 1200×630px"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:134
-msgid "Upload your site logo for branding and schema markup (SVG or PNG, min 112×112px)"
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:132
+msgid "SVG or PNG, min 112×112px"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:144
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:140
 msgid "Site Map"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:150
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:146
 msgid "Enable XML sitemap"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:153
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:149
 msgid "Helps search engines discover your pages faster."
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:171
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:167
 msgid "Include images"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:174
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:170
 msgid "Improves image indexing in Google Search."
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:192
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:188
 msgid "Include in sitemap"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:225
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:221
 msgid "Taxonomies"
 msgstr ""
 
@@ -16074,23 +16295,23 @@ msgstr ""
 msgid "Post ID is required for schema deployment"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:457
+#: src/metabox/components/metabox-schema-tab/api.js:465
 msgid "Schema deployment failed"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:478
+#: src/metabox/components/metabox-schema-tab/api.js:486
 msgid "Please enter a URL to import from."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:502
+#: src/metabox/components/metabox-schema-tab/api.js:510
 msgid "Schema imported successfully! Please review and apply the data below."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:510
+#: src/metabox/components/metabox-schema-tab/api.js:518
 msgid "Failed to import schema."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:517
+#: src/metabox/components/metabox-schema-tab/api.js:525
 msgid "An error occurred while importing schema."
 msgstr ""
 
@@ -16102,8 +16323,24 @@ msgstr ""
 msgid "Schema markup generated successfully! Ready to deploy."
 msgstr ""
 
+#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:88
+msgid "Schema markup will be deployed as JSON-LD format in the document head."
+msgstr ""
+
+#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:103
+msgid "Schema Actions"
+msgstr ""
+
 #: src/metabox/components/metabox-schema-tab/DeploymentSection.js:110
 msgid "Schema markup is deployed and active on this post."
+msgstr ""
+
+#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:138
+msgid "Redeploying…"
+msgstr ""
+
+#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:139
+msgid "Redeploy Current"
 msgstr ""
 
 #: src/metabox/components/metabox-schema-tab/DeploymentSection.js:152
@@ -16117,6 +16354,10 @@ msgstr ""
 
 #: src/metabox/components/metabox-schema-tab/DeploymentSection.js:174
 msgid "Updating…"
+msgstr ""
+
+#: src/metabox/components/metabox-schema-tab/DeploymentSection.js:179
+msgid "This will update your existing schema markup with the new version."
 msgstr ""
 
 #: src/metabox/components/metabox-schema-tab/ImportSection.js:111
@@ -16157,23 +16398,23 @@ msgstr ""
 msgid "Select Schema to Import"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/ImportSection.js:403
+#: src/metabox/components/metabox-schema-tab/ImportSection.js:409
 msgid "Not valid JSON yet — this field will not be saved until it parses."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/ImportSection.js:467
+#: src/metabox/components/metabox-schema-tab/ImportSection.js:473
 msgid "Schema updated successfully."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/ImportSection.js:478
+#: src/metabox/components/metabox-schema-tab/ImportSection.js:484
 msgid "Schema saved successfully."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/ImportSection.js:492
+#: src/metabox/components/metabox-schema-tab/ImportSection.js:498
 msgid "Update Saved Schema"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/ImportSection.js:493
+#: src/metabox/components/metabox-schema-tab/ImportSection.js:499
 msgid "Save to Saved Schemas"
 msgstr ""
 
@@ -16220,16 +16461,19 @@ msgstr ""
 
 #: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:141
 #: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:150
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:166
 msgid "FAQ Page"
 msgstr ""
 
 #: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:142
 #: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:157
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:165
 msgid "Review"
 msgstr ""
 
 #: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:143
 #: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:158
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:167
 msgid "Video"
 msgstr ""
 
@@ -16237,55 +16481,55 @@ msgstr ""
 msgid "Event"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:168
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:181
 msgid "URL / Online Page"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:174
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:187
 msgid "Raw Code"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:175
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:188
 msgid "Raw Code (Pro)"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:181
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:194
 msgid "File Upload"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:182
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:195
 msgid "File Upload (Pro)"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:239
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:252
 msgid "Switching schema type will replace your current configuration. Your current data will be backed up in case you want to switch back. Continue?"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:304
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:317
 msgid "Schema activated. Only one schema can be active in the free version — the previous one was deactivated. Upgrade to ThinkRank Pro for multiple active schemas."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:312
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:325
 msgid "Schema activated. Update the deployment to apply changes."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:327
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:340
 msgid "activated"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:328
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:341
 msgid "deactivated"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:431
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:481
 msgid "Loading schema data…"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:445
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:495
 msgid "Updating schema data…"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:515
+#: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:565
 msgid "Are you sure you want to delete this schema?"
 msgstr ""
 
@@ -16368,10 +16612,6 @@ msgstr ""
 
 #: src/metabox/components/metabox-schema-tab/SchemaTypeSection.js:83
 msgid "Article is recommended for most blog posts and pages."
-msgstr ""
-
-#: src/metabox/components/metabox-schema-tab/SchemaTypeSection.js:112
-msgid "Generate Schema"
 msgstr ""
 
 #: src/metabox/components/MetaboxApp.js:352
@@ -16530,103 +16770,91 @@ msgstr ""
 msgid "Please provide a meta description. If you don't, Google will try to find a relevant part of your post to show in search results."
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:66
-msgid "Select social share image"
-msgstr ""
-
-#: src/metabox/components/SocialTab.js:67
-msgid "Use this image"
-msgstr ""
-
-#: src/metabox/components/SocialTab.js:137
+#: src/metabox/components/SocialTab.js:123
 msgid "Your Post Title"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:145
+#: src/metabox/components/SocialTab.js:131
 msgid "Add a meta description to improve how your post appears when shared on social media."
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:174
+#: src/metabox/components/SocialTab.js:160
 msgid "Invalid image URL format"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:179
+#: src/metabox/components/SocialTab.js:165
 msgid "Please fix validation errors before generating preview"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:228
+#: src/metabox/components/SocialTab.js:214
 msgid "Preview generated locally - API unavailable"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:292
+#: src/metabox/components/SocialTab.js:278
 msgid "Inherits Open Graph or SEO title"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:293
+#: src/metabox/components/SocialTab.js:279
 msgid "Inherits SEO / post title"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:297
+#: src/metabox/components/SocialTab.js:283
 msgid "Inherits Open Graph or meta description"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:299
+#: src/metabox/components/SocialTab.js:285
 msgid "Inherits meta description"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:303
+#: src/metabox/components/SocialTab.js:289
 msgid "Inherits Open Graph image or featured image"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:304
+#: src/metabox/components/SocialTab.js:290
 msgid "Inherits featured image"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:334
+#: src/metabox/components/SocialTab.js:320
 msgid "Recommended: up to 70 characters."
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:338
+#: src/metabox/components/SocialTab.js:324
 msgid "Recommended: up to 60 characters."
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:370
+#: src/metabox/components/SocialTab.js:356
 msgid "Recommended: up to 200 characters."
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:379
-msgid "Image URL"
-msgstr ""
-
-#: src/metabox/components/SocialTab.js:399
-msgid "Browse Media Library"
-msgstr ""
-
-#: src/metabox/components/SocialTab.js:418
+#: src/metabox/components/SocialTab.js:381
 msgid "Use featured image"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:450
+#: src/metabox/components/SocialTab.js:391
+msgid "Or paste an image URL"
+msgstr ""
+
+#: src/metabox/components/SocialTab.js:417
 msgid "Open Graph (Facebook, LinkedIn, Pinterest)"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:456
+#: src/metabox/components/SocialTab.js:423
 msgid "Empty fields fall back to the SEO title, meta description, and featured image."
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:469
+#: src/metabox/components/SocialTab.js:436
 msgid "Twitter Card"
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:472
+#: src/metabox/components/SocialTab.js:439
 msgid "Empty fields fall back to Open Graph values."
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:536
+#: src/metabox/components/SocialTab.js:503
 msgid "Click \"Refresh\" to see how your post will appear when shared."
 msgstr ""
 
-#: src/metabox/components/SocialTab.js:555
+#: src/metabox/components/SocialTab.js:522
 msgid "Issues"
 msgstr ""
 

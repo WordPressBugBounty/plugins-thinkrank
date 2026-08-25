@@ -289,6 +289,29 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
         // Clear relevant caches
         $this->clear_cache($context_type, $context_id);
 
+        /**
+         * Fires after a settings category has been written.
+         *
+         * Lets one manager react to another's save — the Schema Manager uses it
+         * to refresh LocalBusiness when Site Identity's Business Info changes,
+         * since those fields live in a different category and never appear in a
+         * schema settings payload (#455).
+         *
+         * @since 2.0.2
+         *
+         * @param string   $manager_type Settings category that was saved.
+         * @param array    $settings     The sanitized settings that were written.
+         * @param string   $context_type Context type.
+         * @param int|null $context_id   Context ID.
+         */
+        do_action(
+            'thinkrank_seo_settings_saved',
+            $this->manager_type,
+            $sanitized_settings,
+            $context_type,
+            $context_id
+        );
+
         return $success;
     }
 

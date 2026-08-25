@@ -105,7 +105,7 @@ class Get_Llms_Txt_Settings extends Ability_Base {
 		return [
 			'type'                 => 'object',
 			'additionalProperties' => false,
-			'properties'           => [],
+			'properties'           => self::empty_properties(),
 		];
 	}
 
