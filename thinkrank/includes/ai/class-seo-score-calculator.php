@@ -274,8 +274,7 @@ class SEOScoreCalculator {
         foreach ($haystacks as $location => $haystack) {
             $matched = [];
             foreach ($keywords as $keyword) {
-                $needle = strtolower(trim($keyword));
-                if ($needle !== '' && $haystack !== '' && strpos($haystack, $needle) !== false) {
+                if ($this->keyword_matches($haystack, strtolower(trim($keyword)))) {
                     $matched[] = $keyword;
                 }
             }
@@ -286,6 +285,84 @@ class SEOScoreCalculator {
         }
 
         return $checks;
+    }
+
+    /**
+     * Scripts written without spaces between words.
+     *
+     * @since 2.1.0
+     * @var string
+     */
+    private const SCRIPTIO_CONTINUA = '/[\p{Han}\p{Hiragana}\p{Katakana}\p{Thai}\p{Lao}\p{Khmer}\p{Myanmar}]/u';
+
+    /**
+     * Whether a keyword appears in a haystack as a word rather than as a
+     * fragment of a longer one.
+     *
+     * The five keyword checks used a plain strpos(), so any substring hit
+     * counted: "test coronavirus" matched "la|test coronavirus|news", "art"
+     * matched "start", "cat" matched "category". The panel then confidently
+     * reported a keyword placement that does not exist (#416). Same class of
+     * problem #71 fixed in the Image SEO rewriter, and the same remedy.
+     *
+     * Both arguments are expected lowercased already.
+     *
+     * @since 2.1.0
+     *
+     * @param string $haystack Text to search.
+     * @param string $needle   Keyword, lowercased and trimmed.
+     * @return bool
+     */
+    private function keyword_matches(string $haystack, string $needle): bool {
+        if ($needle === '' || $haystack === '') {
+            return false;
+        }
+
+        if (!$this->supports_word_boundaries($needle)) {
+            return strpos($haystack, $needle) !== false;
+        }
+
+        $matched = preg_match('/\b' . preg_quote($needle, '/') . '\b/u', $haystack);
+
+        // PCRE refusing the pattern — invalid UTF-8 in the keyword, a
+        // backtrack limit — must not be reported as a confident "no match".
+        // Fall back to the behaviour this replaced rather than invent a
+        // negative the user cannot explain.
+        if ($matched === false) {
+            return strpos($haystack, $needle) !== false;
+        }
+
+        return $matched === 1;
+    }
+
+    /**
+     * Whether \b can express "this keyword, as a word" for this keyword.
+     *
+     * It asserts a transition between a word and a non-word character, which
+     * only means something where words are separated. Two cases where it is
+     * not, both verified against PCRE rather than assumed:
+     *
+     *   - the keyword's own edges are not word characters ("c++", "#seo"), so
+     *     no boundary can assert there and a real match is lost;
+     *   - scripts written without spaces, where the neighbouring characters
+     *     are word characters too — "冠状病毒" inside "最新冠状病毒新闻" is a
+     *     legitimate match that \b never sees.
+     *
+     * Accented Latin and Cyrillic need no special handling: PHP's /u modifier
+     * turns on Unicode character properties, so "café" correctly does not
+     * match "cafés" and "коронавирус" does not match "коронавирусный".
+     *
+     * @since 2.1.0
+     *
+     * @param string $needle Keyword, lowercased and trimmed.
+     * @return bool
+     */
+    private function supports_word_boundaries(string $needle): bool {
+        if (preg_match(self::SCRIPTIO_CONTINUA, $needle)) {
+            return false;
+        }
+
+        return preg_match('/^\w/u', $needle) === 1 && preg_match('/\w$/u', $needle) === 1;
     }
 
     /**

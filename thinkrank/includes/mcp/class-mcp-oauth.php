@@ -17,8 +17,9 @@
  *   - PKCE S256 REQUIRED (OAuth 2.1 public clients); codes are single-use,
  *     60 s TTL, bound to client_id + redirect_uri + challenge.
  *   - /authorize gates on manage_options — only an admin can grant access.
- *   - Access/refresh tokens stored only as SHA-256 hashes; the raw value
- *     exists solely in the /token response. Constant-time comparison.
+ *   - Authorization codes and access/refresh tokens stored only as SHA-256
+ *     hashes; the raw value exists solely in the response that hands it out.
+ *     Constant-time comparison.
  *   - Tokens carry the read/write scope model; a read-only grant refuses
  *     every write tool, exactly like a read-only pairing token.
  *
@@ -48,6 +49,23 @@ final class Mcp_OAuth {
 	public const OPTION = 'thinkrank_mcp_oauth';
 
 	/**
+	 * Per-client "last used" stamps, kept OUT of self::OPTION.
+	 *
+	 * Every authenticated MCP call used to stamp this inside the credential
+	 * option, which meant ordinary tool traffic did a read-modify-write of the
+	 * whole client/code/token/refresh store. A tool call overlapping a token
+	 * refresh could write back its stale snapshot and erase a token the server
+	 * had just minted — the client then holds an access token the server has
+	 * no record of, and every later call 401s (#485).
+	 *
+	 * A cosmetic timestamp has no business sharing a store with credentials,
+	 * so it lives in its own option. Losing a race here costs one stamp.
+	 *
+	 * @since 2.1.0
+	 */
+	public const LAST_USED_OPTION = 'thinkrank_mcp_oauth_last_used';
+
+	/**
 	 * Authorization-code lifetime (seconds). Deliberately short.
 	 */
 	private const CODE_TTL = 60;
@@ -73,6 +91,24 @@ final class Mcp_OAuth {
 	 * MCP call into a database write.
 	 */
 	private const LAST_USED_THROTTLE = 60;
+
+	/**
+	 * Seconds to wait for the advisory lock before giving up and proceeding
+	 * unguarded. Short: these are user-facing OAuth endpoints, and waiting is
+	 * worse than the small race we are narrowing.
+	 *
+	 * @since 2.1.0
+	 */
+	private const LOCK_TIMEOUT = 3;
+
+	/**
+	 * Nesting depth of mutate() on this request, so a mutation that calls
+	 * another (grant -> mint) releases the lock once, at the outermost exit.
+	 *
+	 * @since 2.1.0
+	 * @var int
+	 */
+	private static int $lock_depth = 0;
 
 	/**
 	 * How many registered clients to keep. RFC 7591 registration is open by
@@ -240,14 +276,16 @@ final class Mcp_OAuth {
 		$name      = isset( $body['client_name'] ) ? sanitize_text_field( (string) $body['client_name'] ) : 'MCP Client';
 		$client_id = 'trk_' . bin2hex( random_bytes( 16 ) );
 
-		$state                          = self::state();
-		$state['clients'][ $client_id ] = [
-			'redirect_uris' => $redirect_uris,
-			'name'          => $name,
-			'created'       => time(),
-		];
-		$state['clients']               = self::prune_clients( $state );
-		self::save( $state );
+		self::mutate(
+			static function ( array &$state ) use ( $client_id, $redirect_uris, $name ): void {
+				$state['clients'][ $client_id ] = [
+					'redirect_uris' => $redirect_uris,
+					'name'          => $name,
+					'created'       => time(),
+				];
+				$state['clients']               = self::prune_clients( $state );
+			}
+		);
 
 		return [
 			'client_id'                  => $client_id,
@@ -309,6 +347,20 @@ final class Mcp_OAuth {
 				]
 			);
 		}
+		// The challenge reaches us verbatim now (#487), so it is checked
+		// against its own character set rather than cleaned as display text.
+		// RFC 7636 unreserved base64url; an S256 challenge is 43 characters,
+		// the wider bound leaves room for a client that pads.
+		if ( ! preg_match( '/^[A-Za-z0-9\-._~]{43,128}$/', $challenge ) ) {
+			return new \WP_Error(
+				'invalid_request',
+				__( 'code_challenge is not a valid S256 challenge.', 'thinkrank' ),
+				[
+					'status'       => 400,
+					'redirectable' => true,
+				]
+			);
+		}
 
 		return [
 			'client_id'      => $client_id,
@@ -330,17 +382,27 @@ final class Mcp_OAuth {
 	 * @return string The authorization code.
 	 */
 	public static function issue_code( array $req, int $user_id ): string {
-		$code                    = bin2hex( random_bytes( 32 ) );
-		$state                   = self::state();
-		$state['codes'][ $code ] = [
-			'client_id'    => $req['client_id'],
-			'redirect_uri' => $req['redirect_uri'],
-			'challenge'    => $req['code_challenge'],
-			'scope'        => $req['scope'],
-			'user_id'      => $user_id,
-			'expires'      => time() + self::CODE_TTL,
-		];
-		self::save( $state );
+		$code = bin2hex( random_bytes( 32 ) );
+
+		// Keyed by hash, like access and refresh tokens. The authorization
+		// code is a bearer credential too, and this file's own contract says
+		// the raw value exists solely in the response that hands it out — the
+		// code was the one exception (#488). The exposure is small (60 s TTL,
+		// single use, bound to client_id + redirect_uri + PKCE) but #396 made
+		// exactly that argument about the pairing token and still hashed it.
+		self::mutate(
+			static function ( array &$state ) use ( $code, $req, $user_id ): void {
+				$state['codes'][ self::hash( $code ) ] = [
+					'client_id'    => $req['client_id'],
+					'redirect_uri' => $req['redirect_uri'],
+					'challenge'    => $req['code_challenge'],
+					'scope'        => $req['scope'],
+					'user_id'      => $user_id,
+					'expires'      => time() + self::CODE_TTL,
+				];
+			}
+		);
+
 		return $code;
 	}
 
@@ -377,15 +439,31 @@ final class Mcp_OAuth {
 		$redirect_uri = isset( $body['redirect_uri'] ) ? (string) $body['redirect_uri'] : '';
 		$verifier     = isset( $body['code_verifier'] ) ? (string) $body['code_verifier'] : '';
 
-		$state = self::state();
-		if ( '' === $code || ! isset( $state['codes'][ $code ] ) ) {
+		// Claim the code and remove it in one guarded read-modify-write.
+		// Single-use has to mean single-use: looking it up, saving the removal,
+		// and letting a concurrent writer restore its pre-removal snapshot put
+		// a spent code back in the store (#485). Looked up by hash, because
+		// that is how issue_code() stores it (#488).
+		$entry = self::mutate(
+			static function ( array &$state ) use ( $code ) {
+				$chash = self::hash( $code );
+
+				if ( '' === $code || ! isset( $state['codes'][ $chash ] ) ) {
+					return null;
+				}
+
+				$claimed = $state['codes'][ $chash ];
+
+				// Removed whether or not verification below passes.
+				unset( $state['codes'][ $chash ] );
+
+				return $claimed;
+			}
+		);
+
+		if ( null === $entry ) {
 			return self::oauth_error( 'invalid_grant', 'Unknown or expired authorization code.' );
 		}
-		$entry = $state['codes'][ $code ];
-
-		// Single-use: remove immediately whether or not verification passes.
-		unset( $state['codes'][ $code ] );
-		self::save( $state );
 
 		if ( $entry['expires'] < time() ) {
 			return self::oauth_error( 'invalid_grant', 'Authorization code expired.' );
@@ -415,22 +493,37 @@ final class Mcp_OAuth {
 		$refresh   = isset( $body['refresh_token'] ) ? (string) $body['refresh_token'] : '';
 		$client_id = isset( $body['client_id'] ) ? (string) $body['client_id'] : '';
 
-		$state = self::state();
 		$rhash = self::hash( $refresh );
-		if ( '' === $refresh || ! isset( $state['refresh'][ $rhash ] ) ) {
-			return self::oauth_error( 'invalid_grant', 'Unknown refresh token.' );
-		}
-		$entry = $state['refresh'][ $rhash ];
-		if ( '' !== $client_id && ! hash_equals( (string) $entry['client_id'], $client_id ) ) {
-			return self::oauth_error( 'invalid_grant', 'client_id mismatch.' );
+
+		// Look up and rotate under one guard. A mismatched client_id must not
+		// consume the token, so the check happens inside the mutation.
+		$claim = self::mutate(
+			static function ( array &$state ) use ( $refresh, $rhash, $client_id ): array {
+				if ( '' === $refresh || ! isset( $state['refresh'][ $rhash ] ) ) {
+					return [ 'error' => 'Unknown refresh token.' ];
+				}
+
+				$entry = $state['refresh'][ $rhash ];
+
+				if ( '' !== $client_id && ! hash_equals( (string) $entry['client_id'], $client_id ) ) {
+					return [ 'error' => 'client_id mismatch.' ];
+				}
+
+				// Rotate: drop old refresh + its access token.
+				unset( $state['refresh'][ $rhash ] );
+				if ( isset( $entry['access_hash'] ) ) {
+					unset( $state['tokens'][ $entry['access_hash'] ] );
+				}
+
+				return [ 'entry' => $entry ];
+			}
+		);
+
+		if ( isset( $claim['error'] ) ) {
+			return self::oauth_error( 'invalid_grant', (string) $claim['error'] );
 		}
 
-		// Rotate: drop old refresh + its access token.
-		unset( $state['refresh'][ $rhash ] );
-		if ( isset( $entry['access_hash'] ) ) {
-			unset( $state['tokens'][ $entry['access_hash'] ] );
-		}
-		self::save( $state );
+		$entry = $claim['entry'];
 
 		return self::mint_tokens( (string) $entry['client_id'], (string) $entry['scope'], (int) $entry['user_id'] );
 	}
@@ -450,22 +543,24 @@ final class Mcp_OAuth {
 		$ahash   = self::hash( $access );
 		$rhash   = self::hash( $refresh );
 
-		$state                      = self::state();
-		$state['tokens'][ $ahash ]  = [
-			'client_id' => $client_id,
-			'scope'     => $scope,
-			'user_id'   => $user_id,
-			'expires'   => time() + self::ACCESS_TTL,
-			'refresh'   => $rhash,
-		];
-		$state['refresh'][ $rhash ] = [
-			'access_hash' => $ahash,
-			'client_id'   => $client_id,
-			'scope'       => $scope,
-			'user_id'     => $user_id,
-			'expires'     => time() + self::REFRESH_TTL,
-		];
-		self::save( $state );
+		self::mutate(
+			static function ( array &$state ) use ( $ahash, $rhash, $client_id, $scope, $user_id ): void {
+				$state['tokens'][ $ahash ]  = [
+					'client_id' => $client_id,
+					'scope'     => $scope,
+					'user_id'   => $user_id,
+					'expires'   => time() + self::ACCESS_TTL,
+					'refresh'   => $rhash,
+				];
+				$state['refresh'][ $rhash ] = [
+					'access_hash' => $ahash,
+					'client_id'   => $client_id,
+					'scope'       => $scope,
+					'user_id'     => $user_id,
+					'expires'     => time() + self::REFRESH_TTL,
+				];
+			}
+		);
 
 		return [
 			'access_token'  => $access,
@@ -501,16 +596,13 @@ final class Mcp_OAuth {
 		}
 
 		// Record activity against the owning client so the "Connected AI apps"
-		// list can show a last-used date. Throttled + stored on the client
-		// record so it survives access-token rotation.
+		// list can show a last-used date. Throttled, and written to its own
+		// option: this runs on every authenticated MCP call, and writing it
+		// back into the credential store meant ordinary tool traffic could
+		// erase a token minted by an overlapping refresh (#485).
 		$client_id = (string) $entry['client_id'];
-		$now       = time();
 		if ( isset( $state['clients'][ $client_id ] ) && is_array( $state['clients'][ $client_id ] ) ) {
-			$last = isset( $state['clients'][ $client_id ]['last_used'] ) ? (int) $state['clients'][ $client_id ]['last_used'] : 0;
-			if ( $now - $last >= self::LAST_USED_THROTTLE ) {
-				$state['clients'][ $client_id ]['last_used'] = $now;
-				self::save( $state );
-			}
+			self::touch_last_used( $client_id, array_keys( $state['clients'] ) );
 		}
 
 		return [
@@ -541,6 +633,7 @@ final class Mcp_OAuth {
 	 */
 	public static function revoke_all(): void {
 		delete_option( self::OPTION );
+		delete_option( self::LAST_USED_OPTION );
 	}
 
 	/**
@@ -553,7 +646,8 @@ final class Mcp_OAuth {
 	 * @return array<int,array{client_id:string,name:string,scope:string,read_only:bool,user_id:int,connected_at:int,last_used:int}>
 	 */
 	public static function connected_apps(): array {
-		$state = self::state();
+		$state     = self::state();
+		$last_used = self::last_used_map();
 
 		// Collect the scope + approving user per active client. Refresh tokens
 		// are the durable grant, so prefer them; fall back to access tokens.
@@ -581,7 +675,11 @@ final class Mcp_OAuth {
 				'read_only'    => self::scope_is_read_only( $info['scope'] ),
 				'user_id'      => $info['user_id'],
 				'connected_at' => isset( $client['created'] ) ? (int) $client['created'] : 0,
-				'last_used'    => isset( $client['last_used'] ) ? (int) $client['last_used'] : 0,
+				// Legacy fallback: stamps written before #485 still sit on the
+				// client record, so an existing install keeps its dates.
+				'last_used'    => isset( $last_used[ $cid ] )
+					? (int) $last_used[ $cid ]
+					: ( isset( $client['last_used'] ) ? (int) $client['last_used'] : 0 ),
 			];
 		}
 
@@ -617,21 +715,29 @@ final class Mcp_OAuth {
 		if ( '' === $client_id ) {
 			return false;
 		}
-		$state   = self::state();
-		$removed = false;
+		$removed = self::mutate(
+			static function ( array &$state ) use ( $client_id ): bool {
+				$found = false;
 
-		foreach ( [ 'tokens', 'refresh', 'codes' ] as $bucket ) {
-			foreach ( $state[ $bucket ] as $key => $entry ) {
-				if ( isset( $entry['client_id'] ) && (string) $entry['client_id'] === $client_id ) {
-					unset( $state[ $bucket ][ $key ] );
-					$removed = true;
+				foreach ( [ 'tokens', 'refresh', 'codes' ] as $bucket ) {
+					foreach ( $state[ $bucket ] as $key => $entry ) {
+						if ( isset( $entry['client_id'] ) && (string) $entry['client_id'] === $client_id ) {
+							unset( $state[ $bucket ][ $key ] );
+							$found = true;
+						}
+					}
 				}
+
+				return $found;
 			}
-		}
+		);
 
 		if ( $removed ) {
-			self::save( $state );
+			$map = self::last_used_map();
+			unset( $map[ $client_id ] );
+			update_option( self::LAST_USED_OPTION, $map, false );
 		}
+
 		return $removed;
 	}
 
@@ -677,11 +783,170 @@ final class Mcp_OAuth {
 	/**
 	 * Persist state (autoload off — hot-write, request-scoped option).
 	 *
+	 * Private on purpose: every mutation goes through mutate(), so that the
+	 * state being written was read inside the same guard.
+	 *
 	 * @param array<string,mixed> $state State to persist.
 	 * @return void
 	 */
 	private static function save( array $state ): void {
 		update_option( self::OPTION, $state, false );
+	}
+
+	/**
+	 * Read-modify-write the OAuth state under a guard, re-reading inside it.
+	 *
+	 * Clients, codes, access tokens and refresh tokens share one option, and
+	 * every mutation used to read a snapshot at the top of the request and
+	 * write the whole thing back later. Two overlapping requests therefore had
+	 * one silently erase the other's work — the damaging order being a tool
+	 * call writing back a pre-refresh snapshot over a token pair that had just
+	 * been minted, leaving the client holding an access token the server has no
+	 * record of (#485).
+	 *
+	 * The mutator receives the state by reference and may return a value, which
+	 * is handed back to the caller — so a caller can claim-and-remove (a
+	 * single-use code, a rotating refresh token) without the lookup and the
+	 * removal being separate writes.
+	 *
+	 * @param callable $mutator function ( array &$state ): mixed
+	 * @return mixed Whatever the mutator returned.
+	 */
+	private static function mutate( callable $mutator ) {
+		$locked = self::lock();
+
+		try {
+			$state  = self::state();
+			$result = $mutator( $state );
+			self::save( $state );
+		} finally {
+			if ( $locked ) {
+				self::unlock();
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Take the cross-request advisory lock guarding self::OPTION.
+	 *
+	 * MySQL GET_LOCK is what WordPress gives us that actually holds ACROSS
+	 * processes — wp_cache_add() is per-request without a persistent object
+	 * cache, which is exactly the configuration this bug bites hardest on.
+	 * The name is namespaced by database + table prefix because GET_LOCK names
+	 * are server-wide and shared MySQL hosts are the common case.
+	 *
+	 * Best-effort by design: a host where the lock cannot be taken (SQLite
+	 * drop-in, a proxy that does not support session locks, contention past
+	 * the timeout) proceeds unguarded, which is exactly today's behaviour
+	 * rather than a new failure.
+	 *
+	 * @return bool Whether the lock is held.
+	 */
+	private static function lock(): bool {
+		global $wpdb;
+
+		// Already inside a guarded mutation on this request (grant -> mint).
+		// MySQL's lock is re-entrant per session; the depth counter is what
+		// keeps the release paired with the outermost acquire.
+		if ( self::$lock_depth > 0 ) {
+			++self::$lock_depth;
+			return true;
+		}
+
+		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
+			return false;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- advisory lock, not cacheable data.
+		$got = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', self::lock_name(), self::LOCK_TIMEOUT ) );
+
+		if ( '1' !== (string) $got ) {
+			return false;
+		}
+
+		self::$lock_depth = 1;
+
+		return true;
+	}
+
+	/**
+	 * Release the advisory lock taken by lock(). Only the outermost mutation
+	 * actually releases it.
+	 *
+	 * @return void
+	 */
+	private static function unlock(): void {
+		global $wpdb;
+
+		if ( self::$lock_depth <= 0 ) {
+			return;
+		}
+
+		--self::$lock_depth;
+
+		if ( self::$lock_depth > 0 || ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- advisory lock, not cacheable data.
+		$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', self::lock_name() ) );
+	}
+
+	/**
+	 * Lock name, inside MySQL's 64-character limit and unique per install.
+	 *
+	 * @return string
+	 */
+	private static function lock_name(): string {
+		global $wpdb;
+
+		$prefix = isset( $wpdb ) && is_object( $wpdb ) ? (string) $wpdb->prefix : '';
+
+		return 'trk_mcp_oauth_' . md5( ( defined( 'DB_NAME' ) ? (string) DB_NAME : '' ) . '|' . $prefix );
+	}
+
+	/**
+	 * Per-client last-used stamps, client_id => unix timestamp.
+	 *
+	 * @return array<string,int>
+	 */
+	private static function last_used_map(): array {
+		$stored = get_option( self::LAST_USED_OPTION, [] );
+
+		return is_array( $stored ) ? $stored : [];
+	}
+
+	/**
+	 * Stamp a client as having just been used, at most once per throttle
+	 * window. Writes its own option, never the credential store.
+	 *
+	 * @param string   $client_id   Client to stamp.
+	 * @param string[] $known_clients Client ids that still exist, so the map
+	 *                                cannot outgrow the store it describes.
+	 * @return void
+	 */
+	private static function touch_last_used( string $client_id, array $known_clients ): void {
+		$map  = self::last_used_map();
+		$now  = time();
+		$last = isset( $map[ $client_id ] ) ? (int) $map[ $client_id ] : 0;
+
+		if ( $now - $last < self::LAST_USED_THROTTLE ) {
+			return;
+		}
+
+		$map[ $client_id ] = $now;
+
+		// Drop stamps for clients that are gone (revoked, pruned, expired).
+		$known = array_flip( $known_clients );
+		foreach ( array_keys( $map ) as $id ) {
+			if ( ! isset( $known[ $id ] ) ) {
+				unset( $map[ $id ] );
+			}
+		}
+
+		update_option( self::LAST_USED_OPTION, $map, false );
 	}
 
 	/**

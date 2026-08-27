@@ -82,6 +82,12 @@ final class Mcp_Manager {
 	public function init(): void {
 		add_action( 'rest_api_init', [ $this, 'register_rest' ] );
 
+		// Published /.well-known/ files are served ahead of WordPress, so a
+		// site URL change leaves them advertising the old domain's issuer with
+		// nothing to correct them. Registered unconditionally: a stale
+		// document is harmful whether or not MCP is currently enabled (#486).
+		Mcp_Static_Discovery::init();
+
 		// Pretty per-site endpoint: /thinkrank/mcp → MCP JSON-RPC handler.
 		add_action( 'init', [ $this, 'add_rewrite' ] );
 		add_filter( 'query_vars', [ $this, 'register_query_var' ] );
@@ -741,12 +747,12 @@ final class Mcp_Manager {
 		$is_post = isset( $_SERVER['REQUEST_METHOD'] ) && 'POST' === strtoupper( (string) wp_unslash( $_SERVER['REQUEST_METHOD'] ) );
 		// Params come from GET on the consent link and POST on the form submit.
 		// Nonce is verified below before any POST value is acted on.
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- each member is sanitize_text_field()ed in the loop below; nothing reads $source directly.
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- read verbatim by oauth_param(); see its docblock for why, and where each value is validated or escaped instead.
 		$source = $is_post ? $_POST : $_GET;
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$params = [];
 		foreach ( [ 'client_id', 'redirect_uri', 'response_type', 'code_challenge', 'code_challenge_method', 'scope', 'state', 'approve', 'deny', '_thinkrank_oauth_nonce' ] as $k ) {
-			$params[ $k ] = isset( $source[ $k ] ) ? sanitize_text_field( wp_unslash( $source[ $k ] ) ) : '';
+			$params[ $k ] = self::oauth_param( $source, $k );
 		}
 
 		// Validate the OAuth params before touching the session.
@@ -980,15 +986,91 @@ final class Mcp_Manager {
 	// -- Helpers --
 
 	/**
+	 * Read one /authorize parameter verbatim.
+	 *
+	 * Deliberately NOT sanitize_text_field(). That function exists to make
+	 * untrusted text safe to store and display, and part of what it does is
+	 * strip %XX sequences as an anti-obfuscation measure. Applied to an OAuth
+	 * protocol value it quietly changes the value's meaning.
+	 *
+	 * The concrete failure: registration stores redirect_uris raw from a JSON
+	 * body, but at /authorize the same URI arrives as a query parameter, so
+	 * PHP has already URL-decoded it — and sanitising then removed the percent
+	 * sequences. A client registered with `.../cb?next=%2Fdashboard` was
+	 * compared as `.../cb?next=dashboard`, failed the strict match, and was
+	 * told `invalid_redirect_uri` for sending exactly what it registered
+	 * (#487). `state` has the same problem: it is opaque to us and must
+	 * round-trip byte for byte, or the client aborts its own callback.
+	 *
+	 * Protocol identifiers want validation and rejection, not cleaning. Every
+	 * value read here is constrained somewhere better suited to it:
+	 *   - redirect_uri  strict in_array() against the client's registered set
+	 *   - client_id     must resolve to a registered client
+	 *   - response_type must equal 'code'
+	 *   - code_challenge_method must equal 'S256'
+	 *   - code_challenge validated against the RFC 7636 character set
+	 *   - scope         intersected with SUPPORTED_SCOPES
+	 *   - state         opaque; escaped at output (esc_attr / rawurlencode)
+	 *   - approve/deny  tested for emptiness only
+	 *   - the nonce     passed to wp_verify_nonce()
+	 *
+	 * An array value (`?state[]=x`) reads as absent rather than becoming the
+	 * string "Array".
+	 *
+	 * @since 2.1.0
+	 *
+	 * @param array<string,mixed> $source $_GET or $_POST.
+	 * @param string              $key    Parameter name.
+	 * @return string
+	 */
+	private static function oauth_param( array $source, string $key ): string {
+		if ( ! isset( $source[ $key ] ) || ! is_scalar( $source[ $key ] ) ) {
+			return '';
+		}
+
+		return (string) wp_unslash( $source[ $key ] );
+	}
+
+	/**
 	 * Read an inbound HTTP header from $_SERVER (for the pretty path).
+	 *
+	 * Mirrors WP_REST_Server::get_headers(): on Apache with CGI/FastCGI/suPHP the
+	 * Authorization header never lands in HTTP_AUTHORIZATION. WordPress's own
+	 * .htaccess passthrough re-publishes it as REDIRECT_HTTP_AUTHORIZATION, and a
+	 * few Apache module setups populate neither key but do answer getallheaders().
+	 * The REST route gets this handling from core; the pretty route builds its own
+	 * WP_REST_Request, so it has to do the same here or it 401s on those hosts.
 	 *
 	 * @param string $name Header name.
 	 * @return string|null
 	 */
 	private static function server_header( string $name ): ?string {
 		$key = 'HTTP_' . strtoupper( str_replace( '-', '_', $name ) );
+
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- token compared constant-time downstream; raw header needed verbatim.
-		return isset( $_SERVER[ $key ] ) ? wp_unslash( $_SERVER[ $key ] ) : null;
+		if ( isset( $_SERVER[ $key ] ) && '' !== $_SERVER[ $key ] ) {
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- as above.
+			return wp_unslash( $_SERVER[ $key ] );
+		}
+
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- as above.
+		if ( isset( $_SERVER[ 'REDIRECT_' . $key ] ) && '' !== $_SERVER[ 'REDIRECT_' . $key ] ) {
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- as above.
+			return wp_unslash( $_SERVER[ 'REDIRECT_' . $key ] );
+		}
+
+		if ( function_exists( 'getallheaders' ) ) {
+			$headers = getallheaders();
+			if ( is_array( $headers ) ) {
+				foreach ( $headers as $header => $value ) {
+					if ( 0 === strcasecmp( (string) $header, $name ) && '' !== (string) $value ) {
+						return (string) $value;
+					}
+				}
+			}
+		}
+
+		return null;
 	}
 
 	/**

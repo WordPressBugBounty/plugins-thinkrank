@@ -272,9 +272,46 @@ class Setup_Wizard {
         }
         ?>
         <div id="thinkrank-setup-wizard" class="thinkrank-wizard-root">
-            <div class="thinkrank-wizard-loading">
-                <img src="<?php echo esc_url(THINKRANK_PLUGIN_URL . 'static/svg/spinner.svg'); ?>" alt="" aria-hidden="true" class="thinkrank-svg-spinner thinkrank-animate-spin" style="width:48px;height:48px;">
-                <p><?php esc_html_e('Loading Setup Wizard…', 'thinkrank'); ?></p>
+            <div class="tr-wizard tr-wizard-skeleton" role="status" aria-live="polite">
+                <span class="screen-reader-text"><?php esc_html_e('Loading Setup Wizard…', 'thinkrank'); ?></span>
+                <div class="tr-wizard__panel" aria-hidden="true">
+                    <div class="tr-wizard__stepper-card">
+                        <ol class="tr-wizard__stepper">
+                            <?php for ($i = 0; $i < 8; $i++) : ?>
+                                <li class="tr-wizard__step">
+                                    <span class="tr-skel tr-skel--marker"></span>
+                                    <span class="tr-skel tr-skel--step-label"></span>
+                                </li>
+                            <?php endfor; ?>
+                        </ol>
+                    </div>
+
+                    <div class="tr-wizard__card">
+                        <div class="tr-wizard__header">
+                            <span class="tr-skel tr-skel--title"></span>
+                            <span class="tr-skel tr-skel--subtitle"></span>
+                        </div>
+                        <div class="tr-wizard__divider"></div>
+                        <div class="tr-wizard__body">
+                            <div class="tr-wizard-skeleton__rows">
+                                <?php for ($i = 0; $i < 3; $i++) : ?>
+                                    <div class="tr-wizard-skeleton__row">
+                                        <span class="tr-skel tr-skel--row-icon"></span>
+                                        <span class="tr-wizard-skeleton__row-text">
+                                            <span class="tr-skel tr-skel--row-title"></span>
+                                            <span class="tr-skel tr-skel--row-detail"></span>
+                                        </span>
+                                        <span class="tr-skel tr-skel--row-badge"></span>
+                                    </div>
+                                <?php endfor; ?>
+                            </div>
+                        </div>
+                        <div class="tr-wizard__footer">
+                            <span class="tr-skel tr-skel--btn tr-skel--btn-ghost"></span>
+                            <span class="tr-skel tr-skel--btn"></span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         <?php

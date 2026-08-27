@@ -61,6 +61,16 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
     private string $last_delivery_warning = '';
 
     /**
+     * Whether the last save's delivery-mode switch failed outright, as opposed
+     * to succeeding with a warning. Both set {@see delivery_switch_warning()},
+     * and only one of them means /llms.txt is still on the old path.
+     *
+     * @since 2.1.0
+     * @var bool
+     */
+    private bool $last_delivery_switch_failed = false;
+
+    /**
      * LLMs.txt content sections configuration
      *
      * @since 1.0.0
@@ -147,6 +157,38 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
      * @var string
      */
     private const PUBLISHED_AT_OPTION = 'thinkrank_llms_txt_published_at';
+
+    /**
+     * Option recording what the site's public URL really answers /llms.txt with.
+     *
+     * Shaped as ['home' => string, 'result' => 'charset'|'no_charset'|'unknown',
+     * 'checked_at' => int] and keyed on the home URL, so a clone or a migration
+     * re-checks instead of inheriting the verdict of the host it came from.
+     *
+     * @since 2.1.0
+     * @var string
+     */
+    private const DELIVERY_PROBE_OPTION = 'thinkrank_llms_delivery_probe';
+
+    /**
+     * How long an inconclusive delivery check is left alone before retrying.
+     *
+     * A conclusive verdict stands until the document is published again; only
+     * the "could not tell" answer — a blocked loopback, an HTTP-auth'd staging
+     * site — is worth asking about a second time, and not often.
+     *
+     * @since 2.1.0
+     * @var int
+     */
+    private const DELIVERY_PROBE_RETRY = DAY_IN_SECONDS;
+
+    /**
+     * Shown when the server answers the published file without a charset.
+     *
+     * @since 2.1.0
+     * @var string
+     */
+    private const STATIC_CHARSET_WARNING = 'This server answers the published llms.txt without a character set, so accented characters and curly quotes arrive mis-decoded. Set Delivery Method to "Served by WordPress" to publish it as UTF-8.';
 
     /**
      * Delivery modes accepted by the `delivery_mode` setting.
@@ -318,6 +360,7 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
     public function save_settings(string $context_type, ?int $context_id, array $settings): bool {
         $this->last_unpublish_failed = false;
         $this->last_delivery_warning = '';
+        $this->last_delivery_switch_failed = false;
         $previous_mode = $this->resolve_delivery_mode();
 
         $result = parent::save_settings($context_type, $context_id, $settings);
@@ -413,6 +456,15 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
             $this->last_delivery_warning = isset($write['message']) && '' !== (string) $write['message']
                 ? (string) $write['message']
                 : 'The delivery method was saved, but the published llms.txt could not be moved to it.';
+            $this->last_delivery_switch_failed = true;
+            return;
+        }
+
+        // The switch worked, but static delivery on this server cannot carry the
+        // charset the document needs. Only an explicitly chosen `static` gets
+        // this far — `auto` moves itself to WordPress delivery instead.
+        if (!empty($write['delivery_warning'])) {
+            $this->last_delivery_warning = (string) $write['delivery_warning'];
         }
     }
 
@@ -426,6 +478,18 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
      */
     public function delivery_switch_warning(): string {
         return $this->last_delivery_warning;
+    }
+
+    /**
+     * Whether the last save's warning was a failed switch rather than a
+     * successful one the server cannot serve correctly.
+     *
+     * @since 2.1.0
+     *
+     * @return bool
+     */
+    public function delivery_switch_failed(): bool {
+        return $this->last_delivery_switch_failed;
     }
 
     /**
@@ -448,9 +512,14 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
      * nginx a physical file is served with a bare `Content-Type: text/plain`
      * that neither fix path can reach, which renders UTF-8 as mojibake (#419).
      *
-     * Layered hosts (e.g. an nginx front end reporting as something else) can
-     * defeat the detection, which is why the setting also accepts an explicit
-     * override rather than relying on $is_apache alone.
+     * $is_apache is not trusted on its own: WordPress reads it from
+     * $_SERVER['SERVER_SOFTWARE'], which describes the server that runs PHP
+     * rather than the one answering the public request. A reverse proxy hides
+     * the difference — an nginx edge in front of an Apache backend reports
+     * Apache, so `auto` chose the file that nginx then served with no charset,
+     * which is the very defect the setting was added to avoid (#493). A
+     * publish-time self-request settles what the detection cannot see, and its
+     * verdict is what this consults; an explicit setting still wins outright.
      *
      * @since 2.1.0
      *
@@ -469,7 +538,198 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
         }
 
         // $is_apache also covers LiteSpeed, which reads .htaccess the same way.
-        return !empty($GLOBALS['is_apache']) ? 'static' : 'dynamic';
+        if (empty($GLOBALS['is_apache'])) {
+            return 'dynamic';
+        }
+
+        // Detection says this stack reads the .htaccess charset block. Believe
+        // it unless a self-request has caught the public URL answering without
+        // a charset, which is what a reverse-proxied stack does (#493).
+        return $this->static_delivery_drops_charset() ? 'dynamic' : 'static';
+    }
+
+    /**
+     * Whether the recorded check caught the public URL dropping the charset.
+     *
+     * @since 2.1.0
+     *
+     * @return bool
+     */
+    private function static_delivery_drops_charset(): bool {
+        return 'no_charset' === ($this->delivery_probe()['result'] ?? '');
+    }
+
+    /**
+     * The delivery check recorded for this site, or [] when there is none.
+     *
+     * @since 2.1.0
+     *
+     * @return array
+     */
+    private function delivery_probe(): array {
+        $probe = get_option(self::DELIVERY_PROBE_OPTION, []);
+
+        if (!is_array($probe) || !isset($probe['result'])) {
+            return [];
+        }
+
+        return ($probe['home'] ?? '') === home_url() ? $probe : [];
+    }
+
+    /**
+     * Ask the site's own public URL what it answers /llms.txt with.
+     *
+     * @since 2.1.0
+     *
+     * @return string 'charset', 'no_charset', or 'unknown' when the response
+     *                could not be read and nothing should be concluded from it.
+     */
+    private function probe_static_delivery(): string {
+        if (!function_exists('wp_remote_get')) {
+            return 'unknown';
+        }
+
+        // The cache-buster stops a page cache from answering with a copy stored
+        // before the file was written; a server ignores the query string when it
+        // serves a physical file, so the response still shows the real headers.
+        $url = add_query_arg(
+            'thinkrank-delivery-check',
+            (string) time(),
+            home_url('/llms.txt')
+        );
+
+        $response = wp_remote_get($url, [
+            'timeout' => 5,
+            'redirection' => 2,
+            // A request to our own home URL, from which a single response header
+            // is read. Staging and local installs routinely run on certificates
+            // this host does not trust, and failing there would leave the very
+            // sites most likely to be misconfigured unchecked.
+            'sslverify' => false,
+            'headers' => ['Cache-Control' => 'no-cache'],
+        ]);
+
+        if (is_wp_error($response) || 200 !== (int) wp_remote_retrieve_response_code($response)) {
+            return 'unknown';
+        }
+
+        $content_type = wp_remote_retrieve_header($response, 'content-type');
+
+        // A header sent more than once comes back as an array.
+        if (is_array($content_type)) {
+            $content_type = implode(' ', $content_type);
+        }
+
+        $content_type = trim((string) $content_type);
+
+        // No Content-Type at all is the same problem: the browser is left to
+        // guess the encoding.
+        if ('' === $content_type) {
+            return 'no_charset';
+        }
+
+        return false !== stripos($content_type, 'charset=') ? 'charset' : 'no_charset';
+    }
+
+    /**
+     * Persist the outcome of a delivery check.
+     *
+     * @since 2.1.0
+     *
+     * @param string $verdict One of 'charset', 'no_charset', 'unknown'.
+     * @return void
+     */
+    private function record_delivery_probe(string $verdict): void {
+        update_option(self::DELIVERY_PROBE_OPTION, [
+            'home' => home_url(),
+            'result' => $verdict,
+            'checked_at' => time(),
+        ], false);
+    }
+
+    /**
+     * Confirm the published file is really served with a charset, and act on it.
+     *
+     * Static delivery leans on an .htaccess directive, so it is only ever as
+     * good as the guess that the server reads .htaccess. This checks the guess
+     * against the response the public URL actually returns: a site left on
+     * `auto` is moved to WordPress delivery when the charset is missing — the
+     * file has to go with it, or it would shadow the PHP route that carries the
+     * charset — while a site that asked for `static` keeps its file and gets a
+     * warning, because an explicit choice is not overruled.
+     *
+     * @since 2.1.0
+     *
+     * @param array $result Publish result to annotate.
+     * @return array The annotated result.
+     */
+    private function verify_static_delivery(array $result): array {
+        $verdict = $this->probe_static_delivery();
+
+        $this->record_delivery_probe($verdict);
+
+        if ('no_charset' !== $verdict) {
+            return $result;
+        }
+
+        $settings = $this->get_settings('site');
+        $explicit = 'static' === (string) ($settings['delivery_mode'] ?? 'auto');
+
+        // Auto: resolve_delivery_mode() answers 'dynamic' from here on, so the
+        // file it would otherwise leave behind has to be removed. The document
+        // is already stored, so nothing is lost by deleting it.
+        if (!$explicit && $this->delete_static_file()) {
+            delete_transient('thinkrank_llms_file_status');
+            $this->purge_llms_txt_caches();
+
+            $result['delivery_mode'] = 'dynamic';
+            $result['charset_pinned'] = true;
+            $result['message'] = 'LLMs.txt published. This server answers a static file without a character set, so WordPress serves it as UTF-8 instead.';
+            $result['permissions']['file_exists'] = false;
+            $result['permissions']['file_writable'] = null;
+
+            return $result;
+        }
+
+        $result['charset_pinned'] = false;
+        $result['delivery_warning'] = self::STATIC_CHARSET_WARNING;
+        $result['message'] = trim((string) $result['message'] . ' ' . self::STATIC_CHARSET_WARNING);
+
+        return $result;
+    }
+
+    /**
+     * Whether the delivery check may run on this request.
+     *
+     * It makes an HTTP request of its own, so it never runs on a front-end
+     * page view — only where an administrator, the REST API, WP-CLI or cron is
+     * already waiting on a status read.
+     *
+     * @since 2.1.0
+     *
+     * @return bool
+     */
+    private function delivery_probe_is_due(): bool {
+        $interactive = is_admin()
+            || (defined('REST_REQUEST') && REST_REQUEST)
+            || (defined('WP_CLI') && WP_CLI)
+            || (function_exists('wp_doing_cron') && wp_doing_cron());
+
+        if (!$interactive) {
+            return false;
+        }
+
+        $probe = $this->delivery_probe();
+
+        if ([] === $probe) {
+            return true;
+        }
+
+        if ('unknown' !== $probe['result']) {
+            return false;
+        }
+
+        return (time() - (int) ($probe['checked_at'] ?? 0)) > self::DELIVERY_PROBE_RETRY;
     }
 
     /**
@@ -536,10 +796,30 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
      * @return bool True once nothing is left to serve.
      */
     public function delete_llms_txt_file(): bool {
-        delete_transient('thinkrank_llms_file_status');
-
         delete_option(self::CONTENT_OPTION);
         delete_option(self::PUBLISHED_AT_OPTION);
+
+        return $this->unpublish_static_file();
+    }
+
+    /**
+     * Stop serving llms.txt, but keep the document.
+     *
+     * Deactivation needs this half: the physical file must go — it shadows the
+     * next plugin's routes and advertises a plugin that is switched off — but
+     * the user's prose has to survive so reactivation can republish it.
+     * {@see \ThinkRank\Core\Activator::restore_webroot_artifacts()} does that.
+     *
+     * Deactivation previously called {@see delete_llms_txt_file()}, which drops
+     * the stored document too, so a deactivate/reactivate round-trip silently
+     * lost whatever the user had written.
+     *
+     * @since 2.1.0
+     *
+     * @return bool True once nothing is left on disk.
+     */
+    public function unpublish_static_file(): bool {
+        delete_transient('thinkrank_llms_file_status');
 
         $removed = $this->delete_static_file();
         $this->purge_llms_txt_caches();
@@ -829,7 +1109,10 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
         // dynamic delivery serves the same document.
         $this->store_published_content($content);
 
-        return $result;
+        // Detection said this server reads the .htaccess block. Check what the
+        // public URL really answers with before leaving the file in place — on a
+        // reverse-proxied stack the detection describes the wrong server (#493).
+        return $this->verify_static_delivery($result);
     }
 
     /**
@@ -870,6 +1153,17 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
 
         $llms_file = ABSPATH . 'llms.txt';
         $mode = $this->resolve_delivery_mode();
+
+        // A site that published before this check existed — or whose server has
+        // changed under it — has never had its delivery confirmed. Do it here so
+        // an already-broken install heals without waiting for a republish; the
+        // recorded verdict and the status cache keep it to a couple of requests
+        // a day at most.
+        if ('static' === $mode && file_exists($llms_file) && $this->delivery_probe_is_due()) {
+            $this->verify_static_delivery(['message' => '']);
+            $mode = $this->resolve_delivery_mode();
+        }
+
         $stored = $this->get_published_content();
 
         $status = [
@@ -881,6 +1175,12 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
             'file_path' => 'dynamic' === $mode ? '' : $llms_file,
             'file_url' => home_url('/llms.txt'),
             'writable' => $this->is_directory_writable(dirname($llms_file)),
+            // Non-empty only when the site is on static delivery that the server
+            // is known to answer without a charset — i.e. an explicit `static`
+            // the plugin will not overrule, which is the user's to fix.
+            'delivery_warning' => 'static' === $mode && $this->static_delivery_drops_charset()
+                ? self::STATIC_CHARSET_WARNING
+                : '',
             'last_modified' => null,
             'file_size' => null,
             'content_preview' => ''

@@ -351,13 +351,17 @@ class LLMs_Txt_Endpoint extends WP_REST_Controller {
 
             // A delivery-mode switch that could not move the already-published
             // document leaves /llms.txt on the old path; say so instead of
-            // reporting a clean save.
+            // reporting a clean save. A switch that worked but landed on a
+            // server that answers the file without a charset warns under its own
+            // key — reporting that one as a failed switch misdescribes it.
             $delivery_warning = $this->llms_txt_manager->delivery_switch_warning();
 
             if ('' !== $delivery_warning) {
+                $switch_failed = $this->llms_txt_manager->delivery_switch_failed();
+
                 return new WP_REST_Response([
                     'success' => true,
-                    'delivery_switch_failed' => true,
+                    ($switch_failed ? 'delivery_switch_failed' : 'delivery_warning') => true,
                     'data' => [
                         'settings' => $settings,
                         'validation' => $validation

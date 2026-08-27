@@ -22,6 +22,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+// Filename derivation and web-root removal are shared with the deactivator and
+// with uninstall.php, which runs without an autoloader — so they live in a
+// plain function file both can require. See includes/cleanup-webroot.php.
+require_once __DIR__ . '/../cleanup-webroot.php';
+
 /**
  * Sitemap Generator Class
  *
@@ -1540,16 +1545,21 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     /**
      * Remove every static sitemap file ThinkRank publishes to the web root.
      *
-     * Called when the sitemap feature is disabled, and by the cleanup route, so
-     * /sitemap.xml, /sitemap_index.xml, the segmented children (incl. paginated
-     * -N pages), and /local-sitemap.xml stop being served. Only ThinkRank's own
-     * filenames are targeted; WordPress core's wp-sitemap.xml and any other
-     * plugin's sitemap in the web root are left untouched.
+     * Called when the sitemap feature is disabled, by the cleanup route, and by
+     * both removal paths, so /sitemap.xml, /sitemap_index.xml, the segmented
+     * children (incl. paginated -N pages), and /local-sitemap.xml stop being
+     * served. Only ThinkRank's own filenames are targeted; WordPress core's
+     * wp-sitemap.xml and any other plugin's sitemap in the web root are left
+     * untouched.
      *
      * @since 1.31.0 Returns the filenames removed, and accepts the settings to
      *               derive them from, so a caller that already read them (and
      *               needs to report what went) does not have to re-read or
      *               re-derive the name list.
+     * @since 2.1.0  Delegates to thinkrank_webroot_delete_sitemaps(). Uninstall
+     *               needs the same removal but has no autoloader to reach this
+     *               class, so the logic moved to includes/cleanup-webroot.php
+     *               and this stays as the in-plugin entry point.
      *
      * @param array|null $settings Optional. Sitemap settings; defaults to the
      *                             saved site settings.
@@ -1557,121 +1567,20 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      *                             those that existed but could not be removed.
      */
     public function delete_published_sitemaps(?array $settings = null): array {
-        $settings = $settings ?? $this->get_settings('site');
-        $deleted = [];
-        $failed = [];
-
-        // Base filenames to remove. Derive the child/index names from the stored
-        // sitemap_urls so a custom custom_url_pattern (e.g. seo-{type}.xml) is
-        // honored, not just the default sitemap-*.xml naming. Include the current
-        // primary + the default names as a safety net.
-        $names = [
-            'sitemap.xml',
-            'sitemap_index.xml',
-            'local-sitemap.xml',
-            $this->get_primary_sitemap_filename($settings),
-        ];
-
-        foreach ((is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : []) as $config) {
-            if (empty($config['url'])) {
-                continue;
-            }
-            $name = basename((string) wp_parse_url($config['url'], PHP_URL_PATH));
-            if ($name !== '') {
-                $names[] = $name;
-            }
-        }
-
-        // Segment names for every type we could have published under the current
-        // url pattern, not just the ones stored in sitemap_urls. Two states leave
-        // a published child unlisted there: settings that drifted from what is on
-        // disk (a single-file entry while an index and its children are live), and
-        // a content type that has since been switched off. Deriving the names
-        // from the pattern reaches those without falling back to a 'sitemap-*.xml'
-        // glob, which would also match another plugin's segments.
-        $names = array_merge($names, $this->publishable_segment_filenames($settings));
-
-        foreach (array_unique(array_filter($names)) as $name) {
-            // Remove the file itself and any paginated -N variants of its stem
-            // (e.g. seo-posts.xml plus seo-posts-2.xml, seo-posts-3.xml…).
-            $path = ABSPATH . $name;
-            if (file_exists($path)) {
-                wp_delete_file($path);
-                // wp_delete_file() returns nothing, so confirm by re-checking.
-                if (file_exists($path)) {
-                    $failed[] = $name;
-                } else {
-                    $deleted[] = $name;
-                }
-            }
-            if (preg_match('/^(.*)\.xml$/i', $name, $m)) {
-                // Pagination pages only — a numeric suffix on this exact stem.
-                // Globbing '<stem>-*.xml' matched any name that merely started
-                // with the stem, so the default 'sitemap.xml' entry pulled in
-                // every sitemap-*.xml in the root, including another plugin's.
-                $paged_pattern = '/^' . preg_quote($m[1], '/') . '-\d+\.xml$/i';
-
-                foreach (glob(ABSPATH . $m[1] . '-*.xml') ?: [] as $paged) {
-                    $paged_name = basename($paged);
-                    if (!preg_match($paged_pattern, $paged_name)) {
-                        continue;
-                    }
-
-                    wp_delete_file($paged);
-                    if (file_exists($paged)) {
-                        $failed[] = $paged_name;
-                    } else {
-                        $deleted[] = $paged_name;
-                    }
-                }
-            }
-        }
-
-        return [
-            'deleted' => array_values(array_unique($deleted)),
-            'failed' => array_values(array_unique($failed)),
-        ];
+        return thinkrank_webroot_delete_sitemaps($settings ?? $this->get_settings('site'));
     }
 
     /**
      * Every child-sitemap filename this site could have published.
      *
-     * Formats the configured url pattern against each type ThinkRank segments by
-     * — the four built-ins plus every public custom post type and public custom
-     * taxonomy — ignoring whether that type is currently included. The point is
-     * to recognise our own filenames, and a type that was published and later
-     * disabled still left a file behind.
-     *
      * @since 1.31.0
+     * @since 2.1.0 Delegates to thinkrank_webroot_segment_filenames().
      *
      * @param array $settings Sitemap settings (read for `custom_url_pattern`).
      * @return string[] Basenames, e.g. ['sitemap-posts.xml', 'sitemap-pages.xml'].
      */
     private function publishable_segment_filenames(array $settings): array {
-        $pattern = (string) ($settings['custom_url_pattern'] ?? 'sitemap-{type}.xml');
-        if (strpos($pattern, '{type}') === false) {
-            return [];
-        }
-
-        $types = ['posts', 'pages', 'categories', 'tags'];
-
-        foreach (get_post_types(['public' => true, '_builtin' => false], 'names') as $cpt) {
-            $types[] = (string) $cpt;
-        }
-
-        foreach (get_taxonomies(['public' => true, '_builtin' => false], 'names') as $taxonomy) {
-            $types[] = (string) $taxonomy;
-        }
-
-        $names = [];
-        foreach (array_unique($types) as $type) {
-            $name = basename(str_replace('{type}', $type, $pattern));
-            if ($name !== '') {
-                $names[] = $name;
-            }
-        }
-
-        return $names;
+        return thinkrank_webroot_segment_filenames($settings);
     }
 
     /**
@@ -1889,24 +1798,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return string Sitemap filename.
      */
     public function get_primary_sitemap_filename(array $settings): string {
-        $use_index = !empty($settings['use_sitemap_index']);
-
-        foreach ((is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : []) as $config) {
-            if (empty($config['enabled']) || empty($config['url'])) {
-                continue;
-            }
-
-            if ($use_index !== (($config['type'] ?? '') === 'index')) {
-                continue;
-            }
-
-            $path = wp_parse_url($config['url'], PHP_URL_PATH);
-            if (!empty($path)) {
-                return basename($path);
-            }
-        }
-
-        return $use_index ? 'sitemap_index.xml' : 'sitemap.xml';
+        return thinkrank_webroot_primary_sitemap_filename($settings);
     }
 
     /**

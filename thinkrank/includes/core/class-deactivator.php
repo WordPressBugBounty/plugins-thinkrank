@@ -25,10 +25,21 @@ if (!defined('ABSPATH')) {
  * @since 1.0.0
  */
 class Deactivator {
-    
+
+    /**
+     * Which web-root artifacts deactivation removed, for activation to restore.
+     *
+     * Holds a subset of ['sitemap', 'robots', 'llms']. Read and deleted by
+     * {@see Activator::restore_webroot_artifacts()}. Keep in sync with
+     * Activator::REPUBLISH_OPTION.
+     *
+     * @since 2.1.0
+     */
+    public const REPUBLISH_OPTION = 'thinkrank_webroot_republish';
+
     /**
      * Plugin deactivation tasks
-     * 
+     *
      * @return void
      */
     public function deactivate(): void {
@@ -43,14 +54,56 @@ class Deactivator {
 
     /**
      * Remove physically published files so they stop serving once the plugin
-     * is inactive (the published llms.txt would otherwise keep serving forever).
+     * is inactive.
+     *
+     * ThinkRank publishes its sitemap, robots.txt and llms.txt as real files in
+     * the web root rather than serving them through rewrite rules. A leftover
+     * file is served by the web server before WordPress boots, so it does not
+     * merely go stale — it shadows the route of whatever the user switched to
+     * (#510). Deactivating to trial another SEO plugin is the common way people
+     * hit that, which is why removal belongs here and not only in uninstall.
+     *
+     * The stored settings and documents are deliberately untouched: only the
+     * artifacts go. {@see Activator::restore_webroot_artifacts()} republishes
+     * them from those settings when the plugin is switched back on.
+     *
+     * @since 2.1.0 Also removes the sitemap files and a generated robots.txt,
+     *              and keeps the llms.txt document instead of discarding it.
      *
      * @return void
      */
     private function remove_published_files(): void {
-        if (class_exists('ThinkRank\\SEO\\LLMs_Txt_Manager')) {
-            (new \ThinkRank\SEO\LLMs_Txt_Manager())->delete_llms_txt_file();
+        require_once THINKRANK_PLUGIN_DIR . 'includes/cleanup-webroot.php';
+
+        // Record what was actually published so reactivation restores exactly
+        // that, and nothing else. Republishing from settings alone would write
+        // files a site never had — every artifact defaults to enabled, so a
+        // fresh install would start emitting a robots.txt it had not asked for.
+        $republish = [];
+
+        if (thinkrank_webroot_delete_sitemaps(thinkrank_webroot_read_sitemap_settings())['deleted']) {
+            $republish[] = 'sitemap';
         }
+
+        if (thinkrank_webroot_delete_robots_txt()['deleted']) {
+            $republish[] = 'robots';
+        }
+
+        if (class_exists('ThinkRank\\SEO\\LLMs_Txt_Manager')) {
+            // Checked up front: unpublish_static_file() reports success for a
+            // file that was never there, which would mark a site that never
+            // published llms.txt for republishing.
+            $was_published = file_exists(ABSPATH . 'llms.txt');
+
+            // unpublish_static_file(), not delete_llms_txt_file(): the served
+            // file goes, the user's document stays for reactivation.
+            if ((new \ThinkRank\SEO\LLMs_Txt_Manager())->unpublish_static_file() && $was_published) {
+                $republish[] = 'llms';
+            }
+        }
+
+        // Autoload off: this is read once, on the next activation.
+        update_option(self::REPUBLISH_OPTION, $republish, false);
         // Static /.well-known/ OAuth discovery files (published by the MCP
         // self-test on hosts whose proxy intercepts that directory) — a
         // static copy must not keep advertising a server that is now off.

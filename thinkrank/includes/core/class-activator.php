@@ -52,6 +52,7 @@ class Activator {
         $this->set_default_options();
         $this->setup_indexnow_key();
         $this->schedule_cron_jobs();
+        $this->restore_webroot_artifacts();
         $this->set_activation_flag();
 
         // Grant the admin capabilities here rather than waiting for the `init`
@@ -204,8 +205,80 @@ class Activator {
 
 
     /**
+     * Republish the web-root artifacts deactivation took away.
+     *
+     * Deactivation removes the published sitemap, robots.txt and llms.txt so an
+     * inactive ThinkRank stops shadowing whatever the user switched to (#510).
+     * That is only safe if switching the plugin back on puts them back, which is
+     * what this does.
+     *
+     * Restores strictly what {@see Deactivator::REPUBLISH_OPTION} recorded as
+     * having been removed — never "everything the settings would allow", which
+     * on a fresh install would publish files the site never had.
+     *
+     * The sitemap goes through schedule_regeneration() rather than being built
+     * inline: a full rebuild on a large site is far too slow to sit inside an
+     * activation request, and the debounced hook already respects the master
+     * `enabled` flag. robots.txt and llms.txt are single small writes, so they
+     * happen here.
+     *
+     * @since 2.1.0
+     *
+     * @return void
+     */
+    private function restore_webroot_artifacts(): void {
+        $republish = get_option(Deactivator::REPUBLISH_OPTION, null);
+
+        if ($republish === null) {
+            // No recorded deactivation — a first install, or an activation that
+            // already consumed the record.
+            return;
+        }
+
+        // Consume it first. A restore that fatals must not re-run on every
+        // subsequent activation, and each entry below is independently guarded.
+        delete_option(Deactivator::REPUBLISH_OPTION);
+
+        if (!is_array($republish)) {
+            return;
+        }
+
+        try {
+            if (in_array('sitemap', $republish, true) && class_exists('ThinkRank\\SEO\\Sitemap_Generator')) {
+                // Read-only instance: the hook-registering one would bind a
+                // second set of content-change listeners to this request.
+                (new \ThinkRank\SEO\Sitemap_Generator(false))->schedule_regeneration();
+            }
+
+            if (in_array('robots', $republish, true) && class_exists('ThinkRank\\SEO\\Site_Identity_Manager')) {
+                (new \ThinkRank\SEO\Site_Identity_Manager())->sync_robots_txt_file();
+            }
+
+            if (in_array('llms', $republish, true) && class_exists('ThinkRank\\SEO\\LLMs_Txt_Manager')) {
+                $llms    = new \ThinkRank\SEO\LLMs_Txt_Manager();
+                $content = $llms->get_published_content();
+
+                // write_llms_txt_to_file() enforces the enabled toggle and the
+                // delivery mode itself, so an empty document is the only case
+                // worth short-circuiting here.
+                if ($content !== '') {
+                    $llms->write_llms_txt_to_file($content);
+                }
+            }
+        } catch (\Throwable $e) {
+            // A failed republish must not block activation — the user would be
+            // left unable to switch the plugin on at all. The artifacts rebuild
+            // on the next content or settings save.
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log('ThinkRank: failed to restore web-root artifacts: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /**
      * Schedule cron jobs
-     * 
+     *
      * @return void
      */
     private function schedule_cron_jobs(): void {

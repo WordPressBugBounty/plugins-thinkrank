@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.0.2
+Stable tag: 2.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -370,6 +370,26 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 
 == Changelog ==
 
+= 2.1.0 =
+Release Date: 2026-08-27
+
+- New: Each keyword check in the SEO panel now names every focus keyword and its state. A row where one of three keywords matched reads "1 of 3 matched" with a tick beside the ones that matched and a cross beside the ones that did not, instead of a single tick that looked like a pass
+- New: When an Elementor accordion is already publishing its own FAQ schema for a page, ThinkRank stops publishing a second one — two FAQ blocks on one URL is a structured-data error
+- Changed: The setup wizard now fills in as a preview of the wizard itself while it loads, instead of a spinner that jumped the whole screen into place when it finished
+- Fixed: A focus keyword counted as found inside longer words — "art" matched "start", "cat" matched "category", "ai" matched "said" and "email". Every keyword row reported the same phantom placement at once. Languages written without spaces, such as Chinese, Japanese and Thai, are unaffected
+- Fixed: Editing the permalink in the Classic Editor and saving put the old address back
+- Fixed: FAQ images in a block published a single fixed-size image, so opening an answer shifted the page, and an image deleted from the media library left a broken picture on the page and in your structured data. Images now come from the media library with the right sizes for each screen. Existing FAQ blocks get this with no re-save
+- Fixed: The FAQ and How-To blocks' buttons — add image, move up, move down, duplicate, remove, add question — were invisible in the editor, so the per-item image could not be reached at all
+- Fixed: Pages built with Beaver Builder read as empty to SEO analysis, so scores and recommendations ignored everything in the layout
+- Fixed: On sites behind a reverse proxy, automatic llms.txt delivery chose the one mode that cannot state a character set, which turned accented letters into mojibake. Those sites now move themselves to the correct mode; a site that deliberately chose the static file keeps it and is told what to expect
+- Fixed: ThinkRank left its sitemap, llms.txt, robots.txt and IndexNow key in the site root after the plugin was deactivated or deleted. They are removed now, and restored if you reactivate
+- Fixed: Connecting an AI assistant failed with an authentication error on Apache servers running PHP as CGI or FastCGI, while the same token worked on the longer address
+- Fixed: An AI connection stopped working after a domain change, a move to staging, or a host's "reset security keys" — the connection read as missing and was silently replaced, locking out every assistant already using it. The discovery files that name your site are kept in step with your address now
+- Fixed: A busy AI assistant could wipe out a connection it had just been given, after which every request failed with nothing to explain it
+- Fixed: Some AI clients were refused at the consent screen for sending back exactly the callback address they had registered
+- Fixed: Fewer database queries on every visitor's page load
+
+
 = 2.0.2 =
 Release Date: 2026-08-25
 
@@ -466,33 +486,12 @@ Release Date: 2026-08-18
 - Fixed: A Codex connection on the MCP screen showed a plain letter instead of the OpenAI mark
 - Fixed: The two Schema screens showed their title three times over before any content, and the Global SEO, Crawling and Author Archives screens had the wrong icon or a missing divider
 
-= 1.31.0 =
-Release Date: 2026-08-16
-
-- New: Submission Coverage for Instant Indexing — compares every published URL against the last successful IndexNow submission and tells you what is stale, what failed and what was never announced, then closes the gaps on its own once a day. There is a Reconcile Now button for when you do not want to wait
-- New: A noindex you set on a category, tag or custom taxonomy archive is finally applied. The setting saved and read back correctly before, but the archive still carried your site-wide default — and the archive is now dropped from the XML sitemap too, so the sitemap cannot advertise a page that asks not to be indexed
-- New: The Robots.txt screen shows what crawlers actually receive right now, and warns you when a robots.txt file sitting in your site's folder is being served by the web server instead of the content you saved
-- Changed: ThinkRank now runs on PHP 7.4 and higher, instead of requiring PHP 8.0
-- Changed: WordPress's own sitemap is switched off while ThinkRank's is enabled, so your site stops publishing two competing sitemaps and pointing search engines at both
-- Changed: Core Web Vitals now reports Interaction to Next Paint, the metric Google replaced First Input Delay with
-- Fixed: /sitemap.xml led search engines to a dead page on sites using a sitemap index — the one sitemap URL crawlers guess. It now goes to the sitemap you actually publish, and while your sitemap has not been generated yet WordPress's own sitemap is left in place rather than leaving that URL answering nothing
-- Fixed: Cleaning up sitemaps deleted any file in your site's folder with "sitemap" in its name — including WordPress's own and other plugins' — and then left your site with no sitemap and nothing scheduled to rebuild it. It now removes only ThinkRank's files and queues the rebuild
-- Fixed: Turning off a content type stopped its sitemap from being updated but left the old file serving and listed in the index. Sitemaps you no longer publish are now removed
-- Fixed: Regenerating the sitemap from anywhere other than the settings screen could republish one flat sitemap over your sitemap index, or republish files that had lost their styling and their image entries
-- Fixed: When a Core Web Vitals check fails, ThinkRank now tells you why — your site could not be reached, no Google connection, or the daily quota is used up — instead of reporting a server error for all three. Pressing refresh after a failure also really re-measures now, and a site set up with only a PageSpeed API key works without a Google account
-- Fixed: The historical performance charts drew an empty card for a metric with no measurements, most visibly for the new INP metric on sites with older data
-- Fixed: Open Graph told Facebook and LinkedIn your site was in US English no matter what language it was actually in
-- Fixed: Pages built with Elementor and similar builders contributed no links, images or headings to SEO analysis, so scores and recommendations were based on text alone
-- Fixed: SEO Insights failed with a server error on sites that had connected PageSpeed
-- Fixed: With some caching or optimization plugins, ThinkRank's screens and the Dashboard widget could stay stuck on "Loading" forever
-- Fixed: The AI usage overview reported empty fields on a site that had not used any AI features yet
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.1.0 =
+Focus keywords no longer match inside longer words, and each check names every keyword and its state. Fixes a reverted Classic Editor permalink, invisible FAQ/How-To block buttons, Beaver Builder pages reading as empty, and AI-assistant connection failures. Recommended for all sites.
+
 = 2.0.2 =
 Adds a master Enable Schema Markup switch and fixes a large batch of Schema Manager defects: settings saves collapsing four schema types to one, invalid dates dropping Article rich results, FAQ questions emptied on save, and duplicate business identities. Recommended for all sites.
-
-= 2.0.1 =
-A large correctness release. Settings that saved and then did nothing now take effect, a failed settings load can no longer overwrite what you had stored, and SEO titles and descriptions saved on categories and tags finally render. Fixes double aggregate ratings on WooCommerce products, cart and checkout pages in the sitemap, garbled accented characters in llms.txt on Nginx, paginated archives describing themselves as page 1, and an uninstall that damaged an active Pro install. Also hardens the AI-assistant connection token and object permissions on several REST routes. Recommended for all sites.

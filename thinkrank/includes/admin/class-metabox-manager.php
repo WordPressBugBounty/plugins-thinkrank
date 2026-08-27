@@ -594,8 +594,20 @@ class Metabox_Manager {
 
         // Update the post slug (post_name) when the metabox permalink field
         // was edited. This touches the WP post itself, not post meta.
+        //
+        // The baseline is what the field was RENDERED with. Without it the
+        // guard here was a bare isset(), and the hidden input is always
+        // posted — so a user who edited WordPress's own permalink field in
+        // the Classic Editor had their new slug written by core and then
+        // overwritten by this page-load snapshot (#441).
         if (isset($src['thinkrank_post_slug'])) {
-            $this->maybe_update_slug($post_id, (string) $src['thinkrank_post_slug']);
+            $this->maybe_update_slug(
+                $post_id,
+                (string) $src['thinkrank_post_slug'],
+                isset($src['thinkrank_post_slug_baseline'])
+                    ? (string) $src['thinkrank_post_slug_baseline']
+                    : null
+            );
         }
 
         // Save canonical URL separately with URL sanitization
@@ -678,7 +690,7 @@ class Metabox_Manager {
      * @param string $raw_slug Desired slug from the metabox.
      * @return void
      */
-    private function maybe_update_slug(int $post_id, string $raw_slug): void {
+    private function maybe_update_slug(int $post_id, string $raw_slug, ?string $baseline = null): void {
         static $updating = false;
         if ($updating) {
             return;
@@ -694,7 +706,23 @@ class Metabox_Manager {
         }
 
         $desired = sanitize_title($raw_slug);
-        if ($desired === '' || $desired === $post->post_name) {
+        if ($desired === '') {
+            return;
+        }
+
+        // Unchanged from what the form was rendered with, so the user did not
+        // choose this value — they left it alone. Writing it back would undo
+        // whatever core already saved from WordPress's own permalink field a
+        // moment ago, on the same save_post priority (#441).
+        //
+        // Compared against the BASELINE rather than the current post_name on
+        // purpose: by the time this runs core has already updated post_name,
+        // so that comparison cannot tell a deliberate edit from a stale one.
+        if ($baseline !== null && $desired === sanitize_title($baseline)) {
+            return;
+        }
+
+        if ($desired === $post->post_name) {
             return;
         }
 

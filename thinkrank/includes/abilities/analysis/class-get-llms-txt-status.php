@@ -66,15 +66,16 @@ class Get_Llms_Txt_Status extends Ability_Base {
 		return [
 			'type'       => 'object',
 			'properties' => [
-				'file_exists'     => [ 'type' => 'boolean' ],
-				'published'       => [ 'type' => 'boolean' ],
-				'delivery_mode'   => [ 'type' => 'string' ],
-				'file_path'       => [ 'type' => 'string' ],
-				'file_url'        => [ 'type' => 'string' ],
-				'writable'        => [ 'type' => 'boolean' ],
-				'last_modified'   => [ 'type' => [ 'string', 'integer', 'null' ] ],
-				'file_size'       => [ 'type' => [ 'integer', 'null' ] ],
-				'content_preview' => [ 'type' => 'string' ],
+				'file_exists'      => [ 'type' => 'boolean' ],
+				'published'        => [ 'type' => 'boolean' ],
+				'delivery_mode'    => [ 'type' => 'string' ],
+				'delivery_warning' => [ 'type' => 'string' ],
+				'file_path'        => [ 'type' => 'string' ],
+				'file_url'         => [ 'type' => 'string' ],
+				'writable'         => [ 'type' => 'boolean' ],
+				'last_modified'    => [ 'type' => [ 'string', 'integer', 'null' ] ],
+				'file_size'        => [ 'type' => [ 'integer', 'null' ] ],
+				'content_preview'  => [ 'type' => 'string' ],
 			],
 		];
 	}

@@ -91,7 +91,7 @@ class Update_Llms_Txt_Settings extends Ability_Base {
 		}
 
 		$props['delivery_mode']['enum']        = [ 'auto', 'static', 'dynamic' ];
-		$props['delivery_mode']['description'] = __( 'How /llms.txt is served: "static" writes a physical file the web server answers, "dynamic" keeps the document in WordPress and serves it from PHP as UTF-8, "auto" picks static on Apache/LiteSpeed and dynamic elsewhere.', 'thinkrank' );
+		$props['delivery_mode']['description'] = __( 'How /llms.txt is served: "static" writes a physical file the web server answers, "dynamic" keeps the document in WordPress and serves it from PHP as UTF-8, "auto" prefers static on Apache/LiteSpeed but falls back to dynamic when the published file turns out to be served without a character set.', 'thinkrank' );
 
 		return $props;
 	}

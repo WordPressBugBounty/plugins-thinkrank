@@ -2,14 +2,14 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 2.0.2\n"
+"Project-Id-Version: ThinkRank 2.1.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-25T09:47:57+00:00\n"
+"POT-Creation-Date: 2026-08-27T07:40:32+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
@@ -266,7 +266,7 @@ msgstr ""
 #: includes/abilities/analysis/class-get-term-seo-checks.php:185
 #: includes/abilities/analysis/class-get-term-seo-checks.php:192
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:411
-#: src/admin/components/seo/SEOScoreSummary.js:339
+#: src/admin/components/seo/SEOScoreSummary.js:417
 msgid "Meta description"
 msgstr ""
 
@@ -721,7 +721,7 @@ msgstr ""
 
 #: includes/abilities/settings/class-get-llms-txt-settings.php:94
 #: includes/abilities/settings/class-update-llms-txt-settings.php:94
-msgid "How /llms.txt is served: \"static\" writes a physical file the web server answers, \"dynamic\" keeps the document in WordPress and serves it from PHP as UTF-8, \"auto\" picks static on Apache/LiteSpeed and dynamic elsewhere."
+msgid "How /llms.txt is served: \"static\" writes a physical file the web server answers, \"dynamic\" keeps the document in WordPress and serves it from PHP as UTF-8, \"auto\" prefers static on Apache/LiteSpeed but falls back to dynamic when the published file turns out to be served without a character set."
 msgstr ""
 
 #: includes/abilities/settings/class-get-robots-meta-settings.php:47
@@ -1388,7 +1388,7 @@ msgid "An error occurred"
 msgstr ""
 
 #: includes/admin/class-manager.php:850
-#: includes/admin/class-metabox-manager.php:900
+#: includes/admin/class-metabox-manager.php:928
 msgid "Success!"
 msgstr ""
 
@@ -1401,7 +1401,7 @@ msgstr ""
 #: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:1187
 #: src/admin/components/import-export/ConfirmationDialog.js:45
 #: src/admin/components/pages/MCPConnectedApps.js:460
-#: src/admin/components/pages/MCPConnectionConfig.js:487
+#: src/admin/components/pages/MCPConnectionConfig.js:503
 #: src/admin/components/seo/SEOScoreCalculator.js:1016
 #: src/metabox/components/metabox-schema-tab/ImportSection.js:510
 msgid "Cancel"
@@ -1447,49 +1447,49 @@ msgid "Optimize this content for search & AI with ThinkRank."
 msgstr ""
 
 #: includes/admin/class-metabox-manager.php:442
-#: src/metabox/components/MetaboxApp.js:1460
+#: src/metabox/components/MetaboxApp.js:1522
 #: src/metabox/components/MetaboxDrawer.js:169
 msgid "Open ThinkRank SEO"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:897
+#: includes/admin/class-metabox-manager.php:925
 msgid "Generating..."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:898
+#: includes/admin/class-metabox-manager.php:926
 msgid "Analyzing..."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:899
+#: includes/admin/class-metabox-manager.php:927
 msgid "Error occurred"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:901
+#: includes/admin/class-metabox-manager.php:929
 msgid "Metadata generated successfully"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:902
+#: includes/admin/class-metabox-manager.php:930
 msgid "Please add some content before generating SEO metadata."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:903
+#: includes/admin/class-metabox-manager.php:931
 msgid "Failed to connect to AI service. Please check your API settings."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1241
+#: includes/admin/class-metabox-manager.php:1269
 #: includes/ai/class-manager.php:1461
 msgid "SEO metadata generated successfully!"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1262
+#: includes/admin/class-metabox-manager.php:1290
 msgid "Security check failed"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1267
+#: includes/admin/class-metabox-manager.php:1295
 msgid "Insufficient permissions"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1274
+#: includes/admin/class-metabox-manager.php:1302
 #: src/metabox/utils/persistSeoFields.js:121
 msgid "SEO settings saved successfully!"
 msgstr ""
@@ -1588,7 +1588,7 @@ msgstr ""
 #: src/admin/components/essential-seo/analytics/AnalyticsTab.js:936
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:292
 #: src/admin/components/essential-seo/crawling-ai-indexing/GlobalRobotMeta.js:368
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1433
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1441
 #: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:946
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:1238
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:213
@@ -1698,7 +1698,7 @@ msgstr ""
 msgid "You do not have permission to access this page."
 msgstr ""
 
-#: includes/admin/class-setup-wizard.php:277
+#: includes/admin/class-setup-wizard.php:276
 msgid "Loading Setup Wizard…"
 msgstr ""
 
@@ -2510,7 +2510,7 @@ msgstr ""
 
 #: includes/editor/elementor/class-howto-widget.php:61
 #: includes/editor/elementor/class-toc-widget.php:63
-#: src/admin/components/seo/SEOScoreSummary.js:338
+#: src/admin/components/seo/SEOScoreSummary.js:416
 #: src/metabox/components/SocialTab.js:299
 msgid "Title"
 msgstr ""
@@ -2716,124 +2716,128 @@ msgstr ""
 msgid "You do not have permission to connect a Google account."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:121
+#: includes/mcp/class-mcp-manager.php:127
 msgid "ThinkRank MCP: AI assistants will connect but see no tools."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:122
+#: includes/mcp/class-mcp-manager.php:128
 msgid "MCP access is enabled, but the bundled Abilities runtime (dependencies/vendor) is missing from this installation — usually a plugin package built without it. Reinstall ThinkRank from wordpress.org or an official build; until then, connected AI clients get an empty tool list."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:583
+#: includes/mcp/class-mcp-manager.php:589
 msgid "A client_id is required to revoke an OAuth app."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:607
+#: includes/mcp/class-mcp-manager.php:613
 msgid "Unknown user"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:648
-#: includes/mcp/class-mcp-manager.php:663
+#: includes/mcp/class-mcp-manager.php:654
+#: includes/mcp/class-mcp-manager.php:669
 msgid "MCP is disabled on this site."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:771
+#: includes/mcp/class-mcp-manager.php:777
 msgid "You must be an administrator to authorize an AI assistant to manage SEO on this site."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:778
+#: includes/mcp/class-mcp-manager.php:784
 msgid "Security check failed. Please try connecting again."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:864
+#: includes/mcp/class-mcp-manager.php:870
 #: src/admin/components/pages/MCPConnectedApps.js:271
 msgid "Read-only"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:864
+#: includes/mcp/class-mcp-manager.php:870
 #: src/admin/components/pages/MCPConnectedApps.js:272
 msgid "Read & write"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:866
+#: includes/mcp/class-mcp-manager.php:872
 msgid "Review your SEO across posts and site settings metadata, schema, sitemaps, robots, social, and SEO scores. No changes are made."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:867
+#: includes/mcp/class-mcp-manager.php:873
 msgid "Read and improve your SEO across posts and site settings metadata, schema, sitemaps, robots, social, indexing, and SEO scores."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:868
+#: includes/mcp/class-mcp-manager.php:874
 msgid "An AI assistant"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:908
+#: includes/mcp/class-mcp-manager.php:914
 msgid "Authorize AI access"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:935
+#: includes/mcp/class-mcp-manager.php:941
 msgid "Connect to ThinkRank"
 msgstr ""
 
 #. translators: %s: AI client name, already escaped and wrapped in <strong>.
-#: includes/mcp/class-mcp-manager.php:938
+#: includes/mcp/class-mcp-manager.php:944
 #, php-format
 msgid "%s wants to manage SEO on this site."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:944
+#: includes/mcp/class-mcp-manager.php:950
 msgid "Site"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:945
+#: includes/mcp/class-mcp-manager.php:951
 msgid "Signed in as"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:946
+#: includes/mcp/class-mcp-manager.php:952
 msgid "Access"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:951
+#: includes/mcp/class-mcp-manager.php:957
 msgid "Secured with OAuth. Revoke anytime in ThinkRank → MCP."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:957
+#: includes/mcp/class-mcp-manager.php:963
 msgid "Deny"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:958
+#: includes/mcp/class-mcp-manager.php:964
 msgid "Approve"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:973
+#: includes/mcp/class-mcp-manager.php:979
 msgid "Authorization error"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:976
+#: includes/mcp/class-mcp-manager.php:982
 msgid "Could not authorize"
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:235
+#: includes/mcp/class-mcp-oauth.php:271
 msgid "At least one valid redirect_uri is required."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:285
+#: includes/mcp/class-mcp-oauth.php:323
 msgid "Unknown client_id."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:289
+#: includes/mcp/class-mcp-oauth.php:327
 msgid "redirect_uri does not match a registered value."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:294
+#: includes/mcp/class-mcp-oauth.php:332
 msgid "Only response_type=code is supported."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:305
+#: includes/mcp/class-mcp-oauth.php:343
 msgid "PKCE with code_challenge_method=S256 is required."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:579
+#: includes/mcp/class-mcp-oauth.php:357
+msgid "code_challenge is not a valid S256 challenge."
+msgstr ""
+
+#: includes/mcp/class-mcp-oauth.php:673
 msgid "MCP Client"
 msgstr ""
 
@@ -2845,32 +2849,36 @@ msgstr ""
 msgid "No connection token exists yet. Click Connect to mint one, then run the test again."
 msgstr ""
 
-#: includes/mcp/class-mcp-self-test.php:127
-msgid "Connection URL"
-msgstr ""
-
-#: includes/mcp/class-mcp-self-test.php:128
-msgid "REST fallback URL"
-msgstr ""
-
-#: includes/mcp/class-mcp-self-test.php:134
-msgid "OAuth discovery"
+#: includes/mcp/class-mcp-self-test.php:120
+msgid "A connection token exists but can no longer be read on this site — the security keys in wp-config.php changed after it was minted. Clients already set up with it keep working. Use Reset token to mint one this site can show, then run the test again."
 msgstr ""
 
 #: includes/mcp/class-mcp-self-test.php:137
+msgid "Connection URL"
+msgstr ""
+
+#: includes/mcp/class-mcp-self-test.php:138
+msgid "REST fallback URL"
+msgstr ""
+
+#: includes/mcp/class-mcp-self-test.php:144
+msgid "OAuth discovery"
+msgstr ""
+
+#: includes/mcp/class-mcp-self-test.php:147
 msgid "OAuth challenge"
 msgstr ""
 
-#: includes/mcp/class-mcp-self-test.php:143
+#: includes/mcp/class-mcp-self-test.php:153
 msgid "Client access"
 msgstr ""
 
-#: includes/mcp/class-mcp-self-test.php:155
+#: includes/mcp/class-mcp-self-test.php:165
 msgid "Client lockouts"
 msgstr ""
 
 #. translators: %d: number of currently locked-out clients.
-#: includes/mcp/class-mcp-self-test.php:159
+#: includes/mcp/class-mcp-self-test.php:169
 #, php-format
 msgid "%d client is currently locked out after repeated failed authentications — typically a connector still holding a rotated-away token. Remove and re-add the connector in the AI client; the lockout clears itself within 15 minutes of the retries stopping."
 msgid_plural "%d clients are currently locked out after repeated failed authentications — typically connectors still holding a rotated-away token. Remove and re-add the connector in the AI client; lockouts clear within 15 minutes of the retries stopping."
@@ -2878,13 +2886,13 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: pretty MCP endpoint URL, 2: REST fallback URL.
-#: includes/mcp/class-mcp-self-test.php:176
+#: includes/mcp/class-mcp-self-test.php:186
 #, php-format
 msgid "The connection URL %1$s did not answer, but the REST fallback %2$s works. Re-save Settings → Permalinks to rebuild the rewrite rules; until then, give your AI client the fallback URL."
 msgstr ""
 
 #. translators: %d: number of MCP tools returned.
-#: includes/mcp/class-mcp-self-test.php:199
+#: includes/mcp/class-mcp-self-test.php:209
 #, php-format
 msgid "Connection healthy: the endpoint authenticated, offered OAuth, and returned %d tool."
 msgid_plural "Connection healthy: the endpoint authenticated, offered OAuth, and returned %d tools."
@@ -2892,130 +2900,140 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: endpoint URL, 2: underlying transport error.
-#: includes/mcp/class-mcp-self-test.php:256
+#: includes/mcp/class-mcp-self-test.php:266
 #, php-format
 msgid "%1$s could not be reached over HTTPS: %2$s. On local/dev sites this is usually a self-signed certificate the AI client must be told to trust."
 msgstr ""
 
 #. translators: 1: endpoint URL, 2: underlying transport error.
-#: includes/mcp/class-mcp-self-test.php:258
+#: includes/mcp/class-mcp-self-test.php:268
 #, php-format
 msgid "%1$s could not be reached: %2$s."
 msgstr ""
 
 #. translators: 1: endpoint URL, 2: redirect target URL.
-#: includes/mcp/class-mcp-self-test.php:270
+#: includes/mcp/class-mcp-self-test.php:280
 #, php-format
 msgid "%1$s redirected to %2$s instead of answering. A redirect between HTTP and HTTPS usually means the site address and WordPress address schemes disagree."
 msgstr ""
 
 #. translators: %s: endpoint URL.
-#: includes/mcp/class-mcp-self-test.php:272
+#: includes/mcp/class-mcp-self-test.php:282
 #, php-format
 msgid "%s redirected instead of answering, which usually means the site address and WordPress address schemes disagree."
 msgstr ""
 
 #. translators: %s: endpoint URL.
-#: includes/mcp/class-mcp-self-test.php:280
+#: includes/mcp/class-mcp-self-test.php:290
 #, php-format
 msgid "%s returned 404 — WordPress does not know this URL. Re-save Settings → Permalinks to rebuild the rewrite rules."
 msgstr ""
 
 #. translators: %s: endpoint URL.
-#: includes/mcp/class-mcp-self-test.php:290
+#: includes/mcp/class-mcp-self-test.php:300
 #, php-format
 msgid "%s rejected the connection token (authentication failed). Rotate the token and reconnect your AI client."
 msgstr ""
 
 #. translators: %s: endpoint URL.
-#: includes/mcp/class-mcp-self-test.php:300
+#: includes/mcp/class-mcp-self-test.php:310
 #, php-format
 msgid "%s is rate-limiting this server after repeated failed tokens. Wait for the lockout to lapse, then rotate the token and reconnect."
 msgstr ""
 
 #. translators: 1: endpoint URL, 2: abilities-registry diagnostic summary.
-#: includes/mcp/class-mcp-self-test.php:323
+#: includes/mcp/class-mcp-self-test.php:333
 #, php-format
 msgid "%1$s answered but returned no tool catalog. Confirm the MCP runtime is built and abilities are registered. Diagnostics — %2$s"
 msgstr ""
 
 #. translators: 1: endpoint URL, 2: number of tools.
-#: includes/mcp/class-mcp-self-test.php:333
+#: includes/mcp/class-mcp-self-test.php:343
 #, php-format
 msgid "%1$s authenticated and returned %2$d tools."
 msgstr ""
 
-#: includes/mcp/class-mcp-self-test.php:449
+#. translators: 1: file path relative to the site root, 2: identifier name, 3: value found in the file, 4: value it should carry.
+#: includes/mcp/class-mcp-self-test.php:383
+#, php-format
+msgid "The static discovery file %1$s advertises %2$s as %3$s, but this site is %4$s. It was written before the site URL changed, the host serves it ahead of WordPress, and it could not be rewritten or removed — so clients read the old identity and refuse to connect. Delete that file from the site root, or restore write access there and run this test again."
+msgstr ""
+
+#: includes/mcp/class-mcp-self-test.php:386
+msgid "nothing"
+msgstr ""
+
+#: includes/mcp/class-mcp-self-test.php:492
 msgid "The primary discovery documents are served and correct, but the host intercepts the site root's /.well-known/ directory before WordPress runs (common on SiteGround shared hosting), and static files could not be published there. Clients that follow the challenge — ChatGPT, Claude — still connect; a client that only derives the root /.well-known/ URL itself may not. If write access to the site root is possible, granting it lets ThinkRank publish static discovery files that fix this completely."
 msgstr ""
 
-#: includes/mcp/class-mcp-self-test.php:467
+#: includes/mcp/class-mcp-self-test.php:510
 msgid "All OAuth discovery documents are served and advertise this site's MCP endpoint exactly."
 msgstr ""
 
 #. translators: 1: discovery document URL, 2: transport error.
-#: includes/mcp/class-mcp-self-test.php:496
+#: includes/mcp/class-mcp-self-test.php:539
 #, php-format
 msgid "The OAuth discovery document %1$s could not be fetched: %2$s. Clients that connect by URL alone cannot authenticate without it."
 msgstr ""
 
 #. translators: 1: discovery document URL, 2: HTTP status code.
-#: includes/mcp/class-mcp-self-test.php:514
+#: includes/mcp/class-mcp-self-test.php:557
 #, php-format
 msgid "The OAuth discovery document %1$s returned %2$d instead of valid metadata. Re-save Settings → Permalinks; if it persists, the host may be intercepting the URL before WordPress runs, or another plugin may be claiming it."
 msgstr ""
 
 #. translators: 1: metadata field name, 2: value found in the document, 3: value it should be, 4: discovery document URL.
-#: includes/mcp/class-mcp-self-test.php:529
+#: includes/mcp/class-mcp-self-test.php:572
 #, php-format
 msgid "The discovery document %4$s advertises %1$s \"%2$s\" but this site's MCP endpoint is \"%3$s\". RFC 9728 requires an exact match, so clients reject the metadata and report that the server does not implement OAuth. If the two differ only by scheme, a reverse proxy is terminating TLS without passing X-Forwarded-Proto; otherwise another plugin is serving this URL."
 msgstr ""
 
 #. translators: 1: http endpoint URL advertised, 2: https endpoint URL that also answers.
-#: includes/mcp/class-mcp-self-test.php:567
+#: includes/mcp/class-mcp-self-test.php:610
 #, php-format
 msgid "The discovery documents advertise %1$s, but %2$s answers as well — WordPress is storing an http:// site address behind a proxy that terminates TLS. AI clients connect over https and reject the http identifier as a mismatch. Fix the Site Address in Settings → General, or have the proxy send X-Forwarded-Proto."
 msgstr ""
 
 #. translators: 1: endpoint URL, 2: HTTP status code.
-#: includes/mcp/class-mcp-self-test.php:620
+#: includes/mcp/class-mcp-self-test.php:663
 #, php-format
 msgid "An unauthenticated call to %1$s answered %2$d instead of 401. Clients that connect by URL alone need the 401 challenge to start the OAuth flow."
 msgstr ""
 
 #. translators: %s: endpoint URL.
-#: includes/mcp/class-mcp-self-test.php:631
+#: includes/mcp/class-mcp-self-test.php:674
 #, php-format
 msgid "%s answered 401 but sent no WWW-Authenticate header — a security plugin or proxy is likely stripping it. Clients that connect by URL alone will report that this server does not implement OAuth."
 msgstr ""
 
 #. translators: 1: endpoint URL, 2: the WWW-Authenticate header value received.
-#: includes/mcp/class-mcp-self-test.php:644
+#: includes/mcp/class-mcp-self-test.php:687
 #, php-format
 msgid "%1$s sent a WWW-Authenticate header with no resource_metadata URL (%2$s). Clients have nowhere to look up this site's OAuth metadata."
 msgstr ""
 
 #. translators: 1: resource_metadata URL from the challenge header, 2: endpoint URL.
-#: includes/mcp/class-mcp-self-test.php:668
+#: includes/mcp/class-mcp-self-test.php:711
 #, php-format
 msgid "The challenge from %2$s points at %1$s, but that URL does not return OAuth metadata. This is the first thing a client fetches, so the connection fails there. A security plugin or edge rule blocking the REST API for visitors is the usual cause."
 msgstr ""
 
-#: includes/mcp/class-mcp-self-test.php:683
+#: includes/mcp/class-mcp-self-test.php:726
 msgid "The OAuth challenge could not be checked because the endpoint did not answer. Fix the connection error above and re-run the test."
 msgstr ""
 
-#: includes/mcp/class-mcp-self-test.php:689
+#: includes/mcp/class-mcp-self-test.php:732
 msgid "Unauthenticated calls answer with the OAuth challenge, so URL-only clients can authenticate."
 msgstr ""
 
 #. translators: 1: user agent string, 2: HTTP status returned for it, 3: HTTP status returned for WordPress's own user agent.
-#: includes/mcp/class-mcp-self-test.php:728
+#: includes/mcp/class-mcp-self-test.php:771
 #, php-format
 msgid "The endpoint answered %3$d for WordPress but %2$d for an AI client's User-Agent (%1$s). ThinkRank deliberately tests with the generic agents real MCP backends send; this refusal means a security plugin, firewall or host-level \"block bad bots\" rule (SiteGround's edge protection does this) will also refuse the real AI client. Ask the host to exempt the MCP and /.well-known/ paths, or allowlist these User-Agents."
 msgstr ""
 
-#: includes/mcp/class-mcp-self-test.php:738
+#: includes/mcp/class-mcp-self-test.php:781
 msgid "The endpoint answers AI-client User-Agents the same way it answers WordPress, so no bot filter is blocking them. This cannot see an IP-level block of the AI vendor."
 msgstr ""
 
@@ -3306,7 +3324,7 @@ msgstr ""
 
 #: includes/seo/class-seo-analyzer.php:59
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:667
-#: src/admin/components/seo/SEOScoreSummary.js:340
+#: src/admin/components/seo/SEOScoreSummary.js:418
 #: src/blocks/faq-block/edit.js:99
 #: src/blocks/howto-block/edit.js:104
 #: src/blocks/toc-block/edit.js:110
@@ -3824,7 +3842,7 @@ msgstr ""
 
 #: src/admin/components/ai/MetadataGenerator.js:275
 #: src/admin/components/common/OptimizationButton.js:38
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:798
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:800
 #: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:438
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:533
 #: src/admin/components/essential-seo/schema/SchemaDeployment.js:454
@@ -3858,9 +3876,9 @@ msgstr ""
 #: src/admin/components/content-brief/ContentStructure.js:510
 #: src/admin/components/content-brief/ContentStructure.js:1411
 #: src/admin/components/essential-seo/schema/SchemaPreview.js:141
-#: src/admin/components/pages/MCPConnectionConfig.js:566
-#: src/admin/components/pages/MCPConnectionConfig.js:654
-#: src/admin/components/pages/MCPConnectionConfig.js:664
+#: src/admin/components/pages/MCPConnectionConfig.js:582
+#: src/admin/components/pages/MCPConnectionConfig.js:670
+#: src/admin/components/pages/MCPConnectionConfig.js:680
 #: src/admin/setup-wizard/steps/StepMcpServer.js:381
 msgid "Copy"
 msgstr ""
@@ -4242,7 +4260,7 @@ msgid "Remove media"
 msgstr ""
 
 #: src/admin/components/common/OptimizationButton.js:17
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:788
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:790
 #: src/admin/components/essential-seo/SiteIdentityTab.js:692
 msgid "AI Optimize"
 msgstr ""
@@ -4260,12 +4278,12 @@ msgid "Optimize"
 msgstr ""
 
 #: src/admin/components/common/OptimizationButton.js:27
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:779
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:781
 msgid "Validate"
 msgstr ""
 
 #: src/admin/components/common/OptimizationButton.js:28
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:780
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:782
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsTxtValidation.js:340
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:1128
 #: src/admin/components/essential-seo/SiteIdentityTab.js:734
@@ -4468,7 +4486,7 @@ msgstr ""
 
 #: src/admin/components/content-brief/ContentBriefGenerator.js:602
 #: src/admin/components/content-brief/ContentStructure.js:369
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:558
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:560
 msgid "Target Audience"
 msgstr ""
 
@@ -4558,8 +4576,8 @@ msgstr ""
 
 #: src/admin/components/content-brief/ContentBriefGenerator.js:1089
 #: src/admin/components/content-brief/ContentBriefGenerator.js:1126
-#: src/admin/components/pages/MCPConnectionConfig.js:561
-#: src/admin/components/pages/MCPConnectionConfig.js:659
+#: src/admin/components/pages/MCPConnectionConfig.js:577
+#: src/admin/components/pages/MCPConnectionConfig.js:675
 #: src/metabox/components/PillarContentSuggestions.js:297
 msgid "Copied!"
 msgstr ""
@@ -5968,7 +5986,7 @@ msgid "SEO Analytics features are disabled. Enable to access Google API integrat
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/AnalyticsTab.js:937
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1434
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1442
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:1239
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:956
 #: src/admin/components/essential-seo/GlobalSEOTab.js:773
@@ -6401,7 +6419,7 @@ msgid "Configure Google API connections for SEO analytics data collection."
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/SetupSection.js:41
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1082
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1084
 msgid "Setup Instructions"
 msgstr ""
 
@@ -6820,7 +6838,7 @@ msgid "Automatic (recommended)"
 msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:68
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1353
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1355
 msgid "Static file in the site root"
 msgstr ""
 
@@ -6870,328 +6888,328 @@ msgstr ""
 msgid "Could not load your LLMs.txt settings. Nothing has been changed — retry before editing."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:502
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:504
 msgid "LLMs.txt settings saved successfully!"
-msgstr ""
-
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:553
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:636
-#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:137
-msgid "Website Description"
 msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:555
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:638
+#: src/admin/components/essential-seo/schema/forms/SchemaWebsiteForm.js:137
+msgid "Website Description"
+msgstr ""
+
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:557
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:640
 #: src/admin/components/essential-seo/schema/forms/SchemaSoftwareForm.js:372
 msgid "Key Features"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:569
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:571
 #, js-format
 msgid "Please fill in the following required fields: %s"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:605
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:607
 msgid "LLMs.txt generated successfully! File saved to website root."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:633
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:869
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:635
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:871
 msgid "Website Title"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:648
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:650
 #, js-format
 msgid "Please fill in the following required fields before AI optimization: %s"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:702
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:704
 msgid "AI optimization completed! Review the optimized content and insights below."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:754
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:756
 msgid "Validation completed successfully!"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:789
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:791
 #: src/admin/components/essential-seo/SiteIdentityTab.js:693
 #: src/admin/components/essential-seo/SiteIdentityTab.js:725
 msgid "AI Optimizing…"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:797
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:799
 msgid "Generate File"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:818
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:820
 msgid "Your LLMs.txt settings could not be read, so this screen has nothing to edit yet. Nothing has changed — retry to load them."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:831
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:833
 msgid "LLMs.txt Management"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:837
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:839
 msgid "LLMs.txt is on."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:838
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:840
 msgid "LLMs.txt is off."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:841
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:843
 msgid "Enable LLMs.txt"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:847
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:849
 msgid "LLMs.txt generation is disabled. Enable to configure website information and generate AI-friendly documentation."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:856
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:858
 msgid "Website Information"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:857
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:859
 msgid "Core details used to generate your LLMs.txt file"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:870
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:872
 msgid "The name of your website as it will appear in the LLMs.txt file"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:885
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:887
 msgid "Your Website"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:894
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:896
 msgid "Website Description *"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:895
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:897
 msgid "Comprehensive description of your website and its purpose (required)"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:911
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:913
 msgid "Describe what your website does, its main purpose, and key objectives…"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:921
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:923
 msgid "Key Features *"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:922
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:924
 msgid "Main features and functionality of your website (required)"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:938
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:940
 msgid "List the key features, services, or functionality your website provides…"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:952
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:954
 msgid "Business Details"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:953
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:955
 msgid "Audience and business type details."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:965
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:967
 msgid "Target Audience *"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:966
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:968
 msgid "Primary audience for your website (required)"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:989
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:991
 #: src/admin/components/essential-seo/site-identity/LocalSEO.js:145
 msgid "Business Type"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:990
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:992
 msgid "Type of website or business"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1016
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1018
 msgid "Technical Information"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1017
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1019
 msgid "Stack, methodology, and setup details."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1029
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1031
 msgid "Technical Stack"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1030
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1032
 msgid "Technologies and frameworks used"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1045
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1047
 msgid "e.g., WordPress, PHP, JavaScript, MySQL, React…"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1055
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1057
 msgid "Development Approach"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1056
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1058
 msgid "Development methodology and practices"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1072
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1074
 msgid "e.g., Agile development, WordPress coding standards, responsive design…"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1083
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1085
 msgid "Instructions for setting up or working with the project"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1099
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1101
 msgid "Provide setup instructions for developers or users…"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1113
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1115
 msgid "LLMs.txt Structured Content"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1117
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1119
 msgid "Control structured sections of your LLMs.txt file. Format: [Link Title](URL): Description"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1129
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1131
 msgid "Documentation Links"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1130
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1132
 msgid "Links to documentation, guides, and important pages. Format: [Title](URL): Description"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1154
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1156
 msgid "Technical Links"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1155
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1157
 msgid "Links to technical resources, code repositories, and development info"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1180
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1182
 msgid "Optional Links"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1181
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1183
 msgid "Secondary resources that can be skipped for shorter context"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1206
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1208
 msgid "Custom Sections"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1207
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1209
 msgid "Additional custom sections in markdown format"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1236
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1238
 msgid "AI Context (Internal Use)"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1237
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1239
 msgid "This context helps AI optimization but is not included in the public LLMs.txt file"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1249
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1251
 msgid "Additional AI Context"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1250
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1252
 msgid "Custom context information for AI assistants"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1265
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1267
 msgid "Provide specific context that would help AI assistants better understand your website…"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1275
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1277
 msgid "Delivery Method"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1276
-msgid "How /llms.txt reaches visitors. A static file is answered by the web server, which on Nginx sends no character-set and garbles accented characters and curly quotes. \"Served by WordPress\" keeps the document in WordPress and always responds as UTF-8. Automatic picks a static file on Apache/LiteSpeed and WordPress delivery everywhere else."
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1278
+msgid "How /llms.txt reaches visitors. A static file is answered by the web server, which on Nginx sends no character-set and garbles accented characters and curly quotes. \"Served by WordPress\" keeps the document in WordPress and always responds as UTF-8. Automatic prefers a static file on Apache/LiteSpeed, checks what the published file is really served with, and moves to WordPress delivery if the character-set is missing."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1298
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1300
 msgid "Auto-generate"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1299
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1301
 msgid "Automatically regenerate llms.txt when settings change"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1324
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1326
 msgid "Publish Status"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1331
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1333
 msgid "Status:"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1335
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1337
 msgid "Generated"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1339
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1341
 msgid "Not Generated"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1345
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1347
 msgid "Delivery:"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1349
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1351
 msgid "Served by WordPress as UTF-8"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1363
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1365
 msgid "Last Modified:"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1371
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1381
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1373
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1383
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:276
 #: src/admin/components/import-export/SnapshotInfo.js:44
 msgid "Unknown"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1376
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1378
 msgid "Size:"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1391
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1393
 msgid "View LLMs.txt"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1400
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1408
 msgid "WordPress root directory is not writable, so no static llms.txt can be written. Set Delivery Method to \"Served by WordPress\" to publish without a file."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1423
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1431
 msgid "You have unsaved changes."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1447
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1455
 msgid "AI Recommendations"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1458
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1466
 msgid "Additional suggestions to enhance your website"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1488
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1496
 msgid "Recent AI Optimizations"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1491
+#: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1499
 msgid "History of your LLMs.txt AI optimization results"
 msgstr ""
 
@@ -13703,143 +13721,147 @@ msgstr ""
 msgid "Couldn’t reset the connection token."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:279
+#: src/admin/components/pages/MCPConnectionConfig.js:284
 msgid "Claude (web, mobile & desktop)"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:283
+#: src/admin/components/pages/MCPConnectionConfig.js:288
 msgid "In Claude, open Settings → Connectors → Add Connector → Add custom connector."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:287
+#: src/admin/components/pages/MCPConnectionConfig.js:292
 #: src/admin/setup-wizard/steps/StepMcpServer.js:152
 msgid "Paste the connector URL above and give it a name (e.g. ThinkRank)."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:291
+#: src/admin/components/pages/MCPConnectionConfig.js:296
 #: src/admin/setup-wizard/steps/StepMcpServer.js:156
 msgid "Click Add, then approve access when Claude asks you to sign in."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:304
+#: src/admin/components/pages/MCPConnectionConfig.js:309
 msgid "In ChatGPT, open Settings → Plugins → Add New."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:308
+#: src/admin/components/pages/MCPConnectionConfig.js:313
 msgid "Enter a name (e.g. ThinkRank)."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:309
+#: src/admin/components/pages/MCPConnectionConfig.js:314
 msgid "Paste the Connection URL above."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:310
+#: src/admin/components/pages/MCPConnectionConfig.js:315
 #: src/admin/setup-wizard/steps/StepMcpServer.js:177
 msgid "Save, then approve access when ChatGPT asks you to sign in."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:326
+#: src/admin/components/pages/MCPConnectionConfig.js:331
 msgid "CLI"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:328
+#: src/admin/components/pages/MCPConnectionConfig.js:333
 msgid "Command"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:331
+#: src/admin/components/pages/MCPConnectionConfig.js:336
 msgid "Copy the command above."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:332
+#: src/admin/components/pages/MCPConnectionConfig.js:337
 msgid "Run it in your terminal from your project directory."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:343
-#: src/admin/components/pages/MCPConnectionConfig.js:360
+#: src/admin/components/pages/MCPConnectionConfig.js:348
+#: src/admin/components/pages/MCPConnectionConfig.js:365
 msgid "Editor"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:346
+#: src/admin/components/pages/MCPConnectionConfig.js:351
 msgid "Add to Cursor"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:348
+#: src/admin/components/pages/MCPConnectionConfig.js:353
 msgid "Click \"Add to Cursor\". It opens Cursor with ThinkRank prefilled."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:352
+#: src/admin/components/pages/MCPConnectionConfig.js:357
 msgid "Confirm the install when Cursor asks."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:363
+#: src/admin/components/pages/MCPConnectionConfig.js:368
 msgid "Add to VS Code"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:365
+#: src/admin/components/pages/MCPConnectionConfig.js:370
 msgid "Click \"Add to VS Code\". It opens VS Code with ThinkRank prefilled."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:369
+#: src/admin/components/pages/MCPConnectionConfig.js:374
 msgid "Confirm the install when VS Code asks."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:375
-#: src/admin/components/pages/MCPConnectionConfig.js:532
+#: src/admin/components/pages/MCPConnectionConfig.js:380
+#: src/admin/components/pages/MCPConnectionConfig.js:548
 msgid "OAuth"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:376
+#: src/admin/components/pages/MCPConnectionConfig.js:381
 msgid "Editors & CLI"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:383
+#: src/admin/components/pages/MCPConnectionConfig.js:388
 msgid "Add ThinkRank to your client"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:386
+#: src/admin/components/pages/MCPConnectionConfig.js:391
 msgid "Pick your assistant below it opens or copies fully configured."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:396
+#: src/admin/components/pages/MCPConnectionConfig.js:401
 msgid "How it works"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:410
+#: src/admin/components/pages/MCPConnectionConfig.js:415
 msgid "Preparing your connection… reload the page if this persists."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:458
+#: src/admin/components/pages/MCPConnectionConfig.js:448
+msgid "This site can no longer display the connection token — the security keys in wp-config.php changed after it was minted. Clients you’ve already set up keep working. Reset the token below to get one you can copy again; that disconnects those clients until you paste the new command."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:474
 msgid "Reset the connection token if it may have leaked. This disconnects Claude Code, Cursor, VS Code, and Claude Desktop they’ll need the new command to reconnect. OAuth-connected apps are unaffected."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:468
-#: src/admin/components/pages/MCPConnectionConfig.js:494
+#: src/admin/components/pages/MCPConnectionConfig.js:484
+#: src/admin/components/pages/MCPConnectionConfig.js:510
 msgid "Reset token"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:478
+#: src/admin/components/pages/MCPConnectionConfig.js:494
 msgid "Reset connection token?"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:500
+#: src/admin/components/pages/MCPConnectionConfig.js:516
 msgid "A new token is generated immediately. Every header-based client (Claude Code, Cursor, VS Code, Claude Desktop) is disconnected and must reconnect with the new command. OAuth-connected apps like Claude on the web keep working."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:535
+#: src/admin/components/pages/MCPConnectionConfig.js:551
 msgid "Signs in with a one-time approval. No token to paste."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:546
+#: src/admin/components/pages/MCPConnectionConfig.js:562
 #: src/admin/setup-wizard/steps/StepMcpServer.js:360
 msgid "Connector URL"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:556
+#: src/admin/components/pages/MCPConnectionConfig.js:572
 #: src/admin/setup-wizard/steps/StepMcpServer.js:368
 msgid "Copy connector URL"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:595
+#: src/admin/components/pages/MCPConnectionConfig.js:611
 msgid "How to add a connector"
 msgstr ""
 
@@ -14874,32 +14896,38 @@ msgstr ""
 msgid "Keyword Density"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:341
-msgid "Image alt"
-msgstr ""
-
-#: src/admin/components/seo/SEOScoreSummary.js:342
-msgid "Slug"
-msgstr ""
-
-#: src/admin/components/seo/SEOScoreSummary.js:351
-msgid "Per-Keyword Analysis"
-msgstr ""
-
-#: src/admin/components/seo/SEOScoreSummary.js:352
-msgid "Keyword Analysis"
-msgstr ""
-
-#: src/admin/components/seo/SEOScoreSummary.js:366
-msgid "Best"
-msgstr ""
-
-#: src/admin/components/seo/SEOScoreSummary.js:405
+#: src/admin/components/seo/SEOScoreSummary.js:389
 msgid "Matched"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:406
+#: src/admin/components/seo/SEOScoreSummary.js:392
 msgid "Unmatched"
+msgstr ""
+
+#. translators: 1: number of keywords found in this location, 2: total focus keywords.
+#: src/admin/components/seo/SEOScoreSummary.js:397
+#, js-format
+msgid "%1$d of %2$d matched"
+msgstr ""
+
+#: src/admin/components/seo/SEOScoreSummary.js:419
+msgid "Image alt"
+msgstr ""
+
+#: src/admin/components/seo/SEOScoreSummary.js:420
+msgid "Slug"
+msgstr ""
+
+#: src/admin/components/seo/SEOScoreSummary.js:436
+msgid "Per-Keyword Analysis"
+msgstr ""
+
+#: src/admin/components/seo/SEOScoreSummary.js:437
+msgid "Keyword Analysis"
+msgstr ""
+
+#: src/admin/components/seo/SEOScoreSummary.js:451
+msgid "Best"
 msgstr ""
 
 #: src/admin/components/ui/AIButton.js:65
@@ -16618,35 +16646,35 @@ msgstr ""
 msgid "Analysis"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1433
+#: src/metabox/components/MetaboxApp.js:1495
 msgid "Optimize this content for search & AI"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1439
+#: src/metabox/components/MetaboxApp.js:1501
 msgid "Titles, meta description, focus keywords, schema and social previews."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1449
+#: src/metabox/components/MetaboxApp.js:1511
 msgid "Current SEO score"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1529
+#: src/metabox/components/MetaboxApp.js:1591
 msgid "The General tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1554
+#: src/metabox/components/MetaboxApp.js:1616
 msgid "The Analysis tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1581
+#: src/metabox/components/MetaboxApp.js:1643
 msgid "The Schema tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1597
+#: src/metabox/components/MetaboxApp.js:1659
 msgid "The Social tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1615
+#: src/metabox/components/MetaboxApp.js:1677
 msgid "The Advanced tab encountered an error."
 msgstr ""
 

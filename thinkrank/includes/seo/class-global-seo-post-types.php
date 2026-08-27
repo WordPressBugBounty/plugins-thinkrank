@@ -65,6 +65,10 @@ class Global_SEO_Post_Types {
             // Divi: the library plus every Theme Builder template type.
             'et_pb_layout', 'et_theme_builder', 'et_template',
             'et_header_layout', 'et_body_layout', 'et_footer_layout',
+            // Beaver Builder: saved templates (rows, columns, modules) and
+            // Beaver Themer's layouts. Same clutter Divi's Theme Builder
+            // templates caused before they were listed here (#449).
+            'fl-builder-template', 'fl-theme-layout',
         ], $object);
 
         return !in_array($object->name, (array) $excluded, true);

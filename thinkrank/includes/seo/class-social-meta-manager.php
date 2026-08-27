@@ -2812,6 +2812,14 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         $platform_tags = [];
 
         $core = \ThinkRank\Core\Settings::instance();
+
+        // One query for all seven instead of one query each. They are
+        // autoload=off like every thinkrank_* option, so WordPress cannot
+        // batch them out of `alloptions`, and this runs on every anonymous
+        // front-end request — on most sites to discover that all seven are
+        // empty and no tag is emitted at all (#393).
+        $core->prime(array_keys(self::PLATFORM_META_KEYS));
+
         // Core Settings (decrypted for sensitive keys) wins; the table value is a
         // backward-compat fallback for installs that saved these before the UI
         // moved to the Social Platforms tab.
@@ -2823,49 +2831,34 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             return $value;
         };
 
-        // Facebook meta tags
-        $facebook_app_id = $resolve('facebook_app_id');
-        if ('' !== $facebook_app_id) {
-            $platform_tags['fb:app_id'] = $facebook_app_id;
-        }
+        foreach (self::PLATFORM_META_KEYS as $key => $meta_name) {
+            $value = $resolve($key);
 
-        $facebook_admins = $resolve('facebook_admins');
-        if ('' !== $facebook_admins) {
-            $platform_tags['fb:admins'] = $facebook_admins;
-        }
-
-        // Pinterest site verification
-        $pinterest = $resolve('pinterest_site_verification');
-        if ('' !== $pinterest) {
-            $platform_tags['pinterest-site-verification'] = $pinterest;
-        }
-
-        // Instagram verification
-        $instagram = $resolve('instagram_verification');
-        if ('' !== $instagram) {
-            $platform_tags['instagram-site-verification'] = $instagram;
-        }
-
-        // TikTok verification
-        $tiktok = $resolve('tiktok_verification');
-        if ('' !== $tiktok) {
-            $platform_tags['tiktok-site-verification'] = $tiktok;
-        }
-
-        // YouTube channel verification
-        $youtube = $resolve('youtube_channel_id');
-        if ('' !== $youtube) {
-            $platform_tags['youtube-channel-id'] = $youtube;
-        }
-
-        // WhatsApp Business verification
-        $whatsapp = $resolve('whatsapp_business_id');
-        if ('' !== $whatsapp) {
-            $platform_tags['whatsapp-business-id'] = $whatsapp;
+            if ('' !== $value) {
+                $platform_tags[$meta_name] = $value;
+            }
         }
 
         return $platform_tags;
     }
+
+    /**
+     * Platform verification settings, mapped to the meta name each is emitted
+     * under. One list so the batch primed in generate_platform_meta_tags() and
+     * the keys it then reads cannot drift apart.
+     *
+     * @since 2.1.0
+     * @var array<string,string>
+     */
+    private const PLATFORM_META_KEYS = [
+        'facebook_app_id'             => 'fb:app_id',
+        'facebook_admins'             => 'fb:admins',
+        'pinterest_site_verification' => 'pinterest-site-verification',
+        'instagram_verification'      => 'instagram-site-verification',
+        'tiktok_verification'         => 'tiktok-site-verification',
+        'youtube_channel_id'          => 'youtube-channel-id',
+        'whatsapp_business_id'        => 'whatsapp-business-id',
+    ];
 
     /**
      * Convert OG, Twitter, and Platform tags to HTML meta tags

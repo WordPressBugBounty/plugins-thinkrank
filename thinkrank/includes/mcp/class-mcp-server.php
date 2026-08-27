@@ -117,6 +117,13 @@ final class Mcp_Server {
 
 		// Batched requests: an array of messages. Handle each; drop
 		// notification (id-less) responses per JSON-RPC.
+		//
+		// KEPT DELIBERATELY, not left behind by accident. The revision we
+		// advertise in PROTOCOL_VERSION (2025-06-18) removed JSON-RPC
+		// batching, so this is more than the spec requires — but accepting a
+		// batch harms nobody, while refusing one would break any client still
+		// on an older SDK that sends them. Please don't delete this as a spec
+		// violation; that trade is the reason it is here (#488).
 		if ( is_array( $msg ) && array_key_exists( 0, $msg ) ) {
 			$responses = [];
 			foreach ( $msg as $one ) {
@@ -158,6 +165,29 @@ final class Mcp_Server {
 		// Notifications (no id) get acknowledged with no response.
 		$is_notification = ! array_key_exists( 'id', $msg );
 
+		$response = self::handle_method( $method, $id, $params, $is_notification );
+
+		// JSON-RPC 2.0: a message with no `id` is a notification and MUST NOT
+		// be answered. Only the default branch below used to consult this, so
+		// initialize, ping, tools/list and tools/call sent without an id all
+		// fell through to self::result( null, ... ) and were answered with a
+		// 200 carrying "id": null instead of the 202 with no body a
+		// notification should get (#488). The message is still PROCESSED —
+		// only the reply is suppressed, which is what the spec asks for.
+		return $is_notification ? null : $response;
+	}
+
+	/**
+	 * Run one JSON-RPC method. Whether the caller wanted an answer is
+	 * dispatch()'s business, not this method's.
+	 *
+	 * @param string $method          Method name.
+	 * @param mixed  $id              JSON-RPC id (null for a notification).
+	 * @param array  $params          Method params.
+	 * @param bool   $is_notification Whether the message carried no id.
+	 * @return array|null
+	 */
+	private static function handle_method( string $method, $id, array $params, bool $is_notification ): ?array {
 		switch ( $method ) {
 			case 'initialize':
 				return self::result(

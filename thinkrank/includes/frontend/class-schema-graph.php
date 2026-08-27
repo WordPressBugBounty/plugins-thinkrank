@@ -98,6 +98,20 @@ class Schema_Graph {
     private const FAQ_WIDGET = 'thinkrank-faq';
 
     /**
+     * Third-party Elementor widgets that publish their own FAQPage.
+     *
+     * Maps widgetType to the setting whose 'yes' arms that widget's FAQ schema,
+     * so an accordion used purely as an accordion never suppresses ours.
+     *
+     * @since 2.1.0
+     * @var array<string,string>
+     */
+    private const FOREIGN_FAQ_WIDGETS = [
+        // Essential Addons for Elementor — Advanced Accordion.
+        'eael-adv-accordion' => 'eael_adv_accordion_faq_schema_show',
+    ];
+
+    /**
      * Singleton instance.
      *
      * @var self|null
@@ -124,6 +138,14 @@ class Schema_Graph {
      * @var array<string,array>
      */
     private array $faq_entities = [];
+
+    /**
+     * Memoized answer to "should this request emit a FAQPage at all?".
+     *
+     * @since 2.1.0
+     * @var bool|null
+     */
+    private ?bool $emit_faqpage = null;
 
     /**
      * Whether FAQ content was taken from the rendered post body (block/widget),
@@ -202,9 +224,18 @@ class Schema_Graph {
 
         $type = $this->effective_type($schema, $type);
 
-        if ('FAQPage' === $type) {
+        if ('FAQPage' === $type && $this->should_emit_faqpage()) {
             $this->add_faq_entities($schema['mainEntity'] ?? []);
             return;
+        }
+
+        // A third party owns the page's FAQPage, so ours must not be emitted
+        // (#494). Demote rather than drop: a FAQPage is still the page, and
+        // returning here would leave the URL with no page-level entity at all.
+        if ('FAQPage' === $type) {
+            $schema['@type'] = 'WebPage';
+            unset($schema['mainEntity']);
+            $type = 'WebPage';
         }
 
         // A per-post deployment can be something that isn't what the page is
@@ -255,8 +286,15 @@ class Schema_Graph {
 
         $effective_type = $this->effective_type($schema, $type);
 
+        // A supporting FAQPage never survives as its own node: its questions
+        // merge into the graph's single FAQ node, or are dropped when a third
+        // party already owns the page's FAQPage (#494). Unlike the primary
+        // slot there is nothing to preserve here, so demotion would only add a
+        // second page-level entity beside the real one.
         if ('FAQPage' === $effective_type) {
-            $this->add_faq_entities($schema['mainEntity'] ?? []);
+            if ($this->should_emit_faqpage()) {
+                $this->add_faq_entities($schema['mainEntity'] ?? []);
+            }
             return;
         }
 
@@ -557,13 +595,11 @@ class Schema_Graph {
 
             $text = wp_kses_post($answer);
 
-            // Mirrors Blocks_Manager::build_faq_schema(): a per-item image is
-            // carried inside the answer HTML (Yoast-style).
-            $image_url = isset($pair['imageUrl']) ? esc_url((string) $pair['imageUrl']) : '';
-            if ($image_url !== '') {
-                $image_alt = isset($pair['imageAlt']) ? esc_attr((string) $pair['imageAlt']) : '';
-                $text     .= ' <img src="' . $image_url . '" alt="' . $image_alt . '" />';
-            }
+            // Mirrors Blocks_Manager::build_faq_schema() by calling the same
+            // builder, so the two paths cannot drift — the per-item image is
+            // resolved from its attachment id, carries intrinsic dimensions,
+            // and disappears if the media was deleted (#418).
+            $text .= \ThinkRank\Editor\Blocks_Manager::faq_image_markup(is_array($pair) ? $pair : []);
 
             $entities[] = [
                 '@type'          => 'Question',
@@ -1044,13 +1080,122 @@ class Schema_Graph {
     }
 
     /**
+     * Whether ThinkRank should emit a FAQPage on this request.
+     *
+     * ThinkRank emitted its FAQPage unconditionally, so a URL whose FAQ was
+     * already published by another plugin carried two FAQPage entities — each
+     * valid on its own, together ambiguous about which one describes the page
+     * (#494).
+     *
+     * The answer cannot be read off the rendered page. Third-party FAQ schema
+     * is typically printed in `wp_footer` from data its widget only gathers
+     * while the body renders, which is long after this graph goes out in
+     * `wp_head`; at the moment of the decision the foreign FAQPage does not
+     * exist yet, in the buffer or anywhere else. Detection therefore inspects
+     * the stored post content, the same way collect_elementor_faq() finds
+     * ThinkRank's own widget.
+     *
+     * @since 2.1.0
+     * @return bool
+     */
+    private function should_emit_faqpage(): bool {
+        if (null !== $this->emit_faqpage) {
+            return $this->emit_faqpage;
+        }
+
+        $post = (function_exists('is_singular') && is_singular()) ? get_post() : null;
+        if (!$post instanceof \WP_Post) {
+            $post = null;
+        }
+
+        $emit = !$this->has_foreign_faq_source($post);
+
+        /**
+         * Filter whether ThinkRank emits its FAQPage entity.
+         *
+         * Return false from a plugin that publishes its own FAQPage on the same
+         * URL and ThinkRank drops its FAQ node, leaving the page one
+         * unambiguous FAQPage. ThinkRank already defaults this to false for the
+         * FAQ sources it recognises, so the filter is for the ones it does not
+         * — or for forcing its FAQPage back on.
+         *
+         * @since 2.1.0
+         *
+         * @param bool          $emit Whether to emit the FAQPage node.
+         * @param \WP_Post|null $post Post being viewed, or null when not singular.
+         */
+        $this->emit_faqpage = (bool) apply_filters('thinkrank_emit_faqpage', $emit, $post);
+
+        return $this->emit_faqpage;
+    }
+
+    /**
+     * Whether another plugin publishes a FAQPage for this post.
+     *
+     * @since 2.1.0
+     * @param \WP_Post|null $post Post being viewed.
+     * @return bool
+     */
+    private function has_foreign_faq_source(?\WP_Post $post): bool {
+        if (!$post instanceof \WP_Post) {
+            return false;
+        }
+
+        $raw = get_post_meta($post->ID, '_elementor_data', true);
+        if (empty($raw) || !is_string($raw)) {
+            return false;
+        }
+
+        $elements = json_decode($raw, true);
+
+        return is_array($elements) && $this->elements_have_foreign_faq($elements);
+    }
+
+    /**
+     * Recurse an Elementor element tree looking for a third-party FAQ producer.
+     *
+     * @since 2.1.0
+     * @param array $elements Elementor elements.
+     * @return bool
+     */
+    private function elements_have_foreign_faq(array $elements): bool {
+        foreach ($elements as $element) {
+            if (!is_array($element)) {
+                continue;
+            }
+
+            // Stored JSON, so nothing guarantees the shape: a non-string
+            // widgetType would be an illegal array offset, not a miss.
+            $widget   = is_string($element['widgetType'] ?? null) ? $element['widgetType'] : '';
+            $gate     = self::FOREIGN_FAQ_WIDGETS[$widget] ?? '';
+            $settings = is_array($element['settings'] ?? null) ? $element['settings'] : [];
+
+            if ($gate !== '' && 'yes' === ($settings[$gate] ?? '')) {
+                return true;
+            }
+
+            if (!empty($element['elements']) && is_array($element['elements'])
+                && $this->elements_have_foreign_faq($element['elements'])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Build the single FAQ node, if any questions were collected.
+     *
+     * Gated on should_emit_faqpage(): every FAQ source in the plugin — the
+     * block, the Elementor widget, a deployed row and the post-type default —
+     * funnels through here, so this is the one place that can hold the whole
+     * plugin's FAQPage back (#494).
      *
      * @since 1.32.0
      * @return array|null
      */
     private function build_faq_node(): ?array {
-        if (empty($this->faq_entities)) {
+        if (empty($this->faq_entities) || !$this->should_emit_faqpage()) {
             return null;
         }
 

@@ -319,6 +319,45 @@ class Settings {
     }
 
     /**
+     * Warm the option cache for a batch of setting keys in one query.
+     *
+     * Every `thinkrank_*` option is autoload=off, so WordPress cannot serve
+     * them from `alloptions` and each get() below is its own round-trip. A
+     * caller that reads a known list of keys should prime it first: on a
+     * ~1ms managed-hosting round-trip, sixteen of those on an anonymous
+     * pageview is ~16ms spent on values the page may not use (#393).
+     *
+     * get() memoizes within the request, so only the first read of each key
+     * ever reaches the database — this is what collapses those first reads.
+     * Keys already memoized are left out of the batch.
+     *
+     * wp_prime_option_caches() is WP 6.4+; the plugin supports 6.0, so an
+     * older site simply keeps the previous behaviour.
+     *
+     * @since 2.1.0
+     *
+     * @param string[] $keys Setting keys, without the `thinkrank_` prefix.
+     * @return void
+     */
+    public function prime(array $keys): void {
+        if (!function_exists('wp_prime_option_caches')) {
+            return;
+        }
+
+        $unread = [];
+
+        foreach ($keys as $key) {
+            if (!isset($this->cache[$key])) {
+                $unread[] = 'thinkrank_' . $key;
+            }
+        }
+
+        if (!empty($unread)) {
+            wp_prime_option_caches($unread);
+        }
+    }
+
+    /**
      * Get setting value
      * 
      * @param string $key Setting key

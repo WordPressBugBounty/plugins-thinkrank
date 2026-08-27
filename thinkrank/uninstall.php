@@ -70,6 +70,24 @@ class ThinkRank_Uninstaller {
         // the user has explicitly enabled "Delete all data on uninstall".
         $keep_data = (bool) get_option('thinkrank_keep_data_on_uninstall', true);
 
+        // Files first, and regardless of $keep_data.
+        //
+        // Ordering: every ownership test in there reads state the database
+        // cleanup below is about to destroy — sitemap filenames come from the
+        // settings table, the IndexNow key file's name from an option. Run it
+        // after, and there is nothing left to identify our files by.
+        //
+        // Not gated on $keep_data because these are not the user's data. They
+        // are artifacts of a plugin that is being removed, and leaving them is
+        // actively harmful: a real file at /sitemap_index.xml is served by the
+        // web server before WordPress boots, so it goes on shadowing RankMath,
+        // Squirrly or core's own sitemap indefinitely — while rendering blank,
+        // since the XSL stylesheet it points at leaves with the plugin (#510).
+        // "Keep my data" means keep the settings for a reinstall, not keep a
+        // dead file breaking the next plugin. On reinstall they are republished
+        // from the settings that were kept.
+        self::remove_webroot_files();
+
         if (!$keep_data) {
             self::remove_database_tables();
             self::remove_options();
@@ -82,6 +100,36 @@ class ThinkRank_Uninstaller {
         self::remove_cron_jobs();
         self::remove_capabilities();
         self::mark_uninstalled();
+    }
+
+    /**
+     * Delete every file ThinkRank published into the WordPress web root.
+     *
+     * The sitemap, robots.txt, llms.txt and the IndexNow key file are real files
+     * in `ABSPATH`, not routes, so removing the plugin has to remove them too —
+     * otherwise the web server keeps serving a sitemap belonging to a plugin
+     * that is no longer installed, and the next SEO plugin's own sitemap can
+     * never answer (#510).
+     *
+     * @since 2.1.0
+     *
+     * @return void
+     */
+    private static function remove_webroot_files(): void {
+        // No autoloader here — WP_UNINSTALL_PLUGIN loads this file without the
+        // plugin — so the removal logic comes from the same plain function file
+        // the deactivator and the sitemap generator use. One copy, not three.
+        $shared = __DIR__ . '/includes/cleanup-webroot.php';
+
+        if (!is_readable($shared)) {
+            return;
+        }
+
+        require_once $shared;
+
+        if (function_exists('thinkrank_webroot_cleanup')) {
+            thinkrank_webroot_cleanup();
+        }
     }
 
     /**

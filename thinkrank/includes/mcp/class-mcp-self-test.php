@@ -111,6 +111,16 @@ final class Mcp_Self_Test {
 			return $result;
 		}
 
+		if ( Mcp_Pairing::state()['token_sealed'] ) {
+			// A token exists and still authenticates the clients holding it,
+			// but this site can no longer decrypt it, so there is nothing to
+			// present. Probing with '' would report an authentication failure
+			// and point support at entirely the wrong thing.
+			$result['stage']   = 'token_sealed';
+			$result['message'] = __( 'A connection token exists but can no longer be read on this site — the security keys in wp-config.php changed after it was minted. Clients already set up with it keep working. Use Reset token to mint one this site can show, then run the test again.', 'thinkrank' );
+			return $result;
+		}
+
 		$token = Mcp_Pairing::site_token();
 
 		$pretty = self::probe_jsonrpc( $endpoint, $token );
@@ -346,6 +356,39 @@ final class Mcp_Self_Test {
 	 */
 	private static function probe_discovery(): array {
 		$documents = [];
+
+		// --- Published files vs. the identity this site has NOW -----------
+		// The static /.well-known/ documents embed absolute home_url()-derived
+		// identifiers, and the whole reason they exist is that the host serves
+		// them before WordPress. After a domain change, an http->https switch
+		// or a staging clone, the stale copy therefore wins over the correct
+		// dynamic route and the site advertises an issuer it no longer owns,
+		// which a spec-compliant client must refuse (#486).
+		//
+		// Checked on disk, ahead of the HTTP probes below, because loopback
+		// does not always take the path an external client does — a site can
+		// serve a stale document to the internet while our own request never
+		// sees it, and every probe below then passes.
+		$stale = Mcp_Static_Discovery::stale_document();
+		if ( null !== $stale ) {
+			Mcp_Static_Discovery::refresh();
+			$still_stale = Mcp_Static_Discovery::stale_document();
+
+			if ( null !== $still_stale ) {
+				return [
+					'stage'     => 'stale_static_discovery',
+					'documents' => $documents,
+					'detail'    => sprintf(
+						/* translators: 1: file path relative to the site root, 2: identifier name, 3: value found in the file, 4: value it should carry. */
+						__( 'The static discovery file %1$s advertises %2$s as %3$s, but this site is %4$s. It was written before the site URL changed, the host serves it ahead of WordPress, and it could not be rewritten or removed — so clients read the old identity and refuse to connect. Delete that file from the site root, or restore write access there and run this test again.', 'thinkrank' ),
+						$still_stale['file'],
+						$still_stale['key'],
+						'' === $still_stale['found'] ? __( 'nothing', 'thinkrank' ) : $still_stale['found'],
+						$still_stale['expected']
+					),
+				];
+			}
+		}
 
 		// --- The documents clients are POINTED at (must work) -------------
 		// The 401 challenge advertises the REST-served resource metadata, and

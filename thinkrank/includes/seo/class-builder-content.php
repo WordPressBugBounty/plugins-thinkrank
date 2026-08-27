@@ -53,6 +53,12 @@ class Builder_Content {
         '_oxygen_data',            // Oxygen (earlier releases)
         'ct_builder_shortcodes',   // Oxygen classic
         '_elementor_data',         // Elementor
+        // Beaver Builder. Published layout first: `_fl_builder_draft` holds
+        // unsaved changes and would score content the visitor cannot see.
+        // Both are arrays of stdClass nodes, which is why the walker below
+        // has to treat objects like arrays (#449).
+        '_fl_builder_data',        // Beaver Builder (published)
+        '_fl_builder_draft',       // Beaver Builder (unsaved changes)
     ];
 
     /**
@@ -292,9 +298,11 @@ class Builder_Content {
                 continue;
             }
 
-            // Some builders store an already-decoded array.
-            if (is_array($stored)) {
-                $text = self::text_from_tree($stored);
+            // Some builders store an already-decoded tree — an array for most,
+            // an array of objects for Beaver Builder (#449).
+            $tree = self::as_children($stored);
+            if (null !== $tree) {
+                $text = self::text_from_tree($tree);
                 if (!self::is_blank($text)) {
                     return $text;
                 }
@@ -302,6 +310,41 @@ class Builder_Content {
         }
 
         return '';
+    }
+
+    /**
+     * A node's children, whether it stores them as an array or an object.
+     *
+     * The walker used to return immediately on `!is_array($node)`, so an
+     * object node was dropped along with its entire subtree — silently, as
+     * `''`, which the caller reads as "this builder stored nothing" rather
+     * than "this walker cannot read this shape".
+     *
+     * Beaver Builder stores `_fl_builder_data` as an array of stdClass nodes,
+     * each with a stdClass `settings` object, so every node would have been
+     * dropped and adding its meta key alone would have looked like it worked
+     * and changed nothing. Not BB-specific: any builder storing objects hits
+     * this, and that shape will come up again (#449).
+     *
+     * @since 2.1.0
+     *
+     * @param mixed $node Candidate node.
+     * @return array<string|int,mixed>|null Traversable children, or null.
+     */
+    private static function as_children($node): ?array {
+        if (is_array($node)) {
+            return $node;
+        }
+
+        // Deliberately not is_object(): a builder can store a value object
+        // (DateTime, a WP_Post) whose properties are not content, and
+        // get_object_vars() on those yields noise. stdClass is what the
+        // JSON/serialize round-trip produces, which is the shape we want.
+        if ($node instanceof \stdClass) {
+            return get_object_vars($node);
+        }
+
+        return null;
     }
 
     /**
@@ -326,7 +369,8 @@ class Builder_Content {
         // destination are separate sibling fields, so once the tree is
         // flattened to leaves the pairing is gone.
         $reconstruct = static function ($node) use (&$reconstruct, &$collected, &$consumed): void {
-            if (!is_array($node)) {
+            $node = self::as_children($node);
+            if (null === $node) {
                 return;
             }
 
@@ -354,8 +398,9 @@ class Builder_Content {
 
         // Pass 2 — remaining visible text.
         $walk = static function ($node, $key = null) use (&$walk, &$collected, &$consumed): void {
-            if (is_array($node)) {
-                foreach ($node as $child_key => $child) {
+            $children = self::as_children($node);
+            if (null !== $children) {
+                foreach ($children as $child_key => $child) {
                     $walk($child, is_string($child_key) ? $child_key : $key);
                 }
                 return;
@@ -491,8 +536,9 @@ class Builder_Content {
             }
 
             // Elementor and Breakdance both nest the destination one level down.
-            if (is_array($value)) {
-                foreach ($value as $nested_key => $nested) {
+            $nested_values = self::as_children($value);
+            if (null !== $nested_values) {
+                foreach ($nested_values as $nested_key => $nested) {
                     if (is_string($nested_key)
                         && in_array(strtolower($nested_key), ['url', 'href', 'permalink'], true)
                         && is_string($nested)
@@ -523,10 +569,11 @@ class Builder_Content {
                 return ['url' => trim($value), 'alt' => ''];
             }
 
-            if (is_array($value)) {
+            $nested_values = self::as_children($value);
+            if (null !== $nested_values) {
                 $url = '';
                 $alt = '';
-                foreach ($value as $nested_key => $nested) {
+                foreach ($nested_values as $nested_key => $nested) {
                     if (!is_string($nested_key) || !is_string($nested)) {
                         continue;
                     }

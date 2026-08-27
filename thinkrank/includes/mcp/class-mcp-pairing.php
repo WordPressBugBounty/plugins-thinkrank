@@ -94,20 +94,32 @@ final class Mcp_Pairing {
 	/**
 	 * Current pairing state, defaults merged.
 	 *
-	 * @return array{site_token:string,token_hash:string,connected:bool,connected_at:int,scopes:string[],user_id:int,last_used:int}
+	 * @return array{site_token:string,token_hash:string,token_sealed:bool,connected:bool,connected_at:int,scopes:string[],user_id:int,last_used:int}
 	 */
 	public static function state(): array {
 		$stored = get_option( self::OPTION, [] );
 		if ( ! is_array( $stored ) ) {
 			$stored = [];
 		}
-		$raw = isset( $stored['site_token'] ) ? (string) $stored['site_token'] : '';
+		$raw   = isset( $stored['site_token'] ) ? (string) $stored['site_token'] : '';
+		$plain = '' === $raw ? '' : Secret_At_Rest::decrypt( $raw );
+
+		// Sealed: something IS stored, but this site can no longer open it —
+		// the auth salt rotated, or sodium went away under us (decrypt() hands
+		// the envelope back unchanged in that case). Either way there is no
+		// displayable credential, and the envelope must never be passed off as
+		// one: it would be copied into a client and 401 forever.
+		$sealed = '' !== $raw && ( '' === $plain || Secret_At_Rest::is_encrypted( $plain ) );
 
 		return [
 			// Decrypted for display and for the self-test's own probe. Stored
 			// encrypted (#396) — a database read on its own no longer yields a
 			// usable admin-equivalent credential.
-			'site_token'   => '' === $raw ? '' : Secret_At_Rest::decrypt( $raw ),
+			'site_token'   => $sealed ? '' : $plain,
+			// Whether a stored token exists that cannot be shown here. Callers
+			// use this to tell "never connected" apart from "connected, but
+			// this site cannot display the token any more".
+			'token_sealed' => $sealed,
 			// What authorize() compares against. Held separately so a token
 			// whose ciphertext can no longer be opened — the auth salt was
 			// rotated, the site was migrated without wp-config — keeps
@@ -236,11 +248,18 @@ final class Mcp_Pairing {
 	/**
 	 * Whether an MCP connection token is currently active for this site.
 	 *
+	 * Deliberately reads the hash, not the decrypted token. Those are not the
+	 * same question: after an auth salt rotation the ciphertext will not open,
+	 * so `site_token` is '' — but `token_hash` still verifies the credential
+	 * every configured client is holding, and verify_token() still accepts it.
+	 * Answering "not connected" there made ensure_connected() mint a fresh
+	 * token over the hash, which was the only surviving copy of the live one.
+	 *
 	 * @return bool
 	 */
 	public static function is_connected(): bool {
 		$state = self::state();
-		return $state['connected'] && '' !== $state['site_token'];
+		return $state['connected'] && ( '' !== $state['token_hash'] || '' !== $state['site_token'] );
 	}
 
 	/**
@@ -263,6 +282,9 @@ final class Mcp_Pairing {
 		return [
 			'connected'         => self::is_connected(),
 			'connection_token'  => $state['site_token'],
+			// Connected, but the token cannot be displayed on this site any
+			// more. The screen offers a rotate instead of a blank recipe.
+			'token_sealed'      => $state['token_sealed'],
 			'connect_url'       => self::connect_url(),
 			'mcp_endpoint'      => self::site_endpoint(),
 			'mcp_endpoint_rest' => self::site_endpoint_fallback(),
@@ -377,12 +399,36 @@ final class Mcp_Pairing {
 	 * @return array<string,mixed> Public status.
 	 */
 	public static function connect( bool $read_only = false ): array {
-		$state    = self::state();
-		$existing = '' !== $state['site_token'];
-		$token    = $existing ? $state['site_token'] : self::mint_token();
+		$state = self::state();
+		// The hash is what decides "is there a pairing", not the decrypted
+		// token: after an auth salt rotation the ciphertext will not open, but
+		// the credential every configured client holds still authenticates
+		// against the hash.
+		$existing = '' !== $state['token_hash'] || '' !== $state['site_token'];
 		$scopes   = $existing && ! empty( $state['scopes'] )
 			? $state['scopes']
 			: self::scopes_for( $read_only );
+
+		if ( $existing && $state['token_sealed'] ) {
+			// Keeping a pairing this site can no longer read. Falling through
+			// would re-encrypt $state['site_token'] — which is '' here — and
+			// write hash('') over token_hash, destroying the last copy of a
+			// live credential and silently resetting its scopes and owner.
+			// Touch only the metadata; rotate() is the deliberate re-mint.
+			$stored              = get_option( self::OPTION, [] );
+			$stored              = is_array( $stored ) ? $stored : [];
+			$stored['connected'] = true;
+			$stored['scopes']    = $scopes;
+			if ( empty( $stored['user_id'] ) ) {
+				$stored['user_id'] = get_current_user_id();
+			}
+
+			update_option( self::OPTION, $stored, false );
+
+			return self::public_status();
+		}
+
+		$token = $existing ? $state['site_token'] : self::mint_token();
 
 		update_option(
 			self::OPTION,

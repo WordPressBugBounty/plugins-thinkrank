@@ -650,20 +650,8 @@ class Settings_Manager {
         // thinkrank_* option is autoload=off, so WordPress cannot serve them
         // from `alloptions` and each Settings->get() below was its own
         // round-trip — 16 of them on every anonymous front-end request, on
-        // pages that use none of the values. Settings::get() memoizes within a
-        // request, so only the first read of each key ever hit the database;
-        // this collapses those first reads into a single query (#393).
-        //
-        // wp_prime_option_caches() is WP 6.4+; the plugin supports 6.0, so an
-        // older site simply keeps the previous behaviour.
-        if (function_exists('wp_prime_option_caches')) {
-            wp_prime_option_caches(array_map(
-                static function (string $key): string {
-                    return 'thinkrank_' . $key;
-                },
-                $category_config['keys']
-            ));
-        }
+        // pages that use none of the values (#393).
+        $this->core_settings->prime($category_config['keys']);
 
         $settings = [];
 
