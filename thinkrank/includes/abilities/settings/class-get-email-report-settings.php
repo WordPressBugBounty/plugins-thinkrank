@@ -33,7 +33,7 @@ class Get_Email_Report_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-email-report-settings';
 		$this->label       = __( 'Get ThinkRank Email Report Settings', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank Email Reporting settings: enable toggle, frequency, recipients, branding/content fields, the plan capability map, the next scheduled send, the available report sections, and the tokens usable in text fields.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank Email Reporting settings: enable toggle, frequency, recipients, branding/content fields, the plan capability map, the next scheduled send, the available report sections, and the tokens usable in text fields. Use update-email-report-settings to change them, and send-email-report-test to send one now.', 'thinkrank' );
 	}
 
 	/**

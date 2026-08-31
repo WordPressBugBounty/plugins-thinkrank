@@ -210,12 +210,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     public function generate_sitemap(array $options = []): string {
         $settings = $this->get_settings('site');
 
-        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-
-        // Add XSL stylesheet only if styling is enabled
-        if (!empty($settings['enable_styling'])) {
-            $xml .= '<?xml-stylesheet type="text/xsl" href="' . home_url('/wp-content/plugins/thinkrank/static/xsl/sitemap.xsl') . '"?>' . "\n";
-        }
+        $xml = $this->xml_prolog($settings, 'sitemap.xsl');
 
         // Add image namespace if images are enabled
         if (!empty($settings['include_images'])) {
@@ -752,6 +747,35 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     }
 
     /**
+     * The XML declaration, ownership marker and optional stylesheet every
+     * sitemap document opens with.
+     *
+     * The marker is written unconditionally, and that is the point: removal on
+     * deactivate and uninstall deletes a web-root sitemap only when the file
+     * says it is ours, and our filenames are the canonical ones another SEO
+     * plugin writes too (#515). Tying the proof to `enable_styling` — the one
+     * marker older versions left — would mean a site with styling off either
+     * kept a shadowing file behind (#510) or had a competitor's deleted.
+     *
+     * @since 2.1.1
+     *
+     * @param array  $settings   Sitemap settings (read for `enable_styling`).
+     * @param string $stylesheet Stylesheet basename in static/xsl/.
+     * @return string Prolog lines, newline-terminated.
+     */
+    private function xml_prolog(array $settings, string $stylesheet): string {
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+        $xml .= THINKRANK_SITEMAP_MARKER . "\n";
+
+        // The stylesheet is presentation only, so it stays opt-in.
+        if (!empty($settings['enable_styling'])) {
+            $xml .= '<?xml-stylesheet type="text/xsl" href="' . home_url('/wp-content/plugins/thinkrank/static/xsl/' . $stylesheet) . '"?>' . "\n";
+        }
+
+        return $xml;
+    }
+
+    /**
      * Wrap a set of <url> entry strings in a complete <urlset> document.
      *
      * @since 1.14.0
@@ -762,11 +786,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return string Full sitemap XML
      */
     private function wrap_urlset(array $entries, array $settings, bool $with_image_ns): string {
-        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-
-        if (!empty($settings['enable_styling'])) {
-            $xml .= '<?xml-stylesheet type="text/xsl" href="' . home_url('/wp-content/plugins/thinkrank/static/xsl/sitemap.xsl') . '"?>' . "\n";
-        }
+        $xml = $this->xml_prolog($settings, 'sitemap.xsl');
 
         if ($with_image_ns && !empty($settings['include_images'])) {
             $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">' . "\n";
@@ -1584,6 +1604,42 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     }
 
     /**
+     * Can this web-root file be shown to be a sitemap ThinkRank wrote?
+     *
+     * The generator deletes as often as cleanup does — a segment that dropped
+     * out of the set, a pagination page beyond the new count, the local sitemap
+     * after the business identity was cleared — and until 2.1.1 it did all
+     * three by filename alone. That is the #515 bug on a far more frequent
+     * trigger: our names are the canonical ones, so an ordinary regeneration
+     * (post save, term change, settings save) destroyed RankMath's
+     * `sitemap-tags.xml` and `local-sitemap.xml` with no deactivation involved.
+     *
+     * Every name the generator derives comes from the current settings — the
+     * url pattern, the configured `sitemap_urls`, `local-sitemap.xml` — but the
+     * ownership test is still asked with `$name_derived = false`, which switches
+     * off the legacy fallback for the whole generator side.
+     *
+     * The fallback exists to recover a pre-2.1.1 file written with
+     * `enable_styling` off, which carries neither marker. That recovery belongs
+     * to the once-off cleanup paths. Here it can only do harm: this method runs
+     * on every post save, and everything this version writes carries
+     * THINKRANK_SITEMAP_MARKER, so after the site's first regeneration an
+     * unmarked file at one of our names is by definition somebody else's — and
+     * deleting it on an ordinary regeneration is #515 through the more common
+     * door. The cost is a stale unmarked segment left on disk until deactivation
+     * picks it up, which is the safe direction to fail in.
+     *
+     * @since 2.1.1
+     *
+     * @param string $path     Absolute path to a file in the web root.
+     * @param array  $settings Sitemap settings.
+     * @return bool True when the file may be deleted.
+     */
+    private function webroot_sitemap_is_ours(string $path, array $settings): bool {
+        return thinkrank_webroot_sitemap_is_ours($path, $settings, false);
+    }
+
+    /**
      * Auto-regenerate sitemap (called by scheduled action)
      *
      * @since 1.0.0
@@ -1852,7 +1908,20 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         }
 
         if ($wp_filesystem) {
-            return $wp_filesystem->put_contents($sitemap_path, $sitemap_xml, FS_CHMOD_FILE);
+            $written = $wp_filesystem->put_contents($sitemap_path, $sitemap_xml, FS_CHMOD_FILE);
+
+            if ($written) {
+                // Every sitemap this version writes carries the ownership
+                // marker, so once one has been written an unmarked file at one
+                // of our names cannot be ours. Recording that retires the
+                // legacy fallback for this install — see
+                // thinkrank_webroot_sitemap_is_ours().
+                if (get_option(THINKRANK_SITEMAP_MARKED_WRITE_OPTION) !== '1') {
+                    update_option(THINKRANK_SITEMAP_MARKED_WRITE_OPTION, '1', false);
+                }
+            }
+
+            return $written;
         }
 
         // WP_Filesystem initialization failed
@@ -2087,7 +2156,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 }
 
                 // Remove pages left over from a previous, larger generation.
-                $this->cleanup_stale_pages($sitemap_config['url'], $page);
+                $this->cleanup_stale_pages($sitemap_config['url'], $page, $settings);
 
             } catch (\Exception $e) {
                 $results['errors'][] = "Error generating {$type} sitemap: " . $e->getMessage();
@@ -2202,6 +2271,11 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 if (!file_exists($path)) {
                     continue;
                 }
+                // A name we could have published is not proof we published
+                // this file: RankMath and core write at the same paths (#515).
+                if (!$this->webroot_sitemap_is_ours($path, $settings)) {
+                    continue;
+                }
                 if ($wp_filesystem->delete($path)) {
                     $removed[] = basename($path);
                 }
@@ -2239,9 +2313,13 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $entries  = $this->collect_local_entries();
 
         if (empty($entries)) {
-            // Business identity was cleared — drop any file left from before.
+            // Business identity was cleared — drop the file we left from
+            // before, but only ours. `local-sitemap.xml` is the name Rank Math
+            // publishes under too (this method mirrors it deliberately), so on
+            // a migrated site the file at that path may never have been ours
+            // to delete (#515).
             $path = ABSPATH . 'local-sitemap.xml';
-            if (file_exists($path)) {
+            if (file_exists($path) && $this->webroot_sitemap_is_ours($path, $settings)) {
                 wp_delete_file($path);
             }
             return false;
@@ -2391,11 +2469,16 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      *
      * @since 1.14.0
      *
+     * @since 2.1.1 Each candidate must pass the content ownership test — a
+     *              `-N.xml` page of another plugin's sitemap paginates our
+     *              stem exactly as ours does (#515).
+     *
      * @param string $base_url      Base (page 1) sitemap URL
      * @param int    $current_pages Number of pages generated this run
+     * @param array  $settings      Sitemap settings, for the ownership test.
      * @return void
      */
-    private function cleanup_stale_pages(string $base_url, int $current_pages): void {
+    private function cleanup_stale_pages(string $base_url, int $current_pages, array $settings): void {
         $filename = basename(wp_parse_url($base_url, PHP_URL_PATH));
         if (!preg_match('/^(.*)\.xml$/i', $filename, $m)) {
             return;
@@ -2414,7 +2497,9 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $candidates = glob(ABSPATH . $stem . '-*.xml') ?: [];
         foreach ($candidates as $path) {
             // Only delete numeric-suffixed pages beyond the current count.
-            if (preg_match('/-(\d+)\.xml$/', basename($path), $mm) && (int) $mm[1] > $current_pages) {
+            if (preg_match('/-(\d+)\.xml$/', basename($path), $mm)
+                && (int) $mm[1] > $current_pages
+                && $this->webroot_sitemap_is_ours($path, $settings)) {
                 $wp_filesystem->delete($path);
             }
         }
@@ -2431,12 +2516,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return string Sitemap index XML
      */
     private function generate_sitemap_index(array $children, array $settings): string {
-        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-
-        // Add XSL stylesheet only if styling is enabled
-        if (!empty($settings['enable_styling'])) {
-            $xml .= '<?xml-stylesheet type="text/xsl" href="' . home_url('/wp-content/plugins/thinkrank/static/xsl/sitemap-index.xsl') . '"?>' . "\n";
-        }
+        $xml = $this->xml_prolog($settings, 'sitemap-index.xsl');
         $xml .= '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
 
         $site_url = home_url();

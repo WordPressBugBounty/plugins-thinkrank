@@ -16,6 +16,11 @@ declare(strict_types=1);
 
 namespace ThinkRank\SEO;
 
+// Prevent direct access
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 // Ensure dependencies are loaded
 if (!class_exists('ThinkRank\\SEO\\Abstract_SEO_Manager')) {
     require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-abstract-seo-manager.php';

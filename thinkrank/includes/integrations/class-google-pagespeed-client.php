@@ -112,6 +112,32 @@ class Google_PageSpeed_Client extends Google_API_Base_Client {
     }
 
     /**
+     * Whether the site holds a credential the PageSpeed API will accept.
+     *
+     * The counterpart to for_site(): either of the first two rungs of its auth
+     * order is enough, and a caller that wants to refuse the keyless third rung
+     * asks this rather than testing one credential itself. Callers that did the
+     * latter locked out every site configured with only an API key — the
+     * credential for_site() actually *prefers*, since a dedicated key bills its
+     * own project quota (#519).
+     *
+     * @since 2.1.1
+     *
+     * @return bool True when an API key or an OAuth token is configured.
+     */
+    public static function site_has_credentials(): bool {
+        if (!class_exists('\\ThinkRank\\Core\\Settings')) {
+            return false;
+        }
+
+        $settings = new \ThinkRank\Core\Settings();
+
+        // OAuth tokens are encrypted at rest; Settings::get() decrypts them.
+        return '' !== trim((string) $settings->get('google_pagespeed_api_key', ''))
+            || '' !== trim((string) $settings->get('google_access_token', ''));
+    }
+
+    /**
      * Run PageSpeed test for a URL
      *
      * @param string $url URL to test

@@ -104,7 +104,7 @@ class Update_Schema_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-schema-settings';
 		$this->label       = __( 'Update ThinkRank Schema Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank structured-data (schema) settings. When auto_deploy is enabled, saving automatically regenerates and redeploys the site-wide schema markup.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank structured-data (schema) settings. When auto_deploy is enabled, saving automatically regenerates and redeploys the site-wide schema markup. Read the current values with get-schema-settings first; only the keys you pass are changed.', 'thinkrank' );
 	}
 
 	/**

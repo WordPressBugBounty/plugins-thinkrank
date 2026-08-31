@@ -20,6 +20,11 @@ declare(strict_types=1);
 
 namespace ThinkRank\Database;
 
+// Prevent direct access
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Database Schema Manager Class
  *

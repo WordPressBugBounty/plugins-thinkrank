@@ -42,7 +42,7 @@ class Update_Instant_Indexing_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-instant-indexing-settings';
 		$this->label       = __( 'Update ThinkRank Instant Indexing Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank instant indexing (IndexNow) settings: the enabled flag and the auto-submit post types. The API key is auto-generated and cannot be set here.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank instant indexing (IndexNow) settings: the enabled flag and the auto-submit post types. The API key is auto-generated and cannot be set here. Read the current values with get-instant-indexing-settings first.', 'thinkrank' );
 	}
 
 	/**

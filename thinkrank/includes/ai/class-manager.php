@@ -243,7 +243,7 @@ class Manager {
 
         // If still not available, throw error
         if (!$this->client) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         return $this->client;
@@ -264,7 +264,7 @@ class Manager {
 
             // If still not available, throw error
             if (!$this->client) {
-                throw new \Exception($this->get_client_unavailable_message());
+                throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
             }
         }
 
@@ -293,7 +293,7 @@ class Manager {
             $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
 
             if (!$user_has_api_key) {
-                throw new \Exception($this->get_client_unavailable_message());
+                throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
             }
 
             // Cache the result
@@ -339,14 +339,14 @@ class Manager {
         if (!$this->client) {
             $this->initialize_client();
             if (!$this->client) {
-                throw new \Exception($this->get_client_unavailable_message());
+                throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
             }
         }
 
         // Ensure user has configured their API key.
         $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
         if (!$user_has_api_key) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         // Check rate limits.
@@ -510,13 +510,13 @@ class Manager {
         if (!$this->client) {
             $this->initialize_client();
             if (!$this->client) {
-                throw new \Exception($this->get_client_unavailable_message());
+                throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
             }
         }
 
         $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
         if (!$user_has_api_key) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         if (!$this->check_rate_limit()) {
@@ -903,12 +903,12 @@ class Manager {
         if (!$this->client) {
             $this->initialize_client();
             if (!$this->client) {
-                throw new \Exception($this->get_client_unavailable_message());
+                throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
             }
         }
         $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
         if (!$user_has_api_key) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
         if (!$this->check_rate_limit()) {
             throw new \Exception('Rate limit exceeded. Please try again later.');
@@ -956,7 +956,7 @@ class Manager {
      */
     public function answer_prompt(string $prompt, int $max_tokens = 1024, array $options = []): array {
         if (!$this->client) {
-            throw new \Exception(esc_html($this->get_client_unavailable_message()));
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         return $this->request_completion($prompt, $max_tokens, $options);
@@ -1146,7 +1146,7 @@ class Manager {
      */
     public function analyze_content(string $content, array $metadata = []): array {
         if (!$this->client) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         $user_id = get_current_user_id();
@@ -1155,7 +1155,7 @@ class Manager {
         $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
 
         if (!$user_has_api_key) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         // Check rate limits
@@ -1245,7 +1245,7 @@ class Manager {
         $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
 
         if (!$user_has_api_key) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         // Generate cache key using existing pattern
@@ -1270,7 +1270,7 @@ class Manager {
         $client = $this->get_client();
 
         if (!$client) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         // Perform AI optimization
@@ -1323,7 +1323,7 @@ class Manager {
         $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
 
         if (!$user_has_api_key) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         // Generate cache key
@@ -1348,7 +1348,7 @@ class Manager {
         $client = $this->get_client();
 
         if (!$client) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         // Perform AI optimization
@@ -1602,7 +1602,7 @@ class Manager {
         $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
 
         if (!$user_has_api_key) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         // Generate cache key using existing pattern
@@ -1627,7 +1627,7 @@ class Manager {
         $client = $this->get_client();
 
         if (!$client) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         // Perform AI optimization
@@ -1680,7 +1680,7 @@ class Manager {
         $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
 
         if (!$user_has_api_key) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         // Generate cache key using existing pattern
@@ -1705,7 +1705,7 @@ class Manager {
         $client = $this->get_client();
 
         if (!$client) {
-            throw new \Exception($this->get_client_unavailable_message());
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
 
         // Perform AI optimization

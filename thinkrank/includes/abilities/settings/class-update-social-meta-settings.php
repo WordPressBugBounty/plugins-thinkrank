@@ -81,7 +81,7 @@ class Update_Social_Meta_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-social-meta-settings';
 		$this->label       = __( 'Update ThinkRank Social Meta Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank social meta settings, covering Open Graph, Twitter Cards, and per-network verification and handle configuration.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank social meta settings, covering Open Graph, Twitter Cards, and per-network verification and handle configuration. Read the current values with get-social-meta-settings first; only the keys you pass are changed.', 'thinkrank' );
 	}
 
 	/**

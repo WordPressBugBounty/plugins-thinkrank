@@ -25,7 +25,7 @@ class Get_Term_Seo extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-term-seo';
 		$this->label       = __( 'Get ThinkRank Term SEO', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank SEO metadata for a taxonomy term.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank SEO metadata for a taxonomy term. Use update-term-seo to change them, and get-term-seo-checks to see what would improve.', 'thinkrank' );
 	}
 
 	/**

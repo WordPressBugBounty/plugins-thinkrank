@@ -162,8 +162,14 @@ final class Email_Report_Config {
 
         // Subject: free plan always uses the default. Pro: keep existing
         // when input doesn't include the key, accept new when it does.
+        //
+        // The subject carries variable tags (%site_title%, %date%, %period%),
+        // so it is sanitized as a template: sanitize_text_field() reads %date%
+        // as percent-encoding and stores "te%" (#521). intro_text/footer_text
+        // take the same tags but go through wp_kses_post(), which leaves them
+        // alone, and header_background holds a colour rather than a template.
         if (!empty($caps['custom_subject']) && array_key_exists('subject_template', $input)) {
-            $subject = sanitize_text_field((string) $input['subject_template']);
+            $subject = Pattern_Resolver::sanitize_template((string) $input['subject_template']);
             if ($subject === '') {
                 $subject = (string) $defaults['subject_template'];
             }

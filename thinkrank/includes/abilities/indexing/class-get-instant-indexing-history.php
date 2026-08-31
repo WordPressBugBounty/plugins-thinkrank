@@ -26,7 +26,7 @@ class Get_Instant_Indexing_History extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-instant-indexing-history';
 		$this->label       = __( 'Get ThinkRank Instant Indexing History', 'thinkrank' );
-		$this->description = __( 'Retrieve the ThinkRank instant indexing (IndexNow) submission history, including submitted URLs, status, response codes, and timestamps.', 'thinkrank' );
+		$this->description = __( 'Retrieve the ThinkRank instant indexing (IndexNow) submission history, including submitted URLs, status, response codes, and timestamps. Lists the submissions made by submit-urls-to-index.', 'thinkrank' );
 	}
 
 	/**

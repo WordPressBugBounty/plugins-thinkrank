@@ -26,7 +26,7 @@ class Update_Post_Seo extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-post-seo';
 		$this->label       = __( 'Update ThinkRank Post SEO', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank SEO metadata for a post, page, or custom post type item.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank SEO metadata for a post, page, or custom post type item. Read the current values with get-post-seo first; only the fields you pass are changed, and get-post-seo-checks reports what would improve.', 'thinkrank' );
 	}
 
 	/**

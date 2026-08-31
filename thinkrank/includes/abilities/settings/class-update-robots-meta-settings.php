@@ -45,7 +45,7 @@ class Update_Robots_Meta_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-robots-meta-settings';
 		$this->label       = __( 'Update ThinkRank Robots Meta Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank site-wide default robots meta directives (index, noindex, nofollow, noarchive, noimageindex, nosnippet).', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank site-wide default robots meta directives (index, noindex, nofollow, noarchive, noimageindex, nosnippet). Read the current values with get-robots-meta-settings first.', 'thinkrank' );
 	}
 
 	/**

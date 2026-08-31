@@ -32,7 +32,7 @@ class Get_Performance_Data extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-performance-data';
 		$this->label       = __( 'Get Performance Data', 'thinkrank' );
-		$this->description = __( 'Retrieve the site Core Web Vitals / performance snapshot (LCP, INP, CLS, FCP), performance score and grade, and SEO correlation. Requires a connected Google account for real data; otherwise returns an empty snapshot with a not-connected marker.', 'thinkrank' );
+		$this->description = __( 'Retrieve the site Core Web Vitals / performance snapshot (LCP, INP, CLS, FCP), performance score and grade, and SEO correlation. Requires a connected Google account for real data; otherwise returns an empty snapshot with a not-connected marker. get-integrations-status reports whether that account is connected.', 'thinkrank' );
 	}
 
 	/**

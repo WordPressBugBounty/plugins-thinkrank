@@ -83,6 +83,65 @@ class Pattern_Resolver {
     }
 
     /**
+     * Sanitize a variable-tag template for storage.
+     *
+     * The write-side counterpart of resolve_value(): every template that
+     * reaches this class has to survive the trip into the database first.
+     *
+     * sanitize_text_field() cannot be used for that. Core's
+     * _sanitize_text_fields() strips percent-encoded characters, looping
+     * `preg_replace( '/%[a-f0-9]{2}/i', ... )` until nothing matches, so any
+     * token whose first two characters are hex digits is eaten on save:
+     * %date% is stored as "te%" and %category% as "tegory%" (#521). They are
+     * the only two tags in the language that collide, which is why the
+     * corruption looked arbitrary — %title%, %sitename%, %sep%, %excerpt%,
+     * %modified% and %author% all pass through core untouched.
+     *
+     * This mirrors what core does either side of that percent loop — invalid
+     * UTF-8 dropped, tags stripped, control characters removed, whitespace
+     * collapsed — and simply omits the loop itself.
+     *
+     * @since 2.1.1
+     *
+     * @param string $value         Raw template as submitted.
+     * @param bool   $keep_newlines Preserve newlines, as sanitize_textarea_field() does.
+     * @return string Sanitized template with its %tokens% intact.
+     */
+    public static function sanitize_template(string $value, bool $keep_newlines = false): string {
+        $filtered = wp_check_invalid_utf8($value);
+
+        if (strpos($filtered, '<') !== false) {
+            $filtered = wp_pre_kses_less_than($filtered);
+            // Tags out, the text between them kept.
+            $filtered = wp_strip_all_tags($filtered, false);
+            $filtered = str_replace("<\n", "&lt;\n", $filtered);
+        }
+
+        // C0 controls and DEL, less the tab/newline/carriage-return handled below.
+        $filtered = (string) preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $filtered);
+
+        if (!$keep_newlines) {
+            $filtered = (string) preg_replace('/[\r\n\t ]+/', ' ', $filtered);
+        }
+
+        return trim($filtered);
+    }
+
+    /**
+     * Sanitize a variable-tag template that may span multiple lines.
+     *
+     * The sanitize_textarea_field() counterpart of sanitize_template().
+     *
+     * @since 2.1.1
+     *
+     * @param string $value Raw template as submitted.
+     * @return string Sanitized template with its %tokens% and newlines intact.
+     */
+    public static function sanitize_template_textarea(string $value): string {
+        return self::sanitize_template($value, true);
+    }
+
+    /**
      * Derive a description from raw post content.
      *
      * wp_strip_all_tags() removes HTML but not shortcodes, so a page built with

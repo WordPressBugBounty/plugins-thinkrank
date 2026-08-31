@@ -42,7 +42,7 @@ class Get_Instant_Indexing_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-instant-indexing-settings';
 		$this->label       = __( 'Get ThinkRank Instant Indexing Settings', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank instant indexing (IndexNow) settings. The API key is auto-generated and is not exposed; only whether a key is set is reported.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank instant indexing (IndexNow) settings. The API key is auto-generated and is not exposed; only whether a key is set is reported. Use update-instant-indexing-settings to change them.', 'thinkrank' );
 	}
 
 	/**

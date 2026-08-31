@@ -23,32 +23,12 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class Update_Sitemap_Settings extends Ability_Base {
 	/**
-	 * Boolean-typed sitemap keys.
-	 */
-	private const BOOL_KEYS = [
-		'enabled',
-		'include_images',
-		'include_posts',
-		'include_pages',
-		'include_categories',
-		'include_tags',
-	];
-
-	/**
-	 * String-typed sitemap keys.
-	 */
-	private const STRING_KEYS = [
-		'exclude_posts',
-		'exclude_terms',
-	];
-
-	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		$this->id          = 'thinkrank/update-sitemap-settings';
 		$this->label       = __( 'Update ThinkRank Sitemap Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank XML sitemap settings, including per-type inclusion toggles and exclusion lists.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank XML sitemap settings: per-type inclusion toggles, exclusion lists, and the index/splitting, styling, filename and search-engine ping options. Read the current values with get-sitemap-settings first; only the keys you pass are changed.', 'thinkrank' );
 	}
 
 	/**
@@ -79,16 +59,7 @@ class Update_Sitemap_Settings extends Ability_Base {
 				'settings' => [
 					'type'        => 'object',
 					'description' => __( 'Sitemap settings to update.', 'thinkrank' ),
-					'properties'  => [
-						'enabled'            => [ 'type' => 'boolean' ],
-						'include_images'     => [ 'type' => 'boolean' ],
-						'include_posts'      => [ 'type' => 'boolean' ],
-						'include_pages'      => [ 'type' => 'boolean' ],
-						'include_categories' => [ 'type' => 'boolean' ],
-						'include_tags'       => [ 'type' => 'boolean' ],
-						'exclude_posts'      => [ 'type' => 'string' ],
-						'exclude_terms'      => [ 'type' => 'string' ],
-					],
+					'properties'  => Settings_Key_Map::sitemap(),
 				],
 			],
 			'required'             => [ 'settings' ],
@@ -129,23 +100,10 @@ class Update_Sitemap_Settings extends Ability_Base {
 
 		$gen    = new Sitemap_Generator();
 		$merged = $gen->get_settings( 'site', null );
-		$found  = false;
+		$patch  = Settings_Key_Map::coerce( Settings_Key_Map::sitemap(), $settings );
+		$merged = array_merge( $merged, $patch );
 
-		foreach ( self::BOOL_KEYS as $key ) {
-			if ( array_key_exists( $key, $settings ) ) {
-				$merged[ $key ] = (bool) $settings[ $key ];
-				$found          = true;
-			}
-		}
-
-		foreach ( self::STRING_KEYS as $key ) {
-			if ( array_key_exists( $key, $settings ) ) {
-				$merged[ $key ] = sanitize_text_field( (string) $settings[ $key ] );
-				$found          = true;
-			}
-		}
-
-		if ( ! $found ) {
+		if ( empty( $patch ) ) {
 			return new \WP_Error(
 				'thinkrank_no_valid_sitemap_setting_keys',
 				__( 'No valid sitemap setting keys were provided.', 'thinkrank' ),

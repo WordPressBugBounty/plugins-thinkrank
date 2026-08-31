@@ -32,7 +32,7 @@ class Send_Email_Report_Test extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/send-email-report-test';
 		$this->label       = __( 'Send ThinkRank Test Email Report', 'thinkrank' );
-		$this->description = __( 'Send an immediate one-off test of the ThinkRank Email Report to the configured recipients using the current saved settings. Does not change the schedule. Fails if no recipients are configured.', 'thinkrank' );
+		$this->description = __( 'Send an immediate one-off test of the ThinkRank Email Report to the configured recipients using the current saved settings. Does not change the schedule. Fails if no recipients are configured. update-email-report-settings changes what it sends.', 'thinkrank' );
 	}
 
 	/**

@@ -30,7 +30,7 @@ class Get_Seo_Analytics_Data extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-seo-analytics-data';
 		$this->label       = __( 'Get ThinkRank SEO Analytics Data', 'thinkrank' );
-		$this->description = __( 'Retrieve the ThinkRank SEO analytics dashboard data. Requires Google Search Console / Analytics to be connected; returns empty data otherwise.', 'thinkrank' );
+		$this->description = __( 'Retrieve the ThinkRank SEO analytics dashboard data. Requires Google Search Console / Analytics to be connected; returns empty data otherwise. get-integrations-status reports whether those are connected.', 'thinkrank' );
 	}
 
 	/**

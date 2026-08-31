@@ -380,7 +380,7 @@ class Vision_Client {
 
         if ($status >= 400) {
             $message = $data['error']['message'] ?? ($data['error']['status'] ?? 'Unknown API error');
-            throw new \Exception(sprintf('Vision API error (%d): %s', $status, esc_html((string) $message)));
+            throw new \Exception(esc_html(sprintf('Vision API error (%d): %s', $status, (string) $message)));
         }
 
         return is_array($data) ? $data : [];

@@ -39,7 +39,7 @@ class Bulk_Analyze_And_Save extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/bulk-analyze-and-save';
 		$this->label       = __( 'Bulk Analyze and Save SEO Scores', 'thinkrank' );
-		$this->description = __( 'Analyze multiple posts and persist their SEO scores in one call. Pass explicit post_ids, or omit them to score the most recent posts of a post type. Already-scored posts are skipped unless rescore is true. Returns per-post results (score, saved score_id, status) and totals. Capped at 100 posts per call.', 'thinkrank' );
+		$this->description = __( 'Analyze multiple posts and persist their SEO scores in one call. Pass explicit post_ids, or omit them to score the most recent posts of a post type. Already-scored posts are skipped unless rescore is true. Returns per-post results (score, saved score_id, status) and totals. Capped at 100 posts per call. Use list-content-items to find the post IDs.', 'thinkrank' );
 	}
 
 	/**

@@ -28,7 +28,7 @@ class Get_Post_Seo extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-post-seo';
 		$this->label       = __( 'Get ThinkRank Post SEO', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank SEO metadata for a post, page, or custom post type item.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank SEO metadata for a post, page, or custom post type item. Use update-post-seo to change them, and get-post-seo-checks to see what would improve.', 'thinkrank' );
 	}
 
 	/**

@@ -22,6 +22,11 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
 
+// Prevent direct access
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Instant Indexing API Endpoints Class
  *

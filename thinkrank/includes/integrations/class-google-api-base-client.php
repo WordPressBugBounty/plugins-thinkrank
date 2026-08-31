@@ -116,7 +116,13 @@ abstract class Google_API_Base_Client {
         $response = wp_remote_request($url, $args);
 
         if (is_wp_error($response)) {
-            throw new \Exception('API request failed: ' . esc_html($response->get_error_message()));
+            // Not esc_html()'d: an exception message is data, not output. It is
+            // JSON-encoded to the REST layer and rendered as text by React, so
+            // escaping here only smuggled entities into what the user reads —
+            // Google's own wording is full of quotes, and the Performance panels
+            // displayed them as "quota metric &#039;Queries&#039;".
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Message is JSON data for the REST layer, escaped at render time by React.
+            throw new \Exception('API request failed: ' . $response->get_error_message());
         }
 
         $status_code = wp_remote_retrieve_response_code($response);
@@ -125,7 +131,8 @@ abstract class Google_API_Base_Client {
         if ($status_code >= 400) {
             $error_data = json_decode($response_body, true);
             $error_message = $error_data['error']['message'] ?? 'Unknown API error';
-            throw new \Exception(sprintf('Google API error (%d): %s', (int) $status_code, esc_html($error_message)), (int) $status_code);
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Same as above: Google's wording is data, not markup; escaping it leaks entities into the UI.
+            throw new \Exception(sprintf('Google API error (%d): %s', (int) $status_code, $error_message), (int) $status_code);
         }
 
         $data = json_decode($response_body, true);
@@ -181,7 +188,8 @@ abstract class Google_API_Base_Client {
         $current_count = get_transient($rate_limit_key . '_count') ?: 0;
 
         if ($current_count >= $this->rate_limits['max_requests_per_day']) {
-            throw new \Exception(esc_html($this->get_rate_limit_error_message()));
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plugin-authored message, rendered as text by the admin app.
+            throw new \Exception($this->get_rate_limit_error_message());
         }
     }
 

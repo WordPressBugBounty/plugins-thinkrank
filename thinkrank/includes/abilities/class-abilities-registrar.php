@@ -9,6 +9,10 @@ declare(strict_types=1);
 
 namespace ThinkRank\Abilities;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit; // Exit if accessed directly.
+}
+
 use ThinkRank\Abilities\Analysis\Get_Post_Seo_Checks;
 use ThinkRank\Abilities\Analysis\Get_Term_Seo_Checks;
 use ThinkRank\Abilities\Content\Get_Post_Seo;
@@ -67,10 +71,6 @@ use ThinkRank\Abilities\Analysis\Get_Integrations_Status;
 use ThinkRank\Abilities\Analysis\Get_Connection_Status;
 use ThinkRank\Abilities\Analysis\Bulk_Analyze_And_Save;
 use ThinkRank\Core\Settings;
-
-if ( ! defined( 'ABSPATH' ) ) {
-	exit; // Exit if accessed directly.
-}
 
 /**
  * Registers ThinkRank abilities with the WordPress Abilities API.

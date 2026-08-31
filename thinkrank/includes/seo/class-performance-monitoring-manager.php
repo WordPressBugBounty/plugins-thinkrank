@@ -35,6 +35,69 @@ if (!defined('ABSPATH')) {
 class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
 
     /**
+     * Public metric names that differ from the metric_type they are stored under.
+     *
+     * The REST enum uses the display name `score` while the writer stores
+     * `performance_score`, so the filtered history query looked for a row type
+     * that is never written and always came back empty (#520).
+     *
+     * @since 2.1.1
+     * @var array<string,string>
+     */
+    private const METRIC_COLUMN_MAP = [
+        'score' => 'performance_score',
+    ];
+
+    /**
+     * Error code: no PageSpeed credential, and keyless runs are switched off.
+     */
+    public const ERROR_NOT_CONFIGURED = 'pagespeed_not_configured';
+
+    /**
+     * Error code: the PageSpeed request was attempted and failed.
+     */
+    public const ERROR_API_FAILED = 'pagespeed_api_failed';
+
+    /**
+     * Error code: Google's daily PageSpeed quota for this caller is spent.
+     *
+     * On a site with no credential that is the keyless pool every anonymous
+     * caller shares, so it says nothing about this site's own usage and will
+     * not clear on a retry — only a dedicated key or an OAuth connection gets
+     * the site a quota of its own.
+     */
+    public const ERROR_QUOTA_EXHAUSTED = 'pagespeed_quota_exhausted';
+
+    /**
+     * Error code: too many requests in a short window. Unlike the daily quota
+     * this does clear on its own, so the remedy really is to wait.
+     */
+    public const ERROR_RATE_LIMITED = 'pagespeed_rate_limited';
+
+    /**
+     * Error code: Google rejected the credential the site is configured with.
+     */
+    public const ERROR_CREDENTIAL_REJECTED = 'pagespeed_credential_rejected';
+
+    /**
+     * Error code: Lighthouse could not load the URL under test.
+     */
+    public const ERROR_URL_UNREACHABLE = 'pagespeed_url_unreachable';
+
+    /**
+     * Why the last PageSpeed-backed call returned nothing, if it did.
+     *
+     * Diagnostics and opportunities return a plain list, so a bare [] cannot
+     * say whether the site is clean, the request failed, or nothing was even
+     * attempted — the endpoint reported all three as "retrieved successfully"
+     * (#519). Callers read this the way Performance_Data_Collector exposes its
+     * own last error.
+     *
+     * @var array{code: string, message: string}
+     */
+    private array $last_error = ['code' => '', 'message' => ''];
+
+    /**
      * Core Web Vitals thresholds (2025 Google standards)
      * Lazy-loaded to reduce memory usage
      *
@@ -184,21 +247,39 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
     private function get_user_friendly_error(\Exception $exception): array {
         $message = $exception->getMessage();
 
-        if (strpos($message, 'API key') !== false || strpos($message, 'not connected') !== false) {
-            return [
-                'type' => 'configuration',
-                'title' => 'Google Account Connection Required',
-                'message' => 'Please connect your Google account in Integrations > Google Services to view performance data.',
-                'action' => 'connect_google'
-            ];
-        }
-
-        if (strpos($message, 'rate limit') !== false) {
+        if (stripos($message, 'rate limit') !== false || stripos($message, 'quota') !== false) {
             return [
                 'type' => 'rate_limit',
                 'title' => 'API Rate Limit Exceeded',
                 'message' => 'Google API rate limit exceeded. Please try again in a few minutes.',
                 'action' => 'retry_later'
+            ];
+        }
+
+        // A credential that Google rejected is not a missing one. Matching
+        // "API key" alone sent an invalid or expired key to the "connect your
+        // Google account" copy, which is no help to a site that configured a
+        // key on purpose (#519).
+        if (stripos($message, 'not valid') !== false
+            || stripos($message, 'invalid') !== false
+            || stripos($message, 'expired') !== false
+            || stripos($message, 'unauthorized') !== false
+            || stripos($message, 'API key') !== false
+        ) {
+            return [
+                'type' => 'configuration',
+                'title' => 'PageSpeed Credential Rejected',
+                'message' => 'Google rejected the PageSpeed credential. Check the PageSpeed API key, or reconnect your Google account, in Integrations > Google Services.',
+                'action' => 'check_pagespeed_credential'
+            ];
+        }
+
+        if (stripos($message, 'not connected') !== false || stripos($message, 'not configured') !== false) {
+            return [
+                'type' => 'configuration',
+                'title' => 'PageSpeed Not Configured',
+                'message' => 'Add a PageSpeed API key or connect your Google account in Integrations > Google Services to view performance data.',
+                'action' => 'configure_pagespeed'
             ];
         }
 
@@ -1252,11 +1333,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
 
     private function get_field_data(string $url, string $device_type): array {
         try {
-            // Get Google OAuth access token for Chrome UX Report access
-            $settings = $this->settings_manager->get_settings('integrations', 'site', null);
-            $access_token = $settings['google_access_token'] ?? '';
-
-            if (empty($access_token)) {
+            if ($this->pagespeed_refusal() !== null) {
                 return ['field_data' => [], 'available' => false];
             }
 
@@ -1306,11 +1383,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
 
     private function get_pagespeed_insights_data(string $url, string $device_type): array {
         try {
-            // Get Google OAuth access token for PageSpeed data
-            $settings = $this->settings_manager->get_settings('integrations', 'site', null);
-            $access_token = $settings['google_access_token'] ?? '';
-
-            if (empty($access_token)) {
+            if ($this->pagespeed_refusal() !== null) {
                 return ['page_speed_score' => 0];
             }
 
@@ -1354,15 +1427,13 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
 
     private function get_core_web_vitals_data(string $url, string $context_type, ?int $context_id, string $device_type = 'mobile'): array {
         try {
-            // Get Google OAuth access token for PageSpeed data
-            $settings = $this->settings_manager->get_settings('integrations', 'site', null);
-            $access_token = $settings['google_access_token'] ?? '';
-
-            if (empty($access_token)) {
-                // Return error state when Google account is not connected
+            $refusal = $this->pagespeed_refusal();
+            if ($refusal !== null) {
+                // Neither credential is configured and keyless runs are off. The
+                // copy names both, since an API key is as good as a connection.
                 return [
-                    'error' => 'Google account not connected',
-                    'message' => 'Please connect your Google account in Integrations > Google Services to view real Core Web Vitals data.',
+                    'error' => __('PageSpeed not configured', 'thinkrank'),
+                    'message' => $refusal['message'],
                     'lcp' => $this->get_empty_metric_data('Largest Contentful Paint', 's', 2.5, 4.0),
                     'inp' => $this->get_empty_metric_data('Interaction to Next Paint', 'ms', 200, 500),
                     'cls' => $this->get_empty_metric_data('Cumulative Layout Shift', '', 0.1, 0.25),
@@ -1373,7 +1444,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
             // Validate device type
             $device_type = in_array($device_type, ['mobile', 'desktop'], true) ? $device_type : 'mobile';
 
-            // Create Google PageSpeed client with OAuth token
+            // for_site() resolves the credential: API key, then OAuth, then keyless.
             $pagespeed_client = Google_PageSpeed_Client::for_site();
             $core_web_vitals = $pagespeed_client->get_core_web_vitals($url, $device_type);
 
@@ -1811,15 +1882,18 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
     }
 
     /**
-     * Whether a Google OAuth token is available for PageSpeed requests.
+     * Whether a credential the PageSpeed API accepts is configured.
+     *
+     * Decides between scheduling a background collection and showing the
+     * "not configured" empty state, so an OAuth-only test sent every site
+     * holding just an API key down the wrong branch (#519).
      *
      * @since 1.16.2
      *
      * @return bool
      */
     private function has_pagespeed_credentials(): bool {
-        $settings = $this->settings_manager->get_settings('integrations', 'site', null);
-        return !empty($settings['google_access_token'] ?? '');
+        return Google_PageSpeed_Client::site_has_credentials();
     }
 
     /**
@@ -2284,15 +2358,26 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
     /**
      * Get historical performance data from database
      *
+     * Both shapes cover the whole requested window, gaps included: 'all'
+     * returns `date => [metric_type => value]` and a single metric returns the
+     * same window flattened to `date => value|null`.
+     *
      * @since 1.0.0
      *
      * @param int    $days   Number of days of history
-     * @param string $metric Specific metric or 'all'
-     * @return array Historical data
+     * @param string $metric Specific metric or 'all'. Uses the public names the
+     *                       REST enum advertises, so 'score' means the stored
+     *                       'performance_score'.
+     * @return array Historical data, or [] when nothing was measured.
      */
     public function get_historical_data(int $days = 30, string $metric = 'all'): array {
-        // Check cache first (1-hour TTL for historical data)
-        $cache_key = "thinkrank_historical_data_{$days}_{$metric}";
+        // The public metric name is not always the stored one.
+        $column = self::METRIC_COLUMN_MAP[$metric] ?? $metric;
+
+        // Check cache first (1-hour TTL for historical data). The `_v2` marks the
+        // single-metric shape change in #520 so caches written by an older build
+        // are not served in the old shape after an upgrade.
+        $cache_key = "thinkrank_historical_data_v2_{$days}_{$metric}";
         $cached_data = get_transient($cache_key);
 
         if ($cached_data !== false) {
@@ -2342,7 +2427,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Performance metrics retrieval requires direct database access
                 $results = $wpdb->get_results(
                     // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- SQL is properly prepared with placeholders
-                    $wpdb->prepare($sql, $start_date, $metric)
+                    $wpdb->prepare($sql, $start_date, $column)
                 );
             }
 
@@ -2372,7 +2457,17 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                 $filled_data[$date] = $organized_data[$date] ?? [];
             }
 
-            $result = $metric === 'all' ? $filled_data : array_column($filled_data, $metric, null);
+            // A single metric is the same date-keyed window as `all`, flattened to
+            // one series: array_column() would have packed it into a positional
+            // list, dropping both the dates and every day with no measurement.
+            $result = $metric === 'all'
+                ? $filled_data
+                : array_map(
+                    static function (array $day) use ($column) {
+                        return $day[$column] ?? null;
+                    },
+                    $filled_data
+                );
 
             // Cache the result for 1 hour
             set_transient($cache_key, $result, HOUR_IN_SECONDS);
@@ -2498,15 +2593,9 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
             return $cached_data;
         }
 
+        $this->reset_pagespeed_error();
+
         try {
-            // Get Google OAuth access token
-            $settings = $this->settings_manager->get_settings('integrations', 'site', null);
-            $access_token = $settings['google_access_token'] ?? '';
-
-            if (empty($access_token)) {
-                return [];
-            }
-
             // Ensure the Google PageSpeed Client class is loaded
             if (!class_exists('ThinkRank\\Integrations\\Google_PageSpeed_Client')) {
                 $pagespeed_file = THINKRANK_PLUGIN_DIR . 'includes/integrations/class-google-pagespeed-client.php';
@@ -2515,7 +2604,13 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                 }
             }
 
-            // Create Google PageSpeed client with OAuth token
+            $refusal = $this->pagespeed_refusal();
+            if ($refusal !== null) {
+                $this->record_pagespeed_error($refusal['code'], $refusal['message']);
+                return [];
+            }
+
+            // for_site() resolves the credential: API key, then OAuth, then keyless.
             $pagespeed_client = Google_PageSpeed_Client::for_site();
 
             // Get opportunities data with device type
@@ -2529,9 +2624,167 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
             return $opportunities;
 
         } catch (\Exception $e) {
-            // Return empty array if API fails
+            // The request was attempted and failed — say so, rather than letting
+            // the endpoint report the empty list as a success. Classified rather
+            // than passed through: Google's raw wording names a quota project the
+            // reader has nothing to do with and never says what to do about it.
+            $failure = $this->classify_pagespeed_exception($e);
+            $this->record_pagespeed_error($failure['code'], $failure['message']);
             return [];
         }
+    }
+
+    /**
+     * The reason a PageSpeed request must not be attempted, if there is one.
+     *
+     * Mirrors Google_PageSpeed_Client::for_site(), which resolves a dedicated
+     * API key first, the OAuth token second, and runs keyless otherwise. The
+     * callers here used to demand an OAuth token specifically and return early
+     * before for_site() was ever reached, so a site configured with only a
+     * PageSpeed API key — the credential for_site() *prefers* — got permanently
+     * empty Diagnostics and Opportunities and a Core Web Vitals panel telling it
+     * to connect an account it had deliberately not connected (#519).
+     *
+     * @since 2.1.1
+     *
+     * @return array{code: string, message: string}|null Null when a request may proceed.
+     */
+    private function pagespeed_refusal(): ?array {
+        if (Google_PageSpeed_Client::site_has_credentials()) {
+            return null;
+        }
+
+        /**
+         * Whether PageSpeed may be called with no credential at all.
+         *
+         * Google allows it on a shared per-IP quota, which is the third rung of
+         * for_site()'s auth order, so it is on by default. Return false to make
+         * an unconfigured site refuse instead of spending that quota.
+         *
+         * @since 2.1.1
+         *
+         * @param bool $allowed Whether keyless PageSpeed runs are permitted.
+         */
+        if (apply_filters('thinkrank_allow_keyless_pagespeed', true)) {
+            return null;
+        }
+
+        return [
+            'code' => self::ERROR_NOT_CONFIGURED,
+            'message' => __('Connect Google or add a PageSpeed API key to run PageSpeed Insights.', 'thinkrank'),
+        ];
+    }
+
+    /**
+     * Record why a PageSpeed-backed call is returning nothing.
+     *
+     * @param string $code    One of the self::ERROR_* codes.
+     * @param string $message Human-readable reason.
+     * @return void
+     */
+    /**
+     * Turn a PageSpeed exception into a code and a sentence a user can act on.
+     *
+     * The read paths used to record `$e->getMessage()` verbatim, which is
+     * Google's own wording. For an exhausted quota that reads:
+     *
+     *   Quota exceeded for quota metric 'Queries' and limit 'Queries per day'
+     *   of service 'pagespeedonline.googleapis.com' for consumer
+     *   'project_number:583797351490'.
+     *
+     * — a project number the reader has no relationship with, and no hint that
+     * the fix is to add a key. Worse, it is indistinguishable from a transient
+     * rate limit, so the old "try again in a few minutes" copy was actively
+     * wrong: a *daily* quota will not come back in minutes.
+     *
+     * The real message is kept on the `detail` key for logs and support.
+     *
+     * @since 2.1.1
+     *
+     * @param \Exception $e Exception thrown by the PageSpeed call.
+     * @return array{code: string, message: string} Classified failure.
+     */
+    private function classify_pagespeed_exception(\Exception $e): array {
+        $raw = $e->getMessage();
+
+        // Lighthouse reached us but could not load the page: private site,
+        // DNS/TLS failure, or the server refused the fetch.
+        if (stripos($raw, 'FAILED_DOCUMENT_REQUEST') !== false
+            || stripos($raw, 'ERRORED_DOCUMENT_REQUEST') !== false
+            || stripos($raw, 'DNS_FAILURE') !== false
+            || stripos($raw, 'net::') !== false
+        ) {
+            return [
+                'code'    => self::ERROR_URL_UNREACHABLE,
+                'message' => __('Google could not load this site to test it. That is expected for a local or password-protected site, and otherwise points at DNS, TLS or a firewall.', 'thinkrank'),
+            ];
+        }
+
+        // A daily quota. Distinguished from a burst limit because the remedy is
+        // different: waiting does not help, a credential of your own does.
+        $is_daily_quota = stripos($raw, 'per day') !== false
+            || (stripos($raw, 'quota') !== false && stripos($raw, 'exceeded') !== false);
+
+        if ($is_daily_quota) {
+            return [
+                'code'    => self::ERROR_QUOTA_EXHAUSTED,
+                'message' => Google_PageSpeed_Client::site_has_credentials()
+                    ? __('Your Google PageSpeed daily quota is used up. It resets at midnight Pacific time, or you can raise the limit in Google Cloud.', 'thinkrank')
+                    : __('This site has no PageSpeed credential, so it is sharing Google\'s free anonymous quota — and that is used up for today. Add a PageSpeed API key or connect your Google account to get a quota of your own.', 'thinkrank'),
+            ];
+        }
+
+        if ((int) $e->getCode() === 429 || stripos($raw, 'rate limit') !== false) {
+            return [
+                'code'    => self::ERROR_RATE_LIMITED,
+                'message' => __('Too many PageSpeed requests in a short time. This clears on its own — try again in a few minutes.', 'thinkrank'),
+            ];
+        }
+
+        // A credential Google rejected is not a missing one (#519).
+        if (stripos($raw, 'not valid') !== false
+            || stripos($raw, 'invalid') !== false
+            || stripos($raw, 'expired') !== false
+            || stripos($raw, 'unauthorized') !== false
+            || stripos($raw, 'API key') !== false
+        ) {
+            return [
+                'code'    => self::ERROR_CREDENTIAL_REJECTED,
+                'message' => __('Google rejected this site\'s PageSpeed credential. Check the API key, or reconnect your Google account, in Integrations > Google Services.', 'thinkrank'),
+            ];
+        }
+
+        return [
+            'code'    => self::ERROR_API_FAILED,
+            'message' => __('Google could not return performance data for this site right now. Try again shortly.', 'thinkrank'),
+        ];
+    }
+
+    private function record_pagespeed_error(string $code, string $message): void {
+        $this->last_error = ['code' => $code, 'message' => $message];
+    }
+
+    /**
+     * Clear the recorded reason at the start of a fresh attempt.
+     *
+     * @return void
+     */
+    private function reset_pagespeed_error(): void {
+        $this->last_error = ['code' => '', 'message' => ''];
+    }
+
+    /**
+     * Why the last diagnostics/opportunities call came back empty.
+     *
+     * An empty `code` means the request was actually made, so an empty result
+     * is a real answer rather than a missing credential or a failed call.
+     *
+     * @since 2.1.1
+     *
+     * @return array{code: string, message: string}
+     */
+    public function get_last_error(): array {
+        return $this->last_error;
     }
 
     /**
@@ -2557,15 +2810,9 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
             return $cached_data;
         }
 
+        $this->reset_pagespeed_error();
+
         try {
-            // Get Google OAuth access token
-            $settings = $this->settings_manager->get_settings('integrations', 'site', null);
-            $access_token = $settings['google_access_token'] ?? '';
-
-            if (empty($access_token)) {
-                return [];
-            }
-
             // Ensure the Google PageSpeed Client class is loaded
             if (!class_exists('ThinkRank\\Integrations\\Google_PageSpeed_Client')) {
                 $pagespeed_file = THINKRANK_PLUGIN_DIR . 'includes/integrations/class-google-pagespeed-client.php';
@@ -2574,7 +2821,13 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                 }
             }
 
-            // Create Google PageSpeed client with OAuth token
+            $refusal = $this->pagespeed_refusal();
+            if ($refusal !== null) {
+                $this->record_pagespeed_error($refusal['code'], $refusal['message']);
+                return [];
+            }
+
+            // for_site() resolves the credential: API key, then OAuth, then keyless.
             $pagespeed_client = Google_PageSpeed_Client::for_site();
 
             // Get diagnostics data with device type
@@ -2588,7 +2841,12 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
             return $diagnostics;
 
         } catch (\Exception $e) {
-            // Return empty array if API fails
+            // The request was attempted and failed — say so, rather than letting
+            // the endpoint report the empty list as a success. Classified rather
+            // than passed through: Google's raw wording names a quota project the
+            // reader has nothing to do with and never says what to do about it.
+            $failure = $this->classify_pagespeed_exception($e);
+            $this->record_pagespeed_error($failure['code'], $failure['message']);
             return [];
         }
     }

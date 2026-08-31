@@ -48,7 +48,7 @@ class Update_Image_Seo_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-image-seo-settings';
 		$this->label       = __( 'Update ThinkRank Image SEO Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank image SEO settings, which control automatic alt/title injection, the token-based formats used to generate them, and whether generated alt text is persisted to the Media Library.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank image SEO settings, which control automatic alt/title injection, the token-based formats used to generate them, and whether generated alt text is persisted to the Media Library. Read the current values with get-image-seo-settings first; only the keys you pass are changed.', 'thinkrank' );
 	}
 
 	/**

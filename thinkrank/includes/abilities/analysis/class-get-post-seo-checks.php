@@ -29,7 +29,7 @@ class Get_Post_Seo_Checks extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-post-seo-checks';
 		$this->label       = __( 'Get ThinkRank Post SEO Checks', 'thinkrank' );
-		$this->description = __( 'Run ThinkRank SEO score analysis for one or more posts, pages, or custom post type items.', 'thinkrank' );
+		$this->description = __( 'Run ThinkRank SEO score analysis for one or more posts, pages, or custom post type items. Scores are not persisted; use bulk-analyze-and-save to score and store them.', 'thinkrank' );
 	}
 
 	/**

@@ -46,7 +46,7 @@ class Update_Author_Archives_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-author-archives-settings';
 		$this->label       = __( 'Update ThinkRank Author Archives Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank author archives settings: enable/index toggles, empty-archive visibility, and the SEO title/meta description templates.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank author archives settings: enable/index toggles, empty-archive visibility, and the SEO title/meta description templates. Read the current values with get-author-archives-settings first; only the keys you pass are changed.', 'thinkrank' );
 	}
 
 	/**

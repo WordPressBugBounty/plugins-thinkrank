@@ -522,10 +522,10 @@ class Content_Brief_Generator {
             $finish  = (string) ($ai_response['choices'][0]['finish_reason'] ?? '');
 
             if (!empty($message['refusal'])) {
-                throw new \Exception(sprintf(
+                throw new \Exception(esc_html(sprintf(
                     'The AI declined to generate this brief: %s',
                     (string) $message['refusal']
-                ));
+                )));
             }
             if ('content_filter' === $finish) {
                 throw new \Exception('The AI blocked this request under its content policy. Try a different topic or less sensitive keywords.');
@@ -552,10 +552,10 @@ class Content_Brief_Generator {
         // PROHIBITED_CONTENT, or be truncated at MAX_TOKENS.
         $block_reason = (string) ($ai_response['promptFeedback']['blockReason'] ?? '');
         if ('' !== $block_reason) {
-            throw new \Exception(sprintf(
+            throw new \Exception(esc_html(sprintf(
                 'The AI blocked this request under its content policy (%s). Try a different topic or less sensitive keywords.',
                 $block_reason
-            ));
+            )));
         }
         $gemini_finish = (string) ($ai_response['candidates'][0]['finishReason'] ?? '');
         if (in_array($gemini_finish, ['SAFETY', 'PROHIBITED_CONTENT'], true)) {

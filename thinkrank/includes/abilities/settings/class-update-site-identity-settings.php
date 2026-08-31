@@ -25,37 +25,12 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class Update_Site_Identity_Settings extends Ability_Base {
 	/**
-	 * Boolean-typed site identity keys.
-	 */
-	private const BOOL_KEYS = [
-		'enabled',
-		'breadcrumbs_enabled',
-	];
-
-	/**
-	 * String-typed site identity keys.
-	 */
-	private const STRING_KEYS = [
-		'title_template',
-		'title_separator',
-		'site_name',
-		'site_description',
-		'tagline',
-		'breadcrumb_type',
-		'breadcrumb_home_text',
-		'breadcrumb_separator',
-		'logo_url',
-		'favicon_url',
-		'apple_touch_icon_url',
-	];
-
-	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		$this->id          = 'thinkrank/update-site-identity-settings';
 		$this->label       = __( 'Update ThinkRank Site Identity Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank site identity settings: title templates, site name/description, breadcrumb configuration, and brand imagery. Robots.txt configuration is never modified by this ability.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank site identity settings: the homepage/category/tag/author/search/archive title templates, site name and description, breadcrumb configuration, brand imagery, homepage hero, and the business details behind LocalBusiness schema. Robots.txt contents and schema toggles are never modified by this ability. Read the current values with get-site-identity-settings first; only the keys you pass are changed.', 'thinkrank' );
 	}
 
 	/**
@@ -79,16 +54,7 @@ class Update_Site_Identity_Settings extends Ability_Base {
 	 * @return array<string, mixed>
 	 */
 	private static function schema_properties() {
-		$props = [];
-
-		foreach ( self::BOOL_KEYS as $key ) {
-			$props[ $key ] = [ 'type' => 'boolean' ];
-		}
-		foreach ( self::STRING_KEYS as $key ) {
-			$props[ $key ] = [ 'type' => 'string' ];
-		}
-
-		return $props;
+		return Settings_Key_Map::site_identity();
 	}
 
 	/**
@@ -145,22 +111,10 @@ class Update_Site_Identity_Settings extends Ability_Base {
 
 		$mgr    = new Site_Identity_Manager();
 		$merged = $mgr->get_settings( 'site', null );
-		$found  = false;
+		$patch  = Settings_Key_Map::coerce( Settings_Key_Map::site_identity(), $settings );
+		$merged = array_merge( $merged, $patch );
 
-		foreach ( self::BOOL_KEYS as $key ) {
-			if ( array_key_exists( $key, $settings ) ) {
-				$merged[ $key ] = (bool) $settings[ $key ];
-				$found          = true;
-			}
-		}
-		foreach ( self::STRING_KEYS as $key ) {
-			if ( array_key_exists( $key, $settings ) ) {
-				$merged[ $key ] = sanitize_text_field( (string) $settings[ $key ] );
-				$found          = true;
-			}
-		}
-
-		if ( ! $found ) {
+		if ( empty( $patch ) ) {
 			return new \WP_Error(
 				'thinkrank_no_valid_site_identity_setting_keys',
 				__( 'No valid site identity setting keys were provided.', 'thinkrank' ),

@@ -25,7 +25,7 @@ class List_Content_Items extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/list-content-items';
 		$this->label       = __( 'List ThinkRank Content Items', 'thinkrank' );
-		$this->description = __( 'List posts, pages, custom post types, or taxonomy terms to find the IDs needed for ThinkRank SEO actions.', 'thinkrank' );
+		$this->description = __( 'List posts, pages, custom post types, or taxonomy terms to find the IDs needed for ThinkRank SEO actions. Use list-content-types first to see which post types and taxonomies are available.', 'thinkrank' );
 	}
 
 	/**

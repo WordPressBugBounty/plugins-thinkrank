@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace ThinkRank\Abilities\Content;
 
 use ThinkRank\Abilities\Ability_Base;
+use ThinkRank\SEO\Pattern_Resolver;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -25,7 +26,7 @@ class Update_Term_Seo extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-term-seo';
 		$this->label       = __( 'Update ThinkRank Term SEO', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank SEO metadata for a taxonomy term.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank SEO metadata for a taxonomy term. Read the current values with get-term-seo first; only the fields you pass are changed.', 'thinkrank' );
 	}
 
 	/**
@@ -144,17 +145,26 @@ class Update_Term_Seo extends Ability_Base {
 	private function save_term_meta( $term_id, array $settings ) {
 		$touched = false;
 
-		$text_fields = [
+		// The title/description fields are variable-tag templates — the frontend
+		// runs each through Pattern_Resolver::resolve_term_value() — so they are
+		// sanitized as templates. sanitize_text_field() would strip %date% and
+		// %category% as percent-encoding and store "te%" / "tegory%" (#521).
+		$template_fields = [
 			'title'         => '_thinkrank_seo_title',
-			'focus_keyword' => '_thinkrank_focus_keyword',
 			'og_title'      => '_thinkrank_og_title',
 			'twitter_title' => '_thinkrank_twitter_title',
 		];
-		foreach ( $text_fields as $key => $meta_key ) {
+		foreach ( $template_fields as $key => $meta_key ) {
 			if ( array_key_exists( $key, $settings ) ) {
-				$this->save_meta( $term_id, $meta_key, sanitize_text_field( (string) $settings[ $key ] ) );
+				$this->save_meta( $term_id, $meta_key, Pattern_Resolver::sanitize_template( (string) $settings[ $key ] ) );
 				$touched = true;
 			}
+		}
+
+		// Plain text, not a template.
+		if ( array_key_exists( 'focus_keyword', $settings ) ) {
+			$this->save_meta( $term_id, '_thinkrank_focus_keyword', sanitize_text_field( (string) $settings['focus_keyword'] ) );
+			$touched = true;
 		}
 
 		$textarea_fields = [
@@ -164,7 +174,7 @@ class Update_Term_Seo extends Ability_Base {
 		];
 		foreach ( $textarea_fields as $key => $meta_key ) {
 			if ( array_key_exists( $key, $settings ) ) {
-				$this->save_meta( $term_id, $meta_key, sanitize_textarea_field( (string) $settings[ $key ] ) );
+				$this->save_meta( $term_id, $meta_key, Pattern_Resolver::sanitize_template_textarea( (string) $settings[ $key ] ) );
 				$touched = true;
 			}
 		}

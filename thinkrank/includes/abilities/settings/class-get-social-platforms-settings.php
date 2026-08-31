@@ -51,7 +51,7 @@ class Get_Social_Platforms_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-social-platforms-settings';
 		$this->label       = __( 'Get ThinkRank Social Platform Settings', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank social platform verification settings: public platform IDs (Facebook, YouTube, WhatsApp) verbatim and sensitive site-verification codes (Pinterest, Instagram, TikTok) masked for security.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank social platform verification settings: public platform IDs (Facebook, YouTube, WhatsApp) verbatim and sensitive site-verification codes (Pinterest, Instagram, TikTok) masked for security. Use update-social-platforms-settings to change them.', 'thinkrank' );
 	}
 
 	/**

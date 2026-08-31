@@ -34,7 +34,7 @@ class Update_Global_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-global-settings';
 		$this->label       = __( 'Update ThinkRank Global Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank global SEO settings for a specific post type. ThinkRank stores global SEO as per-post-type templates, so a post type is required.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank global SEO settings for a specific post type. ThinkRank stores global SEO as per-post-type templates, so a post type is required. Read the current values with get-global-settings first; only the keys you pass are changed.', 'thinkrank' );
 	}
 
 	/**

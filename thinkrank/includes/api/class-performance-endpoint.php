@@ -354,14 +354,15 @@ class Performance_Endpoint extends WP_REST_Controller {
             // Get device type from request
             $device_type = $request->get_param('device_type') ?? 'mobile';
 
-            $opportunities = $this->get_performance_manager()->get_performance_opportunities('', $device_type);
+            $manager = $this->get_performance_manager();
+            $opportunities = $manager->get_performance_opportunities('', $device_type);
 
-            return new WP_REST_Response([
-                'success' => true,
-                'data' => $opportunities,
-                'device_type' => $device_type,
-                'message' => __('Performance opportunities retrieved successfully', 'thinkrank')
-            ], 200);
+            return $this->pagespeed_list_response(
+                $manager,
+                $opportunities,
+                $device_type,
+                __('Performance opportunities retrieved successfully', 'thinkrank')
+            );
 
         } catch (\Exception $e) {
             return new WP_Error(
@@ -385,14 +386,15 @@ class Performance_Endpoint extends WP_REST_Controller {
             // Get device type from request
             $device_type = $request->get_param('device_type') ?? 'mobile';
 
-            $diagnostics = $this->get_performance_manager()->get_performance_diagnostics('', $device_type);
+            $manager = $this->get_performance_manager();
+            $diagnostics = $manager->get_performance_diagnostics('', $device_type);
 
-            return new WP_REST_Response([
-                'success' => true,
-                'data' => $diagnostics,
-                'device_type' => $device_type,
-                'message' => __('Performance diagnostics retrieved successfully', 'thinkrank')
-            ], 200);
+            return $this->pagespeed_list_response(
+                $manager,
+                $diagnostics,
+                $device_type,
+                __('Performance diagnostics retrieved successfully', 'thinkrank')
+            );
 
         } catch (\Exception $e) {
             return new WP_Error(
@@ -533,6 +535,44 @@ class Performance_Endpoint extends WP_REST_Controller {
      *
      * @return array Arguments array
      */
+    /**
+     * Wrap a PageSpeed-backed list, reporting whether it was actually fetched.
+     *
+     * An empty list used to come back as `success: true` /
+     * "retrieved successfully" whether the site was clean, the request had
+     * failed, or nothing had been attempted for want of a credential — so no
+     * API or MCP consumer could tell the three apart, and the admin UI told
+     * everyone to connect Google (#519). The list itself keeps its shape.
+     *
+     * @since 2.1.1
+     *
+     * @param Performance_Monitoring_Manager $manager     Manager that produced the list.
+     * @param array                          $data        The list.
+     * @param string                         $device_type Device the list is for.
+     * @param string                         $success_message Message for a completed request.
+     * @return WP_REST_Response
+     */
+    private function pagespeed_list_response(Performance_Monitoring_Manager $manager, array $data, string $device_type, string $success_message): WP_REST_Response {
+        $error = $manager->get_last_error();
+
+        if ('' !== $error['code']) {
+            return new WP_REST_Response([
+                'success' => false,
+                'data' => $data,
+                'device_type' => $device_type,
+                'error_code' => $error['code'],
+                'message' => $error['message'],
+            ], 200);
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => $data,
+            'device_type' => $device_type,
+            'message' => $success_message,
+        ], 200);
+    }
+
     private function get_historical_data_args(): array {
         return [
             'days' => [

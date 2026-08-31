@@ -49,6 +49,9 @@ class Activator {
 
         $this->check_requirements();
         $this->create_database_tables();
+        // Must precede set_default_options(): it reads `thinkrank_version`,
+        // which that method creates.
+        $this->retire_sitemap_legacy_fallback();
         $this->set_default_options();
         $this->setup_indexnow_key();
         $this->schedule_cron_jobs();
@@ -178,6 +181,53 @@ class Activator {
     }
 
 
+
+    /**
+     * On a brand-new install, close the pre-2.1.1 sitemap ownership fallback
+     * before it can ever open.
+     *
+     * {@see thinkrank_webroot_sitemap_is_ours()} keeps one narrow escape hatch:
+     * a sitemap written before 2.1.1 with `enable_styling` off carries neither
+     * the marker nor our XSL href, so it can only be recognised by the name the
+     * stored settings derive. That fallback is gated on this install never
+     * having written a marked sitemap — but "never written one" describes two
+     * completely different sites:
+     *
+     *   - a pre-2.1.1 install that has not regenerated since upgrading, which
+     *     is exactly what the fallback exists to recover; and
+     *   - a fresh install that simply has not generated yet, which cannot have
+     *     a legacy file of ours on disk at all.
+     *
+     * On the second, the fallback has nothing to recover and can only delete
+     * somebody else's sitemap from one of the canonical names — #515 again, in
+     * a site that never had the problem the fallback addresses. It is not a
+     * narrow window either: `regenerate_sitemap_from_settings()` returns early
+     * while the master `enabled` flag is off, so a site with sitemaps disabled
+     * and styling saved off never records a marked write, and stays exposed for
+     * as long as it stays in that configuration.
+     *
+     * Recording the marker here on a fresh install separates the two cases. An
+     * upgrade does not reach this code — WordPress does not re-run the
+     * activation hook on update — so a genuine pre-2.1.1 site keeps the
+     * fallback until its first marked write, exactly as before.
+     *
+     * `thinkrank_version` is the signal: set_default_options() adds it only
+     * when absent and never updates it, so it is missing on the very first
+     * activation and present on every one after.
+     *
+     * @since 2.1.1
+     *
+     * @return void
+     */
+    private function retire_sitemap_legacy_fallback(): void {
+        if (get_option('thinkrank_version') !== false) {
+            return;
+        }
+
+        require_once THINKRANK_PLUGIN_DIR . 'includes/cleanup-webroot.php';
+
+        add_option(THINKRANK_SITEMAP_MARKED_WRITE_OPTION, '1', '', false);
+    }
 
     /**
      * Set default plugin options

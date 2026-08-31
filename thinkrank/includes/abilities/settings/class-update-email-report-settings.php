@@ -32,7 +32,7 @@ class Update_Email_Report_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-email-report-settings';
 		$this->label       = __( 'Update ThinkRank Email Report Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank Email Reporting settings: enable toggle, frequency (days), recipients, and — on plans that allow it — subject, branding, intro/footer text, enabled sections, and custom CSS. Partial updates are supported; fields not allowed on the current plan are ignored.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank Email Reporting settings: enable toggle, frequency (days), recipients, and — on plans that allow it — subject, branding, intro/footer text, enabled sections, and custom CSS. Partial updates are supported; fields not allowed on the current plan are ignored. Read the current values with get-email-report-settings first.', 'thinkrank' );
 	}
 
 	/**

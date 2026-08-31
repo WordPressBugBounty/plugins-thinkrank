@@ -29,7 +29,7 @@ class Get_Term_Seo_Checks extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-term-seo-checks';
 		$this->label       = __( 'Get ThinkRank Term SEO Checks', 'thinkrank' );
-		$this->description = __( 'Run ThinkRank-native basic on-page SEO checks for one or more taxonomy terms (SEO title, meta description, and term description).', 'thinkrank' );
+		$this->description = __( 'Run ThinkRank-native basic on-page SEO checks for one or more taxonomy terms (SEO title, meta description, and term description). Read or change the underlying fields with get-term-seo and update-term-seo.', 'thinkrank' );
 	}
 
 	/**

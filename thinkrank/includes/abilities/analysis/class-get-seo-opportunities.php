@@ -29,7 +29,7 @@ class Get_Seo_Opportunities extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-seo-opportunities';
 		$this->label       = __( 'Get ThinkRank SEO Opportunities', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank SEO opportunities (e.g. striking-distance keywords). Requires Google Search Console to be connected; returns empty data otherwise.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank SEO opportunities (e.g. striking-distance keywords). Requires Google Search Console to be connected; returns empty data otherwise. get-integrations-status reports whether Search Console is connected.', 'thinkrank' );
 	}
 
 	/**

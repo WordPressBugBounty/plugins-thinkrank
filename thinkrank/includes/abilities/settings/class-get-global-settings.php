@@ -34,7 +34,7 @@ class Get_Global_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-global-settings';
 		$this->label       = __( 'Get ThinkRank Global Settings', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank global SEO settings. ThinkRank stores these as per-post-type templates; pass a post type to filter.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank global SEO settings. ThinkRank stores these as per-post-type templates; pass a post type to filter. Use update-global-settings to change them.', 'thinkrank' );
 	}
 
 	/**
@@ -89,7 +89,7 @@ class Get_Global_Settings extends Ability_Base {
 	 * Execute ability.
 	 *
 	 * @param array<string, mixed> $input Ability input payload.
-	 * @return array<string, mixed>
+	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function execute( $input ) {
 		$all = get_option( self::OPTION_NAME, [] );
@@ -100,6 +100,27 @@ class Get_Global_Settings extends Ability_Base {
 		$post_type = isset( $input['post_type'] ) ? sanitize_key( (string) $input['post_type'] ) : '';
 
 		if ( '' !== $post_type ) {
+			// A slug this ability cannot answer for used to come back as
+			// `settings: {}`, indistinguishable from a real post type with no
+			// templates configured — so "category", "home" and a typo all read
+			// as "nothing set" (#518). Reject it with the same two checks
+			// thinkrank/update-global-settings applies.
+			if ( ! post_type_exists( $post_type ) ) {
+				return new \WP_Error(
+					'thinkrank_invalid_post_type',
+					__( 'A valid post type slug is required.', 'thinkrank' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			if ( ! \ThinkRank\SEO\Global_SEO_Post_Types::is_allowed( $post_type ) ) {
+				return new \WP_Error(
+					'thinkrank_non_public_post_type',
+					__( 'Global SEO settings are only available for valid Global SEO target post types.', 'thinkrank' ),
+					[ 'status' => 400 ]
+				);
+			}
+
 			$settings = isset( $all[ $post_type ] ) && is_array( $all[ $post_type ] ) ? $all[ $post_type ] : [];
 
 			return [

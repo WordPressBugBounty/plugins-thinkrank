@@ -31,7 +31,7 @@ class Get_Seo_Insights extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-seo-insights';
 		$this->label       = __( 'Get ThinkRank SEO Insights', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank AI-generated SEO insights. Requires a Google connection and, for AI insights, ThinkRank Pro; otherwise a "requires ThinkRank Pro" message is returned.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank AI-generated SEO insights. Requires a Google connection and, for AI insights, ThinkRank Pro; otherwise a "requires ThinkRank Pro" message is returned. get-integrations-status reports whether Google is connected.', 'thinkrank' );
 	}
 
 	/**

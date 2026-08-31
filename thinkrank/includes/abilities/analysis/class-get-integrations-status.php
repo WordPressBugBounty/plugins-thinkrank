@@ -11,6 +11,7 @@ namespace ThinkRank\Abilities\Analysis;
 
 use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\Core\Settings;
+use ThinkRank\Integrations\Google_PageSpeed_Client;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -128,9 +129,11 @@ class Get_Integrations_Status extends Ability_Base {
 			|| '' !== (string) $settings->get( 'google_search_console_api_key', '' );
 
 		// PageSpeed: for_site() prefers a dedicated key, else the OAuth token,
-		// else runs keyless on the per-IP quota. Report credentialed state.
+		// else runs keyless on the per-IP quota. Report credentialed state, and
+		// read it from the same predicate the Performance tab gates on, so the
+		// two screens cannot disagree about the same site again (#519).
 		$ps_key        = (string) $settings->get( 'google_pagespeed_api_key', '' );
-		$ps_configured = '' !== $ps_key || $oauth_present;
+		$ps_configured = Google_PageSpeed_Client::site_has_credentials();
 
 		// ThinkRank's own tag-injection state (see the google_analytics block).
 		$ga4_measurement_id = (string) $settings->get( 'ga4_measurement_id', '' );

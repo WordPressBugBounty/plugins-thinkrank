@@ -657,6 +657,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             'fields'           => 'ids',
             'orderby'          => 'ID',
             'order'            => 'ASC',
+            // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.SuppressFilters_suppress_filters -- The pager must walk the same unfiltered set count_images() counts, or it can never reach the total (#322).
             'suppress_filters' => true,
         ]);
 

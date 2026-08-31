@@ -103,7 +103,7 @@ class Get_Schema_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-schema-settings';
 		$this->label       = __( 'Get ThinkRank Schema Settings', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank structured-data (schema) settings, including organization, website, local business, and person markup.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank structured-data (schema) settings, including organization, website, local business, and person markup. Use update-schema-settings to change them.', 'thinkrank' );
 	}
 
 	/**

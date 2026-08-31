@@ -31,7 +31,7 @@ class Get_Pillar_Content extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-pillar-content';
 		$this->label       = __( 'Get Pillar Content', 'thinkrank' );
-		$this->description = __( 'Read whether a post is flagged as pillar content and get its internal-link suggestions (related pillar posts sharing a taxonomy term).', 'thinkrank' );
+		$this->description = __( 'Read whether a post is flagged as pillar content and get its internal-link suggestions (related pillar posts sharing a taxonomy term). Use update-pillar-content to flag or unflag a post.', 'thinkrank' );
 	}
 
 	/**

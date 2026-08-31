@@ -48,7 +48,7 @@ class Get_Image_Seo_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-image-seo-settings';
 		$this->label       = __( 'Get ThinkRank Image SEO Settings', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank image SEO settings, which control automatic alt/title injection, the token-based formats used to generate them, and whether generated alt text is persisted to the Media Library.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank image SEO settings, which control automatic alt/title injection, the token-based formats used to generate them, and whether generated alt text is persisted to the Media Library. Use update-image-seo-settings to change them.', 'thinkrank' );
 	}
 
 	/**

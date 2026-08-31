@@ -26,7 +26,7 @@ class Get_Llms_Txt_Status extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-llms-txt-status';
 		$this->label       = __( 'Get ThinkRank llms.txt Status', 'thinkrank' );
-		$this->description = __( 'Report the current status of the published llms.txt file, including existence, path, URL, writability, last modified time, size, and a content preview.', 'thinkrank' );
+		$this->description = __( 'Report the current status of the published llms.txt file, including existence, path, URL, writability, last modified time, size, and a content preview. Reports on the file written by publish-llms-txt.', 'thinkrank' );
 	}
 
 	/**

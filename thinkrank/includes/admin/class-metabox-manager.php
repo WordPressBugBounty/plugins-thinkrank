@@ -572,8 +572,12 @@ class Metabox_Manager {
         // after an editor was opened, so a plain save from that now-stale editor
         // would clobber the generated value with a blank. Focus keywords are
         // likewise handled separately (array meta) via Focus_Keywords below.
-        $this->persist_seo_text_field($post_id, $src, 'thinkrank_seo_title', '_thinkrank_seo_title', 'sanitize_text_field');
-        $this->persist_seo_text_field($post_id, $src, 'thinkrank_meta_description', '_thinkrank_meta_description', 'sanitize_textarea_field');
+        //
+        // Both fields may hold variable tags, so they are sanitized as templates:
+        // sanitize_text_field()/sanitize_textarea_field() strip %date% and
+        // %category% as percent-encoding and store "te%" / "tegory%" (#521).
+        $this->persist_seo_text_field($post_id, $src, 'thinkrank_seo_title', '_thinkrank_seo_title', [Pattern_Resolver::class, 'sanitize_template']);
+        $this->persist_seo_text_field($post_id, $src, 'thinkrank_meta_description', '_thinkrank_meta_description', [Pattern_Resolver::class, 'sanitize_template_textarea']);
 
         $fields = [
             'thinkrank_seo_score' => 'absint',
@@ -751,7 +755,9 @@ class Metabox_Manager {
             if (!isset($src[$field])) {
                 continue;
             }
-            $value = sanitize_textarea_field((string) $src[$field]);
+            // Template fields: the frontend resolves their variable tags, so the
+            // %tokens% have to survive the save (#521).
+            $value = Pattern_Resolver::sanitize_template_textarea((string) $src[$field]);
             if ($value === '') {
                 delete_post_meta($post_id, $meta_key);
             } else {

@@ -31,7 +31,7 @@ class Detect_Import_Sources extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/detect-import-sources';
 		$this->label       = __( 'Detect SEO Import Sources', 'thinkrank' );
-		$this->description = __( 'Detect installed SEO plugins (Yoast, RankMath, SEOPress, AIOSEO) whose metadata can be imported into ThinkRank, with per-type available counts, plus any snapshots already captured.', 'thinkrank' );
+		$this->description = __( 'Detect installed SEO plugins (Yoast, RankMath, SEOPress, AIOSEO) whose metadata can be imported into ThinkRank, with per-type available counts, plus any snapshots already captured. Start here: pass a detected source to preview-seo-import to see what an import would change, then run-seo-import to perform it.', 'thinkrank' );
 	}
 
 	/**

@@ -18,6 +18,14 @@
 
 declare(strict_types=1);
 
+// Prevent direct access. Reached only via require() from the deactivator and
+// uninstall.php, both of which run with WordPress loaded, so this costs the
+// callers nothing — it was the one tracked file in the plugin without the
+// guard, which Plugin Check flags as direct file access (#517).
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 return [
     /*
      * Every hook the free plugin schedules. Clearing one that was never

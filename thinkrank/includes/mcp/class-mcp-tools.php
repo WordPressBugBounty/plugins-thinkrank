@@ -71,9 +71,13 @@ final class Mcp_Tools {
 	/**
 	 * Whether the active MCP credential is limited to read-only tools.
 	 *
+	 * Public because the initialize instructions tell the assistant which
+	 * scope this session has, so it can read that as a granted limitation
+	 * rather than retrying a tool that will keep refusing (#491).
+	 *
 	 * @return bool
 	 */
-	private static function is_read_only(): bool {
+	public static function is_read_only(): bool {
 		if ( null !== self::$read_only_override ) {
 			return self::$read_only_override;
 		}

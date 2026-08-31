@@ -57,7 +57,7 @@ class Update_Llms_Txt_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-llms-txt-settings';
 		$this->label       = __( 'Update ThinkRank llms.txt Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank llms.txt settings, which describe the site to AI language models via the llms.txt file.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank llms.txt settings, which describe the site to AI language models via the llms.txt file. Read the current values with get-llms-txt-settings first, then publish-llms-txt to write the file.', 'thinkrank' );
 	}
 
 	/**

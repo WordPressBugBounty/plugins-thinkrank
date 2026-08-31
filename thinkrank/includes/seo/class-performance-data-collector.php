@@ -18,7 +18,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use ThinkRank\Core\Settings;
 use ThinkRank\Integrations\Google_PageSpeed_Client;
 
 /**
@@ -132,33 +131,10 @@ class Performance_Data_Collector {
      * @return bool
      */
     private function has_pagespeed_credentials(): bool {
-        if ($this->get_google_pagespeed_api_key() !== '') {
-            return true;
-        }
-
-        return $this->get_google_access_token() !== '';
-    }
-
-    /**
-     * Get the site-owned PageSpeed API key from settings.
-     *
-     * @return string API key, or an empty string when not configured.
-     */
-    private function get_google_pagespeed_api_key(): string {
-        $api_key = (new Settings())->get('google_pagespeed_api_key', '');
-        return is_string($api_key) ? trim($api_key) : '';
-    }
-
-    /**
-     * Get Google OAuth access token from settings
-     *
-     * @return string Access token or empty string if not configured
-     */
-    private function get_google_access_token(): string {
-        // OAuth tokens are encrypted at rest; Settings::get() decrypts them.
-        // Reading the raw option yields ciphertext that PageSpeed rejects with a 401.
-        $access_token = (new Settings())->get('google_access_token', '');
-        return is_string($access_token) ? $access_token : '';
+        // One predicate, next to the for_site() auth order it mirrors: keeping a
+        // second copy here is how the Performance tab drifted into demanding
+        // OAuth specifically (#519).
+        return Google_PageSpeed_Client::site_has_credentials();
     }
 
     /**

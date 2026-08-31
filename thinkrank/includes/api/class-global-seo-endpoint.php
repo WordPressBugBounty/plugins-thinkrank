@@ -16,6 +16,7 @@ declare(strict_types=1);
 
 namespace ThinkRank\API;
 
+use ThinkRank\SEO\Pattern_Resolver;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -472,11 +473,13 @@ class Global_SEO_Endpoint extends WP_REST_Controller {
     public static function normalize_settings_patch(array $settings): array {
         $out = [];
 
+        // Templates, not plain text: sanitize_text_field() would eat %date% and
+        // %category% as percent-encoding and store "te%" / "tegory%" (#521).
         if (isset($settings['title'])) {
-            $out['title'] = sanitize_text_field((string) $settings['title']);
+            $out['title'] = Pattern_Resolver::sanitize_template((string) $settings['title']);
         }
         if (isset($settings['description'])) {
-            $out['description'] = sanitize_text_field((string) $settings['description']);
+            $out['description'] = Pattern_Resolver::sanitize_template((string) $settings['description']);
         }
         if (isset($settings['schema_type'])) {
             $value = sanitize_text_field((string) $settings['schema_type']);

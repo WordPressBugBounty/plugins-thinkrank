@@ -30,7 +30,7 @@ class Update_Pillar_Content extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-pillar-content';
 		$this->label       = __( 'Update Pillar Content', 'thinkrank' );
-		$this->description = __( 'Flag or unflag a post as pillar content. Pillar posts appear as internal-link suggestions for related posts that share a taxonomy term.', 'thinkrank' );
+		$this->description = __( 'Flag or unflag a post as pillar content. Pillar posts appear as internal-link suggestions for related posts that share a taxonomy term. get-pillar-content reads the current flag and its link suggestions.', 'thinkrank' );
 	}
 
 	/**

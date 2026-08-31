@@ -671,6 +671,7 @@ class Multilingual_Manager {
         // Measured against WPML 4.9.5: setting suppress_filters => false cut the
         // sitemap down to the active language, and a 'lang' => 'all' argument
         // was ignored outright, so neither is used here.
+        // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.SuppressFilters_suppress_filters -- Dropping it narrows the sitemap to the active language under WPML; see the note above.
         $args['suppress_filters'] = true;
 
         return $args;

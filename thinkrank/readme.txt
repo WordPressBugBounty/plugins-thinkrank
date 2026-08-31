@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.1.0
+Stable tag: 2.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,9 +25,9 @@ It works where you already build: **Gutenberg, Elementor, Divi, Oxygen/Breakdanc
 
 = Watch: SEO in the Assistant Era =
 
-SEO creator Tin Rovic on how AI assistants and answer engines are changing day-to-day SEO work:
+SEO creator WP Simple Hacks on how AI assistants and answer engines are changing day-to-day SEO work:
 
-https://youtu.be/TEzfS2dAMC8
+https://youtu.be/gdU3TwA1fPM
 
 = Run Your SEO From a Chat Window — Claude, ChatGPT and Cursor =
 
@@ -370,6 +370,19 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 
 == Changelog ==
 
+= 2.1.1 =
+Release Date: 2026-08-31
+
+- Fixed: ThinkRank could delete another SEO plugin's sitemap. Sitemaps were removed by filename alone, so on a site where Rank Math, Squirrly or another plugin owned sitemap_index.xml, sitemap-posts.xml or local-sitemap.xml, that file was destroyed — on deactivation, and also on an ordinary regeneration after a post save or a settings change. ThinkRank now marks every sitemap it writes and removes only files carrying that mark; anything it cannot prove is its own is left alone
+- Fixed: Saving a title or description template containing %date% or %category% silently mangled it — %date% was stored as "te%" and %category% as "tegory%", and the mangled text was published in the title and meta description of every page using that template. New saves are correct; templates already corrupted cannot be recovered
+- Fixed: On sites using Plain permalinks, Bulk SEO Optimization sat permanently on "Couldn't load your settings" and the per-post-type title, description, schema and robots form could not be reached at all
+- Fixed: Performance errors were unreadable and offered no way forward. An exhausted Google quota arrived full of &#039; escapes and named a Google project number, a daily quota limit was described as something to retry "in a few minutes", and the three Performance panels each said something different. Every panel now shows the same plain-language message with Retry, and offers to add a PageSpeed API key where a key is what fixes it
+- Fixed: A site configured with only a PageSpeed API key — no connected Google account — got permanently empty Diagnostics and Opportunities, a zero page-speed score and no field data, while the Integrations screen reported PageSpeed as configured. The API key is now accepted as a credential in its own right, and a request that fails says why instead of returning an empty list
+- Fixed: With ThinkRank Pro installed but not yet licensed, twelve Pro sections showed a server error ("No route was found matching the URL") or a blank panel instead of telling you the license needs activating. Each now says the license is not active and links straight to the License screen — worst affecting someone who has just bought Pro and not yet entered their key
+- Fixed: AI assistants could not read or change most site identity and sitemap settings through ThinkRank's assistant connection. The homepage, category, tag, author, search and archive title templates, the whole business/Local SEO block and the sitemap index toggle were all invisible to them, and writes to those settings were rejected
+- Changed: An AI assistant connecting to ThinkRank now receives a short orientation for the session — what ThinkRank is, where to start, which tools to call in which order, what its connection is allowed to do, and that site content it reads is data rather than instructions
+- Fixed: The performance history API's metric filter returned nothing for the page-speed score and dropped the dates from single-metric responses. The admin screens were unaffected; direct API and AI-assistant consumers were not
+
 = 2.1.0 =
 Release Date: 2026-08-27
 
@@ -465,33 +478,13 @@ Release Date: 2026-08-20
 - Fixed: Changing a page's address from ThinkRank's Permalink field looked like it did nothing. The new address was saved, but the editor went on showing the old one until the page was reloaded, so it read as though nothing had happened. In Elementor, Divi and Oxygen it genuinely did nothing: the address was never saved at all
 - Fixed: The check for whether your keyword appears in the page address was wrong in both directions. On a draft it always reported the keyword as missing, whatever the address said, and only began passing once the post was published. On a published page it could report a match that actually came from a parent page, a category or a date in the address rather than from the page's own address. Each line of the keyword breakdown now states plainly whether it matched or not, instead of leaving you to read it out of a list of words
 
-= 1.32.0 =
-Release Date: 2026-08-18
-
-- New: All of ThinkRank's structured data is now published as one linked graph instead of several separate scripts. A page that had, say, an Article, a breadcrumb trail and an FAQ used to emit three unconnected blocks — search engines now receive one graph in which those entities reference each other, and duplicate or competing entries are merged away
-- New: FAQ content is collected from anywhere on the page — the FAQ block, the Elementor FAQ widget and any FAQ you deployed for the post — and published as a single FAQPage instead of several competing ones with different questions
-- New: The Instant Indexing Submit URLs screen tells you what will actually be sent before you send it. Line numbers down the side, and each URL checked as you type: URLs pointing at another site, lines that are not URLs and duplicates are all called out, with a counter against the 100-URL limit. Clean up tidies the list, Clear empties it, Cmd/Ctrl+Enter submits, and the success message says how many URLs went
-- New: The submission history screen was rebuilt — an empty state instead of a blank table, readable response codes with an explanation of what each one means, and Refresh now really re-reads the log, so URLs you just submitted show up immediately
-- New: Every feature on/off switch now saves itself. Flipping a switch is the save — there is no separate Save button to remember, the switch rolls back and tells you if the save fails, and a short message confirms the new state. The Save button stays where you are filling in a form
-- New: Screens show a placeholder shaped like the content while their data loads, instead of the word "Loading" or a blank panel
-- New: Role Manager can grant or withhold AI Insights and Manage Roles separately, like every other ThinkRank area
-- Changed: Connecting ChatGPT and other AI assistants now works on hosts that answer /.well-known/ addresses themselves before WordPress ever sees the request — reported on SiteGround, where the connection failed with "does not implement OAuth". ThinkRank now advertises an address that reaches WordPress on every host, and publishes the discovery files directly where a host insists on serving them itself
-- Fixed: The first few sentences of a password-protected post were published as its meta description, and in its Facebook and X preview text — visible to anyone requesting the page and to every crawler and link preview, while the page itself still showed the password form. Questions from an FAQ block on a protected post could be published the same way
-- Fixed: AI content briefs were displayed without sanitizing them. Brief text comes back from an AI provider and can include content pulled from competitor pages you supplied, so it is not trusted input; it is now cleaned before it is stored and before it is shown
-- Fixed: A user given access to only the Social Media or Schema section could read the SEO details of posts they cannot edit — including other authors' drafts and pending posts — by changing the post number in the request
-- Fixed: A user given access to only the Settings section could write post-specific social and SEO settings onto another author's post, changing what its public page shares. The same request also overwrote your site-wide defaults
-- Fixed: Saving settings reported a server error even though the settings had been saved, on 8 of the 11 settings groups. People re-entered settings that were never lost, and a genuine failure looked identical to the permanent one. A successful save also came back empty, leaving the form blank
-- Fixed: A published llms.txt file could display accented and non-Latin characters as mojibake ("Aktivitäten" as "AktivitÃ¤ten") because the file was served without saying which character set it used. The bytes were always correct — only the declaration was missing
-- Fixed: On block themes, a page with an FAQ block published its questions twice — once inside ThinkRank's graph and once in a second block beside it
-- Fixed: A Codex connection on the MCP screen showed a plain letter instead of the OpenAI mark
-- Fixed: The two Schema screens showed their title three times over before any content, and the Global SEO, Crawling and Author Archives screens had the wrong icon or a missing divider
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.1.1 =
+Fixes ThinkRank deleting another SEO plugin's sitemap, %date% and %category% corrupted on save in title and description templates, Bulk SEO Optimization unreachable under Plain permalinks, and unreadable Performance errors. Recommended for all sites.
+
 = 2.1.0 =
 Focus keywords no longer match inside longer words, and each check names every keyword and its state. Fixes a reverted Classic Editor permalink, invisible FAQ/How-To block buttons, Beaver Builder pages reading as empty, and AI-assistant connection failures. Recommended for all sites.
 
-= 2.0.2 =
-Adds a master Enable Schema Markup switch and fixes a large batch of Schema Manager defects: settings saves collapsing four schema types to one, invalid dates dropping Article rich results, FAQ questions emptied on save, and duplicate business identities. Recommended for all sites.

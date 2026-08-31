@@ -38,7 +38,7 @@ class Get_Import_Status extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-import-status';
 		$this->label       = __( 'Get SEO Import Status', 'thinkrank' );
-		$this->description = __( 'Report the status of captured SEO import snapshots: export status (exporting/complete), per-type record and chunk totals, and migration timestamps. Optionally scope to a single source plugin.', 'thinkrank' );
+		$this->description = __( 'Report the status of captured SEO import snapshots: export status (exporting/complete), per-type record and chunk totals, and migration timestamps. Optionally scope to a single source plugin. Reports on the snapshots captured by run-seo-import.', 'thinkrank' );
 	}
 
 	/**

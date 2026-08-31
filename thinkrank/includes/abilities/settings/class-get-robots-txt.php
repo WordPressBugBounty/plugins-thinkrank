@@ -26,7 +26,7 @@ class Get_Robots_Txt extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-robots-txt';
 		$this->label       = __( 'Get ThinkRank Robots.txt', 'thinkrank' );
-		$this->description = __( 'Retrieve the ThinkRank robots.txt: both the stored custom override (may be empty) and the "rendered" content actually served to crawlers, which includes the auto-generated default rules when no override is set.', 'thinkrank' );
+		$this->description = __( 'Retrieve the ThinkRank robots.txt: both the stored custom override (may be empty) and the "rendered" content actually served to crawlers, which includes the auto-generated default rules when no override is set. Use update-robots-txt to replace it.', 'thinkrank' );
 	}
 
 	/**

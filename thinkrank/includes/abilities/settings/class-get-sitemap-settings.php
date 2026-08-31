@@ -29,7 +29,7 @@ class Get_Sitemap_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-sitemap-settings';
 		$this->label       = __( 'Get ThinkRank Sitemap Settings', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank XML sitemap settings, which use per-type inclusion toggles plus exclusion lists.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank XML sitemap settings: per-type inclusion toggles, exclusion lists, and the index/splitting, styling, filename and search-engine ping options. Use update-sitemap-settings to change them.', 'thinkrank' );
 	}
 
 	/**
@@ -68,16 +68,7 @@ class Get_Sitemap_Settings extends Ability_Base {
 	public function get_output_schema() {
 		return [
 			'type'       => 'object',
-			'properties' => [
-				'enabled'            => [ 'type' => 'boolean' ],
-				'include_images'     => [ 'type' => 'boolean' ],
-				'include_posts'      => [ 'type' => 'boolean' ],
-				'include_pages'      => [ 'type' => 'boolean' ],
-				'include_categories' => [ 'type' => 'boolean' ],
-				'include_tags'       => [ 'type' => 'boolean' ],
-				'exclude_posts'      => [ 'type' => 'string' ],
-				'exclude_terms'      => [ 'type' => 'string' ],
-			],
+			'properties' => Settings_Key_Map::sitemap(),
 		];
 	}
 
@@ -91,15 +82,6 @@ class Get_Sitemap_Settings extends Ability_Base {
 		$gen = new Sitemap_Generator();
 		$s   = $gen->get_settings( 'site', null );
 
-		return [
-			'enabled'            => (bool) ( $s['enabled'] ?? true ),
-			'include_images'     => (bool) ( $s['include_images'] ?? true ),
-			'include_posts'      => (bool) ( $s['include_posts'] ?? true ),
-			'include_pages'      => (bool) ( $s['include_pages'] ?? true ),
-			'include_categories' => (bool) ( $s['include_categories'] ?? true ),
-			'include_tags'       => (bool) ( $s['include_tags'] ?? true ),
-			'exclude_posts'      => (string) ( $s['exclude_posts'] ?? '' ),
-			'exclude_terms'      => (string) ( $s['exclude_terms'] ?? '' ),
-		];
+		return Settings_Key_Map::read( Settings_Key_Map::sitemap(), $s );
 	}
 }

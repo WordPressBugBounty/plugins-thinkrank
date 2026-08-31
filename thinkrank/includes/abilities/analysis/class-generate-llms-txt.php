@@ -29,7 +29,7 @@ class Generate_Llms_Txt extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/generate-llms-txt';
 		$this->label       = __( 'Generate ThinkRank llms.txt Preview', 'thinkrank' );
-		$this->description = __( 'Generate a preview of the llms.txt content without publishing it to disk. Pass an empty user_input object to preview using the currently saved settings.', 'thinkrank' );
+		$this->description = __( 'Generate a preview of the llms.txt content without publishing it to disk. Pass an empty user_input object to preview using the currently saved settings. Use publish-llms-txt to actually write it.', 'thinkrank' );
 	}
 
 	/**

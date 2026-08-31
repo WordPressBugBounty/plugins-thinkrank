@@ -55,7 +55,7 @@ class Run_Seo_Import extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/run-seo-import';
 		$this->label       = __( 'Run SEO Data Import', 'thinkrank' );
-		$this->description = __( 'Import SEO metadata from another plugin (Yoast, RankMath, SEOPress, or AIOSEO) into ThinkRank. Exports the source to a snapshot then migrates it; existing ThinkRank values are never overwritten and source data is left intact. Returns aggregate export/migration counters.', 'thinkrank' );
+		$this->description = __( 'Import SEO metadata from another plugin (Yoast, RankMath, SEOPress, or AIOSEO) into ThinkRank. Exports the source to a snapshot then migrates it; existing ThinkRank values are never overwritten and source data is left intact. Returns aggregate export/migration counters. Run preview-seo-import first to see what would change; get-import-status reports on the snapshot afterwards.', 'thinkrank' );
 	}
 
 	/**

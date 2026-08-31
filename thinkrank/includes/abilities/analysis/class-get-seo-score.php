@@ -29,7 +29,7 @@ class Get_Seo_Score extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-seo-score';
 		$this->label       = __( 'Get ThinkRank SEO Score', 'thinkrank' );
-		$this->description = __( 'Calculate the ThinkRank SEO score for a single post, analyzing its content against its configured title and meta description.', 'thinkrank' );
+		$this->description = __( 'Calculate the ThinkRank SEO score for a single post, analyzing its content against its configured title and meta description. Use get-post-seo-checks for several posts at once, or bulk-analyze-and-save to score and persist them.', 'thinkrank' );
 	}
 
 	/**

@@ -15,6 +15,11 @@ declare(strict_types=1);
 
 namespace ThinkRank\API;
 
+// Prevent direct access
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 use ThinkRank\SEO\Sitemap_Generator;
 use ThinkRank\API\Traits\CSRF_Protection;
 use ThinkRank\API\Traits\Context_Authorization;
@@ -22,6 +27,11 @@ use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
+
+// Prevent direct access
+if (!defined('ABSPATH')) {
+    exit;
+}
 
 // Load CSRF Protection trait
 require_once THINKRANK_PLUGIN_DIR . 'includes/api/traits/trait-csrf-protection.php';
