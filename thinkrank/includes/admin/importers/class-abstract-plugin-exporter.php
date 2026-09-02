@@ -153,6 +153,24 @@ abstract class Abstract_Plugin_Exporter {
     }
 
     /**
+     * Records for a data type outside the fixed set above.
+     *
+     * Nothing to hand over by default. It exists so an exporter can gain a type
+     * (ThinkRank's own export lets Pro register its tables this way) without
+     * every subclass having to reimplement export_chunk()'s chunk writing and
+     * manifest bookkeeping.
+     *
+     * @since 2.2.0
+     *
+     * @param string $type Data type
+     * @param int    $page Page number (1-indexed)
+     * @return array Records
+     */
+    protected function export_custom_type_page(string $type, int $page): array {
+        return [];
+    }
+
+    /**
      * Capture the source plugin's Role Manager assignments: role slug => the
      * capabilities that role holds whose name starts with $prefix.
      *
@@ -272,7 +290,7 @@ abstract class Abstract_Plugin_Exporter {
                 $records = $this->export_404_logs_page($page);
                 break;
             default:
-                $records = [];
+                $records = $this->export_custom_type_page($type, $page);
         }
 
         $exported_count = count($records);

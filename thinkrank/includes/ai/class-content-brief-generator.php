@@ -128,7 +128,7 @@ class Content_Brief_Generator {
      * @throws \Exception On failure.
      */
     private function init_ai_client(): void {
-        $provider = $this->settings->get('ai_provider', 'openai');
+        $provider = $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
 
         if ($provider === 'openai') {
             $api_key = $this->settings->get('openai_api_key');
@@ -173,7 +173,13 @@ class Content_Brief_Generator {
         }
 
         // Fallback to settings
-        $provider = $this->settings->get('ai_provider', 'openai');
+        $provider = $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
+        if (Settings::AI_PROVIDER_NONE === $provider) {
+            // No provider chosen, so there is no model to name. Reporting the
+            // OpenAI default here would attribute output to a provider the site
+            // never selected (#572).
+            return '';
+        }
         if ($provider === 'claude') {
             return $this->settings->get('claude_model', Settings::DEFAULT_CLAUDE_MODEL);
         } elseif ($provider === 'gemini') {
@@ -228,7 +234,7 @@ class Content_Brief_Generator {
      * @return string Current provider name
      */
     private function get_current_provider(): string {
-        return $this->settings->get('ai_provider', 'openai');
+        return $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
     }
 
     /**
@@ -1993,7 +1999,7 @@ class Content_Brief_Generator {
                 'user_id' => $user_id,
                 'action' => $action,
                 'tokens_used' => $tokens_used,
-                'provider' => $this->settings->get('ai_provider', 'openai'),
+                'provider' => $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE),
                 'post_id' => $post_id,
                 'metadata' => !empty($metadata) ? wp_json_encode($metadata) : null,
                 'created_at' => current_time('mysql'),

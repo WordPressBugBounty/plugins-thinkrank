@@ -334,6 +334,25 @@ class Global_SEO_Schema_Output {
     }
 
     /**
+     * Whether this post type has a SAVED schema type, ignoring the built-in
+     * per-post-type default.
+     *
+     * would_output_schema() answers "will JSON-LD be emitted?", which the
+     * fallback in get_global_seo_settings() makes true for every public post
+     * type. The audit needs the different question "has the user configured
+     * anything?", so this reads the stored option without the default merge.
+     *
+     * @since 2.2.0
+     * @param string $post_type Post type.
+     * @return bool True when an explicit schema_type is stored for this type.
+     */
+    public function has_explicit_schema_type(string $post_type): bool {
+        $all_settings = get_option(self::OPTION_NAME, []);
+
+        return !empty($all_settings[$post_type]['schema_type']);
+    }
+
+    /**
      * Get Global SEO settings for a specific post type
      *
      * @since 1.0.0

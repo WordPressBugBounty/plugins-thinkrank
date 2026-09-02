@@ -96,13 +96,13 @@ class Brand_Visibility_Providers {
         'gemini' => [
             ['value' => 'gemini-3.5-flash', 'label' => 'Gemini 3.5 Flash (recommended)'],
             ['value' => 'gemini-3.1-flash-lite', 'label' => 'Gemini 3.1 Flash Lite (fastest)'],
-            ['value' => 'gemini-3.1-pro', 'label' => 'Gemini 3.1 Pro'],
-            ['value' => 'gemini-2.5-pro', 'label' => 'Gemini 2.5 Pro'],
+            ['value' => 'gemini-3.1-pro-preview', 'label' => 'Gemini 3.1 Pro (preview)'],
         ],
         'claude' => [
             ['value' => 'claude-haiku-4-5', 'label' => 'Claude Haiku 4.5 (fastest)'],
             ['value' => 'claude-sonnet-5', 'label' => 'Claude Sonnet 5 (recommended)'],
-            ['value' => 'claude-opus-4-8', 'label' => 'Claude Opus 4.8 (most capable)'],
+            ['value' => 'claude-opus-4-8', 'label' => 'Claude Opus 4.8'],
+            ['value' => 'claude-opus-5', 'label' => 'Claude Opus 5 (most capable)'],
         ],
         'perplexity' => [
             ['value' => 'sonar', 'label' => 'Sonar (search-grounded)'],

@@ -75,7 +75,10 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             'image_min_height' => 900,
             'image_recommended_ratio' => 0.67, // 2:3 ratio
             'title_max_length' => 100,
-            'description_max_length' => 500
+            // Pinterest has no tag of its own: it reads og:description, which
+            // the frontend caps at max_description_length. Previewing 500
+            // promised up to 340 characters that are never emitted.
+            'description_max_length' => 160
         ],
         'whatsapp' => [
             'og_required' => ['og:title', 'og:type', 'og:image', 'og:url'],
@@ -1027,6 +1030,26 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
     ];
 
     /**
+     * Site-wide switches with no per-context equivalent.
+     *
+     * Unlike INHERITED_SITE_KEYS above, these must inherit their site value
+     * even when it is FALSE. The empty()-guarded loop used for images can only
+     * ever propagate "on", which is right for an image URL (empty means "not
+     * configured") and wrong for a boolean, where false is a deliberate choice.
+     *
+     * Without this the master Open Graph / Twitter Cards switches were honoured
+     * on the homepage (mapped to the `site` context) and ignored on every post
+     * and page, which read as though the toggle had worked (#557).
+     *
+     * @since 2.2.0
+     * @var string[]
+     */
+    private const SITE_ONLY_KEYS = [
+        'enable_open_graph',
+        'enable_twitter_cards',
+    ];
+
+    /**
      * Get settings for a context, inheriting the site-wide default images
      *
      * Two corrections over the generic lookup:
@@ -1061,6 +1084,16 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         }
 
         $site_settings = parent::get_settings('site', null);
+
+        // Site-wide switches: the site value is authoritative, false included.
+        // array_key_exists, not empty() — '' is how a disabled toggle is stored.
+        foreach (self::SITE_ONLY_KEYS as $key) {
+            if (array_key_exists($key, $site_settings)) {
+                $settings[$key] = $site_settings[$key];
+            }
+        }
+
+        // Default images: inherit only when this context has none of its own.
         foreach (self::INHERITED_SITE_KEYS as $key) {
             if (empty($settings[$key]) && !empty($site_settings[$key])) {
                 $settings[$key] = $site_settings[$key];

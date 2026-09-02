@@ -36,6 +36,16 @@ if (!defined('ABSPATH')) {
 class SEO_Analyzer_Fixer {
 
     /**
+     * Option holding the alt-text bulk-fill pager position.
+     *
+     * Not autoloaded: it is read only while a fix is running.
+     *
+     * @since 2.2.0
+     * @var string
+     */
+    private const ALT_FIX_OFFSET_OPTION = 'thinkrank_alt_fix_offset';
+
+    /**
      * The fixable checks, keyed by the analyzer's check id.
      *
      * `warning` is shown in the UI before the user commits when a fix has a
@@ -218,11 +228,63 @@ class SEO_Analyzer_Fixer {
      * @return array
      */
     private function fix_image_alt_text(): array {
+        // bulk_fill_missing_alt() pages by ATTACHMENT offset, so a caller that
+        // always starts at 0 can only ever touch the first batch: once those
+        // images have alt text they are skipped, `remaining` never moves, and
+        // the "run the fix again to continue" message is an instruction that
+        // cannot work. Carry the pager position across clicks.
         $manager = new Image_SEO_Manager();
-        $result  = $manager->bulk_fill_missing_alt(['limit' => 50, 'overwrite' => false]);
+
+        // Nothing missing means nothing to walk. Without this the pager still
+        // marches through the library reporting `remaining` from the total
+        // attachment count, so a fully-covered library kept claiming work was
+        // left and re-armed the offset on every click.
+        $stats = $manager->get_media_alt_stats();
+        if (0 === (int) ($stats['missing'] ?? 0)) {
+            delete_option(self::ALT_FIX_OFFSET_OPTION);
+
+            return [
+                'fixed'   => true,
+                'message' => __('Every image in your media library already has alt text.', 'thinkrank'),
+                'data'    => [
+                    'updated'   => 0,
+                    'remaining' => 0,
+                ],
+            ];
+        }
+
+        $offset  = (int) get_option(self::ALT_FIX_OFFSET_OPTION, 0);
+        $result  = $manager->bulk_fill_missing_alt([
+            'offset'    => $offset,
+            'limit'     => 50,
+            'overwrite' => false,
+        ]);
 
         $updated   = (int) ($result['updated'] ?? 0);
         $remaining = (int) ($result['remaining'] ?? 0);
+        $done      = !empty($result['done']);
+
+        // Reset when the walk finishes so a later run (after new uploads)
+        // starts from the top rather than off the end of the library.
+        if ($done) {
+            delete_option(self::ALT_FIX_OFFSET_OPTION);
+        } else {
+            update_option(self::ALT_FIX_OFFSET_OPTION, (int) ($result['next_offset'] ?? 0), false);
+        }
+
+        // A batch that changed nothing and has nothing left to walk is not a
+        // success. Reporting `fixed => true` here showed a green toast while
+        // the finding below it stayed red.
+        if (0 === $updated && $done) {
+            return [
+                'fixed'   => false,
+                'message' => __('No images could be filled automatically. Check your alt text format under Essential SEO → Image SEO, or add alt text manually in the Media Library.', 'thinkrank'),
+                'data'    => [
+                    'updated'   => 0,
+                    'remaining' => $remaining,
+                ],
+            ];
+        }
 
         return [
             'fixed'   => true,

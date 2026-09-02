@@ -70,7 +70,14 @@ class Role_Manager_Endpoint {
     public function get_data(): WP_REST_Response {
         $roles = [];
         foreach (Capability_Manager::editable_roles() as $slug => $name) {
-            $roles[] = ['slug' => $slug, 'name' => $name];
+            $roles[] = [
+                'slug' => $slug,
+                'name' => $name,
+                // False when the role lacks the WordPress capability ThinkRank's
+                // endpoints require on top of the section gate — the grant would
+                // save and then do nothing (#576).
+                'can_use' => Capability_Manager::role_meets_baseline($slug),
+            ];
         }
 
         $capabilities = [];
@@ -85,6 +92,7 @@ class Role_Manager_Endpoint {
                 'capabilities' => $capabilities,
                 'matrix'       => Capability_Manager::get_matrix(),
                 'base_cap'     => Capability_Manager::ACCESS,
+                'baseline_cap' => Capability_Manager::BASELINE_CAPABILITY,
             ],
         ], 200);
     }

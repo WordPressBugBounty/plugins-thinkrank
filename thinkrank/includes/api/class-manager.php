@@ -34,6 +34,7 @@ use ThinkRank\API\Global_Robot_Meta_Endpoint;
 use ThinkRank\API\Author_Archives_Endpoint;
 use ThinkRank\API\Email_Report_Endpoint;
 use ThinkRank\Admin\Importers\Import_Controller;
+use ThinkRank\Admin\Importers\Export_Controller;
 use ThinkRank\API\Setup_Wizard_Endpoint;
 
 
@@ -147,7 +148,13 @@ class Manager {
             'args' => [
                 'ai_provider' => [
                     'type' => 'string',
+                    // Includes '' (Settings::AI_PROVIDER_NONE) so a client can
+                    // clear the selection, not just switch between providers.
+                    'enum' => \ThinkRank\Core\Settings::selectable_ai_providers(),
                     'sanitize_callback' => 'sanitize_key',
+                    // The enum is inert without this: has_valid_params() skips
+                    // an arg entirely unless a validate_callback is set (#394).
+                    'validate_callback' => 'rest_validate_request_arg',
                 ],
                 'openai_api_key' => [
                     'type' => 'string',
@@ -181,6 +188,25 @@ class Manager {
                     'type' => 'string',
                     'sanitize_callback' => 'sanitize_text_field',
                 ],
+                'max_tokens' => [
+                    'type' => 'integer',
+                    'minimum' => 1,
+                    'maximum' => 32000,
+                    'sanitize_callback' => 'absint',
+                    'validate_callback' => 'rest_validate_request_arg',
+                ],
+                'temperature' => [
+                    'type' => 'number',
+                    'minimum' => 0,
+                    'maximum' => 2,
+                    'validate_callback' => 'rest_validate_request_arg',
+                ],
+                'cache_duration' => [
+                    'type' => 'integer',
+                    'minimum' => 0,
+                    'sanitize_callback' => 'absint',
+                    'validate_callback' => 'rest_validate_request_arg',
+                ],
                 'keep_data_on_uninstall' => [
                     'type' => 'boolean',
                     'sanitize_callback' => 'rest_sanitize_boolean',
@@ -190,6 +216,10 @@ class Manager {
                     'sanitize_callback' => 'rest_sanitize_boolean',
                 ],
                 'enable_migration_tools' => [
+                    'type' => 'boolean',
+                    'sanitize_callback' => 'rest_sanitize_boolean',
+                ],
+                'enable_import_export' => [
                     'type' => 'boolean',
                     'sanitize_callback' => 'rest_sanitize_boolean',
                 ],
@@ -766,7 +796,7 @@ class Manager {
         $settings_instance = \ThinkRank\Core\Settings::instance();
 
         $settings = [
-            'ai_provider' => $settings_instance->get('ai_provider', 'openai'),
+            'ai_provider' => $settings_instance->get('ai_provider', \ThinkRank\Core\Settings::AI_PROVIDER_NONE),
             'openai_api_key' => $settings_instance->get('openai_api_key', ''),
             'openai_model' => $settings_instance->get('openai_model', \ThinkRank\Core\Settings::DEFAULT_OPENAI_MODEL),
             'claude_api_key' => $settings_instance->get('claude_api_key', ''),
@@ -780,6 +810,7 @@ class Manager {
             'cache_duration' => $settings_instance->get('cache_duration', 3600),
             'keep_data_on_uninstall' => (bool) $settings_instance->get('keep_data_on_uninstall', true),
             'enable_migration_tools' => (bool) $settings_instance->get('enable_migration_tools', false),
+            'enable_import_export' => (bool) $settings_instance->get('enable_import_export', false),
             'google_account_connected' => (bool) $settings_instance->get('google_account_connected', false),
             'enable_mcp' => (bool) $settings_instance->get('enable_mcp', false),
         ];
@@ -856,6 +887,7 @@ class Manager {
             'keep_data_on_uninstall' => 'keep_data_on_uninstall',
             'enable_mcp' => 'enable_mcp',
             'enable_migration_tools' => 'enable_migration_tools',
+            'enable_import_export' => 'enable_import_export',
         ];
 
         // Processing settings save request
@@ -1377,6 +1409,16 @@ class Manager {
             $api_key = $request->get_param('api_key');
             $provider = $request->get_param('provider') ?: 'openai';
 
+            // An unrecognised provider used to fall through to the Gemini arm
+            // below, so a typo silently tested the wrong provider's key.
+            if (!in_array($provider, \ThinkRank\Core\Settings::SUPPORTED_AI_PROVIDERS, true)) {
+                return new \WP_REST_Response([
+                    'success' => false,
+                    /* translators: %s: the unrecognised provider value. */
+                    'message' => sprintf(__('Unknown AI provider: %s', 'thinkrank'), $provider),
+                ], 400);
+            }
+
             // If no API key provided in request, try to get from saved settings
             if (empty($api_key)) {
                 $settings = \ThinkRank\Core\Settings::instance();
@@ -1863,11 +1905,32 @@ class Manager {
             // Failed to register Image SEO endpoint
         }
 
+        // Import_Controller is deliberately NOT gated on enable_migration_tools.
+        // /import/detect backs the setup wizard's migration step and the record
+        // count on Settings > Import / Export, and /import/snapshot + /migrate
+        // run the wizard's actual import — all on a fresh install, where the
+        // setting is off. Gating them would break onboarding, which is a worse
+        // bug than the one #583 reports.
         try {
             $import_controller = new Import_Controller();
             $import_controller->register_routes();
         } catch (\Exception $e) {
             // Failed to register Import endpoint
+        }
+
+        // Export/restore is gated on the setting that gates its admin screen,
+        // so turning Import / Export off removes its REST surface along with
+        // its menu item (#583). Nothing in the setup wizard calls these:
+        // MigrationPluginRow takes startExport/startMigration/cancel from
+        // useImportWorkflow and never uploadFile. rest_api_init runs per
+        // request, so a toggle takes effect on the next one — no flush.
+        if ((bool) \ThinkRank\Core\Settings::instance()->get('enable_import_export', false)) {
+            try {
+                $export_controller = new Export_Controller();
+                $export_controller->register_routes();
+            } catch (\Exception $e) {
+                // Failed to register Export endpoint
+            }
         }
 
         try {

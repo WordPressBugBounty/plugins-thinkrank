@@ -1355,8 +1355,14 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-gap-x-6{
   column-gap: 1.5rem;
 }
+.tr-root .tr-gap-x-8{
+  column-gap: 2rem;
+}
 .tr-root .tr-gap-y-2{
   row-gap: 0.5rem;
+}
+.tr-root .tr-gap-y-2\.5{
+  row-gap: 0.625rem;
 }
 .tr-root .tr-gap-y-4{
   row-gap: 1rem;
@@ -1888,6 +1894,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   padding-top: 1.5rem;
   padding-bottom: 1.5rem;
 }
+.tr-root .tr-py-7{
+  padding-top: 1.75rem;
+  padding-bottom: 1.75rem;
+}
 .tr-root .tr-py-8{
   padding-top: 2rem;
   padding-bottom: 2rem;
@@ -1895,6 +1905,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-py-px{
   padding-top: 1px;
   padding-bottom: 1px;
+}
+.tr-root .tr-pb-0{
+  padding-bottom: 0px;
 }
 .tr-root .tr-pb-3{
   padding-bottom: 0.75rem;
@@ -2825,6 +2838,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 @media (min-width: 640px){
   .tr-root .sm\:tr-block{
     display: block;
+  }
+  .tr-root .sm\:tr-w-80{
+    width: 20rem;
   }
   .tr-root .sm\:tr-flex-1{
     flex: 1 1 0%;

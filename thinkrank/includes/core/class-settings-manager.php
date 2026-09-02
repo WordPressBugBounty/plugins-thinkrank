@@ -837,9 +837,13 @@ class Settings_Manager {
                 break;
 
             case 'ai_provider':
-                if (!in_array($value, ['openai', 'claude', 'gemini', 'openrouter'], true)) {
+                // '' is legal: it is Settings::AI_PROVIDER_NONE, the state a
+                // fresh install starts in and the one a user returns to by
+                // deselecting their provider (#572).
+                if (!in_array($value, \ThinkRank\Core\Settings::selectable_ai_providers(), true)) {
                     $validation['valid'] = false;
-                    $validation['errors'][] = "ai_provider must be 'openai', 'claude', 'gemini', or 'openrouter'";
+                    $validation['errors'][] = "ai_provider must be empty (no provider) or one of: "
+                        . implode(', ', \ThinkRank\Core\Settings::SUPPORTED_AI_PROVIDERS);
                 }
                 break;
 

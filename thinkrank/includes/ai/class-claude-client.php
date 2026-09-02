@@ -168,15 +168,20 @@ class Claude_Client {
     /**
      * Whether the given model rejects sampling params (temperature/top_p/top_k).
      *
-     * Anthropic removed these on Opus 4.7+, Sonnet 5, and Fable 5 — including any
-     * date-suffixed or "-latest" alias of them — so they must be omitted from the
-     * request body or the API returns a 400.
+     * Anthropic removed these on Opus 4.7+, Opus 5, Sonnet 5, and Fable 5 —
+     * including any date-suffixed or "-latest" alias of them — so they must be
+     * omitted from the request body or the API returns a 400.
+     *
+     * Every generate_* method below sends a temperature, so a model missing from
+     * this list fails on its first real call rather than at save time. `claude-opus-5`
+     * was absent while being offered in the UI, which made the flagship model
+     * unusable (#572).
      *
      * @param string $model Model ID
      * @return bool
      */
     private function model_rejects_sampling_params(string $model): bool {
-        foreach (['claude-opus-4-7', 'claude-opus-4-8', 'claude-sonnet-5', 'claude-fable-5', 'claude-mythos-5'] as $prefix) {
+        foreach (['claude-opus-4-7', 'claude-opus-4-8', 'claude-opus-5', 'claude-sonnet-5', 'claude-fable-5', 'claude-mythos-5'] as $prefix) {
             if (strpos($model, $prefix) === 0) {
                 return true;
             }

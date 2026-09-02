@@ -1686,11 +1686,20 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             $written = !empty($results['success']);
         } else {
             $xml = $this->generate_sitemap($settings);
-            $written = $this->save_sitemap_to_file($xml, $this->get_primary_sitemap_filename($settings));
+            $primary = $this->get_primary_sitemap_filename($settings);
+            $written = $this->save_sitemap_to_file($xml, $primary);
 
             // Local business sitemap is a standalone file, regenerated on the
             // single-sitemap path too (this is the default mode).
             $this->regenerate_local_sitemap($settings);
+
+            // Switching out of index mode leaves sitemap_index.xml and every
+            // child on disk, still served and never refreshed again. The index
+            // path already prunes what it no longer owns; this path never did,
+            // so the site kept serving two sitemap trees (#563). Ownership is
+            // still tested per file, so another plugin's sitemap at one of our
+            // names is never touched (#515).
+            $this->prune_orphaned_segments($settings, [['filename' => basename($primary)]]);
         }
 
         if ($written) {
@@ -2232,12 +2241,19 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
         }
 
-        // The index and the local business sitemap are written by their own
-        // paths and are not segments, so they are never orphans here.
-        $kept[strtolower(basename($this->get_primary_sitemap_filename($settings)))] = true;
+        // The current mode's primary and the local business sitemap are written
+        // by their own paths and are never orphans here.
+        $primary = strtolower(basename($this->get_primary_sitemap_filename($settings)));
+        $kept[$primary] = true;
         $kept['local-sitemap.xml'] = true;
-        $kept['sitemap.xml'] = true;
-        $kept['sitemap_index.xml'] = true;
+
+        // The OTHER mode's primary is an orphan the moment the mode changes:
+        // index mode leaves sitemap.xml behind, flat mode leaves
+        // sitemap_index.xml and its children. Both used to be kept
+        // unconditionally, so the site served two sitemap trees and only ever
+        // refreshed one (#563). The children are already covered by the segment
+        // sweep below, which now sees them because the index is no longer kept.
+        $stale_primaries = array_diff(['sitemap.xml', 'sitemap_index.xml'], [$primary]);
 
         $removed = [];
 
@@ -2250,7 +2266,9 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             return $removed;
         }
 
-        foreach ($this->publishable_segment_filenames($settings) as $candidate) {
+        $candidates = array_merge($this->publishable_segment_filenames($settings), $stale_primaries);
+
+        foreach ($candidates as $candidate) {
             if (isset($kept[strtolower($candidate)])) {
                 continue;
             }

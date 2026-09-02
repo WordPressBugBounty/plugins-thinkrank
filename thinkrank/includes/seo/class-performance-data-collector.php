@@ -247,6 +247,14 @@ class Performance_Data_Collector {
             return;
         }
 
+        // Not-configured is a configuration state, not a failure: it is the
+        // default for a fresh install, it never resolves on its own, and the
+        // REST layer already reports it to the UI. Logging it wrote a line to
+        // every unconfigured site's error log on every scheduled run (#585).
+        if ($this->last_error_code === self::ERROR_NOT_CONFIGURED) {
+            return;
+        }
+
         error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- the only record that a silent cron failure happened.
             sprintf(
                 'ThinkRank [performance]: scheduled Core Web Vitals collection failed (%s) — %s',

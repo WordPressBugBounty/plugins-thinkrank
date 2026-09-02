@@ -63,6 +63,43 @@ class SEO_Analyzer {
     }
 
     /**
+     * WordPress options whose value the analyzer reports on directly.
+     *
+     * @since 2.2.0
+     * @var string[]
+     */
+    private const WATCHED_OPTIONS = [
+        'blog_public',
+        'permalink_structure',
+        'blogname',
+        'blogdescription',
+    ];
+
+    /**
+     * Register cache invalidation.
+     *
+     * The analysis is cached for an hour, and until now only the image alt-text
+     * bulk writer ever busted it — so changing any other setting the audit
+     * reports on left the screen confidently wrong for up to 60 minutes. The
+     * audit's whole job is to describe the site's current configuration, so it
+     * invalidates on every write it could possibly be reading.
+     *
+     * @since 2.2.0
+     * @return void
+     */
+    public function init(): void {
+        foreach (self::WATCHED_OPTIONS as $option) {
+            add_action("update_option_{$option}", [$this, 'flush_cache']);
+            add_action("add_option_{$option}", [$this, 'flush_cache']);
+        }
+
+        // Any ThinkRank settings category can feed a check (sitemap, schema,
+        // image SEO today; more later). Flushing on all of them is cheaper than
+        // a list that silently rots as checks are added.
+        add_action('thinkrank_seo_settings_saved', [$this, 'flush_cache']);
+    }
+
+    /**
      * Return the cached analysis, computing (and caching) it when missing or
      * when a fresh run is forced.
      *
@@ -331,7 +368,8 @@ class SEO_Analyzer {
      */
     public function check_tagline(): array {
         $tagline = trim((string) get_bloginfo('description'));
-        $is_default = strtolower($tagline) === strtolower('Just another WordPress site');
+
+        $is_default = $this->is_default_tagline($tagline);
 
         if ($tagline === '' || $is_default) {
             return [
@@ -348,6 +386,51 @@ class SEO_Analyzer {
             'message' => __('Your tagline is set and ready to describe your site.', 'thinkrank'),
             'value'   => $tagline,
         ];
+    }
+
+    /**
+     * Whether a tagline is still WordPress' shipped default.
+     *
+     * The installer writes the TRANSLATED default into blogdescription, so an
+     * English-only literal silently passed an untouched tagline on every
+     * non-English install. The string lives in core's `admin-{locale}.mo`,
+     * which a REST request (how this analyzer runs) does not load — so the
+     * catalogue is loaded on demand for the comparison when the site is not
+     * running in English.
+     *
+     * @since 2.2.0
+     * @param string $tagline Trimmed tagline.
+     * @return bool
+     */
+    private function is_default_tagline(string $tagline): bool {
+        $candidates = ['Just another WordPress site'];
+
+        $locale = get_locale();
+        if ('en_US' !== $locale) {
+            // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch,WordPress.WP.I18n.LowLevelTranslationFunction -- core's own string in the `default` domain, read at runtime.
+            $translated = translate('Just another WordPress site', 'default');
+
+            if ($translated === 'Just another WordPress site') {
+                // Not in the loaded catalogue — pull in the admin one, which is
+                // where core ships this string, then ask again.
+                $mofile = WP_LANG_DIR . '/admin-' . $locale . '.mo';
+                if (is_readable($mofile)) {
+                    load_textdomain('default', $mofile, $locale);
+                    // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch,WordPress.WP.I18n.LowLevelTranslationFunction -- as above.
+                    $translated = translate('Just another WordPress site', 'default');
+                }
+            }
+
+            $candidates[] = $translated;
+        }
+
+        foreach ($candidates as $candidate) {
+            if (strtolower($tagline) === strtolower($candidate)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -445,7 +528,7 @@ class SEO_Analyzer {
     public function check_schema(): array {
         $label = __('Structured data configured', 'thinkrank');
 
-        if ($this->schema_is_output()) {
+        if ($this->schema_is_configured()) {
             return [
                 'label'   => $label,
                 'status'  => self::PASSED,
@@ -453,12 +536,65 @@ class SEO_Analyzer {
             ];
         }
 
+        // Nothing is configured, but ThinkRank still emits JSON-LD from its
+        // built-in per-post-type defaults. Saying "no schema" there would be
+        // false; the actionable point is that nobody has reviewed it.
+        if ($this->schema_is_output()) {
+            return [
+                'label'      => $label,
+                'status'     => self::WARNING,
+                'message'    => __('Structured data is running on ThinkRank\'s built-in defaults. Reviewing the schema type for each post type gives you control over how rich results appear.', 'thinkrank'),
+                'how_to_fix' => __('Choose a schema type for each post type under Essential SEO → Bulk SEO Optimization.', 'thinkrank'),
+            ];
+        }
+
         return [
             'label'      => $label,
-            'status'     => self::WARNING,
-            'message'    => __('No schema/structured data is configured. Schema powers rich results in search.', 'thinkrank'),
-            'how_to_fix' => __('Choose a default schema type for each post type under Essential SEO → Bulk SEO Optimization.', 'thinkrank'),
+            'status'     => self::FAILED,
+            'message'    => __('No schema/structured data is configured or emitted. Schema powers rich results in search.', 'thinkrank'),
+            'how_to_fix' => __('Turn on automatic structured data, or choose a schema type for each post type under Essential SEO → Bulk SEO Optimization.', 'thinkrank'),
         ];
+    }
+
+    /**
+     * Whether the user has EXPLICITLY configured structured data.
+     *
+     * Distinct from schema_is_output(): the Global SEO layer falls back to a
+     * built-in schema type for every public post type, so "something is
+     * emitted" is true on every site and made this check impossible to fail
+     * (its weight was earned unconditionally and its one-click fix was
+     * unreachable). This asks the question the check's copy actually claims to
+     * answer.
+     *
+     * @since 2.2.0
+     * @return bool
+     */
+    private function schema_is_configured(): bool {
+        // 1) Schema Management System — an explicit opt-in.
+        if (class_exists('ThinkRank\\SEO\\Schema_Management_System')) {
+            $settings = (new Schema_Management_System())->get_settings('site', null);
+            if (is_array($settings)) {
+                if (!empty($settings['enabled_schema_types']) && is_array($settings['enabled_schema_types'])) {
+                    return true;
+                }
+                if (!empty($settings['auto_generate_schema'])) {
+                    return true;
+                }
+            }
+        }
+
+        // 2) A saved per-post-type schema_type in the Global SEO layer. The
+        //    built-in default deliberately does not count here.
+        if (class_exists('ThinkRank\\Frontend\\Global_SEO_Schema_Output')) {
+            $output = new \ThinkRank\Frontend\Global_SEO_Schema_Output();
+            foreach (get_post_types(['public' => true], 'names') as $post_type) {
+                if ($output->has_explicit_schema_type((string) $post_type)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -565,6 +701,11 @@ class SEO_Analyzer {
         // a valid description via the pattern fallback were wrongly reported as
         // missing. The sample is bounded (CONTENT_SAMPLE_SIZE) so the per-post
         // resolution stays cheap, and the whole analysis is cached for an hour.
+        // 'fields' => 'ids' skips WP_Query's meta priming, so the first
+        // get_post_meta() below would issue a query per post. Warm the whole
+        // sample once instead — 100 posts went from ~200 queries to a handful.
+        _prime_post_caches($post_ids, false, true);
+
         $with_description = 0;
         foreach ($post_ids as $post_id) {
             $custom   = (string) get_post_meta($post_id, '_thinkrank_meta_description', true);

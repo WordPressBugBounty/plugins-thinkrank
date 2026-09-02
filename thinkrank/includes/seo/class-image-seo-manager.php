@@ -456,7 +456,12 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         $replacements = [
             '%site_title%'    => get_bloginfo('name'),
             '%sitename%'      => get_bloginfo('name'),
-            '%title%'         => $post_id > 0 ? get_the_title($post_id) : get_bloginfo('name'),
+            // Empty, not the site name. The segment collapsing below drops an
+            // unresolved token together with its separator, and the default
+            // title_format already ends in %sitename% — substituting the site
+            // name here printed it twice ("Site Name | Site Name") on every
+            // image processed outside the loop (widgets, page builders, FSE).
+            '%title%'         => $post_id > 0 ? get_the_title($post_id) : '',
             '%count%'         => (string) $count,
             '%filename%'      => '',
             '%image_title%'   => '',
@@ -801,7 +806,10 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
      * @return void
      */
     private function flush_analyzer_cache(): void {
-        // Matches SEO_Analyzer::CACHE_KEY.
-        delete_transient('thinkrank_site_seo_analysis');
+        // Ask the analyzer rather than duplicating its transient key here — the
+        // literal drifted out of sync the moment anyone renamed it.
+        if (class_exists('ThinkRank\\SEO\\SEO_Analyzer')) {
+            (new SEO_Analyzer())->flush_cache();
+        }
     }
 }

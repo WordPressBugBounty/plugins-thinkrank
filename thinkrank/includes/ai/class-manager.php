@@ -88,7 +88,14 @@ class Manager {
      * @throws \Exception On failure.
      */
     public function initialize_client(): void {
-        $provider = $this->settings->get('ai_provider', 'openai');
+        $provider = $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
+
+        // No provider chosen yet (a fresh install, or the user cleared it). That
+        // is a normal unconfigured state, not a failure — leave $this->client
+        // null and let get_client_unavailable_message() explain it (#572).
+        if (Settings::AI_PROVIDER_NONE === $provider) {
+            return;
+        }
 
         try {
             switch ($provider) {
@@ -163,7 +170,13 @@ class Manager {
                     throw new \Exception("Unsupported AI provider: {$provider}");
             }
         } catch (\Exception $e) {
-            // AI client initialization failed, will be handled later
+            // Leave a trace. Swallowing this meant a misconfigured provider
+            // produced a NULL client and every AI feature became a silent
+            // no-op with nothing to diagnose from.
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic, WP_DEBUG only.
+                error_log('ThinkRank [ai]: client initialization failed — ' . $e->getMessage());
+            }
         }
     }
 
@@ -175,12 +188,13 @@ class Manager {
     private function get_provider_label(): string {
         $labels = [
             'openai'     => 'OpenAI',
-            'claude'     => 'Claude',
+            // The vendor, not the model family — matches the settings UI (#572).
+            'claude'     => 'Anthropic',
             'gemini'     => 'Gemini',
             'openrouter' => 'OpenRouter',
         ];
 
-        $provider = (string) $this->settings->get('ai_provider', 'openai');
+        $provider = (string) $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
 
         return $labels[$provider] ?? ucfirst($provider);
     }
@@ -194,7 +208,7 @@ class Manager {
      * @return string Actionable error message for end users
      */
     private function get_client_unavailable_message(): string {
-        $provider = (string) $this->settings->get('ai_provider', 'openai');
+        $provider = (string) $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
 
         // The React admin renders this anchor as a real link via linkifyMessage().
         $settings_link = sprintf(
@@ -203,10 +217,21 @@ class Manager {
             __('ThinkRank → Settings', 'thinkrank')
         );
 
-        if (empty($this->settings->get("{$provider}_api_key"))) {
+        // No provider chosen at all — asking for a key would put the cart before
+        // the horse, so name the actual first step (#572).
+        if (Settings::AI_PROVIDER_NONE === $provider) {
             return sprintf(
                 /* translators: %s: link to the ThinkRank settings page. */
-                __('AI features are not set up yet. To enable them, add your API key under %s.', 'thinkrank'),
+                __('AI features are not set up yet. Choose an AI provider and add its API key under %s.', 'thinkrank'),
+                $settings_link
+            );
+        }
+
+        if (empty($this->settings->get("{$provider}_api_key"))) {
+            return sprintf(
+                /* translators: 1: AI provider name (e.g. OpenAI), 2: link to the ThinkRank settings page. */
+                __('AI features are not set up yet. To enable them, add your %1$s API key under %2$s.', 'thinkrank'),
+                $this->get_provider_label(),
                 $settings_link
             );
         }
@@ -1283,7 +1308,7 @@ class Manager {
 
         // Add metadata
         $optimization_results['ai_model'] = $client->get_model();
-        $optimization_results['provider'] = $this->settings->get('ai_provider', 'openai');
+        $optimization_results['provider'] = $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
         $optimization_results['generated_at'] = gmdate('Y-m-d H:i:s');
         $optimization_results['user_id'] = $user_id;
 
@@ -1361,7 +1386,7 @@ class Manager {
 
         // Add metadata
         $optimization_results['ai_model'] = $client->get_model();
-        $optimization_results['provider'] = $this->settings->get('ai_provider', 'openai');
+        $optimization_results['provider'] = $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
         $optimization_results['generated_at'] = gmdate('Y-m-d H:i:s');
         $optimization_results['user_id'] = $user_id;
 
@@ -1393,21 +1418,29 @@ class Manager {
                 'requires_key' => true,
             ],
             'claude' => [
-                'name' => 'Claude (Anthropic)',
-                'description' => 'Claude Opus 4.8, Sonnet 5, and Haiku 4.5',
-                'models' => ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5'],
+                // The vendor, not the model family: the other three entries name
+                // vendors, and a family name goes stale on every rename (#572).
+                'name' => 'Anthropic',
+                'description' => 'Claude Opus 5, Opus 4.8, Sonnet 5, and Haiku 4.5',
+                'models' => ['claude-opus-5', 'claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5'],
                 'requires_key' => true,
             ],
             'gemini' => [
                 'name' => 'Google Gemini',
-                'description' => 'Gemini 3.x and 2.x models',
-                'models' => ['gemini-3.1-pro', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'],
+                'description' => 'Gemini 3.x models',
+                // 2.5 Pro / 2.5 Flash-Lite retire in Oct 2026 and 3.1 Pro only
+                // ships under its -preview id, so none of the three belong in a
+                // list users pick from (#572).
+                'models' => ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview'],
                 'requires_key' => true,
             ],
             'openrouter' => [
                 'name' => 'OpenRouter',
                 'description' => 'Unified access to many models via one key',
-                'models' => ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash-001', 'meta-llama/llama-3.3-70b-instruct', 'deepseek/deepseek-chat'],
+                // claude-3.5-sonnet is retired (Claude_Client::normalize_model
+                // already self-heals it on the direct path) and
+                // gemini-2.0-flash-001 was shut down on 1 Jun 2026 (#572).
+                'models' => ['openai/gpt-4o-mini', 'anthropic/claude-sonnet-5', 'google/gemini-3.5-flash', 'meta-llama/llama-3.3-70b-instruct', 'deepseek/deepseek-chat'],
                 'requires_key' => true,
             ],
         ];
@@ -1419,8 +1452,12 @@ class Manager {
      * @return array Provider status
      */
     public function get_provider_status(): array {
-        $provider = $this->settings->get('ai_provider', 'openai');
-        $api_key = $this->settings->get($provider . '_api_key');
+        $provider = $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
+        // With no provider chosen there is no "<provider>_api_key" to read;
+        // asking for '_api_key' would be a nonsense lookup.
+        $api_key = Settings::AI_PROVIDER_NONE === $provider
+            ? ''
+            : $this->settings->get($provider . '_api_key');
 
         return [
             'provider' => $provider,
@@ -1563,7 +1600,7 @@ class Manager {
                 'user_id' => $user_id,
                 'action' => $action,
                 'tokens_used' => $tokens_used,
-                'provider' => $this->settings->get('ai_provider', 'openai'),
+                'provider' => $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE),
                 'metadata' => !empty($metadata) ? wp_json_encode($metadata) : null,
                 'created_at' => current_time('mysql'),
             ],
@@ -1640,7 +1677,7 @@ class Manager {
 
         // Add metadata
         $optimization_results['ai_model'] = $client->get_model();
-        $optimization_results['provider'] = $this->settings->get('ai_provider', 'openai');
+        $optimization_results['provider'] = $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
         $optimization_results['generated_at'] = gmdate('Y-m-d H:i:s');
         $optimization_results['user_id'] = $user_id;
 
@@ -1718,7 +1755,7 @@ class Manager {
 
         // Add metadata
         $optimization_results['ai_model'] = $client->get_model();
-        $optimization_results['provider'] = $this->settings->get('ai_provider', 'openai');
+        $optimization_results['provider'] = $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
         $optimization_results['generated_at'] = gmdate('Y-m-d H:i:s');
         $optimization_results['user_id'] = $user_id;
 

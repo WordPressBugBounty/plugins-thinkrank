@@ -102,10 +102,13 @@ class Author_Archives_Manager {
             return;
         }
 
-        // Ensure description is within optimal length (150-160 characters)
-        if (strlen($description) > 160) {
-            $description = wp_trim_words($description, 25, '...');
-        }
+        // Keep the rendered description within the ~160 characters search
+        // engines display. Measure and cut in CHARACTERS: strlen() counts
+        // BYTES, so a Cyrillic/CJK description tripped a limit it was nowhere
+        // near, and wp_trim_words() cuts by WORD COUNT, so a long-worded
+        // description sailed past the cap entirely. Three units, three
+        // different answers.
+        $description = $this->trim_to_length($description, self::DESCRIPTION_MAX_LENGTH);
 
         // Opens the block through SEO_Manager so its closing comment, printed
         // on wp_head at priority 99, knows an opener was emitted.
@@ -113,6 +116,46 @@ class Author_Archives_Manager {
         echo "<!-- ThinkRank SEO Meta Description -->\n";
         echo '<meta name="description" content="' . esc_attr($description) . '" />' . "\n";
         echo "<!-- /ThinkRank SEO Meta Description -->\n";
+    }
+
+    /**
+     * Characters search engines display for a meta description.
+     *
+     * @since 2.2.0
+     * @var int
+     */
+    private const DESCRIPTION_MAX_LENGTH = 160;
+
+    /**
+     * Trim a description to a character budget, multibyte-safe.
+     *
+     * Cuts on a word boundary when one is available inside the budget, so the
+     * result does not end mid-word; falls back to a hard character cut for
+     * scripts that do not use spaces (CJK), where a word-boundary search would
+     * find nothing and return the string untouched.
+     *
+     * @since 2.2.0
+     * @param string $description Description text.
+     * @param int    $limit       Maximum length in characters, ellipsis included.
+     * @return string
+     */
+    private function trim_to_length(string $description, int $limit): string {
+        if (mb_strlen($description) <= $limit) {
+            return $description;
+        }
+
+        // Reserve one character for the ellipsis.
+        $budget  = $limit - 1;
+        $cut     = mb_substr($description, 0, $budget);
+        $last_gap = mb_strrpos($cut, ' ');
+
+        // Only honour a word boundary that is not absurdly early — otherwise a
+        // long unbroken token would collapse the description to a few chars.
+        if (false !== $last_gap && $last_gap > (int) ($budget * 0.6)) {
+            $cut = mb_substr($cut, 0, $last_gap);
+        }
+
+        return rtrim($cut) . '…';
     }
 
     /**
@@ -262,7 +305,12 @@ class Author_Archives_Manager {
             $enabled = $settings->get('author_archives_enabled', true);
 
             if (!$enabled) {
-                wp_safe_redirect(home_url(), 301);
+                // 302, not 301. This redirect lasts exactly as long as the
+                // setting stays off, but a 301 is cached by browsers and CDNs
+                // indefinitely — so turning author archives back on could not
+                // undo it for anyone who had already been redirected, and there
+                // was no server-side way to fix that.
+                wp_safe_redirect(home_url(), 302);
                 exit;
             }
         }

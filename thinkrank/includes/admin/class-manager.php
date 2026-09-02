@@ -261,11 +261,31 @@ class Manager {
             [$this, 'render_settings_page']
         );
 
-        // Migration page — re-run SEO data imports from other plugins after
-        // setup. Hidden by default; shown only when the "Enable Migration Tools"
-        // advanced setting is on. Capability matches the import REST endpoints
-        // (`manage_options`) so the UI and API stay in agreement.
-        if (Settings::instance()->get('enable_migration_tools', false)) {
+        // Two separate screens, one per setting, so each menu item appears
+        // exactly when its own feature is on. They shared a page (and therefore
+        // a menu item) until #228: with one route, turning Import / Export off
+        // still left "Import / Export" in the sidebar whenever Migration Tools
+        // happened to be on, which is the opposite of what the switch promises.
+        //
+        // Capability matches the import/export REST endpoints (`manage_options`)
+        // so the UI and API stay in agreement.
+
+        // ThinkRank's own data, out to a file and back. Off by default.
+        if ((bool) Settings::instance()->get('enable_import_export', false)) {
+            $this->pages['import-export'] = add_submenu_page(
+                'thinkrank',
+                __('Import / Export', 'thinkrank'),
+                __('Import / Export', 'thinkrank'),
+                'manage_options',
+                'thinkrank-import-export',
+                [$this, 'render_import_export_page']
+            );
+        }
+
+        // Importing FROM another SEO plugin. Off by default. Slug kept as
+        // thinkrank-migration so existing links, bookmarks and the docs keep
+        // resolving to the migration screen they always meant.
+        if ((bool) Settings::instance()->get('enable_migration_tools', false)) {
             $this->pages['migration'] = add_submenu_page(
                 'thinkrank',
                 __('Migration', 'thinkrank'),
@@ -382,6 +402,10 @@ class Manager {
             'settings' => $this->get_admin_settings(),
             'i18n' => $this->get_i18n_strings(),
             'isAdmin' => current_user_can('manage_options'),
+            // One flag per half of the Import / Export page: the "import from
+            // another SEO plugin" section, and ThinkRank's own export/restore.
+            'migrationToolsEnabled' => (bool) $this->settings->get('enable_migration_tools', false),
+            'importExportEnabled' => (bool) $this->settings->get('enable_import_export', false),
             // Whether any AI provider API key is configured — used to gate
             // "Generate with AI" buttons in the UI
             'aiConfigured' => $this->is_ai_configured(),
@@ -541,28 +565,37 @@ class Manager {
     }
 
     /**
-     * Render import/export page
+     * Render the Import / Export page (ThinkRank's own data, out and back).
+     *
+     * Defense in depth: the submenu is only registered while the setting is on,
+     * but re-check here so a direct hit on the page URL cannot bypass the gate.
+     * The export REST routes carry their own `manage_options` check, so nothing
+     * is protected by the page alone.
      *
      * @return void
      */
     public function render_import_export_page(): void {
+        if (!(bool) Settings::instance()->get('enable_import_export', false)) {
+            wp_die(esc_html__('Import / Export is not enabled.', 'thinkrank'));
+        }
+
         $this->render_admin_page('import-export', [
             'page_title' => __('Import / Export', 'thinkrank'),
         ]);
     }
 
     /**
-     * Render the Migration page (re-run SEO data imports).
+     * Render the Migration page (import SEO data from another plugin).
      *
-     * Defense in depth: the submenu is only registered when the setting is on,
-     * but re-check here so a direct hit on the page URL can't bypass the gate.
+     * Same defense in depth as above, against its own setting.
      *
      * @return void
      */
     public function render_migration_page(): void {
-        if (!Settings::instance()->get('enable_migration_tools', false)) {
+        if (!(bool) Settings::instance()->get('enable_migration_tools', false)) {
             wp_die(esc_html__('The Migration tools are not enabled.', 'thinkrank'));
         }
+
         $this->render_admin_page('migration', [
             'page_title' => __('Migration', 'thinkrank'),
         ]);
@@ -816,7 +849,7 @@ class Manager {
     private function get_admin_settings(): array {
         return [
 
-            'ai_provider' => $this->settings->get('ai_provider', 'openai'),
+            'ai_provider' => $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE),
             'cache_duration' => $this->settings->get('cache_duration', 3600),
         ];
     }
@@ -950,6 +983,7 @@ class Manager {
 				'thinkrank_page_thinkrank-settings',
 				'thinkrank_page_thinkrank-usages',
 				'thinkrank_page_thinkrank-license',
+				'thinkrank_page_thinkrank-import-export',
 				'thinkrank_page_thinkrank-migration'
 		] , true) ) {
 

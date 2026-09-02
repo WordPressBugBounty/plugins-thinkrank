@@ -31,6 +31,11 @@ class Import_Detector {
     private const CACHE_KEY = 'thinkrank_import_detection';
 
     /**
+     * Transient key for caching the native (ThinkRank's own data) counts
+     */
+    private const NATIVE_CACHE_KEY = 'thinkrank_export_detection';
+
+    /**
      * Cache TTL in seconds (1 hour)
      */
     private const CACHE_TTL = 3600;
@@ -95,12 +100,49 @@ class Import_Detector {
     }
 
     /**
+     * Detect ThinkRank's own exportable data.
+     *
+     * Deliberately NOT part of the PLUGINS registry that detect() walks. That
+     * registry describes plugins to migrate FROM: every entry is gated on
+     * is_source_active() (which would reject us), feeds the "import from" cards
+     * in the UI, and — most importantly — drives cleanup()'s prefix maps, which
+     * delete the listed plugin's live data. Keeping the native source on its
+     * own path avoids all three problems instead of special-casing each.
+     *
+     * @param bool $use_cache Whether to use cached results
+     * @return array|null Detection result, or null when there is nothing to export
+     */
+    public function detect_native(bool $use_cache = true): ?array {
+        if ($use_cache) {
+            $cached = get_transient(self::NATIVE_CACHE_KEY);
+            if ($cached !== false) {
+                return is_array($cached) ? $cached : null;
+            }
+        }
+
+        $exporter = new Thinkrank_Exporter();
+        $counts   = $exporter->get_available_types();
+
+        $result = [
+            'plugin'      => $exporter->get_plugin_slug(),
+            'plugin_name' => $exporter->get_plugin_name(),
+            'counts'      => $counts,
+            'total'       => array_sum($counts),
+        ];
+
+        set_transient(self::NATIVE_CACHE_KEY, $result, self::CACHE_TTL);
+
+        return $result;
+    }
+
+    /**
      * Clear the detection cache
      *
      * @return void
      */
     public function clear_cache(): void {
         delete_transient(self::CACHE_KEY);
+        delete_transient(self::NATIVE_CACHE_KEY);
     }
 
     /**

@@ -1614,10 +1614,44 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
      *
      * @return bool Permission status
      */
-    public function check_read_permissions(): bool {
+    public function check_read_permissions(WP_REST_Request $request): bool {
         // Plugin SEO/AI config is not subscriber-visible — require the same
-        // management capability as the write routes.
-        return \ThinkRank\Core\Capability_Manager::current_user_can('thinkrank_settings');
+        // management capability as the write routes, resolved per category so a
+        // role granted one section can reach that section and no other (#573).
+        return \ThinkRank\Core\Capability_Manager::current_user_can(
+            $this->capability_for_request($request)
+        );
+    }
+
+    /**
+     * The capability a settings-management request requires.
+     *
+     * Category routes belong to the section owning the category; every other
+     * route on this controller is plugin-wide configuration and stays on
+     * `thinkrank_settings`. The gate in Role_Manager::gate_rest() reaches the
+     * same answer through Capability_Manager::capability_for_route() — both are
+     * kept so neither layer alone is load-bearing.
+     *
+     * @since 2.1.3
+     *
+     * @param WP_REST_Request $request Request.
+     * @return string
+     */
+    private function capability_for_request(WP_REST_Request $request): string {
+        // URL params only. get_param() searches the JSON body, the POST body
+        // and the query string ahead of the route path, so on the routes that
+        // declare no {category} — /global, /validate, /schema, /export,
+        // /backup, /restore — it read pure caller input and let a request
+        // nominate the capability it would be checked against (#582). Reading
+        // the path is also what Role_Manager::gate_rest() does, so the two
+        // layers now agree and the claim above is true again.
+        $category = $request->get_url_params()['category'] ?? null;
+
+        if (!is_string($category) || '' === $category) {
+            return 'thinkrank_settings';
+        }
+
+        return \ThinkRank\Core\Capability_Manager::capability_for_settings_category($category);
     }
 
     /**
@@ -1627,8 +1661,10 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
      *
      * @return bool Permission status
      */
-    public function check_manage_permissions(): bool {
-        return \ThinkRank\Core\Capability_Manager::current_user_can('thinkrank_settings');
+    public function check_manage_permissions(WP_REST_Request $request): bool {
+        return \ThinkRank\Core\Capability_Manager::current_user_can(
+            $this->capability_for_request($request)
+        );
     }
 
     /**

@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.1.1
+Stable tag: 2.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -370,6 +370,35 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 
 == Changelog ==
 
+= 2.2.0 =
+Release Date: 2026-09-02
+
+- New: Take your ThinkRank data with you. A new Import / Export screen downloads everything ThinkRank stores — post, category, tag and author SEO data plus your settings — as one file, and loads it back on this site or any other. Choose JSON for a complete, restorable file, or CSV for a spreadsheet view of your post SEO data. Restoring shows you what the file contains and lets you decide what happens where this site already has a value, before anything is written. API keys are never written to the file
+- New: Importing from another SEO plugin now has its own Migration screen, separate from Import / Export, so each is turned on and off on its own
+- New: Both screens are off until you switch them on, in Settings. Neither is deleted or hidden permanently — switching one on brings its screen and menu item straight back
+- Changed: A fresh install no longer arrives with an AI provider already chosen. ThinkRank asks you to pick one instead of warning that a key is missing for a provider you never selected
+- Changed: The Anthropic provider is now named after the vendor, matching the other three, and the model list adds Claude Opus 5 and drops models the providers have withdrawn. A model you have already saved keeps working
+- Fixed: Test Connection could not test the key you had already saved. Because a saved key is shown as a mask, the button stayed greyed out and the only way to verify an expired or revoked key was to paste the whole secret in again
+- Fixed: Switching to a provider whose key you had already saved showed it as unconfigured — Save was refused and Clear API key claimed there was nothing to clear
+- Fixed: Brand Visibility competitors and queries could not be saved at all. The save reported success and came back empty
+- Fixed: The Posts, Pages and Categories switches on the XML Sitemap screen did nothing — a type you switched off was put straight back on the next save, and went on being generated
+- Fixed: Changing the sitemap index mode left the previous mode's files in your site root, still served to search engines and never refreshed again
+- Fixed: Turning Instant Indexing on erased the list of post types it applies to, leaving the feature enabled with nothing to submit
+- Fixed: Unticking "Allow search engines to index this content" saved, showed as unticked, and did nothing — the page stayed indexable
+- Fixed: Changing one robots directive reset the other five, so a site set to noindex became indexable because someone toggled a different switch
+- Fixed: The Open Graph and Twitter master switches only worked on the homepage. Turning Open Graph off still emitted its tags on every post and page
+- Fixed: The Pinterest preview promised up to 500 characters of description where only 160 are ever published
+- Fixed: Image SEO printed your site name twice in alt and title text for any image outside a normal post — text widgets, page-builder blocks and site-editor templates. The format preview also disagreed with what was actually written: hyphens in filenames, separator spacing, and empty parts that are dropped
+- Fixed: Author archive descriptions were measured in bytes and trimmed by words, so a description in Cyrillic, Greek or Arabic was cut far too short while a long English one was not trimmed at all
+- Fixed: Turning author archives off issued a permanent redirect, so a visitor's browser could keep bouncing them to the home page even after you turned the archives back on. It is a temporary redirect now
+- Fixed: The Site SEO Analyzer's grade could be up to an hour out of date. De-indexing your site still showed "Site is visible to search engines" and a grade A. The audit now refreshes when the settings it reports on change, and shows when it was generated
+- Fixed: The Analyzer's "fix missing alt text" button re-walked the same first 50 images on every click, so any library over 50 images could never be finished
+- Fixed: The Analyzer's structured data check could only ever pass, so its one-click fix was unreachable, and its tagline check missed the WordPress default tagline on any non-English site
+- Fixed: Roles given access to only some ThinkRank areas hit permission errors on the areas they had been given, and could reach settings for sections they had not. The dashboard also failed to load for them
+- Fixed: A role that cannot be granted ThinkRank access — one without the ability to edit posts — is now marked as such in the Role Manager instead of appearing to be granted access that never took effect
+- Fixed: Site administrators whose role comes from a role-editor plugin or a multisite super admin account saw no ThinkRank menu at all, while still having full access over the API
+- Fixed: With ThinkRank Pro installed but not yet licensed, the Traffic Overview card, the WordPress dashboard widget, four Analytics cards and the Content Brief "Insert" button offered to sell you Pro or showed a server error, instead of saying the licence needs activating
+
 = 2.1.1 =
 Release Date: 2026-08-31
 
@@ -470,21 +499,12 @@ Release Date: 2026-08-23
 - Fixed: The protection against fetching internal addresses checked one address and then connected to whatever the hostname resolved to a moment later
 - Performance: Anonymous page views make fewer database queries — a Google token refresh no longer runs on the front end, AI traffic counting is batched instead of locking a row on every visitor, and schema and settings lookups are cached properly
 
-= 2.0.0 =
-Release Date: 2026-08-20
-
-- New: The FAQ block has a new accordion design and each answer can now carry its own image. The question sits on its own row with a plus that becomes a minus when the answer opens, a line separates the open question from its answer, and the image you add shows with the answer — and travels into the FAQ structured data, so search engines can use it
-- Fixed: While editing an FAQ block the question and answer fields did not line up — the question was pushed to the right edge while the answer stayed on the left, which made an empty item look broken
-- Fixed: Changing a page's address from ThinkRank's Permalink field looked like it did nothing. The new address was saved, but the editor went on showing the old one until the page was reloaded, so it read as though nothing had happened. In Elementor, Divi and Oxygen it genuinely did nothing: the address was never saved at all
-- Fixed: The check for whether your keyword appears in the page address was wrong in both directions. On a draft it always reported the keyword as missing, whatever the address said, and only began passing once the post was published. On a published page it could report a match that actually came from a parent page, a category or a date in the address rather than from the page's own address. Each line of the keyword breakdown now states plainly whether it matched or not, instead of leaving you to read it out of a list of words
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.2.0 =
+Adds an Import / Export screen that takes your ThinkRank data out as one file and loads it back. Fixes the sitemap post-type switches, robots directives resetting each other, the social master switches, and Role Manager permissions. Recommended for all sites.
+
 = 2.1.1 =
 Fixes ThinkRank deleting another SEO plugin's sitemap, %date% and %category% corrupted on save in title and description templates, Bulk SEO Optimization unreachable under Plain permalinks, and unreadable Performance errors. Recommended for all sites.
-
-= 2.1.0 =
-Focus keywords no longer match inside longer words, and each check names every keyword and its state. Fixes a reverted Classic Editor permalink, invisible FAQ/How-To block buttons, Beaver Builder pages reading as empty, and AI-assistant connection failures. Recommended for all sites.
-

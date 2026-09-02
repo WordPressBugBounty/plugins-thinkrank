@@ -140,6 +140,11 @@ class Dashboard_Widget {
             'restNonce'   => wp_create_nonce('wp_rest'),
             'connected'   => (bool) $settings->get('google_account_connected', false),
             'isPro'       => Plan_Config::is_pro(),
+            // is_pro() is licence-aware, so it is false on an activated-but-
+            // unlicensed install and the bar upsold Pro to someone who already
+            // had it. The widget needs the installed-state separately.
+            'isProInstalled' => defined('THINKRANK_PRO_VERSION'),
+            'licenseUrl'     => admin_url('admin.php?page=thinkrank-license'),
             // Pro upsell target for the teaser bar (filterable so campaigns can
             // point it at a specific landing page).
             'upgradeUrl'  => apply_filters(

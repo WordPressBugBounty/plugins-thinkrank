@@ -350,16 +350,24 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
             $params = $request->get_params(); // Fallback if content-type is not JSON
         }
 
-        // Sanitize Post Types
-        $post_types = isset($params['auto_submit_post_types']) ? (array) $params['auto_submit_post_types'] : [];
-        $sanitized_post_types = array_map('sanitize_text_field', $post_types);
-
-        // We generally don't let user update API Key directly via update_settings, 
-        // they should use regenerate, but if we need to support manual entry:
         $current_settings = get_option($this->option_name, []);
-        $new_settings = array_merge($current_settings, [
-            'auto_submit_post_types' => $sanitized_post_types
-        ]);
+        if (!is_array($current_settings)) {
+            $current_settings = [];
+        }
+        $new_settings = $current_settings;
+
+        // Only write the post types when the caller actually sent them. Writing
+        // unconditionally meant a payload of {"enabled": true} cleared the list,
+        // so the feature came on with nothing to submit — and diverged from the
+        // MCP ability, which writes this same option with an array_key_exists()
+        // merge. An explicit empty array still clears, since isset() is true
+        // for one (#562).
+        if (isset($params['auto_submit_post_types'])) {
+            $new_settings['auto_submit_post_types'] = array_values(array_map(
+                'sanitize_key',
+                (array) $params['auto_submit_post_types']
+            ));
+        }
 
         // Save enabled state
         if (isset($params['enabled'])) {

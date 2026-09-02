@@ -238,7 +238,7 @@ class Activator {
         $default_options = [
             'thinkrank_version' => THINKRANK_VERSION,
 
-            'thinkrank_ai_provider' => 'openai',
+            'thinkrank_ai_provider' => \ThinkRank\Core\Settings::AI_PROVIDER_NONE,
             'thinkrank_cache_duration' => 3600, // 1 hour
             'thinkrank_max_requests_per_minute' => 10,
             'thinkrank_enable_logging' => true,

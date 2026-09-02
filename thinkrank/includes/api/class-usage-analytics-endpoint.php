@@ -95,6 +95,10 @@ class Usage_Analytics_Endpoint {
      */
     private const CLAUDE_PRICING = [
         // Current models (recommended)
+        'claude-opus-5' => [
+            'input' => 5.00,
+            'output' => 25.00
+        ],
         'claude-opus-4-8' => [
             'input' => 5.00,
             'output' => 25.00
@@ -142,6 +146,11 @@ class Usage_Analytics_Endpoint {
     private const GEMINI_PRICING = [
         // Gemini 3.x models (tiered models use the base <=200k-token rate)
         'gemini-3.1-pro' => [
+            'input' => 2.00,
+            'output' => 12.00
+        ],
+        // The id the UI offers; 3.1 Pro ships only under -preview.
+        'gemini-3.1-pro-preview' => [
             'input' => 2.00,
             'output' => 12.00
         ],
@@ -193,6 +202,15 @@ class Usage_Analytics_Endpoint {
             'input' => 0.15,
             'output' => 0.60
         ],
+        'anthropic/claude-sonnet-5' => [
+            'input' => 3.00,
+            'output' => 15.00
+        ],
+        'google/gemini-3.5-flash' => [
+            'input' => 1.50,
+            'output' => 9.00
+        ],
+        // Retired upstream, kept so historical usage rows still price correctly.
         'anthropic/claude-3.5-sonnet' => [
             'input' => 3.00,
             'output' => 15.00
@@ -1092,7 +1110,7 @@ class Usage_Analytics_Endpoint {
                 if ($model && isset(self::GEMINI_PRICING[$model])) {
                     return self::GEMINI_PRICING[$model];
                 }
-                return self::GEMINI_PRICING['gemini-2.5-flash'] ?? null;
+                return self::GEMINI_PRICING['gemini-3.5-flash'] ?? null;
 
             case 'openrouter':
                 // Try specific model first, fallback to default

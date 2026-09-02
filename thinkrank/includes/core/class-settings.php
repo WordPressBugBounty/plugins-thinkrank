@@ -59,6 +59,45 @@ class Settings {
      *
      * @since 1.29.1
      */
+    /**
+     * AI providers this plugin supports.
+     *
+     * Single source of truth for the REST enum, the connection test's dispatch
+     * and sanitize_setting(), so the three cannot disagree about what is legal.
+     *
+     * @since 2.2.0
+     * @var string[]
+     */
+    public const SUPPORTED_AI_PROVIDERS = ['openai', 'claude', 'gemini', 'openrouter'];
+
+    /**
+     * The stored value meaning "the user has not chosen a provider yet".
+     *
+     * A fresh install ships with no provider selected: picking one is the
+     * user's call, and pre-selecting OpenAI made the settings screen open with
+     * a warning about a missing key for a provider nobody had asked for (#572).
+     * Every write path accepts this alongside SUPPORTED_AI_PROVIDERS.
+     *
+     * @since 2.1.3
+     */
+    public const AI_PROVIDER_NONE = '';
+
+    /**
+     * One-time marker for {@see Settings::retire_seeded_ai_provider()}.
+     */
+    private const PROVIDER_MIGRATION_OPTION  = 'thinkrank_ai_provider_migration';
+    private const PROVIDER_MIGRATION_VERSION = '1';
+
+    /**
+     * Legal values for the `ai_provider` setting, including "not chosen".
+     *
+     * @since 2.1.3
+     * @return string[]
+     */
+    public static function selectable_ai_providers(): array {
+        return array_merge([self::AI_PROVIDER_NONE], self::SUPPORTED_AI_PROVIDERS);
+    }
+
     const DEFAULT_AUTHOR_ARCHIVES_TITLE     = '%author_name% %separator% %site_title% %page%';
     const DEFAULT_AUTHOR_ARCHIVES_META_DESC = 'Articles written by %author_name% on %site_title%';
 
@@ -78,6 +117,10 @@ class Settings {
     private const EMPTY_IS_A_VALUE = [
         'author_archives_title',
         'author_archives_meta_desc',
+        // '' is the "no provider chosen" state, not "fall back to the default".
+        // Without this, deselecting a provider would be undone by any caller
+        // that passes its own fallback to get() (#572).
+        'ai_provider',
     ];
 
     /**
@@ -131,7 +174,7 @@ class Settings {
      */
     private array $defaults = [
         // AI Settings
-        'ai_provider' => 'openai',
+        'ai_provider' => self::AI_PROVIDER_NONE,
         'openai_api_key' => '',
         'openai_model' => self::DEFAULT_OPENAI_MODEL,
         'claude_api_key' => '',
@@ -236,6 +279,14 @@ class Settings {
         // Exposes the standalone Migration admin page for re-running SEO data
         // imports after setup. Hidden by default; opt-in for advanced/support use.
         'enable_migration_tools' => false,
+        // Exposes ThinkRank's own export / restore. Off by default, like the
+        // migration toggle above: both are occasional, admin-only tools, and a
+        // menu item nobody asked for is a menu item in the way. Your data is
+        // never locked in — the switch is one click away in
+        // Settings > Import / Export, and turning it on immediately restores
+        // the screen and the menu item. Off hides the export card and, unless
+        // migration tools are on, the Import / Export menu item with it.
+        'enable_import_export' => false,
 
         // Privacy Settings
         'data_retention_days' => 90,
@@ -304,6 +355,97 @@ class Settings {
      */
     public function init(): void {
         add_action('admin_init', [$this, 'register_settings']);
+        // Admin-only: a front-end pageview can never need this migration, and
+        // the marker is a non-autoloaded option, so hooking it unconditionally
+        // bought one dedicated query on every request for the life of the
+        // install (#588).
+        if (is_admin()) {
+            add_action('init', [self::class, 'retire_seeded_ai_provider']);
+        }
+    }
+
+    /**
+     * Clear the OpenAI selection that older versions seeded on activation.
+     *
+     * Changing the default only helps installs created after the change. Every
+     * site activated before it still carries `ai_provider = 'openai'` written by
+     * Activator::set_default_options(), and still opens Settings warning about a
+     * missing key for a provider nobody picked — the whole complaint in #572.
+     *
+     * "OpenAI with no OpenAI key" is provably not a user's choice: the settings
+     * form refuses to save a provider without a key, so the only way to reach
+     * that state is the old activation seed. A site that genuinely chose OpenAI
+     * has a key and is left alone, as is any site on another provider.
+     *
+     * Version-gated so it runs once and never fights a user who later clears
+     * their key but keeps the provider selected.
+     *
+     * @since 2.1.3
+     *
+     * @return void
+     */
+    public static function retire_seeded_ai_provider(): void {
+        if (get_option(self::PROVIDER_MIGRATION_OPTION) === self::PROVIDER_MIGRATION_VERSION) {
+            self::promote_migration_marker_to_autoload();
+            return;
+        }
+
+        // Record first: a site that somehow fails the checks below must not
+        // re-test on every request for the rest of its life. Autoloaded on
+        // purpose — it is a short write-once flag that is read on every admin
+        // request, which is exactly what autoload is for; storing it
+        // non-autoloaded bought a dedicated query per request instead (#588).
+        update_option(self::PROVIDER_MIGRATION_OPTION, self::PROVIDER_MIGRATION_VERSION, true);
+
+        if (get_option('thinkrank_ai_provider', null) !== 'openai') {
+            return;
+        }
+
+        // Read the stored option directly rather than through Settings::get().
+        // Only emptiness matters here, and get() adds two things this decision
+        // must not depend on: a per-instance cache that may already be primed,
+        // and decryption that can yield '' for a key that is genuinely present.
+        // The raw option is non-empty whenever a key exists, encrypted or not.
+        if ('' !== (string) get_option('thinkrank_openai_api_key', '')) {
+            // A real choice, backed by a key. Leave it.
+            return;
+        }
+
+        // Write through the shared instance, not a throwaway one: set() refreshes
+        // only the cache of the object it is called on, so a private instance
+        // would leave the registered component serving the old value for the
+        // rest of this request — including to the admin page it localizes.
+        self::instance()->set('ai_provider', self::AI_PROVIDER_NONE);
+    }
+
+    /**
+     * Move a legacy migration marker into the autoloaded set.
+     *
+     * Sites that ran the migration on 2.1.3 wrote the marker with
+     * `autoload = false`, and the version gate above returns before the write
+     * that would correct it — so those installs keep paying a dedicated query
+     * to read a one-byte flag on every admin request, which is the cost #588
+     * was about. Promote it once.
+     *
+     * Free to test: alloptions is loaded from the object cache once per request
+     * regardless, and an autoloaded marker is in it, so the steady state after
+     * the promotion is a cache lookup and nothing else. wp_set_option_autoload()
+     * arrived in WP 6.4 and the plugin supports 6.0, hence the guard.
+     *
+     * @since 2.2.0
+     *
+     * @return void
+     */
+    private static function promote_migration_marker_to_autoload(): void {
+        if (!function_exists('wp_set_option_autoload') || !function_exists('wp_load_alloptions')) {
+            return;
+        }
+
+        if (array_key_exists(self::PROVIDER_MIGRATION_OPTION, wp_load_alloptions())) {
+            return;
+        }
+
+        wp_set_option_autoload(self::PROVIDER_MIGRATION_OPTION, true);
     }
 
     /**
@@ -437,7 +579,11 @@ class Settings {
             return false;
         }
 
-
+        // Apply the declared per-key sanitizer before anything is stored. This
+        // is the path essentially every caller takes, so skipping it left the
+        // whole sanitize_setting() switch unreachable — max_tokens,
+        // cache_duration and temperature persisted whatever string arrived.
+        $value = $this->sanitize_setting($key, $value);
 
         // Encrypt if needed
         $encrypted_value = $this->maybe_encrypt($key, $value);
@@ -521,6 +667,21 @@ class Settings {
     }
 
     /**
+     * Setting keys whose values are encrypted at rest.
+     *
+     * Exposed so callers that must never emit a credential — the data exporter
+     * in particular — can filter against the same list this class encrypts
+     * with, instead of keeping a copy that silently drifts when a key is added.
+     *
+     * @since 2.2.0
+     *
+     * @return string[] Setting keys.
+     */
+    public function get_encrypted_keys(): array {
+        return $this->encrypted_keys;
+    }
+
+    /**
      * Get all settings (optimized with bulk caching)
      *
      * @param int $user_id User ID (0 for global)
@@ -589,6 +750,42 @@ class Settings {
     }
 
     /**
+     * Sanitize a nested array, preserving its shape.
+     *
+     * Scalars keep their type (an int threshold stays an int); strings are
+     * text-sanitized; objects are dropped, since no setting stores one.
+     *
+     * @since 2.2.0
+     * @param array $value Array to sanitize.
+     * @param int   $depth Current recursion depth.
+     * @return array
+     */
+    private function sanitize_array_recursive(array $value, int $depth = 0): array {
+        // Settings are configuration, not arbitrary payloads; a cap keeps a
+        // malformed deep structure from recursing without bound.
+        if ($depth > 10) {
+            return [];
+        }
+
+        $sanitized = [];
+        foreach ($value as $item_key => $item) {
+            $key = is_string($item_key) ? sanitize_key($item_key) : $item_key;
+
+            if (is_array($item)) {
+                $sanitized[$key] = $this->sanitize_array_recursive($item, $depth + 1);
+            } elseif (is_object($item)) {
+                continue;
+            } elseif (is_bool($item) || is_int($item) || is_float($item)) {
+                $sanitized[$key] = $item;
+            } else {
+                $sanitized[$key] = sanitize_text_field((string) $item);
+            }
+        }
+
+        return $sanitized;
+    }
+
+    /**
      * Sanitize individual setting
      * 
      * @param string $key Setting key
@@ -615,7 +812,14 @@ class Settings {
                 return sanitize_text_field($value);
 
             case 'ai_provider':
-                return sanitize_key($value);
+                // sanitize_key() maps '' to '', which is AI_PROVIDER_NONE — the
+                // deliberate "no provider chosen" state, so it must survive here
+                // rather than being folded back into the default (#572).
+                $provider = sanitize_key($value);
+
+                return in_array($provider, self::selectable_ai_providers(), true)
+                    ? $provider
+                    : $this->defaults['ai_provider'];
 
             case 'openai_model':
             case 'claude_model':
@@ -655,6 +859,15 @@ class Settings {
                     if (is_array($threshold_value)) {
                         continue;
                     }
+                    if (is_bool($threshold_value)) {
+                        // Keep booleans as booleans. is_numeric() is false for
+                        // one, so it used to fall to the string arm and a true
+                        // came back as "1" — invisible while this ran only on
+                        // the register_setting() path, now that set() routes
+                        // every write through here it is a type change on save.
+                        $thresholds[sanitize_key($threshold_key)] = $threshold_value;
+                        continue;
+                    }
                     $thresholds[sanitize_key($threshold_key)] = is_numeric($threshold_value)
                         ? $threshold_value + 0
                         : sanitize_text_field((string) $threshold_value);
@@ -667,8 +880,13 @@ class Settings {
                 return sanitize_text_field($value);
 
             case 'robots_txt_content':
+            case 'bv_description':
                 // Multi-line content — sanitize_text_field() collapses newlines
-                // and would flatten the whole file onto a single line.
+                // and would flatten the whole file onto a single line. set()
+                // routes every write through here, so a caller that chose
+                // sanitize_textarea_field() itself (Brand_Visibility_Endpoint
+                // does, for bv_description) is otherwise silently overridden
+                // by the default: arm below (#587).
                 return sanitize_textarea_field($value);
 
             default:
@@ -677,17 +895,13 @@ class Settings {
                 } elseif (is_string($value)) {
                     return sanitize_text_field($value);
                 } elseif (is_array($value)) {
-                    // Flat list/map of scalars; nested members are dropped rather
-                    // than passed to a string sanitizer that would fatal on them.
-                    $sanitized = [];
-                    foreach ($value as $item_key => $item) {
-                        if (is_array($item) || is_object($item)) {
-                            continue;
-                        }
-                        $sanitized[is_string($item_key) ? sanitize_key($item_key) : $item_key] =
-                            sanitize_text_field((string) $item);
-                    }
-                    return $sanitized;
+                    // Recurse rather than drop. Skipping nested members was
+                    // harmless while this ran only on the register_setting()
+                    // path, but set() now routes every write through here and
+                    // structured settings — bv_competitors is a list of
+                    // ['name','url'] maps, bv_queries a list of ['text','type']
+                    // — were being silently emptied on save.
+                    return $this->sanitize_array_recursive($value);
                 }
                 return $value;
         }

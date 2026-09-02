@@ -106,14 +106,27 @@ class Snapshot_Migrator {
     ];
 
     /**
+     * Conflict strategies for a chunk that targets data ThinkRank already holds.
+     *
+     * SKIP is right for an import: another plugin's value must never clobber
+     * something the user has already set here. OVERWRITE is right for a
+     * restore: the whole point of restoring a backup is to get the saved values
+     * back, and a "successful" restore that silently kept the current values
+     * would be the opposite of what was asked for.
+     */
+    public const CONFLICT_SKIP = 'skip';
+    public const CONFLICT_OVERWRITE = 'overwrite';
+
+    /**
      * Migrate one chunk of snapshot data to ThinkRank meta
      *
      * @param string $plugin Plugin slug
      * @param string $type Data type (postmeta, termmeta, usermeta, settings)
      * @param int $page Chunk/page number
+     * @param string $conflict How to treat data ThinkRank already holds
      * @return array Result with status, has_more, processed, skipped
      */
-    public function migrate_chunk(string $plugin, string $type, int $page): array {
+    public function migrate_chunk(string $plugin, string $type, int $page, string $conflict = self::CONFLICT_SKIP): array {
         // Validate manifest status
         $manifest = Snapshot_Store::get_manifest($plugin);
         if (!$manifest || ($manifest['status'] ?? '') !== 'complete') {
@@ -124,6 +137,13 @@ class Snapshot_Migrator {
                 'processed' => 0,
                 'skipped' => 0,
             ];
+        }
+
+        // ThinkRank's own export is not normalized into the canonical fields
+        // META_MAP translates; it carries raw _thinkrank_* meta, so it takes a
+        // restore path that writes those back untouched.
+        if ($plugin === Thinkrank_Exporter::SLUG) {
+            return $this->restore_native_chunk($manifest, $type, $page, $conflict);
         }
 
         if ($type === 'settings') {
@@ -333,6 +353,442 @@ class Snapshot_Migrator {
             'keywords_truncated' => count($truncations),
             'keywords_truncated_sample' => array_slice($truncations, 0, 10),
         ];
+    }
+
+
+    /**
+     * Restore one chunk of ThinkRank's own export.
+     *
+     * Deliberately does NOT reuse the canonical loop above. That loop maps
+     * through META_MAP, rebuilds the robots payload from canonical flags and
+     * drops every key it does not know — correct when translating another
+     * plugin's data, lossy when the data is already ours. Here the record holds
+     * raw `_thinkrank_*` meta and the job is to put it back exactly as it was.
+     *
+     * @param array  $manifest Snapshot manifest
+     * @param string $type     Data type
+     * @param int    $page     Chunk page
+     * @param string $conflict CONFLICT_SKIP | CONFLICT_OVERWRITE
+     * @return array Result
+     */
+    private function restore_native_chunk(array $manifest, string $type, int $page, string $conflict): array {
+        if ($type === 'settings') {
+            return $this->restore_native_settings($conflict);
+        }
+
+        // Pro's own tables (redirections, 404 logs, rank tracker, Brand
+        // Visibility) are exported through a filter and come back through one:
+        // the free plugin holds the records but has nowhere to put them.
+        if (!in_array($type, ['postmeta', 'termmeta', 'usermeta'], true)) {
+            return $this->restore_extension_chunk($manifest, $type, $page, $conflict);
+        }
+
+        $chunk = Snapshot_Store::read_chunk(Thinkrank_Exporter::SLUG, $type, $page);
+        if (empty($chunk)) {
+            return [
+                'status'    => 'complete',
+                'message'   => 'No data in chunk',
+                'has_more'  => false,
+                'processed' => 0,
+                'skipped'   => 0,
+                'missing'   => 0,
+            ];
+        }
+
+        // Hold open the editor's "SEO meta is being written" window for as long
+        // as the restore runs, exactly as the import path does.
+        if ($type === 'postmeta') {
+            Metadata_Pending::mark_bulk();
+        }
+
+        $processed = 0;
+        $skipped   = 0;
+        $missing   = 0;
+
+        foreach ($chunk as $record) {
+            $object_id   = (int) ($record['object_id'] ?? 0);
+            $object_type = (string) ($record['object_type'] ?? '');
+            $data        = $record['data'] ?? [];
+
+            if (!$object_id || !is_array($data) || empty($data)) {
+                $skipped++;
+                continue;
+            }
+
+            // A file from another site (or one taken before a post was deleted)
+            // references IDs that are not here. Counted separately from
+            // `skipped` so the UI can say "12 posts no longer exist" rather
+            // than reporting a silent no-op.
+            if (!$this->object_exists($object_type, $object_id)) {
+                $missing++;
+                continue;
+            }
+
+            $wrote = false;
+            foreach ($data as $meta_key => $value) {
+                // Only ThinkRank's own meta, whatever the file claims: a
+                // hand-edited export must not become a way to write arbitrary
+                // meta onto any post.
+                if (strpos((string) $meta_key, Thinkrank_Exporter::META_PREFIX) !== 0) {
+                    continue;
+                }
+
+                if ($conflict === self::CONFLICT_SKIP) {
+                    $existing = $this->get_object_meta($object_type, $object_id, (string) $meta_key);
+                    if ($existing !== '' && $existing !== false && $existing !== null) {
+                        continue;
+                    }
+                }
+
+                // No skip-empty rule here, unlike the import path. An empty
+                // string is a real stored value for some fields (the author
+                // archive templates, where "" means render no template), and
+                // dropping it would restore the default instead.
+                if ($this->write_object_meta($object_type, $object_id, (string) $meta_key, $value)) {
+                    $wrote = true;
+                }
+            }
+
+            if ($wrote) {
+                $processed++;
+            } else {
+                $skipped++;
+            }
+        }
+
+        $total_chunks = (int) ($manifest['types'][$type]['total_chunks'] ?? 0);
+        $has_more     = $page < $total_chunks;
+
+        if ($type === 'postmeta' && !$has_more) {
+            Metadata_Pending::clear_bulk();
+        }
+
+        return [
+            'status'       => $has_more ? 'processing' : 'complete',
+            'message'      => sprintf(
+                'Restored %d records, skipped %d, %d no longer exist (page %d)',
+                $processed,
+                $skipped,
+                $missing,
+                $page
+            ),
+            'has_more'     => $has_more,
+            'page'         => $page,
+            'total_chunks' => $total_chunks,
+            'processed'    => $processed,
+            'skipped'      => $skipped,
+            'missing'      => $missing,
+        ];
+    }
+
+    /**
+     * Hand a non-core type's records to whoever registered it.
+     *
+     * With no handler the records stay in the snapshot rather than being
+     * dropped: reporting "0 restored" is honest, and a later Pro activation can
+     * still drain the same snapshot.
+     *
+     * @param array  $manifest Snapshot manifest
+     * @param string $type     Data type
+     * @param int    $page     Chunk page
+     * @param string $conflict CONFLICT_SKIP | CONFLICT_OVERWRITE
+     * @return array Result
+     */
+    private function restore_extension_chunk(array $manifest, string $type, int $page, string $conflict): array {
+        $chunk        = Snapshot_Store::read_chunk(Thinkrank_Exporter::SLUG, $type, $page) ?? [];
+        $total_chunks = (int) ($manifest['types'][$type]['total_chunks'] ?? 0);
+        $has_more     = $page < $total_chunks;
+
+        /**
+         * Filters the number of records a non-core restore type applied.
+         *
+         * Handlers should write the records and return how many they wrote.
+         * Anything not written stays in the snapshot.
+         *
+         * @since 2.2.0
+         *
+         * @param int    $processed Records applied (0 by default).
+         * @param array  $records   Records from this chunk.
+         * @param string $type      Data type being restored.
+         * @param string $conflict  'skip' or 'overwrite'.
+         */
+        $processed = (int) apply_filters('thinkrank_restore_records', 0, $chunk, $type, $conflict);
+        $skipped   = max(0, count($chunk) - $processed);
+
+        return [
+            'status'       => $has_more ? 'processing' : 'complete',
+            'message'      => sprintf('Restored %d %s records, skipped %d (page %d)', $processed, $type, $skipped, $page),
+            'has_more'     => $has_more,
+            'page'         => $page,
+            'total_chunks' => $total_chunks,
+            'processed'    => $processed,
+            'skipped'      => $skipped,
+            'missing'      => 0,
+        ];
+    }
+
+    /**
+     * Write a single meta value for post|term|user.
+     *
+     * @param string $object_type One of post|term|user
+     * @param int    $object_id   Object id
+     * @param string $key         Meta key
+     * @param mixed  $value       Meta value
+     * @return bool Whether the value was written
+     */
+    private function write_object_meta(string $object_type, int $object_id, string $key, $value): bool {
+        // Registered meta can carry a typed sanitize_callback, and some of ours
+        // declare `string` — `_thinkrank_robots_meta` and
+        // `_thinkrank_advanced_robots_meta` both run through
+        // Metabox_Manager::sanitize_json_meta_field(string $value). Everything
+        // writing those today stores JSON, so an export carries them back as
+        // strings; but the restore's whole policy is to write the file's value
+        // verbatim, and a file holding one as an array would otherwise raise a
+        // TypeError that takes down the rest of the chunk with it. One bad key
+        // is worth skipping, not the records behind it.
+        try {
+            switch ($object_type) {
+                case 'post':
+                    update_post_meta($object_id, $key, $value);
+                    return true;
+                case 'term':
+                    update_term_meta($object_id, $key, $value);
+                    return true;
+                case 'user':
+                    update_user_meta($object_id, $key, $value);
+                    return true;
+            }
+        } catch (\Throwable $e) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- debug-only diagnostic; a skipped key is otherwise invisible.
+                error_log(sprintf('ThinkRank restore: skipped %s meta "%s" on %d — %s', $object_type, $key, $object_id, $e->getMessage()));
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Restore ThinkRank's own settings from a native snapshot.
+     *
+     * Bypasses migrate_settings() entirely: that method is Yoast/Rank Math
+     * shaped — separator code maps, knowledge graph assembly, webmaster tools —
+     * and none of it applies to data already in our own format.
+     *
+     * @param string $conflict CONFLICT_SKIP | CONFLICT_OVERWRITE
+     * @return array Result
+     */
+    private function restore_native_settings(string $conflict): array {
+        $chunk = Snapshot_Store::read_chunk(Thinkrank_Exporter::SLUG, 'settings', 1);
+        $data  = $chunk[0]['data'] ?? [];
+
+        if (!is_array($data) || empty($data)) {
+            return [
+                'status'    => 'complete',
+                'message'   => 'No settings in snapshot',
+                'has_more'  => false,
+                'processed' => 0,
+                'skipped'   => 0,
+            ];
+        }
+
+        $overwrite = $conflict === self::CONFLICT_OVERWRITE;
+
+        $processed = $this->restore_settings_options((array) ($data['options'] ?? []), $overwrite);
+        $processed += $this->restore_settings_table((array) ($data['seo_table'] ?? []), $overwrite);
+        $processed += $this->restore_aggregate_options((array) ($data['aggregate'] ?? []), $overwrite);
+
+        return [
+            'status'    => 'complete',
+            'message'   => sprintf('Restored %d settings', $processed),
+            'has_more'  => false,
+            'page'      => 1,
+            'processed' => $processed,
+            'skipped'   => 0,
+        ];
+    }
+
+    /**
+     * Restore the `thinkrank_{key}` options behind Settings.
+     *
+     * Written through Settings::set() rather than update_option() so the class's
+     * own key validation, encryption and cache invalidation all run.
+     *
+     * @param array $options   Setting key => value
+     * @param bool  $overwrite Whether to replace values already stored here
+     * @return int Number of settings written
+     */
+    private function restore_settings_options(array $options, bool $overwrite): int {
+        if (empty($options) || !class_exists('ThinkRank\\Core\\Settings')) {
+            return 0;
+        }
+
+        $settings = \ThinkRank\Core\Settings::instance();
+        $written  = 0;
+
+        foreach ($options as $key => $value) {
+            $key = (string) $key;
+
+            if (!$overwrite) {
+                // A distinctive sentinel, because `false` and `''` are both
+                // legitimate stored values here.
+                if (get_option('thinkrank_' . $key, '__tr_not_set__') !== '__tr_not_set__') {
+                    continue;
+                }
+            }
+
+            if ($settings->set($key, $value)) {
+                $written++;
+            }
+        }
+
+        return $written;
+    }
+
+    /**
+     * Restore the thinkrank_seo_settings table, one category/context at a time.
+     *
+     * @param array $categories Category => context type => context id => key => row
+     * @param bool  $overwrite  Whether to replace rows already stored here
+     * @return int Number of settings written
+     */
+    private function restore_settings_table(array $categories, bool $overwrite): int {
+        $written = 0;
+
+        foreach ($categories as $category => $contexts) {
+            $manager = $this->create_settings_restorer((string) $category);
+            if ($manager === null) {
+                continue;
+            }
+
+            foreach ((array) $contexts as $context_type => $context_ids) {
+                foreach ((array) $context_ids as $context_id => $rows) {
+                    $existing = $overwrite ? [] : $manager->get_settings((string) $context_type, (int) $context_id);
+                    $payload  = [];
+
+                    foreach ((array) $rows as $key => $row) {
+                        if (!$overwrite && array_key_exists($key, $existing)) {
+                            continue;
+                        }
+
+                        // Rows are exported as ['value' => …, 'type' => …,
+                        // 'priority' => …]; older files may carry the bare value.
+                        $payload[$key] = is_array($row) && array_key_exists('value', $row)
+                            ? $row['value']
+                            : $row;
+                    }
+
+                    if (empty($payload)) {
+                        continue;
+                    }
+
+                    // Declare the keys before saving. sanitize_settings() drops
+                    // any key the manager does not claim, and save_settings()
+                    // still returns true when it dropped every one of them — so
+                    // without this the restore reports success and writes
+                    // nothing. The rows came out of this table to begin with,
+                    // which is the strongest claim to being real settings that
+                    // exists.
+                    $manager->set_restorable_keys(array_keys($payload));
+
+                    if ($manager->save_settings((string) $context_type, (int) $context_id, $payload)) {
+                        $written += count($payload);
+                    }
+                }
+            }
+        }
+
+        return $written;
+    }
+
+    /**
+     * A minimal Abstract_SEO_Manager for one settings category.
+     *
+     * Going through a manager (rather than writing rows directly) buys the
+     * upsert, the shared sanitizer that knows which keys are multiline or
+     * template strings, the cache invalidation, and the
+     * `thinkrank_seo_settings_saved` action other managers listen for.
+     *
+     * Validation is deliberately permissive: this is the site's own data coming
+     * back, and a validator that has tightened since the export was taken would
+     * silently drop rows mid-restore. Reaching here already requires
+     * manage_options, so the file is not a privilege boundary.
+     *
+     * @param string $category Settings category (the manager_type column)
+     * @return \ThinkRank\SEO\Abstract_SEO_Manager|null
+     */
+    protected function create_settings_restorer(string $category) {
+        if ($category === '' || !class_exists('ThinkRank\\SEO\\Abstract_SEO_Manager')) {
+            return null;
+        }
+
+        return new class($category) extends \ThinkRank\SEO\Abstract_SEO_Manager {
+
+            /** @var string[] Keys this restore pass is allowed to write. */
+            private array $restorable_keys = [];
+
+            /**
+             * @param string[] $keys Setting keys about to be restored.
+             * @return void
+             */
+            public function set_restorable_keys(array $keys): void {
+                $this->restorable_keys = array_values(array_filter($keys, 'is_string'));
+            }
+
+            public function validate_settings(array $settings): array {
+                return ['valid' => true, 'errors' => []];
+            }
+
+            public function get_output_data(string $context_type, ?int $context_id): array {
+                return [];
+            }
+
+            /**
+             * Backs the allow-list sanitize_settings() checks against. Empty
+             * until set_restorable_keys() names the keys of the batch being
+             * written, so the restorer can never write a key that was not in
+             * the file.
+             */
+            public function get_default_settings(string $context_type): array {
+                return array_fill_keys($this->restorable_keys, '');
+            }
+
+            public function get_settings_schema(string $context_type): array {
+                return [];
+            }
+        };
+    }
+
+    /**
+     * Restore the standalone aggregate settings options.
+     *
+     * @param array $options   Option name => value
+     * @param bool  $overwrite Whether to replace options already stored here
+     * @return int Number of options written
+     */
+    private function restore_aggregate_options(array $options, bool $overwrite): int {
+        $written = 0;
+
+        foreach ($options as $option_name => $value) {
+            $option_name = (string) $option_name;
+
+            // Only the options the exporter actually emits, whatever the file
+            // claims. A plain `thinkrank_` prefix check would not be enough:
+            // the snapshot chunks themselves live under that prefix, so a
+            // hand-edited export could rewrite the snapshot it is restoring from.
+            if (!in_array($option_name, Thinkrank_Exporter::AGGREGATE_OPTIONS, true)) {
+                continue;
+            }
+
+            if (!$overwrite && get_option($option_name, '__tr_not_set__') !== '__tr_not_set__') {
+                continue;
+            }
+
+            update_option($option_name, $value);
+            $written++;
+        }
+
+        return $written;
     }
 
     /**

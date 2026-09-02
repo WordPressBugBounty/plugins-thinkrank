@@ -109,22 +109,36 @@ class Global_Robot_Meta_Endpoint extends WP_REST_Controller {
             );
         }
 
-        // Merge the 6 robots booleans into the existing option rather than
-        // replacing it, so sibling keys written by other paths (e.g. the SEO
-        // importer's noindex_date_archives / noindex_author_archives, consumed
-        // by the frontend) survive a save. Mirrors the MCP ability's merge.
+        // Merge into the existing option rather than replacing it, so sibling
+        // keys written by other paths (e.g. the SEO importer's
+        // noindex_date_archives / noindex_author_archives, consumed by the
+        // frontend) survive a save (#134).
         $existing = get_option(self::OPTION_NAME, []);
         if (!is_array($existing)) {
             $existing = [];
         }
-        $sanitized_settings = array_merge($existing, [
-            'index' => isset($settings['index']) ? (bool) $settings['index'] : true,
-            'noindex' => isset($settings['noindex']) ? (bool) $settings['noindex'] : false,
-            'nofollow' => isset($settings['nofollow']) ? (bool) $settings['nofollow'] : false,
-            'noarchive' => isset($settings['noarchive']) ? (bool) $settings['noarchive'] : false,
-            'noimageindex' => isset($settings['noimageindex']) ? (bool) $settings['noimageindex'] : false,
-            'nosnippet' => isset($settings['nosnippet']) ? (bool) $settings['nosnippet'] : false,
-        ]);
+
+        $sanitized_settings = wp_parse_args($existing, $this->get_default_settings());
+
+        // Only write the keys the caller actually sent. Writing all six on every
+        // request meant a payload of {"noarchive": true} silently reset the
+        // other five — and diverged from the MCP ability, which writes the same
+        // option with an array_key_exists() merge (#560).
+        $found = false;
+        foreach (array_keys($this->get_default_settings()) as $key) {
+            if (array_key_exists($key, $settings)) {
+                $sanitized_settings[$key] = (bool) $settings[$key];
+                $found = true;
+            }
+        }
+
+        if (!$found) {
+            return new WP_Error(
+                'no_valid_settings',
+                'No valid robots meta setting keys were provided.',
+                ['status' => 400]
+            );
+        }
 
         update_option(self::OPTION_NAME, $sanitized_settings);
 

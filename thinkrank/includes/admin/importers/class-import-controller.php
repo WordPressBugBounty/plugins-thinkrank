@@ -36,9 +36,24 @@ class Import_Controller extends \WP_REST_Controller {
     protected $rest_base = 'import';
 
     /**
-     * Allowed plugin slugs
+     * Source plugins ThinkRank can migrate FROM.
+     *
+     * Kept separate from ALLOWED_PLUGINS because cleanup() deletes the source
+     * plugin's live data: the native ThinkRank slug must never reach it, or the
+     * endpoint gains a path that wipes our own meta and options.
      */
-    private const ALLOWED_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo'];
+    private const SOURCE_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo'];
+
+    /**
+     * Snapshot slug for ThinkRank's own data (export / backup / restore).
+     */
+    private const NATIVE_PLUGIN = Thinkrank_Exporter::SLUG;
+
+    /**
+     * Allowed plugin slugs for the snapshot endpoints (export, migrate,
+     * snapshot delete). Includes the native slug; cleanup uses SOURCE_PLUGINS.
+     */
+    private const ALLOWED_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'thinkrank'];
 
     /**
      * Allowed export/migrate types. Must cover every type the exporters and
@@ -47,6 +62,22 @@ class Import_Controller extends \WP_REST_Controller {
      * exported or migrated through REST.
      */
     private const ALLOWED_TYPES = ['postmeta', 'termmeta', 'usermeta', 'redirections', '404_logs', 'settings'];
+
+    /**
+     * Types the export and migrate endpoints accept.
+     *
+     * The fixed list above plus anything Pro registered through
+     * `thinkrank_export_types` — without this a Pro type would be exportable in
+     * principle and rejected at the route.
+     *
+     * @return string[]
+     */
+    private function get_allowed_types(): array {
+        return array_values(array_unique(array_merge(
+            self::ALLOWED_TYPES,
+            Thinkrank_Exporter::get_exportable_types()
+        )));
+    }
 
     /**
      * Register REST routes
@@ -97,7 +128,8 @@ class Import_Controller extends \WP_REST_Controller {
                     'plugin' => [
                         'required'          => true,
                         'type'              => 'string',
-                        'enum'              => self::ALLOWED_PLUGINS,
+                        // Source plugins only — see SOURCE_PLUGINS.
+                        'enum'              => self::SOURCE_PLUGINS,
                         'sanitize_callback' => 'sanitize_text_field',
                     ],
                     // Required to proceed while the snapshot still holds
@@ -138,7 +170,8 @@ class Import_Controller extends \WP_REST_Controller {
     }
 
     /**
-     * GET /import/detect — Detect source plugins and existing snapshots
+     * GET /import/detect — Detect source plugins, ThinkRank's own exportable
+     * data, and existing snapshots
      *
      * @param \WP_REST_Request $request Request object
      * @return \WP_REST_Response
@@ -150,6 +183,9 @@ class Import_Controller extends \WP_REST_Controller {
 
         return new \WP_REST_Response([
             'detected'  => $detected,
+            // ThinkRank's own exportable data, reported separately from the
+            // source plugins the user can migrate FROM.
+            'native'    => $detector->detect_native(),
             'snapshots' => $snapshots,
         ], 200);
     }
@@ -168,6 +204,13 @@ class Import_Controller extends \WP_REST_Controller {
         $exporter = $this->get_exporter($plugin);
         if (is_wp_error($exporter)) {
             return $exporter;
+        }
+
+        // Start a run from an empty slot. update_manifest() merges into whatever
+        // manifest is already there, so without this the file the user ends up
+        // downloading carries the union of this run and every run before it.
+        if ((bool) $request->get_param('reset')) {
+            Snapshot_Store::delete_snapshot($plugin);
         }
 
         $result = $exporter->export_chunk($type, $page);
@@ -192,7 +235,8 @@ class Import_Controller extends \WP_REST_Controller {
     }
 
     /**
-     * POST /import/migrate — Migrate a batch from snapshot to ThinkRank meta
+     * POST /import/migrate — Migrate a batch from snapshot to ThinkRank meta,
+     * or restore one from ThinkRank's own export
      *
      * @param \WP_REST_Request $request Request object
      * @return \WP_REST_Response
@@ -201,9 +245,10 @@ class Import_Controller extends \WP_REST_Controller {
         $plugin = $request->get_param('plugin');
         $type = $request->get_param('type');
         $page = (int) $request->get_param('page');
+        $conflict = (string) $request->get_param('conflict');
 
         $migrator = new Snapshot_Migrator();
-        $result = $migrator->migrate_chunk($plugin, $type, $page);
+        $result = $migrator->migrate_chunk($plugin, $type, $page, $conflict);
 
         // If migration is complete for all types, update manifest
         if (!$result['has_more'] && $request->get_param('is_last_type')) {
@@ -233,6 +278,17 @@ class Import_Controller extends \WP_REST_Controller {
         $plugin = $request->get_param('plugin');
         $force = (bool) $request->get_param('force');
         $deleted = 0;
+
+        // Belt and braces on top of the route's SOURCE_PLUGINS enum: this
+        // endpoint deletes the SOURCE plugin's live meta and options, so
+        // pointing it at ThinkRank would delete the user's own SEO data.
+        if ($plugin === self::NATIVE_PLUGIN) {
+            return new \WP_Error(
+                'thinkrank_cleanup_not_applicable',
+                __('Cleanup removes a source plugin\'s data and does not apply to ThinkRank\'s own export. Use DELETE /import/snapshot to discard the snapshot.', 'thinkrank'),
+                ['status' => 400]
+            );
+        }
 
         // Gate: block while the snapshot holds preserved-but-unapplied extended
         // data, unless the caller explicitly forces the cleanup.
@@ -400,6 +456,8 @@ class Import_Controller extends \WP_REST_Controller {
                 return new SEOPress_Exporter();
             case 'aioseo':
                 return new AIOSEO_Exporter();
+            case Thinkrank_Exporter::SLUG:
+                return new Thinkrank_Exporter();
             default:
                 return new \WP_Error('invalid_plugin', 'Unsupported plugin: ' . $plugin, ['status' => 400]);
         }
@@ -421,7 +479,7 @@ class Import_Controller extends \WP_REST_Controller {
             'type' => [
                 'required'          => true,
                 'type'              => 'string',
-                'enum'              => self::ALLOWED_TYPES,
+                'enum'              => $this->get_allowed_types(),
                 'sanitize_callback' => 'sanitize_text_field',
             ],
             'page' => [
@@ -431,6 +489,17 @@ class Import_Controller extends \WP_REST_Controller {
                 'sanitize_callback' => 'absint',
             ],
             'is_last_type' => [
+                'required' => false,
+                'type'     => 'boolean',
+                'default'  => false,
+            ],
+            // Set on the first chunk of a run to discard whatever is already in
+            // the snapshot slot. Without it a run inherits the previous one's
+            // types: the manifest is merged into, never replaced, so a type the
+            // user deselected (or a file they uploaded and chose not to
+            // restore) stays in the snapshot and is streamed by
+            // /export/download, which sends every type the manifest lists.
+            'reset' => [
                 'required' => false,
                 'type'     => 'boolean',
                 'default'  => false,
@@ -451,10 +520,21 @@ class Import_Controller extends \WP_REST_Controller {
                 'enum'              => self::ALLOWED_PLUGINS,
                 'sanitize_callback' => 'sanitize_text_field',
             ],
+            // Defaults to skip, which is the safe answer for an import from
+            // another plugin: its data must never clobber something already
+            // set here. A restore from a ThinkRank backup passes overwrite —
+            // getting the saved values back is the entire point of it.
+            'conflict' => [
+                'required'          => false,
+                'type'              => 'string',
+                'enum'              => [Snapshot_Migrator::CONFLICT_SKIP, Snapshot_Migrator::CONFLICT_OVERWRITE],
+                'default'           => Snapshot_Migrator::CONFLICT_SKIP,
+                'sanitize_callback' => 'sanitize_text_field',
+            ],
             'type' => [
                 'required'          => true,
                 'type'              => 'string',
-                'enum'              => self::ALLOWED_TYPES,
+                'enum'              => $this->get_allowed_types(),
                 'sanitize_callback' => 'sanitize_text_field',
             ],
             'page' => [

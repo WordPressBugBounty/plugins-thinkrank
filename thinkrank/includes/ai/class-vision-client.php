@@ -77,7 +77,7 @@ class Vision_Client {
         return [
             'openai' => 'gpt-5-mini',
             'claude' => 'claude-sonnet-5',
-            'gemini' => 'gemini-2.5-flash',
+            'gemini' => Settings::DEFAULT_GEMINI_MODEL,
         ];
     }
 
@@ -87,7 +87,7 @@ class Vision_Client {
      * @return bool
      */
     public function is_available(): bool {
-        $provider = (string) $this->settings->get('ai_provider', 'openai');
+        $provider = (string) $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
 
         return isset(self::capable_providers()[$provider])
             && '' !== $this->api_key_for($provider);
@@ -118,13 +118,22 @@ class Vision_Client {
      * @throws \Exception When the provider is unusable or the call fails.
      */
     public function describe_attachment(int $attachment_id, string $context = ''): string {
-        $provider = (string) $this->settings->get('ai_provider', 'openai');
+        $provider = (string) $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
         $models   = self::capable_providers();
+
+        // Distinguish "no provider chosen" from "this provider can't do vision":
+        // interpolating an empty provider name reads as a broken string (#572).
+        if (Settings::AI_PROVIDER_NONE === $provider) {
+            throw new \Exception(esc_html__(
+                'No AI provider is selected. Choose OpenAI, Anthropic or Gemini in Settings → AI Provider.',
+                'thinkrank'
+            ));
+        }
 
         if (!isset($models[$provider])) {
             throw new \Exception(sprintf(
                 /* translators: %s: AI provider name. */
-                esc_html__('The %s provider cannot describe images. Switch to OpenAI, Claude or Gemini in Settings → AI Provider.', 'thinkrank'),
+                esc_html__('The %s provider cannot describe images. Switch to OpenAI, Anthropic or Gemini in Settings → AI Provider.', 'thinkrank'),
                 esc_html($provider)
             ));
         }
