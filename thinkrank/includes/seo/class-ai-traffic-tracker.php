@@ -29,6 +29,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\SEO;
 
+use DateTimeImmutable;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -258,7 +260,9 @@ class Ai_Traffic_Tracker {
 
         $days  = max(1, min(self::RETENTION_DAYS, $days));
         $table = $wpdb->prefix . 'thinkrank_ai_traffic';
-        $since = gmdate('Y-m-d', time() - $days * DAY_IN_SECONDS);
+        // Same clock as write_bucket(), and counted in calendar days so a
+        // DST transition inside the window does not move the boundary.
+        $since = $this->day_key_offset($days);
 
         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- read-only aggregate over our own table.
         return (int) $wpdb->get_var(
@@ -348,6 +352,16 @@ class Ai_Traffic_Tracker {
             return;
         }
 
+        // `day` is the SITE-LOCAL date (see day_key()), not UTC. The column is
+        // a bare `date` with no zone attached, so the clock that writes it is
+        // the only thing that gives it meaning — and these keys reach the user
+        // as the trend chart's dates, where the site's own calendar is what
+        // they expect to read.
+        //
+        // Every range boundary and retention cutoff must be derived with
+        // day_key() too. A gmdate() boundary against these rows drifts by a
+        // day for part of every day on a non-UTC site.
+
         global $wpdb;
 
         $table = $wpdb->prefix . 'thinkrank_ai_traffic';
@@ -371,6 +385,81 @@ class Ai_Traffic_Tracker {
     }
 
     /**
+     * The site-local date key for an instant, matching write_bucket().
+     *
+     * Every consumer of the `day` column goes through this, so the read side
+     * cannot drift onto a different calendar from the write side.
+     *
+     * @param int|null $timestamp Unix timestamp, or null for now.
+     * @return string `Y-m-d` on the site's clock.
+     */
+    private function day_key(?int $timestamp = null): string {
+        return wp_date('Y-m-d', $timestamp ?? time());
+    }
+
+    /**
+     * Midday on a given site-local date.
+     *
+     * Midday, not midnight: a handful of zones start DST at 00:00, so
+     * midnight on a transition date can be a time that does not exist and
+     * PHP quietly rolls it forward. Noon is never inside a DST gap, so
+     * every date in the year is representable.
+     *
+     * @param string $day `Y-m-d` on the site's clock.
+     * @return DateTimeImmutable
+     */
+    private function local_noon(string $day): DateTimeImmutable {
+        return new DateTimeImmutable($day . ' 12:00:00', wp_timezone());
+    }
+
+    /**
+     * The site-local date key N *calendar* days before today.
+     *
+     * Not `time() - N * DAY_IN_SECONDS`: a fixed 86400-second step is not a
+     * day on a clock that shifts. Around a DST transition that arithmetic
+     * lands an hour early or late, which moves the date for the hour either
+     * side of midnight.
+     *
+     * @param int $days_ago Whole days back.
+     * @return string `Y-m-d`.
+     */
+    private function day_key_offset(int $days_ago): string {
+        return $this->local_noon($this->day_key())
+            ->modify('-' . max(0, $days_ago) . ' day')
+            ->format('Y-m-d');
+    }
+
+    /**
+     * Every site-local date from $from to $to inclusive.
+     *
+     * Walks the calendar rather than stepping by 86400 seconds, so a DST
+     * transition inside the range neither duplicates a date nor skips one.
+     * Skipping one used to drop that day's referrals out of the trend while
+     * they stayed in the totals.
+     *
+     * @param string $from `Y-m-d`, inclusive.
+     * @param string $to   `Y-m-d`, inclusive.
+     * @return string[] Ordered, contiguous date keys.
+     */
+    private function day_range(string $from, string $to): array {
+        $cursor = $this->local_noon($from);
+        $end    = $this->local_noon($to);
+
+        $days = [];
+        // Bounded by the caller's window (<= RETENTION_DAYS), with headroom
+        // so a malformed pair can never spin here.
+        $guard = self::RETENTION_DAYS + 2;
+        $steps = 0;
+        while ($cursor <= $end && $steps < $guard) {
+            $days[] = $cursor->format('Y-m-d');
+            $cursor = $cursor->modify('+1 day');
+            $steps++;
+        }
+
+        return $days;
+    }
+
+    /**
      * Dashboard summary for the last N days.
      *
      * @param int $days Range in days (bounded 1–180).
@@ -381,7 +470,9 @@ class Ai_Traffic_Tracker {
 
         $days  = max(1, min(self::RETENTION_DAYS, $days));
         $table = $wpdb->prefix . 'thinkrank_ai_traffic';
-        $since = gmdate('Y-m-d', time() - $days * DAY_IN_SECONDS);
+        // Same clock as write_bucket(), and counted in calendar days so a
+        // DST transition inside the window does not move the boundary.
+        $since = $this->day_key_offset($days);
 
         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- read-only aggregates over our own table.
         $rows = $wpdb->get_results(
@@ -429,6 +520,29 @@ class Ai_Traffic_Tracker {
         arsort($crawlers);
         ksort($trend);
 
+        // Fill every day the query covered, zeroes included. Only days that
+        // had a referral produce a $trend key above, and the chart positions
+        // points by index — so a sparse map drew a three-week gap exactly
+        // like a one-day gap. A contiguous series makes even spacing correct,
+        // and distinguishes "no referrals that day" from "no data".
+        //
+        // The range mirrors the WHERE clause (day >= $since, through today)
+        // so the series covers exactly what was counted, and it is built on
+        // day_key() so the keys match how the rows were written.
+        $filled = [];
+        foreach ($this->day_range($since, $this->day_key()) as $day) {
+            $filled[$day] = $trend[$day] ?? 0;
+        }
+
+        // Safety net for anything the window did not cover — a row dated
+        // ahead of today, which a site that moved timezone can hold. Union
+        // keeps the filled zeroes and adds only keys not already present, so
+        // the series can never total less than ai_sessions.
+        $filled += $trend;
+        ksort($filled);
+
+        $trend = $filled;
+
         return [
             'days'         => $days,
             'baseline'     => $baseline,
@@ -440,11 +554,43 @@ class Ai_Traffic_Tracker {
             'crawlers'     => $crawlers,
             // Whether llms.txt is being served, so the crawler panel can pair
             // "bots are coming" with "and here's what we feed them".
-            'llms_txt'     => file_exists(ABSPATH . 'llms.txt'),
+            //
+            // Ask the manager, not the filesystem: `dynamic` delivery — the
+            // resolved default on every non-Apache stack — publishes no
+            // physical file and answers from serve_llms_txt(), so a
+            // file_exists() probe reports "not published" for a live document.
+            'llms_txt'     => $this->llms_txt_published(),
             // Pages served as Markdown by Pro's Markdown for AI feature
             // (kind 'markdown', written via record_served_markdown()).
             'markdown_served' => $markdown,
         ];
+    }
+
+    /**
+     * Whether llms.txt is currently being served, in either delivery mode.
+     *
+     * `static` publishes a file at ABSPATH; `dynamic` keeps the document in
+     * an option and serves it from a PHP route. Only the manager knows which
+     * is in force, so it is the single source of truth here.
+     *
+     * @return bool
+     */
+    private function llms_txt_published(): bool {
+        // Spelt exactly as the class is declared. The autoloader routes this
+        // one through a case-SENSITIVE special-case map, and while a
+        // mis-cased name happens to fall through to the generic rule and
+        // resolve anyway, that is a coincidence — a change to that rule would
+        // silently make class_exists() false here, and the badge would go
+        // back to reporting "No llms.txt" for a live document.
+        if (!class_exists(LLMs_Txt_Manager::class)) {
+            // Defensive: a partial load must not claim llms.txt is live.
+            return false;
+        }
+
+        // is_published(), not get_llms_txt_status(): the latter resolves the
+        // delivery mode, may fire a loopback probe and touches the filesystem
+        // API, which is far too much work for a dashboard boolean.
+        return (new LLMs_Txt_Manager())->is_published();
     }
 
     /**
@@ -456,7 +602,8 @@ class Ai_Traffic_Tracker {
         global $wpdb;
 
         $table  = $wpdb->prefix . 'thinkrank_ai_traffic';
-        $cutoff = gmdate('Y-m-d', time() - self::RETENTION_DAYS * DAY_IN_SECONDS);
+        // Same clock as write_bucket(), counted in calendar days.
+        $cutoff = $this->day_key_offset(self::RETENTION_DAYS);
 
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- retention delete on our own table.
         $wpdb->query($wpdb->prepare("DELETE FROM {$table} WHERE day < %s", $cutoff));

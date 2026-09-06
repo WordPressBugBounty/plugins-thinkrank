@@ -90,6 +90,11 @@ class Manager {
         add_action('rest_api_init', [$this, 'register_routes']);
         add_action('rest_api_init', [$this, 'register_endpoint_classes']);
 
+        // Analytics cache invalidation must listen on every request, not only
+        // REST ones — AI usage is logged from cron and WP-CLI too, and a
+        // listener bound on rest_api_init never hears those.
+        Usage_Analytics_Endpoint::boot_cache_invalidation();
+
         // Make declared schema constraints mean something. Applied once over
         // the whole namespace rather than at 70-odd call sites, because that is
         // exactly how the enum on /setup-wizard/migrated-plugins and the one on

@@ -21,6 +21,7 @@ use ThinkRank\Admin\Metabox_Manager;
 use ThinkRank\Admin\Elementor_Metabox;
 use ThinkRank\Admin\Oxygen_Metabox;
 use ThinkRank\Admin\Divi_Metabox;
+use ThinkRank\Admin\Bricks_Metabox;
 use ThinkRank\Admin\Bulk_Action_Manager;
 use ThinkRank\Admin\Post_List_Filters;
 
@@ -81,6 +82,13 @@ class Manager {
     private Divi_Metabox $divi_metabox;
 
     /**
+     * Bricks builder metabox integration instance
+     *
+     * @var Bricks_Metabox
+     */
+    private Bricks_Metabox $bricks_metabox;
+
+    /**
      * Post list columns instance
      *
      * @var Post_List_Columns
@@ -135,6 +143,7 @@ class Manager {
         $this->elementor_metabox = new Elementor_Metabox($this->metabox_manager);
         $this->oxygen_metabox = new Oxygen_Metabox($this->metabox_manager);
         $this->divi_metabox = new Divi_Metabox($this->metabox_manager);
+        $this->bricks_metabox = new Bricks_Metabox($this->metabox_manager);
         $this->post_list_columns = new Post_List_Columns();
         $this->focus_keyword_ajax = new Focus_Keyword_Ajax();
         $this->seo_quick_edit_ajax = new Seo_Quick_Edit_Ajax();
@@ -171,6 +180,10 @@ class Manager {
         // Initialize Divi Visual Builder integration (hooks gate on the VB
         // request, so they no-op without Divi)
         $this->divi_metabox->init();
+
+        // Initialize Bricks builder integration (hooks gate on Bricks' own
+        // builder detector, so they no-op without Bricks)
+        $this->bricks_metabox->init();
 
         // Initialize post list columns
         $this->post_list_columns->init();

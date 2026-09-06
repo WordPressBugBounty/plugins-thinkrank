@@ -90,8 +90,11 @@ final class Email_Report_Config {
             // Anchor off the last send when we have one, so shortening the
             // cadence brings the next report forward instead of adding a
             // fresh full period on top of time already elapsed.
+            // last_sent_at is a site-local wall clock (current_time('mysql')).
+            // strtotime() would read it as UTC and skew the whole cadence by
+            // the site's offset, so resolve it in the site timezone instead.
             $anchor = $frequency_changed && !empty($sanitized['last_sent_at'])
-                ? strtotime((string) $sanitized['last_sent_at'])
+                ? (int) get_gmt_from_date((string) $sanitized['last_sent_at'], 'U')
                 : time();
             $anchor = $anchor ?: time();
 

@@ -1155,6 +1155,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-gap-x-10{
   column-gap: 2.5rem;
 }
+.tr-root .tr-gap-x-2{
+  column-gap: 0.5rem;
+}
 .tr-root .tr-gap-x-5{
   column-gap: 1.25rem;
 }
@@ -1163,6 +1166,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-gap-x-8{
   column-gap: 2rem;
+}
+.tr-root .tr-gap-y-1{
+  row-gap: 0.25rem;
 }
 .tr-root .tr-gap-y-2{
   row-gap: 0.5rem;
@@ -1305,9 +1311,17 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   --tw-border-opacity: 1;
   border-color: rgb(238 238 238 / var(--tw-border-opacity, 1));
 }
+.tr-root .tr-border-amber-200{
+  --tw-border-opacity: 1;
+  border-color: rgb(253 230 138 / var(--tw-border-opacity, 1));
+}
 .tr-root .tr-border-blue-100{
   --tw-border-opacity: 1;
   border-color: rgb(219 234 254 / var(--tw-border-opacity, 1));
+}
+.tr-root .tr-border-blue-200{
+  --tw-border-opacity: 1;
+  border-color: rgb(191 219 254 / var(--tw-border-opacity, 1));
 }
 .tr-root .tr-border-brand{
   --tw-border-opacity: 1;
@@ -1322,6 +1336,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-border-danger\/30{
   border-color: rgb(146 28 19 / 0.3);
+}
+.tr-root .tr-border-emerald-200{
+  --tw-border-opacity: 1;
+  border-color: rgb(167 243 208 / var(--tw-border-opacity, 1));
 }
 .tr-root .tr-border-line{
   --tw-border-opacity: 1;
@@ -1359,6 +1377,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-border-transparent{
   border-color: transparent;
+}
+.tr-root .tr-border-violet-200{
+  --tw-border-opacity: 1;
+  border-color: rgb(221 214 254 / var(--tw-border-opacity, 1));
 }
 .tr-root .tr-border-warning{
   --tw-border-opacity: 1;
@@ -1533,6 +1555,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-bg-transparent{
   background-color: transparent;
+}
+.tr-root .tr-bg-violet-50{
+  --tw-bg-opacity: 1;
+  background-color: rgb(245 243 255 / var(--tw-bg-opacity, 1));
 }
 .tr-root .tr-bg-warning{
   --tw-bg-opacity: 1;
@@ -1714,6 +1740,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-pb-0{
   padding-bottom: 0px;
+}
+.tr-root .tr-pb-2{
+  padding-bottom: 0.5rem;
 }
 .tr-root .tr-pb-3{
   padding-bottom: 0.75rem;
@@ -1978,6 +2007,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   --tw-text-opacity: 1;
   color: rgb(5 150 105 / var(--tw-text-opacity, 1));
 }
+.tr-root .tr-text-emerald-700{
+  --tw-text-opacity: 1;
+  color: rgb(4 120 87 / var(--tw-text-opacity, 1));
+}
 .tr-root .tr-text-green-700{
   --tw-text-opacity: 1;
   color: rgb(21 128 61 / var(--tw-text-opacity, 1));
@@ -2043,6 +2076,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-text-tertiary{
   --tw-text-opacity: 1;
   color: rgb(90 92 94 / var(--tw-text-opacity, 1));
+}
+.tr-root .tr-text-violet-700{
+  --tw-text-opacity: 1;
+  color: rgb(109 40 217 / var(--tw-text-opacity, 1));
 }
 .tr-root .tr-text-warning{
   --tw-text-opacity: 1;

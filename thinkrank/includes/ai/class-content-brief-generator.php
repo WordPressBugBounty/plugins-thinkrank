@@ -1276,6 +1276,18 @@ class Content_Brief_Generator {
             throw new \Exception('Failed to save content brief to database.');
         }
 
+        /**
+         * Fires after a content brief is persisted.
+         *
+         * Analytics listens to drop its cached overview so the brief counts
+         * on the Usages page are not stale for a TTL.
+         *
+         * @since 2.2.1
+         *
+         * @param int $brief_id Row id of the stored brief.
+         */
+        do_action('thinkrank_content_brief_created', (int) $wpdb->insert_id);
+
         return $wpdb->insert_id;
     }
 
@@ -2006,6 +2018,15 @@ class Content_Brief_Generator {
             ],
             ['%d', '%s', '%d', '%s', '%d', '%s', '%s']
         );
+
+        /**
+         * Fires after an AI usage row is recorded.
+         *
+         * @since 2.2.1
+         *
+         * @param int $user_id User the usage was recorded against.
+         */
+        do_action('thinkrank_ai_usage_logged', $user_id);
 
         return $wpdb->insert_id;
     }

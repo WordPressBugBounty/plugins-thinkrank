@@ -196,6 +196,16 @@ class SEO_Manager {
         remove_action('wp_head', 'rel_canonical');
         add_action('wp_head', [$this, 'output_canonical_url'], 6);
 
+        // Silence the Bricks theme's own SEO + Open Graph output so a Bricks
+        // site doesn't ship two of every tag. Bricks is a THEME, so it loads
+        // after plugins: at this point BRICKS_VERSION is not yet defined and a
+        // `defined()` guard here would always be false. Registering the filters
+        // unconditionally is correct and free — the hooks only ever fire from
+        // inside Bricks itself (#257). This mirrors the core rel_canonical and
+        // wp_robots removals above: one producer per tag.
+        add_filter('bricks/frontend/disable_seo', '__return_true');
+        add_filter('bricks/frontend/disable_opengraph', '__return_true');
+
         // Add Site Identity specific outputs
         add_action('wp_head', [$this, 'output_site_schema_markup'], 7);
         add_action('wp_head', [$this, 'output_breadcrumb_schema'], 8);

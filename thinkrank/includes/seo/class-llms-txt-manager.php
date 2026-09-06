@@ -751,6 +751,26 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * Whether /llms.txt is currently being served, in either delivery mode.
+     *
+     * `static` publishes a file at ABSPATH; `dynamic` keeps the document in
+     * an option and answers from serve_llms_txt(). Callers that only need
+     * this yes/no must use it in preference to get_llms_txt_status(), which
+     * resolves the delivery mode, may fire a loopback delivery probe, asks
+     * the filesystem API whether ABSPATH is writable, reads the document and
+     * writes a transient — far too much work for a boolean, and not
+     * something a dashboard summary should be triggering.
+     *
+     * @since 2.2.1
+     *
+     * @return bool
+     */
+    public function is_published(): bool {
+        return file_exists(ABSPATH . 'llms.txt')
+            || '' !== trim($this->get_published_content());
+    }
+
+    /**
      * Ask the common page/CDN cache layers to drop their copy of /llms.txt.
      *
      * A cached response outlives a republish, so without this a mode switch or
@@ -1175,7 +1195,7 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
             'file_exists' => file_exists($llms_file),
             // Whether /llms.txt is actually being served, either mode. Prefer
             // this over file_exists, which is only meaningful in static mode.
-            'published' => file_exists($llms_file) || '' !== trim($stored),
+            'published' => $this->is_published(),
             'delivery_mode' => $mode,
             'file_path' => 'dynamic' === $mode ? '' : $llms_file,
             'file_url' => home_url('/llms.txt'),

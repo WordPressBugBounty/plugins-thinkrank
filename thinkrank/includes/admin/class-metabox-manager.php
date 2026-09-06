@@ -1092,24 +1092,41 @@ JS;
             '_builtin' => false,
         ]);
 
+        // WordPress internals that should never carry an SEO metabox. Fixed,
+        // so it is built once rather than per post type.
+        $wp_internal_types = [
+            'attachment',
+            'revision',
+            'nav_menu_item',
+            'custom_css',
+            'customize_changeset',
+            'oembed_cache',
+            'user_request',
+            'wp_block',
+            'wp_template',
+            'wp_template_part',
+            'wp_global_styles',
+            'wp_navigation',
+            'acf-field',
+            'acf-field-group',
+        ];
+
+        // Builder template CPTs (Bricks, Elementor, Divi, Beaver Builder) are
+        // layout fragments, not pages with their own SEO. Global SEO already
+        // refuses them; this list is shared with that policy so the two cannot
+        // drift apart again (#621).
+        if (!class_exists('\ThinkRank\SEO\Global_SEO_Post_Types')) {
+            require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-global-seo-post-types.php';
+        }
+
         foreach ($custom_post_types as $post_type) {
-            // Skip certain post types that shouldn't have SEO metabox
-            $excluded_types = [
-                'attachment',
-                'revision',
-                'nav_menu_item',
-                'custom_css',
-                'customize_changeset',
-                'oembed_cache',
-                'user_request',
-                'wp_block',
-                'wp_template',
-                'wp_template_part',
-                'wp_global_styles',
-                'wp_navigation',
-                'acf-field',
-                'acf-field-group',
-            ];
+            // Resolved per post type, not hoisted: the shared list runs through
+            // a public filter that receives the post-type object, so an
+            // integrator can answer differently for different post types.
+            $excluded_types = array_merge(
+                $wp_internal_types,
+                \ThinkRank\SEO\Global_SEO_Post_Types::excluded_post_types(get_post_type_object($post_type))
+            );
 
             if (!in_array($post_type, $excluded_types, true) && !in_array($post_type, $default_types, true)) {
                 $default_types[] = $post_type;

@@ -62,6 +62,42 @@ class Builder_Content {
     ];
 
     /**
+     * Bricks' content-area meta key, used when Bricks itself isn't loaded.
+     *
+     * Bricks exposes `BRICKS_DB_PAGE_CONTENT` and renames the underlying key
+     * between generations (it gained the `_2` suffix in 1.7.3), so the
+     * constant is authoritative and this literal is only the fallback for the
+     * contexts where it is undefined — Bricks is a theme, so on an admin or
+     * CLI request against a site that has since switched themes the constant
+     * is simply not there while the post meta still is.
+     *
+     * Bricks stores three areas — header, content and footer. Only the content
+     * area belongs to the post being scored; the header and footer areas live
+     * on Bricks' own template posts and would double-count site chrome into
+     * every page's word count, so they are deliberately not read here.
+     *
+     * @since 2.2.1
+     * @var string
+     */
+    private const BRICKS_CONTENT_META_KEY = '_bricks_page_content_2';
+
+    /**
+     * Bricks' per-post editor-mode meta key, used when Bricks isn't loaded.
+     *
+     * @since 2.2.1
+     * @var string
+     */
+    private const BRICKS_EDITOR_MODE_META_KEY = '_bricks_editor_mode';
+
+    /**
+     * Bricks' components option, used when Bricks itself isn't loaded.
+     *
+     * @since 2.2.1
+     * @var string
+     */
+    private const BRICKS_COMPONENTS_OPTION = 'bricks_components';
+
+    /**
      * JSON keys whose values are user-visible text.
      *
      * Builder trees mix content with configuration, so a blind string sweep
@@ -262,12 +298,376 @@ class Builder_Content {
     }
 
     /**
+     * Everything Bricks contributes to this post's analyzable content.
+     *
+     * Bricks is the only builder here that needs more than a meta key, on
+     * three counts:
+     *
+     *  - It leaves its stored tree behind when a post is switched back to the
+     *    block editor, so an editor-mode gate has to run first or ThinkRank
+     *    scores markup the visitor never sees — the same failure
+     *    `_fl_builder_draft` was ordered against in #449.
+     *  - A post's content can live on ANOTHER post. Bricks' Templates feature
+     *    assigns a content template by condition, and a page using one stores
+     *    nothing of its own; reading only the page's meta scores it blank
+     *    while the visitor reads a full page.
+     *  - Its stored text carries dynamic-data tags and internal element names
+     *    that never reach the rendered page.
+     *
+     * @since 2.2.1
+     *
+     * @param int $post_id Post being resolved.
+     * @return string Extracted text, or '' when Bricks has nothing for it.
+     */
+    private static function from_bricks(int $post_id): string {
+        if (!self::bricks_owns_post($post_id)) {
+            return '';
+        }
+
+        $source = self::bricks_content_source($post_id);
+        if (!$source) {
+            return '';
+        }
+
+        $stored = get_post_meta($source, self::bricks_meta_key(), true);
+
+        if (is_string($stored)) {
+            $stored = '' === trim($stored) ? null : json_decode($stored, true);
+        }
+
+        if (!is_array($stored) || empty($stored)) {
+            return '';
+        }
+
+        return self::strip_bricks_dynamic_tags(
+            self::text_from_tree(
+                self::without_bricks_element_labels(self::expand_bricks_components($stored))
+            )
+        );
+    }
+
+    /**
+     * Whether Bricks — not the block editor — renders this post.
+     *
+     * Bricks writes `bricks` or `wordpress` into its editor-mode meta as the
+     * author toggles between the two, and never clears the content it stored
+     * for the other mode. Only the `wordpress` value is disqualifying: an
+     * absent value is the normal state for a post Bricks built and never
+     * toggled. This follows Bricks' own `Helpers::render_with_bricks()`, which
+     * bails on exactly that one value.
+     *
+     * It deliberately does not match it exactly: the comparison here is
+     * case-insensitive, where Bricks' is strict. Bricks 2.3.12 only ever writes
+     * the value lowercase, so the two agree on everything Bricks itself
+     * stores; they part company only on a value some other integration wrote.
+     * The two shipping today disagree about the casing — SureRank compares
+     * against `'WordPress'`, AIOSEO against `'bricks'` — and of the two ways to
+     * be wrong about `'WordPress'`, blocking costs a score on a page that has
+     * one, while allowing scores stale content the visitor never sees, which is
+     * the failure this gate exists to prevent.
+     *
+     * @since 2.2.1
+     *
+     * @param int $post_id Post being resolved.
+     * @return bool
+     */
+    private static function bricks_owns_post(int $post_id): bool {
+        $mode = get_post_meta($post_id, self::bricks_editor_mode_key(), true);
+
+        // phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Bricks' own stored meta value, lower-cased for the comparison.
+        return !(is_string($mode) && 'wordpress' === strtolower(trim($mode)));
+    }
+
+    /**
+     * The post whose Bricks tree actually renders for this post.
+     *
+     * Usually the post itself. When it stores nothing of its own, Bricks falls
+     * back to whichever content template's conditions match, and that template
+     * is a separate post carrying the words the visitor reads.
+     *
+     * Resolution is delegated to Bricks rather than reimplemented: template
+     * conditions are a whole rules engine (post IDs, types, taxonomies,
+     * archives), and a second implementation would drift from it. Bricks
+     * answers through statics, so they are saved and restored around the call —
+     * `set_active_templates()` returns early once populated, and on a
+     * front-end request Bricks has already populated it for the page being
+     * served. Clobbering that would corrupt the render in progress.
+     *
+     * Best-effort by design: any failure returns the post's own data, which is
+     * exactly today's behaviour.
+     *
+     * @since 2.2.1
+     *
+     * @param int $post_id Post being resolved.
+     * @return int Post ID holding the Bricks tree, or 0 when there is none.
+     */
+    private static function bricks_content_source(int $post_id): int {
+        $own = get_post_meta($post_id, self::bricks_meta_key(), true);
+        if ((is_array($own) && !empty($own)) || (is_string($own) && '' !== trim($own))) {
+            return $post_id;
+        }
+
+        if (!class_exists('\\Bricks\\Database')
+            || !method_exists('\\Bricks\\Database', 'set_active_templates')
+        ) {
+            return 0;
+        }
+
+        // `set_active_templates()` writes TWO statics — `$active_templates` and,
+        // when a header template resolves, `$header_position`. Both are saved,
+        // and both are restored in `finally` rather than on the happy path: a
+        // throw part-way through (a third-party hook on
+        // `bricks/database/content_type`, `bricks/builder/data_post_id` or
+        // `bricks/active_templates` is enough) must not leave Bricks' render
+        // state holding this lookup's values. Restoring only after a clean
+        // return is what the `catch` below would otherwise skip.
+        $has_header_position = property_exists('\\Bricks\\Database', 'header_position');
+        $saved_templates = \Bricks\Database::$active_templates;
+        $saved_header_position = $has_header_position ? \Bricks\Database::$header_position : null;
+
+        try {
+            \Bricks\Database::$active_templates = [];
+            \Bricks\Database::set_active_templates($post_id);
+            $template = (int) (\Bricks\Database::$active_templates['content'] ?? 0);
+        } catch (\Throwable $e) {
+            return 0;
+        } finally {
+            \Bricks\Database::$active_templates = $saved_templates;
+            if ($has_header_position) {
+                \Bricks\Database::$header_position = $saved_header_position;
+            }
+        }
+
+        // A template that is the post itself adds nothing over the empty read
+        // above, and would otherwise recurse conceptually.
+        return $template === $post_id ? 0 : $template;
+    }
+
+    /**
+     * Splice component definitions into the tree.
+     *
+     * A Bricks component keeps its markup in the `bricks_components` option,
+     * not on the page. The page stores only an instance: an element carrying
+     * `cid` and, usually, empty `settings`. Walking the page alone therefore
+     * found no words at all, and a page built entirely from components scored
+     * blank — the same failure as a page built from a content template.
+     *
+     * Confirmed on Bricks 2.3.12: `Bricks\Frontend::render_data()` renders the
+     * component's copy from an instance this walker extracted '' from.
+     *
+     * The definition is read straight from the option rather than through
+     * `Bricks\Helpers::get_component_instance()`. That helper resolves an
+     * instance's property overrides, which would be better, but it reads
+     * `Bricks\Database::$global_data['components']` — populated once per
+     * request, and empty in the admin and CLI contexts where bulk scoring
+     * runs. Refreshing it would mean writing to Bricks' live render state, the
+     * same hazard the template resolver is careful to avoid, and gating on it
+     * would make a page score differently in wp-admin than on the front end.
+     * Reading the stored definition is consistent everywhere.
+     *
+     * The trade-off: an instance that overrides a component property is scored
+     * with the component's authored copy rather than the override. That is the
+     * text the component renders by default, and it is much closer than the
+     * nothing this returned before.
+     *
+     * @since 2.2.1
+     *
+     * @param array $tree Bricks content area.
+     * @return array Tree with component elements spliced in after each instance.
+     */
+    private static function expand_bricks_components(array $tree): array {
+        $expanded = [];
+        $open = [];
+
+        $walk = static function (array $elements, int $depth) use (&$walk, &$expanded, &$open): void {
+            foreach ($elements as $element) {
+                $expanded[] = $element;
+
+                if (!is_array($element) || empty($element['cid']) || !is_string($element['cid'])) {
+                    continue;
+                }
+
+                $cid = $element['cid'];
+
+                // A component nested inside its own definition would recurse
+                // forever; the depth cap covers deep but legitimate nesting.
+                if (isset($open[$cid]) || $depth > 4) {
+                    continue;
+                }
+
+                $children = self::bricks_component_elements($cid);
+                if (empty($children)) {
+                    continue;
+                }
+
+                // Re-entrant per branch, not per page: the guard is released
+                // after the walk so a second instance further along the page
+                // still expands, rather than being mistaken for recursion.
+                //
+                // That does NOT double the word count — `text_from_tree()`
+                // ends in `array_unique()`, which collapses a repeated
+                // component's copy the same way it collapses a value repeated
+                // across responsive breakpoints. Expanding both instances is
+                // about not silently dropping the second one's structure.
+                $open[$cid] = true;
+                $walk($children, $depth + 1);
+                unset($open[$cid]);
+            }
+        };
+
+        $walk($tree, 0);
+
+        return $expanded;
+    }
+
+    /**
+     * The stored elements of one Bricks component.
+     *
+     * @since 2.2.1
+     *
+     * @param string $cid Component id held by an instance element.
+     * @return array Component elements, or [] when it cannot be resolved.
+     */
+    private static function bricks_component_elements(string $cid): array {
+        $components = get_option(self::bricks_constant('BRICKS_DB_COMPONENTS', self::BRICKS_COMPONENTS_OPTION), []);
+
+        if (!is_array($components)) {
+            return [];
+        }
+
+        foreach ($components as $component) {
+            $component = self::as_children($component);
+            if (null === $component) {
+                continue;
+            }
+
+            if (isset($component['id']) && $component['id'] === $cid && !empty($component['elements'])) {
+                return is_array($component['elements']) ? $component['elements'] : [];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Drop each Bricks element's internal name before the tree is walked.
+     *
+     * A Bricks element carries an optional top-level `label` — the nickname an
+     * author types in the Structure panel to find it again ("Hero headline",
+     * "CTA row"). It is builder chrome and is never rendered, but `label` is in
+     * CONTENT_KEYS because it is real content for other builders' form fields,
+     * so it was being counted as page copy.
+     *
+     * Only the element's own `label` is removed. A `label` inside `settings`
+     * is a rendered field label and stays.
+     *
+     * @since 2.2.1
+     *
+     * @param array $tree Bricks content area.
+     * @return array Tree with element nicknames removed.
+     */
+    private static function without_bricks_element_labels(array $tree): array {
+        foreach ($tree as $index => $element) {
+            if (is_array($element) && isset($element['id'], $element['label'])) {
+                unset($tree[$index]['label']);
+            }
+        }
+
+        return $tree;
+    }
+
+    /**
+     * Remove Bricks dynamic-data tags from extracted text.
+     *
+     * Bricks stores `{post_title}`, `{post_meta:price}`, `{echo:my_fn}` and the
+     * like verbatim and resolves them when it renders. Extraction reads the
+     * stored tree, so without this the placeholders were counted as words, and
+     * a heading whose text is `{post_title}` reported the literal token as its
+     * heading text.
+     *
+     * The pattern is deliberately narrower than Bricks' own
+     * (`/{([\wÀ-ÖØ-öø-ÿ\-\s\.\/:\(\)...]+)}/u`), which also matches braces
+     * containing spaces. Bricks only substitutes tags that resolve to a
+     * registered provider and leaves anything else on the page as literal text,
+     * so the broad pattern would delete prose the visitor can actually read.
+     * Matching only tag-shaped tokens keeps every real sentence and still
+     * removes every placeholder — the same trade-off SureRank makes.
+     *
+     * @since 2.2.1
+     *
+     * @param string $text Extracted text.
+     * @return string Text with placeholders removed.
+     */
+    private static function strip_bricks_dynamic_tags(string $text): string {
+        $stripped = preg_replace('/\{[a-z0-9_][a-z0-9_:\-\.]*\}/i', '', $text);
+
+        if (null === $stripped) {
+            return $text;
+        }
+
+        // Collapse the runs of spaces a removed tag leaves mid-sentence,
+        // without touching the newlines that separate collected nodes.
+        $tidied = preg_replace('/[ \t]{2,}/', ' ', $stripped);
+
+        return null === $tidied ? $stripped : $tidied;
+    }
+
+    /**
+     * Bricks' content-area meta key, preferring Bricks' own constant.
+     *
+     * @since 2.2.1
+     *
+     * @return string
+     */
+    private static function bricks_meta_key(): string {
+        return self::bricks_constant('BRICKS_DB_PAGE_CONTENT', self::BRICKS_CONTENT_META_KEY);
+    }
+
+    /**
+     * Bricks' editor-mode meta key, preferring Bricks' own constant.
+     *
+     * @since 2.2.1
+     *
+     * @return string
+     */
+    private static function bricks_editor_mode_key(): string {
+        return self::bricks_constant('BRICKS_DB_EDITOR_MODE', self::BRICKS_EDITOR_MODE_META_KEY);
+    }
+
+    /**
+     * Read one of Bricks' key-name constants, falling back to the literal.
+     *
+     * @since 2.2.1
+     *
+     * @param string $name     Constant name.
+     * @param string $fallback Key to use when the constant is unavailable.
+     * @return string
+     */
+    private static function bricks_constant(string $name, string $fallback): string {
+        if (defined($name)) {
+            $value = constant($name);
+            if (is_string($value) && '' !== trim($value)) {
+                return $value;
+            }
+        }
+
+        return $fallback;
+    }
+
+    /**
      * Pull text out of whichever builder stored this post.
      *
      * @param int $post_id Post ID.
      * @return string Extracted text, or '' when no builder data was found.
      */
     private static function from_builder_meta(int $post_id): string {
+        // Bricks first: it is the only builder whose content can live on
+        // another post, and the only one gated on an editor mode.
+        $bricks = self::from_bricks($post_id);
+        if (!self::is_blank($bricks)) {
+            return $bricks;
+        }
+
         foreach (self::BUILDER_META_KEYS as $key) {
             $stored = get_post_meta($post_id, $key, true);
 

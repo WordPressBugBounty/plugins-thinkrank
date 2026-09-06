@@ -34,6 +34,16 @@ final class Email_Report_Renderer {
 
     private Email_Report_Section_Registry $registry;
 
+    /**
+     * How many sections produced real data during the last render().
+     *
+     * A section that returns an empty payload (or renders to nothing) drops
+     * to its fallback_html() notice. That outcome is only known *inside*
+     * render_one_section(), so it is counted here for the caller to read
+     * back after rendering — see sections_with_data().
+     */
+    private int $sections_with_data = 0;
+
     public function __construct(Email_Report_Section_Registry $registry) {
         $this->registry = $registry;
     }
@@ -50,6 +60,10 @@ final class Email_Report_Renderer {
      * }
      */
     public function render(array $config, array $context): string {
+        // Reset before walking the sections so sections_with_data() always
+        // describes this render and never a previous one.
+        $this->sections_with_data = 0;
+
         $caps = Plan_Config::email_report();
 
         $shared_context = array_merge([
@@ -112,6 +126,12 @@ final class Email_Report_Renderer {
      * A report with everything switched off still produced a valid email —
      * header, footer, and nothing in between — and reported it as a
      * successful send. Callers use this to skip the send instead.
+     *
+     * This is a *configuration* check: it answers "is anything enabled?",
+     * not "did anything have data?". A section that is enabled but returns
+     * nothing still counts here, because emptiness is only discovered later,
+     * during render(). For the data question use sections_with_data() after
+     * rendering.
      */
     public function has_renderable_sections(array $config): bool {
         return $this->registry->resolve_for($config) !== [];
@@ -139,11 +159,92 @@ final class Email_Report_Renderer {
                 return $section->fallback_html();
             }
             $rendered = $section->render($payload);
-            return $rendered !== '' ? $rendered : $section->fallback_html();
+            if ($rendered === '') {
+                return $section->fallback_html();
+            }
+
+            // A non-empty payload is not the same as data. Key Metrics
+            // collects whenever the provider reports itself "available",
+            // which it does even with no Search Console connection — and
+            // then renders a row of zeroes. That is a placeholder, not a
+            // report, so it must not make an empty send look non-empty.
+            if ($this->payload_has_data($section, $payload)) {
+                $this->sections_with_data++;
+            }
+
+            return $rendered;
         } catch (Throwable $e) {
             // Don't let one section break the report.
             return $section->fallback_html();
         }
+    }
+
+    /**
+     * Whether a section's payload carries anything worth reporting.
+     *
+     * A section may override the default judgement by implementing
+     * `has_data(array $payload): bool` — the interface does not require it,
+     * so Pro sections with their own notion of emptiness can opt in without
+     * every existing section having to change.
+     *
+     * The default is a structural read: any non-zero number, any non-empty
+     * string, any true flag counts. An all-zero payload — six metrics at 0,
+     * no keyword rows — does not. Sections that already return an empty
+     * payload when they have nothing never reach this check.
+     *
+     * @param object $section
+     */
+    private function payload_has_data($section, array $payload): bool {
+        if (method_exists($section, 'has_data')) {
+            return (bool) $section->has_data($payload);
+        }
+
+        return $this->array_has_value($payload);
+    }
+
+    private function array_has_value(array $values): bool {
+        foreach ($values as $value) {
+            if (is_array($value)) {
+                if ($this->array_has_value($value)) {
+                    return true;
+                }
+                continue;
+            }
+            if (is_bool($value)) {
+                if ($value) {
+                    return true;
+                }
+                continue;
+            }
+            if (is_int($value) || is_float($value)) {
+                if (abs((float) $value) > 0.0) {
+                    return true;
+                }
+                continue;
+            }
+            if (is_string($value)) {
+                if (trim($value) !== '') {
+                    return true;
+                }
+                continue;
+            }
+            if ($value !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * How many sections produced real data in the most recent render().
+     *
+     * Zero means every section fell back to its "no data" notice, so the
+     * report is a header, a footer and a column of placeholders. Callers
+     * use this to decide whether that is worth sending.
+     */
+    public function sections_with_data(): int {
+        return $this->sections_with_data;
     }
 
     private function wrap_section($section, string $body_html): string {

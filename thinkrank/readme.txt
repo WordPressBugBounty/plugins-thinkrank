@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.2.0
+Stable tag: 2.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -370,6 +370,25 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 
 == Changelog ==
 
+= 2.3.0 =
+Release Date: 2026-09-06
+
+- New: Bricks Builder support. ThinkRank's SEO panel now opens inside the Bricks builder, the builder toolbar shows your current SEO score, and analysis reads the content you actually built — including copy stored in Bricks components, content templates and dynamic data tags — instead of scoring the page as empty
+- Fixed: Bricks, Elementor, Divi and Oxygen template post types no longer get an SEO metabox they cannot use. Global SEO already refused them, so a template offered per-post SEO fields that went nowhere
+- Fixed: The Usages page showed a cost that was cut short mid-number, so "$0.0377" read as "$0...."
+- Fixed: The Usages page invented a trend on "All time" — every record you had ever created was compared against an arbitrary month and reported as a large increase. When there is no earlier period to compare against, nothing is claimed
+- Fixed: A drop to zero AI usage was shown as no change at all, on both the AI and the SEO cards, so a month where usage collapsed looked identical to a flat one
+- Fixed: The Usages page had two reporting-period selectors, one per tab, which could disagree with each other while showing the same data. There is now one, beside the tabs, and switching tabs is remembered in the address bar so the browser Back button works
+- Fixed: "Success Rate" was not a measurement — it could only ever read 100% or 0% — and has been removed rather than left as a number that means nothing
+- Fixed: The Usages record count said "Showing 29 total records" while the table showed 20, and provider names read "Openai" and "Openrouter". It now reports the range actually displayed, with the providers named properly
+- Fixed: The provider cost breakdown listed all four AI providers at $0.0000 on a site that had never used AI
+- Fixed: AI model names and the cost per action were wrong for several models, and long KPI labels such as "AVERAGE SEO SCORE" were clipped mid-word
+- Fixed: The "AI referrals over time" chart was a bare shape — no dates, no values, no hover. It now shows the date range, states the peak and the day it fell on, and reveals the date and count for the day under your pointer
+- Fixed: The AI referrals series counted days in fixed 24-hour steps and in a different calendar than the one it stored visits in, so on sites outside UTC a day of referrals could be counted in the total and missing from the chart, and a gap of three weeks was drawn like a gap of one day
+- Fixed: The Crawlers panel reported "No llms.txt" on every site serving llms.txt without writing a file to disk — which is most of them — while the document was live
+- Fixed: Scheduled SEO email reports were sent at the wrong time on any site not set to UTC, early or late by the site's offset, and drifted further with every send
+- Fixed: A scheduled report with nothing to say was sent anyway — a page of zeroes and "data unavailable" notices, on every cycle, to sites with no Search Console connection. That period is now skipped and picked up next time
+
 = 2.2.0 =
 Release Date: 2026-09-02
 
@@ -461,50 +480,12 @@ Release Date: 2026-08-25
 - Fixed: An AI assistant sending an unexpected field to ThinkRank got a server error instead of a clear message
 - Fixed: The WordPress admin menu's fly-out panels were cut off at the bottom of the screen when opened from a low menu item such as Settings or Tools
 
-= 2.0.1 =
-Release Date: 2026-08-23
-
-- New: A Delivery Method setting for your llms.txt file — automatic, a static file in the site root, or served by WordPress. On Nginx the web server sends the file without naming its character set, which turns accented letters and curly quotes into mojibake; served by WordPress it always arrives as UTF-8. Automatic picks the right one for your server
-- New: The keyword breakdown — title, meta description, content, image alt, address — now shows on posts with a single focus keyword. It was being calculated and then hidden unless you had two or more keywords, which is the least common setup. Each row now states plainly whether it Matched or not
-- New: Page 2 and beyond of an archive or a multi-page post now describes itself: its own title, its own address, and previous/next links, instead of repeating page 1
-- Fixed: Settings that saved and then did nothing. The breadcrumb "Show current page" switch, the %site_description% and %tagline% variables, the sitemap include toggles for anything other than the admin screen, and the Open Graph type and Twitter card type choices all persisted without changing what your site published
-- Fixed: Saving settings for a category could answer with an error after the save had already succeeded, so you re-entered settings that were never lost
-- Fixed: If a settings screen failed to load it silently filled the form with defaults. Pressing Save then wrote those defaults over everything you had stored — on the Robots.txt screen that emptied a saved robots.txt. The screen now shows an error with a Retry button and refuses to save until a load succeeds
-- Fixed: Flipping two switches quickly made the first one silently revert and stay reverted after a reload
-- Fixed: The Local SEO switch could not be turned on — the save was rejected for a business name whose field only appears after the switch is on
-- Fixed: Saving Site Identity stored a copy of the whole response back into your settings, growing the payload on every save
-- Fixed: A settings screen would store any stray field a client sent it, and once stored it came back in every later response and was written again on every save, so the settings table and every settings request grew and never shrank. Only settings ThinkRank actually defines are stored now, and strays already saved are cleared on upgrade
-- Fixed: An SEO title or meta description saved on a category, tag or custom taxonomy term was ignored on the archive page — the theme's own title was used and no description was published, while the admin screen showed the value as saved. Open Graph and Twitter values stored on a term now render too
-- Fixed: Category, tag, author, date and search archives published no address or description to social networks, and an author archive's title lost its separator
-- Fixed: A Twitter-specific description saved on a post was never used; the card showed the Open Graph description instead
-- Fixed: Pages built with shortcodes or page builders published their own shortcode source as the meta description
-- Fixed: WooCommerce product pages carried two aggregate ratings, which Search Console reports as a critical error on every reviewed product. ThinkRank now stands aside from WooCommerce's own product markup when it publishes its own
-- Fixed: The sitemap listed the cart, checkout and account pages that ThinkRank's own robots.txt blocks, so Search Console reported "Submitted URL blocked by robots.txt" on every store
-- Fixed: robots.txt put a blank line between each Sitemap line, which ends the record for a crawler, and listed child sitemaps the index already covers. The screen also reported the served file as in sync when it was not
-- Fixed: On WPML sites every translation in the sitemap pointed at the default language's address
-- Fixed: The readability score could report "Very Difficult (0)" on ordinary writing, because silent letters were counted as extra syllables
-- Fixed: SEO suggestions are now ordered by how many points they can actually recover, and advice for a factor already scoring full marks is no longer listed
-- Fixed: Core Web Vitals your site has no field data for were counted as failures, pushing the performance score down by 15–30 points for data you do not control. Unmeasured metrics are now reported as unmeasured
-- Fixed: AI-drafted articles could carry heading labels ("H2: ") into the published heading text
-- Fixed: Uninstalling the free plugin deleted an active ThinkRank Pro installation's license and settings. Uninstall also left scheduled tasks and term data behind, and on a network install only cleaned the current site
-- Fixed: Bulk SEO Optimization could show one post type's settings under another and save them there if you switched post types quickly
-- Fixed: An imported schema field could not be edited — the text snapped back as soon as it stopped being valid JSON — Print as PDF did nothing under a pop-up blocker, and the social preview could repaint with an out-of-date result
-- Fixed: A failed save on Site Identity reported the literal word "undefined" instead of the reason
-- Fixed: On sites whose database is not utf8mb4, none of ThinkRank's tables could be created: every settings save failed with a generic error and Quick Setup could not be completed. Affected sites heal on upgrade, and the real database error is now reported instead of a generic message
-- Fixed: A page that does not exist advertised your homepage as its address and carried social tags
-- Fixed: Every page carried a second viewport tag beside the theme's
-- Fixed: FAQ blocks on a blog or archive listing published their own FAQ structured data beside the page's, and a block theme could publish the same questions twice
-- Fixed: The MCP connection token was stored in the database in plain text. It is admin-equivalent, so it is now stored hashed and encrypted; existing connections keep working
-- Fixed: Several REST routes accepted any post or page id from a user with only a section permission, exposing titles and descriptions from other authors' drafts, and four of them wrote settings onto content the caller could not edit
-- Fixed: The protection against fetching internal addresses checked one address and then connected to whatever the hostname resolved to a moment later
-- Performance: Anonymous page views make fewer database queries — a Google token refresh no longer runs on the front end, AI traffic counting is batched instead of locking a row on every visitor, and schema and settings lookups are cached properly
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.3.0 =
+Adds Bricks Builder support: the SEO panel inside the builder, the score on its toolbar, and Bricks content actually analysed. Fixes a truncated cost figure, an invented trend on "All time", the AI referrals chart, and email reports sent at the wrong time or with no data. Recommended for all sites.
+
 = 2.2.0 =
 Adds an Import / Export screen that takes your ThinkRank data out as one file and loads it back. Fixes the sitemap post-type switches, robots directives resetting each other, the social master switches, and Role Manager permissions. Recommended for all sites.
-
-= 2.1.1 =
-Fixes ThinkRank deleting another SEO plugin's sitemap, %date% and %category% corrupted on save in title and description templates, Bulk SEO Optimization unreachable under Plain permalinks, and unreadable Performance errors. Recommended for all sites.

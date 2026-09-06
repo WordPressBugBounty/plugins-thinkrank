@@ -157,6 +157,29 @@ final class Email_Report_Generator {
 
             $html = $this->renderer->render($config, $context);
 
+            // Every section fell back to its "no data" notice, so this report
+            // is a header, a footer and a column of placeholders — the empty
+            // send the pre-check above was meant to stop, but could not: that
+            // check only knows what is *enabled*, and emptiness is only known
+            // once the sections have run.
+            //
+            // A test send still goes out. "Send Test Email" exists to prove
+            // delivery works, and it has to do that on a site with no data.
+            if (!$is_test && $this->renderer->sections_with_data() === 0) {
+                // record_attempt() already claimed this period's log row.
+                // Leaving it 'pending' would accumulate rows for periods that
+                // were deliberately never sent, so close it out honestly.
+                $this->mark_log_skipped($config, $context);
+
+                // Don't re-evaluate this every hour — wait out a period.
+                $this->config->update_schedule(
+                    $config['last_sent_at'] ?? null,
+                    $this->compute_next_run($frequency)
+                );
+
+                return ['success' => false, 'skipped' => 'no_data'];
+            }
+
             $tokens = ['%period%' => $context['period_label']];
             $result = $this->mailer->send($config, $html, $tokens);
 
@@ -333,6 +356,31 @@ final class Email_Report_Generator {
             'attempts' => $attempts,
             'retry'    => true,
         ];
+    }
+
+    /**
+     * Close out the row inserted by record_attempt() for a period that was
+     * deliberately not sent, so it doesn't linger as 'pending'.
+     */
+    private function mark_log_skipped(array $config, array $context): void {
+        global $wpdb;
+        $table = $wpdb->prefix . 'thinkrank_email_report_logs';
+
+        $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+            $table,
+            [
+                'status'        => 'skipped',
+                'sent_at'       => null,
+                'error_message' => null,
+            ],
+            [
+                'site_id'        => get_current_blog_id(),
+                'period_start'   => $context['period_start'] ?: current_time('mysql'),
+                'recipient_hash' => $this->recipient_hash((array) $config['recipients']),
+            ],
+            ['%s','%s','%s'],
+            ['%d','%s','%s']
+        );
     }
 
     /**

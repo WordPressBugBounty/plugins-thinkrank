@@ -78,8 +78,13 @@ final class Email_Report_Scheduler {
             return;
         }
 
-        $next_ts = strtotime((string) $config['next_scheduled_at']);
-        if ($next_ts && $next_ts > time()) {
+        // next_scheduled_at is a site-local wall clock (written with wp_date()).
+        // strtotime() would resolve it against PHP's default timezone (UTC
+        // under WordPress) and shift the send by the site's offset — early on
+        // a negative offset, late on a positive one. Interpret it in the site
+        // timezone, the same way next_run_iso() reports it to the UI.
+        $next_ts = (int) get_gmt_from_date((string) $config['next_scheduled_at'], 'U');
+        if ($next_ts > 0 && $next_ts > time()) {
             return;
         }
 

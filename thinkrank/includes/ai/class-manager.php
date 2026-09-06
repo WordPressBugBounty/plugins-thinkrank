@@ -1606,6 +1606,18 @@ class Manager {
             ],
             ['%d', '%s', '%d', '%s', '%s', '%s']
         );
+
+        /**
+         * Fires after an AI usage row is recorded.
+         *
+         * Analytics listens to drop its cached overview, so the Usages page
+         * reflects this action immediately instead of after the 600s TTL.
+         *
+         * @since 2.2.1
+         *
+         * @param int $user_id User the usage was recorded against.
+         */
+        do_action('thinkrank_ai_usage_logged', $user_id);
     }
 
     /**

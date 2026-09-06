@@ -291,15 +291,25 @@ class Usage_Analytics_Endpoint {
                     'enum' => ['7d', '30d', '90d', 'all'],
                     'sanitize_callback' => 'sanitize_key'
                 ],
-                'group_by' => [
-                    'default' => 'day',
-                    'type' => 'string',
-                    'enum' => ['day', 'week', 'month'],
-                    'sanitize_callback' => 'sanitize_key'
-                ],
                 'user_id' => [
                     'default' => 0,
                     'type' => 'integer',
+                    'sanitize_callback' => 'absint'
+                ],
+                // Declared because the handler reads them. They were validated
+                // only by the handler's own clamping, so they had no type
+                // coercion and did not appear in the endpoint's schema.
+                'page' => [
+                    'default' => 1,
+                    'type' => 'integer',
+                    'minimum' => 1,
+                    'sanitize_callback' => 'absint'
+                ],
+                'per_page' => [
+                    'default' => 20,
+                    'type' => 'integer',
+                    'minimum' => 10,
+                    'maximum' => 100,
                     'sanitize_callback' => 'absint'
                 ]
             ]
@@ -381,7 +391,6 @@ class Usage_Analytics_Endpoint {
                             'features_used_count' => $ai_metrics['features_used_count'],
                             'most_used_feature' => $ai_metrics['most_used_feature'],
                             'most_used_count' => $ai_metrics['most_used_count'],
-                            'success_rate' => $ai_metrics['success_rate'],
                             'content_briefs' => $brief_metrics['total_briefs'],
                             'feature_breakdown' => $ai_metrics['feature_breakdown'],
                             'provider_breakdown' => $cost_data['by_provider']
@@ -447,12 +456,53 @@ class Usage_Analytics_Endpoint {
     }
 
     /**
+     * Bind the cache-invalidation listeners for the whole request lifecycle.
+     *
+     * The listeners used to be registered only by the constructor, which runs
+     * on rest_api_init — so usage logged during cron, WP-CLI or an admin-post
+     * request found no listener and the cached overview rode out its full TTL.
+     * Called from API\Manager::init() on every request instead.
+     *
+     * @since 2.2.1
+     * @return void
+     */
+    public static function boot_cache_invalidation(): void {
+        static $booted = false;
+
+        if ($booted) {
+            return;
+        }
+
+        $booted = true;
+
+        // Constructing the endpoint registers the listeners; the guard in
+        // setup_cache_invalidation() keeps a later REST construction from
+        // double-binding them.
+        new self();
+    }
+
+    /**
      * Set up cache invalidation hooks
      *
      * @since 1.0.0
      * @return void
      */
     private function setup_cache_invalidation(): void {
+        // The endpoint is constructed more than once per request — once on
+        // init via boot_cache_invalidation(), again on rest_api_init, and
+        // potentially by callers resolving it on demand. Bind once per
+        // request, or every event invalidates N times.
+        //
+        // A has_action() check cannot do this: the callback is [$this, ...]
+        // and each construction is a different instance, so it never matches.
+        static $bound = false;
+
+        if ($bound) {
+            return;
+        }
+
+        $bound = true;
+
         // Invalidate analytics cache when AI usage is logged
         add_action('thinkrank_ai_usage_logged', [$this, 'invalidate_analytics_cache']);
 
@@ -546,44 +596,48 @@ class Usage_Analytics_Endpoint {
         
         foreach ($usage_data as $usage) {
             $tokens = (int) $usage['tokens_used'];
-            $provider = $usage['provider'];
+            $provider = (string) $usage['provider'];
 
-            // Estimate 70% input, 30% output tokens
-            $input_tokens = $tokens * 0.7;
-            $output_tokens = $tokens * 0.3;
-
-            $cost = 0;
-
-            // Use the robust pricing helper for consistent cost calculation
-            $pricing = $this->get_model_pricing($provider);
-            if ($pricing) {
-                $cost = ($input_tokens * $pricing['input'] / 1000000) +
-                        ($output_tokens * $pricing['output'] / 1000000);
-                $costs[$provider] += $cost;
+            // Unknown provider: no pricing table, so it cannot be costed. Skip
+            // rather than let `+=` invent a key that the total below misses.
+            if (!isset($costs[$provider])) {
+                continue;
             }
+
+            // Price at the model the request actually used. Reading only the
+            // provider meant every row was costed at that provider's default
+            // model, so this total disagreed with the per-record figures in
+            // the Usage Breakdown tab — by 4.5x on a gpt-4o-mini workload.
+            $metadata = !empty($usage['metadata']) ? json_decode((string) $usage['metadata'], true) : [];
+            $model = is_array($metadata) && !empty($metadata['actual_model'])
+                ? (string) $metadata['actual_model']
+                : $this->get_default_model($provider);
+
+            // Single source of truth for per-row pricing, shared with
+            // get_detailed_usage_breakdown() so both tabs always agree.
+            $costs[$provider] += $this->calculate_record_cost($provider, $tokens, $model);
         }
         
         $costs['total'] = $costs['openai'] + $costs['claude'] + $costs['gemini'] + $costs['openrouter'];
 
-        // Format provider breakdown
-        $costs['by_provider'] = [
-            'openai' => [
-                'cost' => round($costs['openai'], 4),
-                'percentage' => $costs['total'] > 0 ? round(($costs['openai'] / $costs['total']) * 100, 1) : 0
-            ],
-            'claude' => [
-                'cost' => round($costs['claude'], 4),
-                'percentage' => $costs['total'] > 0 ? round(($costs['claude'] / $costs['total']) * 100, 1) : 0
-            ],
-            'gemini' => [
-                'cost' => round($costs['gemini'], 4),
-                'percentage' => $costs['total'] > 0 ? round(($costs['gemini'] / $costs['total']) * 100, 1) : 0
-            ],
-            'openrouter' => [
-                'cost' => round($costs['openrouter'], 4),
-                'percentage' => $costs['total'] > 0 ? round(($costs['openrouter'] / $costs['total']) * 100, 1) : 0
-            ]
-        ];
+        // Report only providers that actually incurred cost. Emitting all four
+        // unconditionally meant a site with no AI usage rendered four ranked
+        // rows at "$0.0000 (0%)" — reading as "four providers were used and
+        // each was free" — and made the panel's own "No provider cost data"
+        // empty state unreachable.
+        $costs['by_provider'] = [];
+        foreach (['openai', 'claude', 'gemini', 'openrouter'] as $provider) {
+            if ($costs[$provider] <= 0) {
+                continue;
+            }
+
+            $costs['by_provider'][$provider] = [
+                'cost' => round($costs[$provider], 4),
+                'percentage' => $costs['total'] > 0
+                    ? round(($costs[$provider] / $costs['total']) * 100, 1)
+                    : 0
+            ];
+        }
         
         return $costs;
     }
@@ -625,7 +679,7 @@ class Usage_Analytics_Endpoint {
             $usage_data = $wpdb->get_results(
                 $wpdb->prepare(
                     // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name is escaped via esc_sql().
-                    "SELECT provider, action, tokens_used, created_at FROM `{$table_name}` WHERE user_id = %d AND created_at >= %s",
+                    "SELECT provider, action, tokens_used, metadata, created_at FROM `{$table_name}` WHERE user_id = %d AND created_at >= %s",
                     $user_id,
                     $cutoff
                 ),
@@ -636,7 +690,7 @@ class Usage_Analytics_Endpoint {
             $usage_data = $wpdb->get_results(
                 $wpdb->prepare(
                     // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name is escaped via esc_sql().
-                    "SELECT provider, action, tokens_used, created_at FROM `{$table_name}` WHERE user_id = %d",
+                    "SELECT provider, action, tokens_used, metadata, created_at FROM `{$table_name}` WHERE user_id = %d",
                     $user_id
                 ),
                 ARRAY_A
@@ -649,6 +703,14 @@ class Usage_Analytics_Endpoint {
             // short array here surfaces as undefined-key warnings and null
             // fields for any user with no AI usage yet (i.e. a fresh install).
             // The values mirror what the loop below produces for zero rows.
+            //
+            // The change fields are COMPUTED here rather than hardcoded to 0.
+            // An empty current window does not mean "nothing changed": a user
+            // whose usage fell from five actions last month to none this month
+            // was shown a 0 — rendered as the same em-dash a genuinely flat
+            // period gets — instead of the -100% that actually happened.
+            $previous = $this->get_previous_period_data($user_id, $date_condition);
+
             return [
                 'total_actions' => 0,
                 'total_tokens' => 0,
@@ -656,10 +718,15 @@ class Usage_Analytics_Endpoint {
                 'features_used_count' => 0,
                 'most_used_feature' => '',
                 'most_used_count' => 0,
-                'success_rate' => 0,
                 'usage_data' => [],
-                'cost_change' => 0,
-                'time_saved_change' => 0
+                'cost_change' => $this->calculate_percentage_change(
+                    array_key_exists('total_cost', $previous) ? $previous['total_cost'] : 0,
+                    0.0
+                ),
+                'time_saved_change' => $this->calculate_percentage_change(
+                    array_key_exists('time_saved', $previous) ? $previous['time_saved'] : 0,
+                    0.0
+                )
             ];
         }
 
@@ -693,18 +760,22 @@ class Usage_Analytics_Endpoint {
             }
         }
 
-        // Calculate success rate (assuming all logged actions are successful for now)
-        // In future, we could track failed attempts separately
-        $success_rate = $total_actions > 0 ? 100 : 0;
+        // No success rate here on purpose. It used to be
+        // `$total_actions > 0 ? 100 : 0` — a constant presented as a
+        // measurement, and one that could only ever read 100% or 0%. Failed
+        // AI calls are never written to this table, so there is nothing to
+        // compute a rate from; the KPI card is gone until there is.
 
         // Calculate changes from previous period
         $previous_period_data = $this->get_previous_period_data($user_id, $date_condition);
+        // Note the lack of `?? 0`: a null here means "no previous period",
+        // and coalescing it to zero would turn that back into a fake 100%.
         $cost_change = $this->calculate_percentage_change(
-            $previous_period_data['total_cost'] ?? 0,
+            array_key_exists('total_cost', $previous_period_data) ? $previous_period_data['total_cost'] : 0,
             $this->calculate_total_cost($usage_data)
         );
         $time_saved_change = $this->calculate_percentage_change(
-            $previous_period_data['time_saved'] ?? 0,
+            array_key_exists('time_saved', $previous_period_data) ? $previous_period_data['time_saved'] : 0,
             $this->calculate_time_saved($feature_breakdown)
         );
 
@@ -715,7 +786,6 @@ class Usage_Analytics_Endpoint {
             'features_used_count' => $features_used_count,
             'most_used_feature' => $most_used_feature,
             'most_used_count' => $most_used_count,
-            'success_rate' => $success_rate,
             'usage_data' => $usage_data,
             'cost_change' => $cost_change,
             'time_saved_change' => $time_saved_change
@@ -759,22 +829,36 @@ class Usage_Analytics_Endpoint {
         }
 
         if (!$result || (int) $result['content_optimized'] === 0) {
+            // Same reasoning as the empty branch in get_ai_usage_metrics():
+            // an empty current window is not "no change". A user who
+            // optimized three posts last month and none this month should
+            // see -100%, not the em-dash a flat period gets — and for `all`
+            // there is no previous window, so the change is null.
+            $previous = $this->get_previous_seo_data($user_id, $date_condition);
+
             return [
                 'content_optimized' => 0,
                 'average_seo_score' => 0,
-                'content_optimized_change' => 0,
-                'seo_score_change' => 0
+                'content_optimized_change' => $this->calculate_percentage_change(
+                    array_key_exists('content_optimized', $previous) ? $previous['content_optimized'] : 0,
+                    0.0
+                ),
+                'seo_score_change' => $this->calculate_percentage_change(
+                    array_key_exists('average_seo_score', $previous) ? $previous['average_seo_score'] : 0,
+                    0.0
+                )
             ];
         }
 
         // Calculate changes from previous period
         $previous_seo_data = $this->get_previous_seo_data($user_id, $date_condition);
+        // As above: no `?? 0`, so a null "no previous period" survives.
         $content_optimized_change = $this->calculate_percentage_change(
-            $previous_seo_data['content_optimized'] ?? 0,
+            array_key_exists('content_optimized', $previous_seo_data) ? $previous_seo_data['content_optimized'] : 0,
             (int) $result['content_optimized']
         );
         $seo_score_change = $this->calculate_percentage_change(
-            $previous_seo_data['average_seo_score'] ?? 0,
+            array_key_exists('average_seo_score', $previous_seo_data) ? $previous_seo_data['average_seo_score'] : 0,
             round((float) $result['average_score'], 1)
         );
 
@@ -833,7 +917,12 @@ class Usage_Analytics_Endpoint {
      */
     public function get_usage_breakdown(WP_REST_Request $request) {
         try {
-            $user_id = get_current_user_id();
+            // Mirrors get_overview_metrics(). The two endpoints declared the
+            // same `user_id` argument but only overview honoured it, so the
+            // same query string described two different users depending on
+            // which one you asked. check_permissions() already requires
+            // manage_options before another user's id is accepted.
+            $user_id = $request->get_param('user_id') ?: get_current_user_id();
             $period = $request->get_param('period') ?? '30d';
             // `(int)` binds tighter than `??`, so `(int) null` is 0 and the
             // `?? 20` fallback was unreachable — per_page silently defaulted to
@@ -858,7 +947,8 @@ class Usage_Analytics_Endpoint {
                         'page' => $page,
                         'per_page' => $per_page,
                         'total_records' => $total_records,
-                        'total_pages' => ceil($total_records / $per_page)
+                        // (int) so it serialises as 2, not 2.0.
+                        'total_pages' => $per_page > 0 ? (int) ceil($total_records / $per_page) : 0
                     ],
                     'period' => $period
                 ]
@@ -908,12 +998,20 @@ class Usage_Analytics_Endpoint {
      * @param float $new_value Current period value
      * @return float Percentage change
      */
-    private function calculate_percentage_change(float $old_value, float $new_value): float {
-        if ((float) $old_value === 0.0) {
-            return $new_value > 0 ? 100 : 0;
+    private function calculate_percentage_change($old_value, float $new_value): ?float {
+        // No previous period at all (the 'all' range).
+        if (null === $old_value) {
+            return null;
         }
 
-        return round((($new_value - $old_value) / $old_value) * 100, 1);
+        if ((float) $old_value === 0.0) {
+            // Growth from nothing has no percentage. Reporting a flat 100%
+            // dressed it up as a measured change; null lets the UI say "new"
+            // (or say nothing) instead of inventing a number.
+            return $new_value > 0 ? null : 0.0;
+        }
+
+        return round((($new_value - (float) $old_value) / (float) $old_value) * 100, 1);
     }
 
     /**
@@ -932,6 +1030,12 @@ class Usage_Analytics_Endpoint {
         // Extract the interval from current date condition to calculate previous period
         $previous_date_condition = $this->get_previous_period_condition($current_date_condition);
 
+        // No preceding window: report "not comparable" rather than querying a
+        // made-up one.
+        if (null === $previous_date_condition) {
+            return ['total_cost' => null, 'time_saved' => null];
+        }
+
         // Prepare and execute query with proper parameter binding to prevent SQL injection
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is properly escaped, date condition is from controlled source
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Analytics data is real-time and shouldn't be cached
@@ -940,7 +1044,8 @@ class Usage_Analytics_Endpoint {
                 SELECT
                     provider,
                     action,
-                    tokens_used
+                    tokens_used,
+                    metadata
                 FROM `{$table_name}`
                 WHERE user_id = %d
                 {$previous_date_condition}
@@ -1160,6 +1265,11 @@ class Usage_Analytics_Endpoint {
 
         $previous_date_condition = $this->get_previous_period_condition($current_date_condition);
 
+        // See get_previous_period_data(): no preceding window, no comparison.
+        if (null === $previous_date_condition) {
+            return ['content_optimized' => null, 'average_seo_score' => null];
+        }
+
         // Prepare and execute query with proper parameter binding to prevent SQL injection
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is properly escaped, date condition is from controlled source
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Analytics data is real-time and shouldn't be cached
@@ -1208,10 +1318,16 @@ class Usage_Analytics_Endpoint {
     /**
      * Convert current period condition to previous period condition
      *
+     * Returns null when there is no preceding window to compare against.
+     * `all` produces an empty date condition, which used to fall through to a
+     * hardcoded 30–60 day fallback — so "all time" was compared against an
+     * arbitrary month and reported a large, meaningless increase. "No
+     * comparison" is now representable instead of being a parse failure.
+     *
      * @param string $current_condition Current period SQL condition
-     * @return string Previous period SQL condition
+     * @return string|null Previous period SQL condition, or null when none exists
      */
-    private function get_previous_period_condition(string $current_condition): string {
+    private function get_previous_period_condition(string $current_condition): ?string {
         // Extract interval from conditions like "AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
         if (preg_match('/INTERVAL (\d+) (\w+)/', $current_condition, $matches)) {
             $interval = (int) $matches[1];
@@ -1225,8 +1341,8 @@ class Usage_Analytics_Endpoint {
                     AND created_at < DATE_SUB(NOW(), INTERVAL {$end_interval} {$unit})";
         }
 
-        // Fallback for unknown conditions
-        return "AND created_at >= DATE_SUB(NOW(), INTERVAL 60 DAY)
-                AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)";
+        // No interval means no window — 'all'. Comparing every record ever
+        // against a fabricated 30-day slice is not a trend.
+        return null;
     }
 }

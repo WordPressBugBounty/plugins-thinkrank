@@ -55,7 +55,31 @@ class Global_SEO_Post_Types {
             return false;
         }
 
-        // Named deny list for viewable-but-unsuitable builder/utility CPTs.
+        return !in_array($object->name, self::excluded_post_types($object), true);
+    }
+
+    /**
+     * Builder and utility CPTs that are not optimizable content.
+     *
+     * These register `public => true` for preview purposes but are layout
+     * fragments, not pages anyone gives a title and a meta description.
+     *
+     * Shared rather than duplicated: the per-post SEO metabox discovers post
+     * types by the same public/`show_ui` rule and used to keep its own
+     * exclusion list, which named only WordPress internals. The two policies
+     * disagreed — a builder template CPT was denied Global SEO while still
+     * getting a full metabox — so both now read this one list (#621).
+     *
+     * @since 2.2.1
+     *
+     * Deliberately untyped: this is passed straight to a public filter whose
+     * existing contract accepts whatever the caller has (a `WP_Post_Type`, or
+     * null when the list is wanted without a subject).
+     *
+     * @param mixed $post_type_object Post type being judged, passed to the filter.
+     * @return string[] Post type names to exclude.
+     */
+    public static function excluded_post_types($post_type_object = null): array {
         // Filterable so integrators can tune it without patching core. The
         // post-type object is passed as the second argument (matches the admin
         // discovery filter usage).
@@ -69,8 +93,11 @@ class Global_SEO_Post_Types {
             // Beaver Themer's layouts. Same clutter Divi's Theme Builder
             // templates caused before they were listed here (#449).
             'fl-builder-template', 'fl-theme-layout',
-        ], $object);
+            // Bricks: saved templates plus the header/footer/section layouts
+            // its Theme Builder stores as the same CPT (#257).
+            'bricks_template',
+        ], $post_type_object);
 
-        return !in_array($object->name, (array) $excluded, true);
+        return array_values(array_filter((array) $excluded, 'is_string'));
     }
 }
