@@ -105,6 +105,13 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
     /**
      * Get SEO settings for a specific context
      *
+     * The returned array always carries every key the context defines: the
+     * saved rows are merged OVER the context defaults, so callers can read a
+     * key without checking whether it exists. That also means the result never
+     * distinguishes "the user saved this" from "this is the built-in default" —
+     * when a caller needs that distinction (an audit asking whether anything
+     * was configured at all), use get_stored_settings() instead.
+     *
      * @since 1.0.0
      *
      * @param string   $context_type The context type
@@ -118,12 +125,63 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
             return $this->get_default_settings($context_type);
         }
 
-        // Convert NULL context_id to 0 for site-wide settings to match save behavior
-        $db_context_id = $context_id === null ? 0 : $context_id;
-
         // Serve from the object cache when available. This runs on every front-end
         // request (the_content, thumbnails), so avoiding a DB hit per request matters.
         $cache_key = $this->get_cache_key($context_type, $context_id);
+        $cached = wp_cache_get($cache_key, 'thinkrank_seo');
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        // Merge with defaults to ensure all required keys exist
+        $merged = array_merge(
+            $this->get_default_settings($context_type),
+            $this->get_stored_settings($context_type, $context_id)
+        );
+
+        // Cache the resolved settings; invalidated on every save via clear_cache().
+        wp_cache_set($cache_key, $merged, 'thinkrank_seo');
+
+        return $merged;
+    }
+
+    /**
+     * Get ONLY the settings actually saved for a context — no defaults merged.
+     *
+     * get_settings() layers the context defaults under the stored rows, which
+     * makes "has the user configured anything?" unanswerable through it: a site
+     * with zero saved rows still gets back a fully populated array. Any audit
+     * or first-run check that must tell a configured site from an untouched one
+     * has to read the storage layer directly, which is what this exposes.
+     *
+     * Returns an empty array when nothing has been saved for the context, or
+     * when the context type is not supported by this manager.
+     *
+     * Note this is the storage layer, not the settings a manager reports: a
+     * subclass that overrides get_settings() to layer in another source —
+     * Schema_Management_System fills its logo and organization fields from Site
+     * Identity, Social_Meta_Manager has its own override — contributes nothing
+     * here. Read it to ask what the site saved, never to read a value out.
+     *
+     * @since 2.3.1
+     *
+     * @param string   $context_type The context type
+     * @param int|null $context_id   Optional. Context ID
+     * @return array Saved settings, keyed by setting key. Empty when nothing is stored.
+     */
+    public function get_stored_settings(string $context_type, ?int $context_id = null): array {
+        $context_type = sanitize_key($context_type);
+
+        if (!in_array($context_type, $this->get_supported_contexts(), true)) {
+            return [];
+        }
+
+        // Convert NULL context_id to 0 for site-wide settings to match save behavior
+        $db_context_id = $context_id === null ? 0 : $context_id;
+
+        // Cached under its own key so the merged and unmerged views can never be
+        // served for one another. clear_cache() drops both on every save.
+        $cache_key = $this->get_stored_cache_key($context_type, $context_id);
         $cached = wp_cache_get($cache_key, 'thinkrank_seo');
         if (is_array($cached)) {
             return $cached;
@@ -152,7 +210,7 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
         );
 
         $settings = [];
-        foreach ($results as $row) {
+        foreach ((array) $results as $row) {
             $value = maybe_unserialize($row['setting_value']);
 
             // Ensure proper data type conversion for boolean fields
@@ -173,13 +231,9 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
             $settings[$row['setting_key']] = $value;
         }
 
-        // Merge with defaults to ensure all required keys exist
-        $merged = array_merge($this->get_default_settings($context_type), $settings);
+        wp_cache_set($cache_key, $settings, 'thinkrank_seo');
 
-        // Cache the resolved settings; invalidated on every save via clear_cache().
-        wp_cache_set($cache_key, $merged, 'thinkrank_seo');
-
-        return $merged;
+        return $settings;
     }
 
     /**
@@ -699,6 +753,10 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
         $cache_key = $this->get_cache_key($context_type, $context_id);
         wp_cache_delete($cache_key, 'thinkrank_seo');
 
+        // The defaults-free view is cached separately, so a save has to drop it
+        // too or get_stored_settings() keeps answering with the pre-save rows.
+        wp_cache_delete($this->get_stored_cache_key($context_type, $context_id), 'thinkrank_seo');
+
         // Clear related transients
         delete_transient("thinkrank_seo_{$this->manager_type}_{$context_type}_{$context_id}");
     }
@@ -751,6 +809,24 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
         // never invalidate the value a front-end read cached.
         $db_context_id = $context_id === null ? 0 : $context_id;
         return "seo_settings_{$this->manager_type}_{$context_type}_{$db_context_id}";
+    }
+
+    /**
+     * Cache key for the defaults-free view of a context.
+     *
+     * Deliberately distinct from get_cache_key(): the two views hold different
+     * data (one merged with defaults, one only what was saved), so sharing an
+     * entry would let whichever ran first answer for the other.
+     *
+     * @since 2.3.1
+     *
+     * @param string   $context_type The context type
+     * @param int|null $context_id   Optional. Context ID
+     * @return string
+     */
+    protected function get_stored_cache_key(string $context_type, ?int $context_id): string {
+        $db_context_id = $context_id === null ? 0 : $context_id;
+        return "seo_stored_settings_{$this->manager_type}_{$context_type}_{$db_context_id}";
     }
 
     /**

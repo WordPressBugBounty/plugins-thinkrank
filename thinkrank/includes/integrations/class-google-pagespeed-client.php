@@ -212,11 +212,30 @@ class Google_PageSpeed_Client extends Google_API_Base_Client {
             throw $e;
         }
 
+        // Lighthouse answers 200 with a populated lighthouseResult even when the
+        // audit itself failed (NO_FCP, ERRORED_DOCUMENT_REQUEST, …); the score
+        // then comes back null. Coercing that to 0 stored a failed run as a
+        // genuine "this site scores 0" measurement, which every consumer —
+        // the SEO score's mobile factor most visibly — has no way to tell from
+        // a real result. Treat it as the failure it is so the caller's existing
+        // failure handling applies.
+        $runtime_error = $result['lighthouseResult']['runtimeError']['code'] ?? '';
+        $raw_score     = $result['lighthouseResult']['categories']['performance']['score'] ?? null;
+
+        if (('' !== $runtime_error && 'NO_ERROR' !== $runtime_error) || null === $raw_score) {
+            $message = $result['lighthouseResult']['runtimeError']['message']
+                ?? __('PageSpeed Insights returned no performance score for this URL.', 'thinkrank');
+
+            set_transient('thinkrank_psi_failure_' . $hash, $message, self::FAILURE_TTL);
+
+            throw new \Exception($message); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+        }
+
         $snapshot = [
             'core_web_vitals'    => $this->parse_core_web_vitals($result),
             'opportunities'      => $this->parse_opportunities($result),
             'diagnostics'        => $this->parse_diagnostics($result),
-            'performance_score'  => (float) (($result['lighthouseResult']['categories']['performance']['score'] ?? 0) * 100),
+            'performance_score'  => (float) ($raw_score * 100),
             'loading_experience' => $result['loadingExperience'] ?? [],
             'fetched_at'         => time(),
         ];

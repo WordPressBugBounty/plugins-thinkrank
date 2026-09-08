@@ -493,8 +493,9 @@ class Global_SEO_Schema_Output {
             'dateModified' => get_the_modified_date('c', $post),
         ];
 
-        // Add description
-        $excerpt = get_the_excerpt($post);
+        // Add description. A Bricks page's stored `post_content` is not on the
+        // page, so core's derived excerpt must not describe it (#651).
+        $excerpt = $this->post_excerpt_text($post);
         if (!empty($excerpt)) {
             $schema['description'] = wp_strip_all_tags($excerpt);
         }
@@ -567,14 +568,14 @@ class Global_SEO_Schema_Output {
             require_once $builder_file;
         }
 
-        $excerpt = get_the_excerpt($post);
+        $excerpt = $this->post_excerpt_text($post);
 
         $builder = new \ThinkRank\SEO\Schema_Builder();
         $schema  = $builder->build_schema(
             'FAQPage',
             [
                 'title'   => get_the_title($post),
-                'content' => $post->post_content,
+                'content' => \ThinkRank\SEO\Builder_Content::visible_content($post),
                 'excerpt' => $excerpt ? wp_strip_all_tags($excerpt) : '',
                 'url'     => get_permalink($post),
             ],
@@ -647,7 +648,7 @@ class Global_SEO_Schema_Output {
         ];
 
         // Add description
-        $excerpt = get_the_excerpt($post);
+        $excerpt = $this->post_excerpt_text($post);
         if (!empty($excerpt)) {
             $schema['description'] = wp_strip_all_tags($excerpt);
         }
@@ -717,7 +718,7 @@ class Global_SEO_Schema_Output {
         ];
 
         // Add description
-        $description = get_the_excerpt($post);
+        $description = $this->post_excerpt_text($post);
         if (empty($description)) {
             $caption = wp_get_attachment_caption($post->ID);
             if (!empty($caption)) {
@@ -883,13 +884,18 @@ class Global_SEO_Schema_Output {
         // Try custom meta field first
         $description = get_post_meta($post->ID, '_thinkrank_product_description', true);
 
-        // Fallback to excerpt or content
+        // Fallback to excerpt or content. On a Bricks page the excerpt core
+        // derives comes from discarded `post_content`, so the visible body is
+        // used instead (#651).
         if (empty($description)) {
-            $description = get_the_excerpt($post);
+            $description = $this->post_excerpt_text($post);
         }
 
         if (empty($description)) {
-            $description = \ThinkRank\SEO\Pattern_Resolver::derive_excerpt((string) $post->post_content, 30);
+            $description = \ThinkRank\SEO\Pattern_Resolver::derive_excerpt(
+                \ThinkRank\SEO\Builder_Content::visible_content($post),
+                30
+            );
         }
 
         return wp_strip_all_tags($description);
@@ -1155,6 +1161,27 @@ class Global_SEO_Schema_Output {
         }
 
         return $reviews;
+    }
+
+    /**
+     * The post's excerpt, taken from content the page actually renders.
+     *
+     * `get_the_excerpt()` falls back to trimming `post_content`, which a Bricks
+     * page discards — so on one of those it describes text no visitor sees. A
+     * hand-written excerpt is the author's own summary and still wins, because
+     * `superseding_excerpt_source()` yields nothing for a post that has one
+     * (#651).
+     *
+     * @since 2.3.1
+     * @param \WP_Post $post Post being described.
+     * @return string
+     */
+    private function post_excerpt_text(\WP_Post $post): string {
+        $superseding = \ThinkRank\SEO\Builder_Content::superseding_excerpt_source($post);
+
+        return '' !== $superseding
+            ? \ThinkRank\SEO\Pattern_Resolver::derive_excerpt($superseding, 30)
+            : (string) get_the_excerpt($post);
     }
 
     /**

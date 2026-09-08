@@ -98,6 +98,39 @@ class Builder_Content {
     private const BRICKS_COMPONENTS_OPTION = 'bricks_components';
 
     /**
+     * Bricks' element that renders the post's own `post_content`.
+     *
+     * A Bricks page normally discards `post_content` entirely, which is why
+     * anything left there is invisible. Dropping this element onto the canvas
+     * is the one way an author puts it back on the page, so its presence flips
+     * `post_content` from stale leftovers to content the visitor reads.
+     *
+     * @since 2.3.1
+     * @var string
+     */
+    private const BRICKS_POST_CONTENT_ELEMENT = 'post-content';
+
+    /**
+     * Resolved Bricks trees for this request, keyed by post ID.
+     *
+     * Rendering one page asks for the tree about twenty times — every
+     * description, every schema node, the FAQ guard — and resolving it is not
+     * free. `bricks_content_source()` clears `Bricks\Database::$active_templates`
+     * before asking Bricks which content template applies, which defeats
+     * Bricks' own early-return and re-runs its whole template-condition engine;
+     * `expand_bricks_components()` then walks the tree again. Measured on a
+     * Bricks page with no content of its own, that was ten full runs of the
+     * rules engine per request.
+     *
+     * Per-request only, and only ever read back within one page render — a
+     * request that writes Bricks content does not also render it.
+     *
+     * @since 2.3.1
+     * @var array<int,array<int,mixed>>
+     */
+    private static array $bricks_trees = [];
+
+    /**
      * JSON keys whose values are user-visible text.
      *
      * Builder trees mix content with configuration, so a blind string sweep
@@ -127,6 +160,69 @@ class Builder_Content {
     ];
 
     /**
+     * JSON keys whose values hold an embedded video's source.
+     *
+     * A builder's video widget keeps its destination in a provider-specific
+     * field — Elementor picks `youtube_url`, `vimeo_url`, `dailymotion_url` or
+     * `hosted_url` according to the chosen source type — none of which is a
+     * link field or a content field, so a video on a builder page reached the
+     * analyzers as nothing at all.
+     *
+     * These are deliberately kept out of URL_KEYS. A video is an embed, not an
+     * outbound link: rendering one as `<a href>` would add a spurious external
+     * link to every page carrying a video and skew the link counts. They are
+     * reconstructed as `<iframe>`/`<video>` instead, which the video detector
+     * recognises and the link and image counters ignore.
+     *
+     * @since 2.3.1
+     * @var string[]
+     */
+    private const VIDEO_KEYS = [
+        'youtube_url', 'vimeo_url', 'dailymotion_url', 'videopress_url',
+        'hosted_url', 'video_url', 'video_src', 'video_link',
+    ];
+
+    /**
+     * File extensions that mean a video source is a file, not a provider page.
+     *
+     * @since 2.3.1
+     * @var string[]
+     */
+    private const VIDEO_FILE_EXTENSIONS = ['mp4', 'webm', 'ogv', 'mov', 'm4v'];
+
+    /**
+     * Source keys to trust for a declared video source type.
+     *
+     * A widget keeps one field per provider and does not clear the others when
+     * the author switches source: an Elementor video moved from YouTube to Self
+     * Hosted still carries the earlier `youtube_url`. Reading whichever key
+     * turns up first then emits the video the author replaced. The widget says
+     * which one it is actually playing, so that is read first and the flat key
+     * sweep is only the fallback for a builder that declares nothing.
+     *
+     * @since 2.3.1
+     * @var array<string,string[]>
+     */
+    private const VIDEO_KEYS_BY_TYPE = [
+        'youtube'     => ['youtube_url'],
+        'vimeo'       => ['vimeo_url'],
+        'dailymotion' => ['dailymotion_url'],
+        'videopress'  => ['videopress_url'],
+        'hosted'      => ['hosted_url', 'video_url', 'video_src', 'video_link'],
+        'media'       => ['hosted_url', 'video_url', 'video_src', 'video_link'],
+        'file'        => ['hosted_url', 'video_url', 'video_src', 'video_link'],
+        'self_hosted' => ['hosted_url', 'video_url', 'video_src', 'video_link'],
+    ];
+
+    /**
+     * Keys a builder uses to name which video source a widget is playing.
+     *
+     * @since 2.3.1
+     * @var string[]
+     */
+    private const VIDEO_TYPE_KEYS = ['video_type', 'videotype', 'video_source', 'source_type'];
+
+    /**
      * JSON keys whose values hold an image, as a URL string or `{ url, alt }`.
      *
      * @var string[]
@@ -145,7 +241,11 @@ class Builder_Content {
      * @var string[]
      */
     private const HEADING_TAG_KEYS = [
-        'header_size', 'heading_tag', 'html_tag', 'title_tag', 'tag', 'level', 'size',
+        // Lower-cased on both sides of the comparison, so `headingtag` is the
+        // camelCase `headingTag` Bricks uses throughout its own controls and
+        // which ThinkRank's Bricks elements declare. Without it their section
+        // headings counted as body copy and never reached heading structure.
+        'header_size', 'heading_tag', 'headingtag', 'html_tag', 'title_tag', 'tag', 'level', 'size',
     ];
 
     /**
@@ -162,7 +262,211 @@ class Builder_Content {
      * @return string HTML/text to analyze.
      */
     public static function resolve(\WP_Post $post): string {
-        return self::resolve_markup((string) $post->post_content, $post);
+        $raw = (string) $post->post_content;
+
+        // A page built in Gutenberg and then switched to Bricks keeps its old
+        // blocks in `post_content` forever — Bricks never clears them, and
+        // never renders them either. Resolving that first meant the stale draft
+        // beat the tree the visitor actually reads, and it did not stop at the
+        // score: the same string becomes the meta description, og:description,
+        // twitter:description and the schema description. Starting from nothing
+        // sends the resolution straight to Bricks' storage, which is where this
+        // page's words are (#651).
+        //
+        // Only for the stored path. `resolve_markup()` is also called with live
+        // editor content, and the Bricks panel's resolver reads the canvas —
+        // discarding that would replace what the author is typing with the last
+        // save.
+        if (self::bricks_supersedes_post_content((int) $post->ID)) {
+            $raw = '';
+        }
+
+        return self::resolve_markup($raw, $post);
+    }
+
+    /**
+     * Whether Bricks renders this post and throws its `post_content` away.
+     *
+     * True means anything still stored in `post_content` is invisible: it is
+     * not on the page, so it must not be scored, described or published as
+     * structured data. False covers both a post Bricks does not own and a
+     * Bricks page that puts `post_content` back with a Post Content element.
+     *
+     * @since 2.3.1
+     *
+     * @param int $post_id Post being resolved.
+     * @return bool
+     */
+    public static function bricks_supersedes_post_content(int $post_id): bool {
+        $tree = self::bricks_tree($post_id);
+
+        if (empty($tree)) {
+            return false;
+        }
+
+        foreach ($tree as $element) {
+            if (is_array($element)
+                && self::BRICKS_POST_CONTENT_ELEMENT === ($element['name'] ?? null)
+            ) {
+                return false;
+            }
+        }
+
+        return !self::bricks_tree_prints_post_content($tree);
+    }
+
+    /**
+     * Whether a Bricks tree prints the body through a dynamic-data tag.
+     *
+     * The Post Content element is not the only way back onto the page: Bricks'
+     * `{post_content}` tag renders the same thing from inside an ordinary text
+     * element, and a single-post template written that way is a common shape.
+     * Missing it would mean the post's real body is discarded everywhere —
+     * scoring, the meta/og/twitter descriptions, the schema description — for a
+     * page that is displaying it.
+     *
+     * Matched over the encoded tree rather than per setting, because the tag can
+     * sit in any string field of any element and Bricks allows modifiers after
+     * the name (`{post_content:...}`).
+     *
+     * @since 2.3.1
+     *
+     * @param array $tree Bricks element tree.
+     * @return bool
+     */
+    private static function bricks_tree_prints_post_content(array $tree): bool {
+        $encoded = wp_json_encode($tree);
+
+        return is_string($encoded) && false !== stripos($encoded, '{post_content');
+    }
+
+    /**
+     * The post's content as the visitor actually receives it.
+     *
+     * `post_content` for everything except a Bricks page that discards it, and
+     * there the Bricks tree's text. Descriptions are derived from a post's body
+     * in half a dozen places; every one of them wants this rather than the raw
+     * column (#651).
+     *
+     * @since 2.3.1
+     *
+     * @param \WP_Post $post Post being described.
+     * @return string
+     */
+    public static function visible_content(\WP_Post $post): string {
+        $superseding = self::superseding_content($post);
+
+        return '' !== $superseding ? $superseding : (string) $post->post_content;
+    }
+
+    /**
+     * Replacement body text for a post whose `post_content` does not render.
+     *
+     * Empty for every ordinary post, which is what makes this safe to call from
+     * paths that already handle excerpts their own way: they keep that handling
+     * and only a Bricks page is diverted.
+     *
+     * @since 2.3.1
+     *
+     * @param \WP_Post $post Post being described.
+     * @return string Visible body text, or '' when `post_content` is fine.
+     */
+    public static function superseding_content(\WP_Post $post): string {
+        if (!self::bricks_supersedes_post_content((int) $post->ID)) {
+            return '';
+        }
+
+        $bricks = self::from_bricks((int) $post->ID);
+
+        return self::is_blank($bricks) ? '' : $bricks;
+    }
+
+    /**
+     * Body text to derive a description from, when the usual source is wrong.
+     *
+     * A hand-written excerpt is the author's own summary and is correct however
+     * the page is built, so it yields '' here and the caller's normal
+     * `get_the_excerpt()` path keeps it. Only a Bricks page with no excerpt —
+     * where core would derive one from discarded `post_content` — gets diverted.
+     *
+     * @since 2.3.1
+     *
+     * @param \WP_Post $post Post being described.
+     * @return string Text to summarize, or '' to leave the caller's path alone.
+     */
+    public static function superseding_excerpt_source(\WP_Post $post): string {
+        if ('' !== trim((string) $post->post_excerpt)) {
+            return '';
+        }
+
+        return self::superseding_content($post);
+    }
+
+    /**
+     * The Bricks element tree that renders for a post.
+     *
+     * Public because what Bricks puts on the page is not only a scoring
+     * question: the schema graph has to know whether a Bricks element already
+     * publishes the page's FAQ before adding one of its own (#649, #650).
+     *
+     * Flat, in Bricks' own storage shape — `expand_bricks_components()`
+     * appends component definitions to the same list rather than nesting them,
+     * so one `foreach` reaches every element.
+     *
+     * @since 2.3.1
+     *
+     * @param int $post_id Post being resolved.
+     * @return array<int,mixed> Elements, or [] when Bricks renders nothing here.
+     */
+    public static function bricks_tree(int $post_id): array {
+        if (array_key_exists($post_id, self::$bricks_trees)) {
+            return self::$bricks_trees[$post_id];
+        }
+
+        self::$bricks_trees[$post_id] = self::resolve_bricks_tree($post_id);
+
+        return self::$bricks_trees[$post_id];
+    }
+
+    /**
+     * Discard the resolved-tree memo. Test seam.
+     *
+     * @since 2.3.1
+     * @return void
+     */
+    public static function flush_bricks_cache(): void {
+        self::$bricks_trees = [];
+    }
+
+    /**
+     * Read and resolve a post's Bricks tree, ignoring the memo.
+     *
+     * @since 2.3.1
+     *
+     * @param int $post_id Post being resolved.
+     * @return array<int,mixed>
+     */
+    private static function resolve_bricks_tree(int $post_id): array {
+        if (!self::bricks_owns_post($post_id)) {
+            return [];
+        }
+
+        $source = self::bricks_content_source($post_id);
+        if (!$source) {
+            return [];
+        }
+
+        $stored = get_post_meta($source, self::bricks_meta_key(), true);
+
+        if (is_string($stored)) {
+            $stored = '' === trim($stored) ? null : json_decode($stored, true);
+        }
+
+        if (!is_array($stored) || empty($stored)) {
+            return [];
+        }
+
+        return self::expand_bricks_components($stored);
     }
 
     /**
@@ -320,29 +624,14 @@ class Builder_Content {
      * @return string Extracted text, or '' when Bricks has nothing for it.
      */
     private static function from_bricks(int $post_id): string {
-        if (!self::bricks_owns_post($post_id)) {
-            return '';
-        }
+        $tree = self::bricks_tree($post_id);
 
-        $source = self::bricks_content_source($post_id);
-        if (!$source) {
-            return '';
-        }
-
-        $stored = get_post_meta($source, self::bricks_meta_key(), true);
-
-        if (is_string($stored)) {
-            $stored = '' === trim($stored) ? null : json_decode($stored, true);
-        }
-
-        if (!is_array($stored) || empty($stored)) {
+        if (empty($tree)) {
             return '';
         }
 
         return self::strip_bricks_dynamic_tags(
-            self::text_from_tree(
-                self::without_bricks_element_labels(self::expand_bricks_components($stored))
-            )
+            self::text_from_tree(self::without_bricks_element_labels($tree))
         );
     }
 
@@ -786,7 +1075,8 @@ class Builder_Content {
                 // would turn an image's own `url` field into a spurious <a>.
                 if (is_string($child_key)
                     && (in_array(strtolower($child_key), self::URL_KEYS, true)
-                        || in_array(strtolower($child_key), self::IMAGE_KEYS, true))
+                        || in_array(strtolower($child_key), self::IMAGE_KEYS, true)
+                        || in_array(strtolower($child_key), self::VIDEO_KEYS, true))
                 ) {
                     continue;
                 }
@@ -840,6 +1130,77 @@ class Builder_Content {
     }
 
     /**
+     * The video source a node is actually playing, if any.
+     *
+     * @since 2.3.1
+     *
+     * @param array $node Builder node.
+     * @return string Video source, or '' when the node carries none.
+     */
+    private static function video_from(array $node): string {
+        foreach ($node as $key => $value) {
+            if (!is_string($key) || !is_string($value)) {
+                continue;
+            }
+
+            if (!in_array(strtolower($key), self::VIDEO_TYPE_KEYS, true)) {
+                continue;
+            }
+
+            $keys = self::VIDEO_KEYS_BY_TYPE[strtolower(trim($value))] ?? null;
+            if (null === $keys) {
+                continue;
+            }
+
+            // A recognised video_type settles it, including when that
+            // provider's own field is empty. Falling through to the flat sweep
+            // there handed back whichever sibling key happened to come first in
+            // node order — the stale youtube_url left behind after switching
+            // the widget to a hosted file, which is exactly what keying on the
+            // declared type is meant to prevent.
+            $declared = self::url_from($node, $keys);
+
+            return self::is_video_source($declared) ? $declared : '';
+        }
+
+        $url = self::url_from($node, self::VIDEO_KEYS);
+
+        return self::is_video_source($url) ? $url : '';
+    }
+
+    /**
+     * Whether a value can be a video source.
+     *
+     * `looks_like_url()` also accepts `#anchor`, `mailto:` and `tel:`, which a
+     * link node may legitimately hold but a video cannot: `<iframe src="#top">`
+     * is not a video and would reach a video sitemap as one.
+     *
+     * @since 2.3.1
+     *
+     * @param string $url Candidate source.
+     * @return bool
+     */
+    private static function is_video_source(string $url): bool {
+        return '' !== $url
+            && (1 === preg_match('#^(https?:)?//#i', $url) || str_starts_with($url, '/'));
+    }
+
+    /**
+     * Whether a video source points at a file rather than a provider page.
+     *
+     * @since 2.3.1
+     *
+     * @param string $url Video source.
+     * @return bool
+     */
+    private static function is_video_file(string $url): bool {
+        $path = (string) wp_parse_url($url, PHP_URL_PATH);
+        $ext  = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
+
+        return in_array($ext, self::VIDEO_FILE_EXTENSIONS, true);
+    }
+
+    /**
      * Rebuild the HTML a single builder node represents, if any.
      *
      * Looks only at the node's own fields (plus one level of nesting, because
@@ -857,9 +1218,20 @@ class Builder_Content {
         $text = self::first_value($node, self::CONTENT_KEYS);
         $url = self::url_from($node, self::URL_KEYS);
         $image = self::image_from($node);
+        $video = self::video_from($node);
         $tag = self::heading_tag_from($node);
 
         $parts = [];
+
+        // Video: an embed shape rather than a link, so the video detector can
+        // see it while the link counters do not mistake it for an outbound
+        // link. A file source becomes <video src>, anything else an <iframe>,
+        // matching how the builder itself renders the two cases.
+        if ('' !== $video) {
+            $parts[] = self::is_video_file($video)
+                ? sprintf('<video src="%s"></video>', esc_url_raw($video))
+                : sprintf('<iframe src="%s"></iframe>', esc_url_raw($video));
+        }
 
         // Image: alt text matters as much as the tag, since alt checks run over
         // whatever this returns.
@@ -1051,12 +1423,29 @@ class Builder_Content {
     }
 
     /**
-     * Whether a value carries no readable text.
+     * Whether a value carries nothing worth analyzing.
+     *
+     * Readable text is the usual signal, but not the only one: a page can be
+     * made entirely of media. A builder section holding just a gallery
+     * reconstructs to `<img>` tags and one holding just a video widget to a
+     * single `<iframe>` — both strip to an empty string, so a text-only test
+     * discarded them here and the page fell through to the next builder key,
+     * then to the raw markup, and finally reported as having no content at all.
+     *
+     * Comments are dropped before the tag test: the raw markup this class falls
+     * back to on a builder page is unrendered block comments, which must stay
+     * blank rather than be mistaken for reconstructed media.
      *
      * @param string $value Candidate content.
      * @return bool
      */
     private static function is_blank(string $value): bool {
-        return '' === trim(wp_strip_all_tags($value));
+        if ('' !== trim(wp_strip_all_tags($value))) {
+            return false;
+        }
+
+        $without_comments = (string) preg_replace('~<!--.*?-->~s', '', $value);
+
+        return 1 !== preg_match('~<(?:a|img|iframe|video|source)\b~i', $without_comments);
     }
 }

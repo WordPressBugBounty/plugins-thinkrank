@@ -373,7 +373,7 @@ class Pattern_Resolver {
         if ($post) {
             $excerpt = !empty($post->post_excerpt)
                 ? $post->post_excerpt
-                : self::derive_excerpt((string) $post->post_content);
+                : self::derive_excerpt(Builder_Content::visible_content($post));
         }
 
         $author_id = (int) get_post_field('post_author', $post_id);

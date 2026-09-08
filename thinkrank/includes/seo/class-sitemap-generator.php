@@ -77,6 +77,67 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     private const ID_WALK_CHUNK = 500;
 
     /**
+     * How long a content or settings change is debounced before the sitemap is
+     * rebuilt, in seconds. Coalesces bulk edits into a single regeneration.
+     *
+     * @since 2.2.1
+     * @var int
+     */
+    private const REGENERATION_DEBOUNCE = 30;
+
+    /**
+     * How far past its due time the scheduled rebuild may sit before a request
+     * takes it over, in seconds.
+     *
+     * WP-Cron is request-driven, so on a site running DISABLE_WP_CRON, blocking
+     * loopback requests, or seeing very little traffic the event never fires and
+     * the sitemap silently stops updating (#629). The grace keeps the fast path
+     * (cron) in charge under normal conditions.
+     *
+     * @since 2.2.1
+     * @var int
+     */
+    private const REGENERATION_TAKEOVER_GRACE = 120;
+
+    /**
+     * Longest backoff between takeover attempts after a failed rebuild, so a
+     * persistently failing generation cannot run on every admin request.
+     *
+     * @since 2.2.1
+     * @var int
+     */
+    private const REGENERATION_MAX_BACKOFF = 3600;
+
+    /**
+     * Option holding the rebuild that content/settings changes are still waiting
+     * on: `since`, `source` ('content'|'settings'), `attempts`, `next_attempt`.
+     * Absent means the served sitemap is up to date with what triggered it.
+     *
+     * @since 2.2.1
+     * @var string
+     */
+    public const REGENERATION_PENDING_OPTION = 'thinkrank_sitemap_regeneration_pending';
+
+    /**
+     * Option holding the last automatic-regeneration failure (`message`,
+     * `source`, `time`), so the failure is visible instead of swallowed.
+     *
+     * @since 2.2.1
+     * @var string
+     */
+    public const REGENERATION_ERROR_OPTION = 'thinkrank_sitemap_regeneration_error';
+
+    /**
+     * Transient guarding against two generations running at once. Shared with
+     * Sitemap_Endpoint's manual generate route so an automatic rebuild and a
+     * manual one cannot write the same files concurrently.
+     *
+     * @since 2.2.1
+     * @var string
+     */
+    public const GENERATION_LOCK_TRANSIENT = 'thinkrank_sitemap_generation_lock';
+
+    /**
      * How many term IDs to hydrate at a time while walking a taxonomy.
      *
      * @since 2.0.1
@@ -1514,11 +1575,345 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return void
      */
     private function schedule_debounced_regeneration(): void {
-        // Clear any existing scheduled regeneration
-        wp_clear_scheduled_hook('thinkrank_regenerate_sitemap');
+        $this->mark_regeneration_pending('content');
+        $this->debounce_event('thinkrank_regenerate_sitemap');
+    }
 
-        // Schedule regeneration in 30 seconds to debounce rapid changes
-        wp_schedule_single_event(time() + 30, 'thinkrank_regenerate_sitemap');
+    /**
+     * Schedule (or keep) the debounced single event behind a regeneration hook.
+     *
+     * An event that is already due is left alone. WP-Cron only runs when a
+     * request arrives, so on a site with DISABLE_WP_CRON, a blocked loopback or
+     * little traffic an overdue event can sit in the queue for a long time —
+     * clearing and re-scheduling it on every save pushed the rebuild
+     * permanently 30 seconds into the future and the sitemap never updated
+     * (#629). Debouncing only against an event that has not come due yet keeps
+     * the bulk-edit coalescing without starving the rebuild.
+     *
+     * @since 2.2.1
+     * @param string $hook Regeneration hook to debounce.
+     * @return void
+     */
+    private function debounce_event(string $hook): void {
+        $next = wp_next_scheduled($hook);
+
+        if ($next !== false) {
+            if ($next <= time()) {
+                return;
+            }
+
+            wp_clear_scheduled_hook($hook);
+        }
+
+        wp_schedule_single_event(time() + self::REGENERATION_DEBOUNCE, $hook);
+    }
+
+    /**
+     * Record that a rebuild is outstanding, so an overdue one can be taken over
+     * by a later request and its staleness surfaced in the UI.
+     *
+     * `since` is the *oldest* outstanding change: it is what the takeover grace
+     * and the admin staleness warning are measured from, so successive edits
+     * must not push it forward. A settings change outranks a content change —
+     * it rebuilds regardless of the auto_generate toggle and handles a sitemap
+     * that has just been disabled — so once one is outstanding it stays the
+     * recorded source until the rebuild lands.
+     *
+     * @since 2.2.1
+     * @param string $source Either 'content' or 'settings'.
+     * @return void
+     */
+    private function mark_regeneration_pending(string $source): void {
+        $pending = get_option(self::REGENERATION_PENDING_OPTION, []);
+        $pending = is_array($pending) ? $pending : [];
+
+        $since   = !empty($pending['since']) ? (int) $pending['since'] : time();
+        $current = isset($pending['source']) ? (string) $pending['source'] : '';
+        $source  = ($current === 'settings' || $source === 'settings') ? 'settings' : 'content';
+
+        update_option(
+            self::REGENERATION_PENDING_OPTION,
+            [
+                'since'        => $since,
+                'source'       => $source,
+                'attempts'     => !empty($pending['attempts']) ? (int) $pending['attempts'] : 0,
+                'next_attempt' => !empty($pending['next_attempt'])
+                    ? (int) $pending['next_attempt']
+                    : time() + self::REGENERATION_TAKEOVER_GRACE,
+                // Bumped on every change so a rebuild can tell whether the edit
+                // it started for is still the newest one outstanding.
+                'revision'     => (!empty($pending['revision']) ? (int) $pending['revision'] : 0) + 1,
+            ],
+            true
+        );
+    }
+
+    /**
+     * The revision of the outstanding rebuild, for
+     * {@see mark_regeneration_complete()} to compare against once it is done.
+     *
+     * @since 2.2.1
+     * @return int Current revision, 0 when nothing is outstanding.
+     */
+    private function current_regeneration_revision(): int {
+        $pending = get_option(self::REGENERATION_PENDING_OPTION, []);
+
+        return (is_array($pending) && !empty($pending['revision'])) ? (int) $pending['revision'] : 0;
+    }
+
+    /**
+     * Clear the outstanding-rebuild marker and any recorded failure.
+     *
+     * Public because a manual generation satisfies whatever the automatic path
+     * was still waiting to write.
+     *
+     * @since 2.2.1
+     * @return void
+     */
+    public function mark_regeneration_complete(?int $revision = null): void {
+        // The write succeeded, so whatever failure was on record is history.
+        if (get_option(self::REGENERATION_ERROR_OPTION, null) !== null) {
+            delete_option(self::REGENERATION_ERROR_OPTION);
+        }
+
+        $pending = get_option(self::REGENERATION_PENDING_OPTION, null);
+
+        if ($pending === null) {
+            return;
+        }
+
+        // A change that landed while this rebuild was running is not covered by
+        // the files it just wrote, so it has to stay outstanding — otherwise, on
+        // a site where WP-Cron never fires, clearing the marker would strand it
+        // exactly the way #629 stranded everything.
+        if (
+            $revision !== null
+            && is_array($pending)
+            && (int) ($pending['revision'] ?? 0) !== $revision
+        ) {
+            return;
+        }
+
+        delete_option(self::REGENERATION_PENDING_OPTION);
+    }
+
+    /**
+     * Record a failed regeneration instead of discarding it.
+     *
+     * Keeps the pending marker in place so the rebuild is retried, but backs the
+     * next attempt off exponentially (capped) so a persistently failing
+     * generation cannot run on every admin request.
+     *
+     * @since 2.2.1
+     * @param string $message Failure detail.
+     * @param string $source  Either 'content' or 'settings'.
+     * @return void
+     */
+    private function record_regeneration_failure(string $message, string $source): void {
+        $pending  = get_option(self::REGENERATION_PENDING_OPTION, []);
+        $pending  = is_array($pending) ? $pending : [];
+        $attempts = (!empty($pending['attempts']) ? (int) $pending['attempts'] : 0) + 1;
+
+        $backoff = min(
+            self::REGENERATION_TAKEOVER_GRACE * (2 ** min($attempts, 10)),
+            self::REGENERATION_MAX_BACKOFF
+        );
+
+        // Same precedence mark_regeneration_pending() enforces: a settings
+        // rebuild outranks a content one and must not be downgraded by a failed
+        // attempt. Overwriting it routed the retry back through the content
+        // path, where should_auto_generate() can be false and the completion
+        // marker then discards the settings rebuild entirely. Only the
+        // outstanding rebuild is upgraded — the recorded error keeps reporting
+        // whichever attempt actually failed.
+        $current         = isset($pending['source']) ? (string) $pending['source'] : '';
+        $pending_source  = ($current === 'settings' || $source === 'settings') ? 'settings' : 'content';
+
+        update_option(
+            self::REGENERATION_PENDING_OPTION,
+            [
+                'since'        => !empty($pending['since']) ? (int) $pending['since'] : time(),
+                'source'       => $pending_source,
+                'attempts'     => $attempts,
+                'next_attempt' => time() + $backoff,
+                'revision'     => !empty($pending['revision']) ? (int) $pending['revision'] : 0,
+            ],
+            true
+        );
+
+        update_option(
+            self::REGENERATION_ERROR_OPTION,
+            [
+                'message'  => $message,
+                'source'   => $source,
+                'attempts' => $attempts,
+                'time'     => time(),
+            ],
+            false
+        );
+
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            error_log(sprintf('ThinkRank: sitemap %s regeneration failed — %s', $source, $message));
+        }
+    }
+
+    /**
+     * Is a rebuild outstanding and past the point where WP-Cron should have run
+     * it?
+     *
+     * Deliberately cheap — one autoloaded option read — because it is consulted
+     * on every admin request to decide whether the takeover is needed.
+     *
+     * @since 2.2.1
+     * @return bool True when a request should rebuild the sitemap itself.
+     */
+    public static function has_overdue_regeneration(): bool {
+        $pending = get_option(self::REGENERATION_PENDING_OPTION, []);
+
+        if (!is_array($pending) || empty($pending['since'])) {
+            return false;
+        }
+
+        $due = !empty($pending['next_attempt'])
+            ? (int) $pending['next_attempt']
+            : (int) $pending['since'] + self::REGENERATION_TAKEOVER_GRACE;
+
+        return time() >= $due;
+    }
+
+    /**
+     * Rebuild the sitemap in-request when WP-Cron has not delivered.
+     *
+     * Hooked on `shutdown` for admin, REST and CLI requests only (see
+     * Plugin::register_sitemap_cron_listeners()), so the work happens after the
+     * response has been sent and never adds latency to a visitor page view.
+     *
+     * @since 2.2.1
+     * @return void
+     */
+    public function run_overdue_regeneration(): void {
+        if (!self::has_overdue_regeneration()) {
+            return;
+        }
+
+        // Cron is running: it is about to do exactly this work.
+        if (wp_doing_cron()) {
+            return;
+        }
+
+        $pending = get_option(self::REGENERATION_PENDING_OPTION, []);
+        $source  = (is_array($pending) && isset($pending['source'])) ? (string) $pending['source'] : 'content';
+
+        if ($source === 'settings') {
+            $this->regenerate_sitemap_from_settings();
+            return;
+        }
+
+        $this->auto_regenerate_sitemap();
+    }
+
+    /**
+     * Acquire the shared generation lock.
+     *
+     * @since 2.2.1
+     * @return bool True when this process may generate.
+     */
+    private function acquire_generation_lock(): bool {
+        if (get_transient(self::GENERATION_LOCK_TRANSIENT)) {
+            return false;
+        }
+
+        set_transient(self::GENERATION_LOCK_TRANSIENT, time(), 5 * MINUTE_IN_SECONDS);
+
+        return true;
+    }
+
+    /**
+     * Release the shared generation lock.
+     *
+     * @since 2.2.1
+     * @return void
+     */
+    private function release_generation_lock(): void {
+        delete_transient(self::GENERATION_LOCK_TRANSIENT);
+    }
+
+    /**
+     * Report how automatic regeneration is faring, for the admin UI.
+     *
+     * The feature used to fail invisibly: `last_generated` simply stopped
+     * advancing and nothing drew attention to it (#629).
+     *
+     * @since 2.2.1
+     * @return array Health payload.
+     */
+    public function get_regeneration_health(): array {
+        $settings = $this->get_settings('site');
+        $pending  = get_option(self::REGENERATION_PENDING_OPTION, []);
+        $pending  = is_array($pending) ? $pending : [];
+        $error    = get_option(self::REGENERATION_ERROR_OPTION, []);
+        $error    = is_array($error) ? $error : [];
+
+        $since = !empty($pending['since']) ? (int) $pending['since'] : 0;
+
+        $next_scheduled = wp_next_scheduled('thinkrank_regenerate_sitemap');
+        if ($next_scheduled === false) {
+            $next_scheduled = wp_next_scheduled('thinkrank_regenerate_sitemap_settings');
+        }
+
+        return [
+            'auto_generate'   => !empty($settings['auto_generate']),
+            'last_generated'  => $settings['last_generated'] ?? '',
+            'pending_since'   => $since ? gmdate('c', $since) : null,
+            'pending_seconds' => $since ? max(0, time() - $since) : 0,
+            'next_scheduled'  => $next_scheduled ? gmdate('c', (int) $next_scheduled) : null,
+            'cron_disabled'   => defined('DISABLE_WP_CRON') && DISABLE_WP_CRON,
+            'stale'           => $this->is_sitemap_stale($settings),
+            'last_error'      => !empty($error['message'])
+                ? [
+                    'message' => (string) $error['message'],
+                    'source'  => isset($error['source']) ? (string) $error['source'] : 'content',
+                    'time'    => !empty($error['time']) ? gmdate('c', (int) $error['time']) : null,
+                ]
+                : null,
+        ];
+    }
+
+    /**
+     * Has published content changed since the served sitemap was last written?
+     *
+     * Uses core's cached last-modified lookup, which only considers published
+     * posts — the same content the sitemap covers.
+     *
+     * @since 2.2.1
+     * @param array $settings Sitemap settings.
+     * @return bool True when the sitemap is behind the content.
+     */
+    private function is_sitemap_stale(array $settings): bool {
+        if (empty($settings['enabled']) || empty($settings['last_generated'])) {
+            // Never generated is already reported separately by the UI.
+            return false;
+        }
+
+        $generated = strtotime((string) $settings['last_generated']);
+        if (!$generated) {
+            return false;
+        }
+
+        $modified = get_lastpostmodified('gmt');
+        if (!$modified) {
+            return false;
+        }
+
+        $modified = strtotime($modified . ' UTC');
+        if (!$modified) {
+            return false;
+        }
+
+        // A minute of slack keeps a rebuild that ran alongside the edit from
+        // reporting itself as stale.
+        return $modified > ($generated + MINUTE_IN_SECONDS);
     }
 
     /**
@@ -1532,8 +1927,8 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // Debounce against rapid successive saves, but use the settings-specific
         // hook so the rebuild runs regardless of the auto_generate toggle (which
         // only governs content-change-triggered regeneration).
-        wp_clear_scheduled_hook('thinkrank_regenerate_sitemap_settings');
-        wp_schedule_single_event(time() + 30, 'thinkrank_regenerate_sitemap_settings');
+        $this->mark_regeneration_pending('settings');
+        $this->debounce_event('thinkrank_regenerate_sitemap_settings');
     }
 
     /**
@@ -1547,6 +1942,13 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return void
      */
     public function regenerate_sitemap_from_settings(): void {
+        if (!$this->acquire_generation_lock()) {
+            // A manual generation (or another request's takeover) is already
+            // writing the files; the pending marker survives so this rebuild is
+            // retried rather than lost.
+            return;
+        }
+
         try {
             $settings = $this->get_settings('site');
             if (empty($settings['enabled'])) {
@@ -1554,11 +1956,24 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 // files so the web server stops serving a stale sitemap that
                 // crawlers would otherwise keep fetching.
                 $this->delete_published_sitemaps();
+                $this->mark_regeneration_complete();
                 return;
             }
-            $this->generate_and_save($settings);
+
+            $revision = $this->current_regeneration_revision();
+
+            if ($this->generate_and_save($settings)) {
+                $this->mark_regeneration_complete($revision);
+            } else {
+                $this->record_regeneration_failure(
+                    __('The sitemap files could not be written to the site root.', 'thinkrank'),
+                    'settings'
+                );
+            }
         } catch (\Throwable $e) {
-            // Settings-triggered regeneration failed - details in exception.
+            $this->record_regeneration_failure($e->getMessage(), 'settings');
+        } finally {
+            $this->release_generation_lock();
         }
     }
 
@@ -1646,18 +2061,39 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return void
      */
     public function auto_regenerate_sitemap(): void {
+        if (!$this->acquire_generation_lock()) {
+            // A manual generation (or another request's takeover) is already
+            // writing the files; the pending marker survives so this rebuild is
+            // retried rather than lost.
+            return;
+        }
+
         try {
             // Double-check that auto-generation is still enabled
             if (!$this->should_auto_generate()) {
+                // Nothing outstanding can be delivered while the feature is off,
+                // so drop the marker rather than let the takeover retry forever.
+                $this->mark_regeneration_complete();
                 return;
             }
 
-            $this->generate_and_save($this->get_settings('site'));
+            $revision = $this->current_regeneration_revision();
 
-            // Sitemap auto-regenerated successfully
-
+            if ($this->generate_and_save($this->get_settings('site'))) {
+                $this->mark_regeneration_complete($revision);
+            } else {
+                // Previously this returned quietly and last_generated simply
+                // stopped advancing, leaving the site owner with no way to learn
+                // the sitemap had stopped updating (#629).
+                $this->record_regeneration_failure(
+                    __('The sitemap files could not be written to the site root.', 'thinkrank'),
+                    'content'
+                );
+            }
         } catch (\Throwable $e) {
-            // Sitemap auto-regeneration failed - error details available in exception
+            $this->record_regeneration_failure($e->getMessage(), 'content');
+        } finally {
+            $this->release_generation_lock();
         }
     }
 
@@ -2186,8 +2622,14 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             $results['success'] = false;
         }
 
-        // Build the index last, from the child files actually generated.
+        // Build the index last, from the child files actually generated, plus the
+        // sitemaps other plugins own: those serve their own URLs and write no
+        // file here, so they are appended to the index only (#104).
         if ($index_config !== null) {
+            foreach (self::additional_sitemaps() as $extra) {
+                $index_children[] = ['url' => $extra];
+            }
+
             try {
                 $index_xml = $this->generate_sitemap_index($index_children, $settings);
                 $filename = basename(wp_parse_url($index_config['url'], PHP_URL_PATH));
@@ -2521,6 +2963,95 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 $wp_filesystem->delete($path);
             }
         }
+    }
+
+    /**
+     * Sitemap URLs contributed by other plugins.
+     *
+     * ThinkRank owns the sitemap index and the robots.txt `Sitemap:` lines, so a
+     * companion plugin that serves its own sitemap — Pro's news and video
+     * sitemaps, for instance — had no way to be discovered: it appeared in
+     * neither, leaving manual Search Console submission as the only route in
+     * (#104). Registering here puts a sitemap in the index when one exists, and
+     * in robots.txt when it does not.
+     *
+     * Callers get root-relative paths. Entries are normalised to a leading
+     * slash, de-duplicated, and anything that is not a non-empty string is
+     * dropped, so one badly-behaved callback cannot produce a malformed index.
+     *
+     * @since 2.3.1
+     *
+     * @return string[] Root-relative sitemap paths, e.g. ['/news-sitemap.xml'].
+     */
+    public static function additional_sitemaps(): array {
+        /**
+         * Filters the sitemaps contributed by other plugins.
+         *
+         * @since 2.3.1
+         *
+         * @param string[] $sitemaps Root-relative sitemap paths.
+         */
+        $sitemaps = apply_filters('thinkrank_additional_sitemaps', []);
+
+        if (!is_array($sitemaps)) {
+            return [];
+        }
+
+        // Both consumers resolve an entry with home_url(), which prefixes the
+        // install's own directory. Everything below is measured against that so
+        // an absolute URL is reduced to what home_url() will put back.
+        $home      = wp_parse_url(home_url('/'));
+        $home_host = strtolower((string) ($home['host'] ?? ''));
+        $home_path = '/' . trim((string) ($home['path'] ?? ''), '/');
+
+        $clean = [];
+        foreach ($sitemaps as $sitemap) {
+            if (!is_string($sitemap)) {
+                continue;
+            }
+
+            $sitemap = trim($sitemap);
+            if ('' === $sitemap) {
+                continue;
+            }
+
+            // A full URL on this site is accepted and reduced to the part
+            // home_url() does not already supply, so a caller that reached for
+            // home_url() still lands in the right place — including on a
+            // subdirectory install, where keeping the whole path would repeat
+            // the directory. A URL on another host is dropped rather than
+            // rewritten: the sitemaps protocol will not accept a cross-host
+            // child anyway, and reusing its path would advertise a URL on this
+            // site that does not exist.
+            if (preg_match('#^(https?:)?//#i', $sitemap)) {
+                $parts = wp_parse_url('//' === substr($sitemap, 0, 2) ? 'https:' . $sitemap : $sitemap);
+                if (!is_array($parts)) {
+                    continue;
+                }
+
+                if (strtolower((string) ($parts['host'] ?? '')) !== $home_host) {
+                    continue;
+                }
+
+                $path = (string) ($parts['path'] ?? '');
+                if ('' === $path) {
+                    continue;
+                }
+
+                if ('/' !== $home_path && ($path === $home_path || 0 === strpos($path, $home_path . '/'))) {
+                    $path = substr($path, strlen($home_path));
+                }
+
+                // A sitemap served from a query string keeps it; dropping the
+                // query would point at a different document.
+                $query   = (string) ($parts['query'] ?? '');
+                $sitemap = $path . ('' !== $query ? '?' . $query : '');
+            }
+
+            $clean[] = '/' . ltrim($sitemap, '/');
+        }
+
+        return array_values(array_unique($clean));
     }
 
     /**

@@ -566,14 +566,34 @@ class SEO_Analyzer {
      * unreachable). This asks the question the check's copy actually claims to
      * answer.
      *
+     * Both layers must be read WITHOUT their defaults, or the same trap closes
+     * again one level down: get_settings() merges the context defaults under
+     * the saved rows, and Schema_Settings_Config's 'site' defaults set both
+     * enabled_schema_types and auto_generate_schema — so an untouched site came
+     * back looking configured and this method still could not return false
+     * (#586). get_stored_settings() answers with only what was actually saved.
+     *
      * @since 2.2.0
      * @return bool
      */
     private function schema_is_configured(): bool {
-        // 1) Schema Management System — an explicit opt-in.
+        // 1) Schema Management System — an explicit opt-in. Read the SAVED rows
+        //    only; the defaults-merged view is truthy on every site.
         if (class_exists('ThinkRank\\SEO\\Schema_Management_System')) {
-            $settings = (new Schema_Management_System())->get_settings('site', null);
-            if (is_array($settings)) {
+            $settings = (new Schema_Management_System())->get_stored_settings('site', null);
+            // The master switch gates these the same way it gates
+            // schema_is_output(). Saving the settings form persists the whole
+            // payload, so turning the feature off stores enabled = '0' while
+            // auto_generate_schema stays '1' — and reading past the switch then
+            // reported "structured data is configured" for a site emitting
+            // none, with the one-click fix withheld. array_key_exists rather
+            // than a bare !empty so an untouched site, where 'enabled' was
+            // never saved at all, still falls through to the Global SEO layer
+            // below instead of short-circuiting to false.
+            $master_on = is_array($settings)
+                && (!array_key_exists('enabled', $settings) || !empty($settings['enabled']));
+
+            if ($master_on) {
                 if (!empty($settings['enabled_schema_types']) && is_array($settings['enabled_schema_types'])) {
                     return true;
                 }
@@ -622,8 +642,18 @@ class SEO_Analyzer {
             // NAME, which get_settings() rejects as an unsupported context and
             // answers with bare defaults — where auto_generate_schema is true, so
             // this always returned true and never read the site's real settings (#473).
+            //
+            // This one KEEPS the defaults-merged view on purpose, unlike
+            // schema_is_configured() (#586). The question here is "does JSON-LD
+            // reach the page?", and an untouched site answers yes: the 'site'
+            // defaults leave the system enabled with auto_generate_schema on, so
+            // the merged value is the emitted behaviour, not a mask over it.
             $settings = (new Schema_Management_System())->get_settings('site', null);
-            if (is_array($settings)) {
+            // The master switch gates everything below it: with 'enabled' off,
+            // get_output_data() reports the feature as off and nothing is
+            // emitted, so reading auto_generate_schema past it told the audit
+            // schema was on the page when it was not (the same shape as #461).
+            if (is_array($settings) && !empty($settings['enabled'])) {
                 if (!empty($settings['enabled_schema_types']) && is_array($settings['enabled_schema_types'])) {
                     return true;
                 }

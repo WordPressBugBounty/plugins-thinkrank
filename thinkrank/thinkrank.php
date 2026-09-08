@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 2.3.0
+ * Version: 2.4.0
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Requires PHP: 7.4
  * 
  * @package ThinkRank
- * @version 2.3.0
+ * @version 2.4.0
  * @since 1.0.0
  */
 
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '2.3.0');
+define('THINKRANK_VERSION', '2.4.0');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -207,6 +207,87 @@ final class ThinkRank {
         add_action('thinkrank_regenerate_sitemap_settings', static function () {
             (new ThinkRank\SEO\Sitemap_Generator())->regenerate_sitemap_from_settings();
         });
+
+        add_action('shutdown', [$this, 'maybe_take_over_sitemap_regeneration'], 100);
+    }
+
+    /**
+     * Rebuild the sitemap in-request when WP-Cron has not delivered.
+     *
+     * WP-Cron only runs when a request arrives, so with DISABLE_WP_CRON set, a
+     * host blocking loopback requests, or very little traffic, the scheduled
+     * regeneration never fires and the sitemap silently stops updating (#629).
+     * Once the event is overdue by the generator's grace period, an admin, REST
+     * or WP-CLI request takes the work over so the site converges on its own.
+     *
+     * Front-end requests are deliberately excluded: this runs on `shutdown`,
+     * after the response, but generation on a large site is not free and a
+     * visitor should never pay for it. Admin traffic is what a site with broken
+     * cron reliably still has — the sitemap goes stale right after someone
+     * publishes something, and that someone is in wp-admin.
+     *
+     * @since 2.2.1
+     * @return void
+     */
+    public function maybe_take_over_sitemap_regeneration(): void {
+        // is_admin() is true for admin-ajax.php and REST_REQUEST for public
+        // core routes, both of which anonymous front-end traffic reaches — so
+        // without the logged-in test a visitor could still pay for the rebuild
+        // this method documents as never being theirs to pay for. WP-CLI has no
+        // user, and is trusted by definition.
+        $eligible = (defined('WP_CLI') && WP_CLI)
+            || (
+                is_user_logged_in()
+                && (
+                    is_admin()
+                    || (defined('REST_REQUEST') && REST_REQUEST)
+                )
+            );
+
+        if (!$eligible) {
+            return;
+        }
+
+        // Cheap autoloaded-option read, so the vast majority of requests stop
+        // here without building the generator.
+        if (!ThinkRank\SEO\Sitemap_Generator::has_overdue_regeneration()) {
+            return;
+        }
+
+        // `shutdown` runs after the output buffers are flushed, but flushed is
+        // not delivered: on FPM the connection stays open until the process
+        // ends, so without this the browser — or the REST call the sitemap
+        // screen just made — waits out the whole generation. Hand the response
+        // back first, then rebuild.
+        $this->close_request();
+
+        // Read-only construction: the auto-generation hooks are pointless this
+        // late in the request and would only add duplicate callbacks.
+        (new ThinkRank\SEO\Sitemap_Generator(false))->run_overdue_regeneration();
+    }
+
+    /**
+     * Deliver the response and let the request keep working without the client.
+     *
+     * A no-op on SAPIs that cannot do it, where the caller simply pays for the
+     * work as before.
+     *
+     * @since 2.2.1
+     * @return void
+     */
+    private function close_request(): void {
+        if (defined('WP_CLI') && WP_CLI) {
+            return;
+        }
+
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+            return;
+        }
+
+        if (function_exists('litespeed_finish_request')) {
+            litespeed_finish_request();
+        }
     }
 
     /**
@@ -267,6 +348,7 @@ final class ThinkRank {
             'admin' => new ThinkRank\Admin\Manager(),
             'blocks' => new ThinkRank\Editor\Blocks_Manager(),
             'elementor' => new ThinkRank\Editor\Elementor_Manager(),
+            'bricks_elements' => new ThinkRank\Editor\Bricks_Elements_Manager(),
             'ai' => new ThinkRank\AI\Manager(),
             'frontend_seo' => new ThinkRank\Frontend\SEO_Manager(),
             'seo_notice' => new ThinkRank\Admin\SEO_Notice(),

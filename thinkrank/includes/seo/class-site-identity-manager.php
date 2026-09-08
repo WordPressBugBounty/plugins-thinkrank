@@ -246,8 +246,270 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      *
      * @since 1.0.0
      */
+    /**
+     * The square derivatives wp_site_icon() asks for.
+     *
+     * Core generates these only through its own Site Icon crop flow, so an
+     * image chosen as a ThinkRank favicon straight from the media library has
+     * none of them and every sizes="" declaration is a near miss (#571).
+     *
+     * @since 2.3.1
+     * @var int[]
+     */
+    public const ICON_SIZES = [32, 180, 192, 270];
+
+    /**
+     * Transient holding resolved icon URLs, keyed by configured URL and size.
+     *
+     * The site-icon filter runs in wp_head on every FRONT-END request, and
+     * resolving a URL to its attachment costs an uncached postmeta query. The
+     * mapping only changes when the icon setting does, so it is cached here and
+     * dropped on save.
+     *
+     * @since 2.3.1
+     * @var string
+     */
+    public const ICON_URL_TRANSIENT = 'thinkrank_site_icon_urls';
+
+    /**
+     * Marker for the one-time derivative backfill on existing installs.
+     *
+     * @since 2.3.1
+     * @var string
+     */
+    public const ICON_BACKFILL_OPTION = 'thinkrank_site_icon_sizes_backfilled';
+
+    /**
+     * Whether the icon-derivative listener has been registered this request.
+     *
+     * Static because `thinkrank_seo_settings_saved` is a global hook — one
+     * listener serves every instance, and this class is constructed on the
+     * front end as well as in admin.
+     *
+     * @since 2.3.1
+     * @var bool
+     */
+    private static bool $icon_sizes_listener_registered = false;
+
     public function __construct() {
         parent::__construct('site_identity');
+
+        if (!self::$icon_sizes_listener_registered) {
+            self::$icon_sizes_listener_registered = true;
+            add_action('thinkrank_seo_settings_saved', [$this, 'generate_icon_sizes_on_save'], 10, 2);
+            // Admin only: resizing is not front-end work, and admin traffic is
+            // enough to run a one-time backfill promptly.
+            add_action('admin_init', [self::class, 'maybe_backfill_icon_sizes']);
+        }
+    }
+
+    /**
+     * Build the icon derivatives for a newly chosen favicon.
+     *
+     * Runs on save, which is the only moment the choice changes and the only
+     * place image work belongs — resolving a size on the front end must stay a
+     * lookup. Failure is silent by design: a missing derivative degrades to the
+     * next best file, so a site whose host cannot resize still renders an icon.
+     *
+     * @since 2.3.1
+     *
+     * @param string $manager_type Settings category that was saved.
+     * @param array  $settings     The settings that were written.
+     * @return void
+     */
+    public function generate_icon_sizes_on_save(string $manager_type, array $settings): void {
+        if ('site_identity' !== $manager_type) {
+            return;
+        }
+
+        // The choice, or the derivatives behind it, may have just changed.
+        delete_transient(self::ICON_URL_TRANSIENT);
+
+        foreach (['favicon_url', 'apple_touch_icon_url'] as $key) {
+            if (empty($settings[$key]) || !is_string($settings[$key])) {
+                continue;
+            }
+
+            $attachment_id = self::icon_attachment_id($settings[$key]);
+
+            if ($attachment_id) {
+                self::ensure_icon_sizes($attachment_id);
+            }
+        }
+
+        // Dropped again after the resizes finish. Resizing is not instant, and a
+        // front-end request arriving mid-generation would otherwise repopulate
+        // the transient with the pre-derivative URLs and pin them for the full
+        // TTL — leaving the sizes= declarations untrue until the next save.
+        delete_transient(self::ICON_URL_TRANSIENT);
+    }
+
+    /**
+     * Build the derivatives for a site that configured its icons before this
+     * existed.
+     *
+     * generate_icon_sizes_on_save() only fires on a settings write, so every
+     * site with an icon already chosen would keep serving whatever
+     * wp_get_attachment_image_url() could find — in practice the 150x150
+     * thumbnail behind a sizes="32x32" declaration — until someone happened to
+     * re-save Site Identity. That is the bug this is meant to fix, so the
+     * derivatives are built once on upgrade instead of waiting for a save.
+     *
+     * Guarded by its own option rather than the plugin version so it runs once
+     * and stays cheap: the check is a single autoloaded read on requests after
+     * the first.
+     *
+     * @since 2.3.1
+     *
+     * @return void
+     */
+    public static function maybe_backfill_icon_sizes(): void {
+        if (get_option(self::ICON_BACKFILL_OPTION)) {
+            return;
+        }
+
+        // Written before the work, not after: a host that cannot resize must
+        // not retry on every admin request forever.
+        update_option(self::ICON_BACKFILL_OPTION, time(), true);
+
+        $settings = (new self())->get_settings('site');
+
+        if (!is_array($settings)) {
+            return;
+        }
+
+        foreach (['favicon_url', 'apple_touch_icon_url'] as $key) {
+            if (empty($settings[$key]) || !is_string($settings[$key])) {
+                continue;
+            }
+
+            $attachment_id = self::icon_attachment_id($settings[$key]);
+
+            if ($attachment_id) {
+                self::ensure_icon_sizes($attachment_id);
+            }
+        }
+
+        delete_transient(self::ICON_URL_TRANSIENT);
+    }
+
+    /**
+     * Attachment ID behind a configured icon URL, or 0 when it is not ours.
+     *
+     * attachment_url_to_postid() matches _wp_attached_file, which holds the
+     * ORIGINAL upload path, so the URL of a generated derivative
+     * (`logo-512.png`) returns 0 — and that is exactly what the media picker
+     * hands back when the user chooses a size. Strip the dimension suffix and
+     * try the original once.
+     *
+     * Shared with SEO_Manager's site-icon filter so both sides of the feature
+     * agree on which attachment a configured URL means.
+     *
+     * @since 2.3.1
+     *
+     * @param string $url Configured icon URL.
+     * @return int Attachment ID, or 0.
+     */
+    public static function icon_attachment_id(string $url): int {
+        $attachment_id = (int) attachment_url_to_postid($url);
+
+        if ($attachment_id) {
+            return $attachment_id;
+        }
+
+        $original = preg_replace('/-\d+x\d+(?=\.[a-zA-Z0-9]+$)/', '', $url);
+
+        if (is_string($original) && $original !== $url) {
+            return (int) attachment_url_to_postid($original);
+        }
+
+        return 0;
+    }
+
+    /**
+     * Which ICON_SIZES derivatives this attachment still needs.
+     *
+     * Split out from the generation so the decision can be asserted on its
+     * own: whether a size is skipped because it already exists or because it
+     * would upscale is invisible once both answers are "nothing was built".
+     *
+     * A source is measured by its SHORTER edge — a 400x40 banner cannot yield
+     * a true 192x192 — and anything reporting no dimensions at all (SVGs) is
+     * left alone.
+     *
+     * @since 2.3.1
+     *
+     * @param array $meta Attachment metadata.
+     * @return array<string, array{width: int, height: int, crop: bool}> Sizes to build.
+     */
+    public static function missing_icon_sizes(array $meta): array {
+        $source = min((int) ($meta['width'] ?? 0), (int) ($meta['height'] ?? 0));
+
+        if ($source < 1) {
+            return [];
+        }
+
+        $wanted = [];
+        foreach (self::ICON_SIZES as $size) {
+            // Never upscale: a stretched source behind an accurate sizes=""
+            // label is worse than the honest near miss it would replace.
+            if (isset($meta['sizes']["site_icon-{$size}"]) || $size > $source) {
+                continue;
+            }
+
+            $wanted["site_icon-{$size}"] = ['width' => $size, 'height' => $size, 'crop' => true];
+        }
+
+        return $wanted;
+    }
+
+    /**
+     * Generate whatever ICON_SIZES derivatives this attachment is missing.
+     *
+     * Only the missing ones, and never one larger than the source: upscaling a
+     * small favicon would put a blurrier file behind an accurate sizes="" label
+     * than the honest near-miss it replaced.
+     *
+     * @since 2.3.1
+     *
+     * @param int $attachment_id Attachment to build derivatives for.
+     * @return string[] Size names generated, empty when there was nothing to do.
+     */
+    public static function ensure_icon_sizes(int $attachment_id): array {
+        $meta = wp_get_attachment_metadata($attachment_id);
+
+        if (!is_array($meta)) {
+            return [];
+        }
+
+        $wanted = self::missing_icon_sizes($meta);
+
+        if (empty($wanted)) {
+            return [];
+        }
+
+        $file = get_attached_file($attachment_id);
+
+        if (!$file || !file_exists($file)) {
+            return [];
+        }
+
+        $editor = wp_get_image_editor($file);
+
+        if (is_wp_error($editor)) {
+            return [];
+        }
+
+        $generated = $editor->multi_resize($wanted);
+
+        if (empty($generated)) {
+            return [];
+        }
+
+        $meta['sizes'] = array_merge($meta['sizes'] ?? [], $generated);
+        wp_update_attachment_metadata($attachment_id, $meta);
+
+        return array_keys($generated);
     }
 
     /**
@@ -2492,7 +2754,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             'homepage_title', 'post_title', 'page_title', 'category_title',
             'tag_title', 'author_title', 'search_title', 'archive_title',
             // Breadcrumbs.
-            'breadcrumb_prefix', 'show_current_page',
+            'breadcrumb_prefix', 'show_current_page', 'breadcrumb_use_seo_title',
             // Identity, as written by the setup wizard and the importers.
             'alternate_name', 'identity_type', 'represents',
             'default_meta_description', 'default_social_image',
@@ -3189,12 +3451,24 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
                 $sitemap_urls[] = home_url('/sitemap.xml');
             }
 
-            // No index on this install, so the local business sitemap has no
-            // other discovery path — advertise it directly.
+            // No index on this install, so anything not already listed above has
+            // no other discovery path — advertise it directly. The local
+            // business sitemap and the sitemaps other plugins register both land
+            // here for the same reason, so they go through one list (#104).
+            $extra = [];
+
             if (file_exists(ABSPATH . 'local-sitemap.xml')) {
-                $local_url = home_url('/local-sitemap.xml');
-                if (!in_array($local_url, $sitemap_urls, true)) {
-                    $sitemap_urls[] = $local_url;
+                $extra[] = '/local-sitemap.xml';
+            }
+
+            foreach (\ThinkRank\SEO\Sitemap_Generator::additional_sitemaps() as $path) {
+                $extra[] = $path;
+            }
+
+            foreach ($extra as $path) {
+                $url = home_url($path);
+                if (!in_array($url, $sitemap_urls, true)) {
+                    $sitemap_urls[] = $url;
                 }
             }
 

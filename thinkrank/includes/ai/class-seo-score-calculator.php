@@ -42,6 +42,24 @@ class SEOScoreCalculator {
     private Database $database;
     
     /**
+     * Memoised collected performance measurement, and whether it was resolved.
+     *
+     * Two factors read it and both may be asked for on every post in a list, so
+     * the lookup happens once per calculator. `null` is a real answer here — the
+     * separate flag keeps "not looked up yet" distinct from "nothing measured".
+     *
+     * @since 2.3.1
+     * @var array|null
+     */
+    private ?array $measured_performance = null;
+
+    /**
+     * @since 2.3.1
+     * @var bool
+     */
+    private bool $measured_performance_resolved = false;
+
+    /**
      * 2025 SEO scoring factors (Q1 2025 Google Algorithm)
      * Based on First Page Sage research and Google's latest updates
      *
@@ -1929,15 +1947,96 @@ class SEOScoreCalculator {
      * @return array Scoring result
      */
     private function score_mobile_experience(array $content_data): array {
-        // Mobile experience is theme/site-level, not controlled by post content.
-        // Award full credit (benefit of the doubt) instead of a fixed partial
-        // that caps every post's ceiling.
+        $max = $this->scoring_factors['mobile_experience'];
+
+        // Mobile experience is theme/site-level, not controlled by post content
+        // — but the plugin already measures it. When a mobile Lighthouse score
+        // has been collected, score against it; the "benefit of the doubt" below
+        // is for sites nobody has measured, not for sites measured as slow.
+        $performance_score = $this->measured_performance_score();
+
+        if ($performance_score === null) {
+            return [
+                'score' => $max,
+                'max_score' => $max,
+                'suggestions' => ['Ensure mobile-first design and fast loading on mobile devices'],
+                'details' => ['mobile_score' => 'Assumed adequate', 'measured' => false],
+            ];
+        }
+
+        $score = (int) round($max * $performance_score / 100);
+
         return [
-            'score' => $this->scoring_factors['mobile_experience'],
-            'max_score' => $this->scoring_factors['mobile_experience'],
-            'suggestions' => ['Ensure mobile-first design and fast loading on mobile devices'],
-            'details' => ['mobile_score' => 'Assumed adequate'],
+            'score' => $score,
+            'max_score' => $max,
+            'suggestions' => $score < $max
+                ? ['Improve mobile page speed: the last PageSpeed run scored ' . $performance_score . '/100 on mobile']
+                : [],
+            'details' => [
+                'mobile_score' => $performance_score,
+                'measured' => true,
+                'source' => 'pagespeed_mobile',
+            ],
         ];
+    }
+
+    /**
+     * The last collected mobile Lighthouse score, or null when unmeasured.
+     *
+     * Memoised per instance: compute_score() asks twice, and a post-list screen
+     * scores a page of posts at a time.
+     *
+     * Every failure — no performance module, no collected row, an unreadable
+     * table — resolves to null, which the callers read as "not measured" and
+     * answer with the full-credit fallback. A site is never penalised for
+     * ThinkRank being unable to look.
+     *
+     * @since 2.3.1
+     * @return int|null Score 0-100, or null when nothing has been collected.
+     */
+    private function measured_performance_score(): ?int {
+        $measurement = $this->measured_performance();
+
+        if ($measurement === null || !isset($measurement['performance_score'])) {
+            return null;
+        }
+
+        $score = $measurement['performance_score'];
+
+        if (!is_numeric($score)) {
+            return null;
+        }
+
+        return (int) round(max(0, min(100, (float) $score)));
+    }
+
+    /**
+     * The last collected mobile measurement, or null when there is none.
+     *
+     * @since 2.3.1
+     * @return array|null { core_web_vitals: array, performance_score: float|null }
+     */
+    private function measured_performance(): ?array {
+        if ($this->measured_performance_resolved) {
+            return $this->measured_performance;
+        }
+
+        $this->measured_performance_resolved = true;
+
+        if (!class_exists('ThinkRank\\SEO\\Performance_Monitoring_Manager')) {
+            return null;
+        }
+
+        try {
+            $manager = new \ThinkRank\SEO\Performance_Monitoring_Manager();
+            // Mobile deliberately: Google indexes mobile-first, and it is the
+            // device the mobile_experience factor is named after.
+            $this->measured_performance = $manager->get_stored_performance_measurement('mobile');
+        } catch (\Throwable $e) {
+            $this->measured_performance = null;
+        }
+
+        return $this->measured_performance;
     }
 
     /**
@@ -1947,14 +2046,92 @@ class SEOScoreCalculator {
      * @return array Scoring result
      */
     private function score_core_web_vitals(array $content_data): array {
-        // Core Web Vitals are a runtime/performance signal, not derivable from
-        // post content. Award full credit (benefit of the doubt) rather than a
-        // fixed partial that caps every post's ceiling.
+        $max = $this->scoring_factors['core_web_vitals'];
+
+        // Not derivable from post content — but it is measured, and the audit
+        // stores LCP, INP and CLS with a rating each. Score against those when
+        // they exist; fall back to the benefit of the doubt when they do not.
+        $rated = $this->measured_vitals_score();
+
+        if ($rated === null) {
+            return [
+                'score' => $max,
+                'max_score' => $max,
+                'suggestions' => ['Optimize Core Web Vitals: LCP, INP, and CLS for better user experience'],
+                'details' => ['vitals_status' => 'Assumed adequate', 'measured' => false],
+            ];
+        }
+
+        $score = (int) round($max * $rated['average'] / 100);
+
         return [
-            'score' => $this->scoring_factors['core_web_vitals'],
-            'max_score' => $this->scoring_factors['core_web_vitals'],
-            'suggestions' => ['Optimize Core Web Vitals: LCP, INP, and CLS for better user experience'],
-            'details' => ['vitals_status' => 'Assumed adequate'],
+            'score' => $score,
+            'max_score' => $max,
+            // Gated on the measurement, not the rounded score: two good metrics
+            // and one needing improvement averages 88.33, which rounds to the
+            // full 3 of 3 and used to swallow the suggestion naming the metric
+            // that is actually failing.
+            'suggestions' => !empty($rated['failing'])
+                ? ['Optimize Core Web Vitals: ' . implode(', ', $rated['failing']) . ' below target on mobile']
+                : [],
+            'details' => [
+                'vitals_status' => $rated['statuses'],
+                'measured' => true,
+                'source' => 'pagespeed_mobile',
+            ],
+        ];
+    }
+
+    /**
+     * Rate the collected Core Web Vitals, or null when none were measured.
+     *
+     * Reuses the per-metric score the performance module already assigns
+     * (good 100, needs improvement 65, poor 30) rather than inventing a second
+     * scale, so the SEO score and the performance card cannot disagree about
+     * whether a metric is healthy.
+     *
+     * Metrics with no stored value — fcp is not always collected — are skipped
+     * rather than counted as failures.
+     *
+     * @since 2.3.1
+     * @return array|null { average: float, statuses: array, failing: string[] }
+     */
+    private function measured_vitals_score(): ?array {
+        $measurement = $this->measured_performance();
+        $vitals      = $measurement['core_web_vitals'] ?? null;
+
+        if (!is_array($vitals)) {
+            return null;
+        }
+
+        $scores   = [];
+        $statuses = [];
+        $failing  = [];
+
+        // The three Google ranks on. fcp is diagnostic and not a Core Web Vital.
+        foreach (['lcp', 'inp', 'cls'] as $metric) {
+            $data = $vitals[$metric] ?? null;
+
+            if (!is_array($data) || !isset($data['value'], $data['score']) || $data['value'] === null) {
+                continue;
+            }
+
+            $scores[]          = (float) $data['score'];
+            $statuses[$metric] = $data['status'] ?? 'unknown';
+
+            if (($data['status'] ?? '') !== 'good') {
+                $failing[] = strtoupper($metric);
+            }
+        }
+
+        if (empty($scores)) {
+            return null;
+        }
+
+        return [
+            'average'  => array_sum($scores) / count($scores),
+            'statuses' => $statuses,
+            'failing'  => $failing,
         ];
     }
 

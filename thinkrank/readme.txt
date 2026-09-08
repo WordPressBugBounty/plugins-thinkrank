@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.3.0
+Stable tag: 2.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -370,6 +370,24 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 
 == Changelog ==
 
+= 2.4.0 =
+Release Date: 2026-09-08
+
+- New: FAQ, How-To and Table of Contents elements for Bricks Builder. A Bricks page can now publish the same FAQ, HowTo and navigation structured data a block or Elementor page already could, with the same markup and styling, so a page built either way looks identical to visitors and to search engines
+- New: Breadcrumbs can follow your SEO titles. Turn on "Use SEO Titles in Breadcrumbs" and every post and category crumb is labelled with the SEO title you set for it, so the trail under a search result matches the result itself. It is off by default, so an update never rewrites an existing trail
+- New: Your SEO score now rates Core Web Vitals and Mobile Experience from real measurements instead of awarding both in full to every site. A site measured as slow now scores lower than a fast one, the failing metric is named in the advice, and a site nothing has measured yet keeps the benefit of the doubt rather than being marked down
+- New: The XML Sitemap screen now tells you when automatic regeneration has failed, fallen behind, or cannot run because WP-Cron is disabled — instead of the sitemap silently going stale — and rebuilds an overdue sitemap on the next admin visit when the schedule never fired
+- Fixed: On a Bricks page, ThinkRank published a second FAQ block of structured data beside the one Bricks publishes itself, published questions from a FAQ block left behind in the editor that no visitor can see, and took descriptions and scores from that hidden content instead of the page Bricks actually renders. Pages that print the post body through a Bricks dynamic tag are read correctly too
+- Fixed: Your favicon was declared at every size at once, so a large upload was served as a 32-pixel tab icon. ThinkRank now creates the sizes the browser asks for and each icon is genuinely the size it claims — a 32x32 tab icon dropped from 135 KB to under 1 KB on a test site. Sites with a favicon already set get the smaller icons on update, with no re-save
+- Fixed: A page that became a 404 after WordPress had already matched a post — the ordinary way a plugin refuses a URL — kept printing that post's meta description, keywords and social descriptions on the error page
+- Fixed: A breadcrumb crumb rendered blank between its separators when the SEO title held only spaces, instead of falling back to the post or category name
+- Fixed: A video swapped in a page-builder widget — YouTube changed to a self-hosted file, or the reverse — still advertised the video you replaced, including in the video sitemap
+- Fixed: The Site SEO Audit reported "structured data is configured for your content" on a site with schema switched off and emitting none, and its one-click fix could never be reached
+- Fixed: An export file carried your IndexNow key, and restoring one deleted the receiving site's Google Search Console and Analytics connection along with its Pinterest, Instagram and TikTok verification. Secrets are stripped from every part of the file now, and the receiving site keeps its own
+- Fixed: "Generate Sitemap" reported success on a site it could not write to, and cleared the recorded failure while doing it, so a broken sitemap looked healthy
+- Fixed: A PageSpeed audit that failed to run was recorded as a score of zero, which cost every post on the site its full mobile score on the strength of a measurement that never happened
+- Fixed: Admin pages and the sitemap screen's own requests could sit waiting while a sitemap was rebuilt in the background. The page is returned first now, and only signed-in requests trigger a rebuild
+
 = 2.3.0 =
 Release Date: 2026-09-06
 
@@ -451,41 +469,12 @@ Release Date: 2026-08-27
 - Fixed: Fewer database queries on every visitor's page load
 
 
-= 2.0.2 =
-Release Date: 2026-08-25
-
-- New: A master Enable Schema Markup switch in Schema Manager. While it is off, the Organization, Website and Person forms stay read-only with a notice explaining why, and no structured data is published
-- Changed: Picking an image is now the same compact control everywhere — the post Social tab, Hero & Branding, and the setup wizard
-- Fixed: Saving Schema Manager settings left a single schema type live even when four were enabled and configured
-- Fixed: Turning Knowledge Graph or Auto-Generate Schema off had no effect — both stayed on
-- Fixed: Opening a post's schema screen rewrote what you had deployed and published types you never chose
-- Fixed: Switching a post's schema type left the old type published beside the new one
-- Fixed: Structured data carried dates in a format Google reports as invalid, which drops the Article rich result
-- Fixed: The site language was published as en_US where search engines expect en-US
-- Fixed: Empty titles, descriptions and image dimensions were published as blank values instead of being left out, which fails validation harder than their absence
-- Fixed: Your business and your personal profile were given a new identity on every address, so one business looked like many to a crawler
-- Fixed: A page could carry two breadcrumb trails
-- Fixed: FAQ questions and HowTo steps typed in the editor were emptied when saved, so FAQ schema could never be deployed
-- Fixed: Schema deployed while a post was still a draft advertised the draft's temporary address forever
-- Fixed: Importing schema from a URL missed the layout Yoast and Rank Math publish, and an entry with more than one type was rejected
-- Fixed: Review and Video schema were offered in the editor and then rejected on save
-- Fixed: The Person "Profile URLs" box would not take a second URL — the new line was erased as it was typed
-- Fixed: One schema type failing validation took every valid type down with it on each save
-- Fixed: A role granted schema access was locked out of deploying and of every site-wide schema screen
-- Fixed: Schema Cache Duration was saved and then never applied
-- Fixed: WooCommerce shop archives got no schema at all
-- Fixed: Repeated settings saves made each save slower than the last, up to hundreds of extra database queries
-- Fixed: The editor's schema preview showed raw stored data after a reload, and deleting one saved schema could overwrite another
-- Fixed: An AI provider declining a request was retried, doubling the cost of a request that was never going to succeed
-- Fixed: An AI assistant sending an unexpected field to ThinkRank got a server error instead of a clear message
-- Fixed: The WordPress admin menu's fly-out panels were cut off at the bottom of the screen when opened from a low menu item such as Settings or Tools
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.4.0 =
+Adds FAQ, How-To and Table of Contents elements for Bricks Builder, SEO titles in breadcrumbs, and an SEO score rating speed from real measurements. Fixes duplicate structured data on Bricks pages, wrong-sized favicons, and descriptions leaking onto 404 pages. Recommended for all sites.
+
 = 2.3.0 =
 Adds Bricks Builder support: the SEO panel inside the builder, the score on its toolbar, and Bricks content actually analysed. Fixes a truncated cost figure, an invented trend on "All time", the AI referrals chart, and email reports sent at the wrong time or with no data. Recommended for all sites.
-
-= 2.2.0 =
-Adds an Import / Export screen that takes your ThinkRank data out as one file and loads it back. Fixes the sitemap post-type switches, robots directives resetting each other, the social master switches, and Role Manager permissions. Recommended for all sites.

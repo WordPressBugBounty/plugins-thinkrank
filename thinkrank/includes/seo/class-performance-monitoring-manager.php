@@ -1725,6 +1725,56 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * The most recent COLLECTED measurement, or null when there is none.
+     *
+     * get_performance_snapshot() is the wrong thing to ask from anywhere that
+     * runs on an ordinary request: it falls through to a live PageSpeed audit,
+     * and when that audit fails it still answers — with a zeroed metric set and
+     * an F grade. A caller that treats that as a measurement scores a healthy
+     * site as broken because Google was rate limiting (the shape of #432).
+     *
+     * This never leaves the database. The collector throws on an API error
+     * rather than persisting one, so a row here is always a real measurement,
+     * and "nothing collected" is reported honestly as null rather than as zero.
+     *
+     * Cached briefly because callers run per-post: the SEO score asks once per
+     * post and a post-list screen scores a whole page of them.
+     *
+     * @since 2.3.1
+     *
+     * @param string $device_type Device type ('mobile' or 'desktop').
+     * @return array|null { core_web_vitals: array, performance_score: float|null }, or null.
+     */
+    public function get_stored_performance_measurement(string $device_type = 'mobile'): ?array {
+        $device_type = in_array($device_type, ['mobile', 'desktop'], true) ? $device_type : 'mobile';
+
+        $cache_key = 'thinkrank_stored_performance_' . $device_type;
+        $cached    = wp_cache_get($cache_key, 'thinkrank_seo');
+
+        // A miss and a cached "nothing collected" are different answers, so the
+        // absence is cached as a sentinel rather than as false.
+        if ($cached === 'none') {
+            return null;
+        }
+
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        try {
+            $measurement = $this->get_latest_stored_core_web_vitals($device_type);
+        } catch (\Throwable $e) {
+            // A missing table on a half-finished install must not take down
+            // whatever asked. Treat it as "not measured".
+            return null;
+        }
+
+        wp_cache_set($cache_key, $measurement ?? 'none', 'thinkrank_seo', 5 * MINUTE_IN_SECONDS);
+
+        return $measurement;
+    }
+
+    /**
      * Fetch the most recent Core Web Vitals measurement collected by the daily
      * cron and reshape it into the structure a live audit returns.
      *

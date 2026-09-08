@@ -98,6 +98,13 @@ class Schema_Graph {
     private const FAQ_WIDGET = 'thinkrank-faq';
 
     /**
+     * Bricks FAQ element name.
+     *
+     * @since 2.3.1
+     */
+    private const FAQ_BRICKS_ELEMENT = 'thinkrank-faq';
+
+    /**
      * Third-party Elementor widgets that publish their own FAQPage.
      *
      * Maps widgetType to the setting whose 'yes' arms that widget's FAQ schema,
@@ -110,6 +117,20 @@ class Schema_Graph {
         // Essential Addons for Elementor — Advanced Accordion.
         'eael-adv-accordion' => 'eael_adv_accordion_faq_schema_show',
     ];
+
+    /**
+     * Bricks elements that publish their own FAQPage.
+     *
+     * Bricks is a theme, not a plugin, and its accordions are core elements
+     * rather than a third-party add-on — so unlike FOREIGN_FAQ_WIDGETS this is
+     * a plain list: they share one gate, the `faqSchema` setting, and the
+     * per-element part of the check is whether the element has usable items
+     * (see bricks_element_publishes_faq()).
+     *
+     * @since 2.3.1
+     * @var string[]
+     */
+    private const FOREIGN_FAQ_BRICKS_ELEMENTS = ['accordion', 'accordion-nested'];
 
     /**
      * Singleton instance.
@@ -449,8 +470,36 @@ class Schema_Graph {
             return;
         }
 
-        $this->collect_block_faq($post);
+        // The same gate, for the same reason, with a different cause: a Bricks
+        // page throws `post_content` away, so a FAQ block left there when the
+        // page was switched over never renders. Publishing its questions would
+        // put schema on the page for content no visitor can see — which Google
+        // treats as a violation, not merely a duplicate (#650).
+        if (!$this->bricks_supersedes_post_content((int) $post->ID)) {
+            $this->collect_block_faq($post);
+        }
+
         $this->collect_elementor_faq($post);
+        $this->collect_bricks_faq($post);
+    }
+
+    /**
+     * Whether Bricks renders this post and discards its `post_content`.
+     *
+     * @since 2.3.1
+     * @param int $post_id Post being viewed.
+     * @return bool
+     */
+    private function bricks_supersedes_post_content(int $post_id): bool {
+        if (!class_exists('ThinkRank\\SEO\\Builder_Content')) {
+            $file = THINKRANK_PLUGIN_DIR . 'includes/seo/class-builder-content.php';
+            if (!file_exists($file)) {
+                return false;
+            }
+            require_once $file;
+        }
+
+        return \ThinkRank\SEO\Builder_Content::bricks_supersedes_post_content($post_id);
     }
 
     /**
@@ -537,6 +586,60 @@ class Schema_Graph {
         }
 
         $this->walk_elementor($elements);
+    }
+
+    /**
+     * Collect FAQ questions from Bricks FAQ elements.
+     *
+     * Reads the tree Bricks will actually render — resolved through
+     * `Builder_Content`, so a page whose content lives on a content template or
+     * inside a component is covered, and one switched back to the block editor
+     * is not.
+     *
+     * Unlike the block, this is not gated on Bricks owning `post_content`: a
+     * Bricks element is on the page whenever Bricks renders the page, which is
+     * exactly what resolving the tree already establishes (#626).
+     *
+     * @since 2.3.1
+     * @param \WP_Post $post Post being viewed.
+     * @return void
+     */
+    private function collect_bricks_faq(\WP_Post $post): void {
+        $this->walk_bricks($this->bricks_tree((int) $post->ID));
+    }
+
+    /**
+     * Collect FAQ entries from a resolved Bricks tree.
+     *
+     * The tree is flat, so no recursion: `Builder_Content::bricks_tree()`
+     * splices component definitions into the same list.
+     *
+     * The element's own settings are read here rather than through
+     * `FAQ_Element`, whose class extends `Bricks\Element` and so cannot even be
+     * loaded when the theme is inactive — which is exactly the case that still
+     * has a stored tree, on a site that has since switched themes. The repeater
+     * uses the same `question` / `answer` keys as the block, so the shared
+     * builder below already understands it.
+     *
+     * @since 2.3.1
+     * @param array $elements Bricks elements.
+     * @return void
+     */
+    private function walk_bricks(array $elements): void {
+        foreach ($elements as $element) {
+            if (!is_array($element) || ($element['name'] ?? '') !== self::FAQ_BRICKS_ELEMENT) {
+                continue;
+            }
+
+            $settings = is_array($element['settings'] ?? null) ? $element['settings'] : [];
+
+            // Mirrors FAQ_Element: a cleared Bricks checkbox loses its key.
+            if (empty($settings['outputSchema'])) {
+                continue;
+            }
+
+            $this->absorb_content_faq($this->questions_from_pairs($settings['faqs'] ?? []));
+        }
     }
 
     /**
@@ -1141,6 +1244,17 @@ class Schema_Graph {
             return false;
         }
 
+        return $this->has_foreign_elementor_faq($post) || $this->has_foreign_bricks_faq($post);
+    }
+
+    /**
+     * Whether an Elementor widget on this post publishes a FAQPage.
+     *
+     * @since 2.1.0
+     * @param \WP_Post $post Post being viewed.
+     * @return bool
+     */
+    private function has_foreign_elementor_faq(\WP_Post $post): bool {
         $raw = get_post_meta($post->ID, '_elementor_data', true);
         if (empty($raw) || !is_string($raw)) {
             return false;
@@ -1149,6 +1263,97 @@ class Schema_Graph {
         $elements = json_decode($raw, true);
 
         return is_array($elements) && $this->elements_have_foreign_faq($elements);
+    }
+
+    /**
+     * Whether a Bricks element on this post publishes a FAQPage.
+     *
+     * Bricks' accordions emit their FAQPage from the body render, so — exactly
+     * as with EA's accordion — the stored tree is the only signal available at
+     * `wp_head`, where this decision has to be made.
+     *
+     * The tree comes from Builder_Content rather than a direct meta read: a
+     * Bricks page's content can live on a content template, be assembled from
+     * components, or be stored but not rendered because the post was switched
+     * back to the block editor. Reading the meta key here would get all three
+     * wrong (#649).
+     *
+     * @since 2.3.1
+     * @param \WP_Post $post Post being viewed.
+     * @return bool
+     */
+    private function has_foreign_bricks_faq(\WP_Post $post): bool {
+        foreach ($this->bricks_tree((int) $post->ID) as $element) {
+            if (is_array($element) && $this->bricks_element_publishes_faq($element)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether one Bricks element will put a FAQPage on the page.
+     *
+     * Mirrors Bricks' own emission condition rather than trusting the toggle:
+     * `accordion` records a question only for an item that has BOTH a title and
+     * content, so an armed but empty accordion publishes nothing and must not
+     * cost the page ThinkRank's FAQ node. `accordion-nested` builds its items
+     * from child elements instead of a repeater, so having children is the
+     * equivalent test there.
+     *
+     * @since 2.3.1
+     * @param array $element One Bricks element.
+     * @return bool
+     */
+    private function bricks_element_publishes_faq(array $element): bool {
+        $name = is_string($element['name'] ?? null) ? $element['name'] : '';
+        if (!in_array($name, self::FOREIGN_FAQ_BRICKS_ELEMENTS, true)) {
+            return false;
+        }
+
+        $settings = is_array($element['settings'] ?? null) ? $element['settings'] : [];
+
+        // Bricks writes a checkbox as `true`, and clears it by removing the key.
+        if (empty($settings['faqSchema'])) {
+            return false;
+        }
+
+        if ('accordion-nested' === $name) {
+            return !empty($element['children']) && is_array($element['children']);
+        }
+
+        $items = is_array($settings['accordions'] ?? null) ? $settings['accordions'] : [];
+
+        foreach ($items as $item) {
+            if (is_array($item)
+                && '' !== trim((string) ($item['title'] ?? ''))
+                && '' !== trim((string) ($item['content'] ?? ''))
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The Bricks element tree that renders for a post.
+     *
+     * @since 2.3.1
+     * @param int $post_id Post being viewed.
+     * @return array<int,mixed>
+     */
+    private function bricks_tree(int $post_id): array {
+        if (!class_exists('ThinkRank\\SEO\\Builder_Content')) {
+            $file = THINKRANK_PLUGIN_DIR . 'includes/seo/class-builder-content.php';
+            if (!file_exists($file)) {
+                return [];
+            }
+            require_once $file;
+        }
+
+        return \ThinkRank\SEO\Builder_Content::bricks_tree($post_id);
     }
 
     /**

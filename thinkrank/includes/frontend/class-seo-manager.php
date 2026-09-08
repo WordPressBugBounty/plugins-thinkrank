@@ -65,6 +65,27 @@ class SEO_Manager {
     private ?\ThinkRank\SEO\Site_Identity_Manager $site_identity_manager = null;
 
     /**
+     * Resolved icon URLs, keyed by "<md5 of configured URL>:<size>".
+     *
+     * wp_site_icon() renders four tags per page and each one resolves the same
+     * setting, so without this the lookup is four rounds of
+     * attachment_url_to_postid() — an uncached postmeta query apiece — for one
+     * answer. Loaded from, and persisted to, a transient: this filter runs in
+     * wp_head on every FRONT-END request, and the mapping only changes when the
+     * icon setting does.
+     *
+     * @var array<string, string>|null Null until loaded.
+     */
+    private ?array $icon_urls = null;
+
+    /**
+     * Whether $icon_urls gained an entry that is not in the transient yet.
+     *
+     * @var bool
+     */
+    private bool $icon_urls_dirty = false;
+
+    /**
      * Social Meta Manager instance
      *
      * @var \ThinkRank\SEO\Social_Meta_Manager|null
@@ -163,6 +184,11 @@ class SEO_Manager {
 
         // Initialize current post and context data first
         add_action('wp', [$this, 'initialize_current_context']);
+
+        // ...then let it be corrected if the request turns into a 404 later.
+        // Late, so every set_404() on this hook has already run; still well
+        // before wp_head, which the template fires.
+        add_action('template_redirect', [$this, 'recheck_404_context'], 999);
 
         // Use HIGH PRIORITY hooks to override other SEO plugins
         // Priority 1-5 ensures ThinkRank runs before other SEO plugins
@@ -436,6 +462,38 @@ class SEO_Manager {
 
         // Load site identity data
         $this->load_site_identity_data();
+    }
+
+    /**
+     * Drop the request's post identity once it has become a 404.
+     *
+     * `initialize_current_context()` runs on `wp`, but a request can be turned
+     * into a 404 after that: `set_404()` on `template_redirect` is the ordinary
+     * way to refuse a URL that did resolve to a real post, and both core and
+     * plugins do it — ThinkRank Pro's Markdown for AI refuses an ineligible
+     * `.md` URL that way. The snapshot still said `post`/`page` and still held
+     * the post id and its metadata, so the error page shipped that post's meta
+     * description, focus keywords and — where the social emitters got that far
+     * — its og:description and twitter:description, all of which a request that
+     * was a 404 from the start never prints (#655).
+     *
+     * Clearing the snapshot rather than special-casing each emitter is what
+     * makes every consumer agree, including the ones that read
+     * `$current_metadata` without ever asking what the context is.
+     *
+     * @since 2.3.1
+     *
+     * @return void
+     */
+    public function recheck_404_context(): void {
+        if (!is_404() || '404' === $this->current_context) {
+            return;
+        }
+
+        $this->current_context  = '404';
+        $this->current_post_id  = null;
+        $this->current_term_id  = null;
+        $this->current_metadata = [];
     }
 
     /**
@@ -1242,6 +1300,14 @@ class SEO_Manager {
      * @return void
      */
     public function output_platform_meta_tags(): void {
+        // Same reasoning as the Open Graph and Twitter emitters: an error page
+        // has no shareable identity, and passing '404' through as a social
+        // context asks the manager for settings that describe a page which does
+        // not exist. Guarding all three keeps them from disagreeing.
+        if ($this->current_context === '404') {
+            return;
+        }
+
         // Try Social Meta Manager for platform tags
         if ($this->social_manager) {
             // Map context for Social Meta Manager (homepage -> site for site-wide settings)
@@ -2071,7 +2137,7 @@ class SEO_Manager {
                     $placeholders['%excerpt%'] = $post->post_excerpt;
                 } elseif (!$this->is_content_password_protected($post->ID)) {
                     $placeholders['%excerpt%'] = \ThinkRank\SEO\Pattern_Resolver::derive_excerpt(
-                        (string) $post->post_content
+                        \ThinkRank\SEO\Builder_Content::visible_content($post)
                     );
                 }
             }
@@ -2387,7 +2453,13 @@ class SEO_Manager {
         // same value is reused for og:description and twitter:description, so
         // one unguarded read leaked through three tags (#363).
         if (is_singular() && $this->current_post_id && !$this->is_content_password_protected()) {
-            $post_content = get_post_field('post_content', $this->current_post_id);
+            // Not the raw column: a Bricks page discards `post_content`, so
+            // whatever is still stored there is invisible — and this one value
+            // becomes the meta, og: and twitter: descriptions (#651).
+            $described = get_post($this->current_post_id);
+            $post_content = $described instanceof \WP_Post
+                ? \ThinkRank\SEO\Builder_Content::visible_content($described)
+                : get_post_field('post_content', $this->current_post_id);
             if ($post_content) {
                 $excerpt = \ThinkRank\SEO\Pattern_Resolver::derive_excerpt((string) $post_content);
                 if (!empty($excerpt)) {
@@ -3422,16 +3494,188 @@ class SEO_Manager {
             return (string) $url;
         }
 
+        $size = (int) $size;
+
         // Apple touch icon has its own dedicated setting
-        if ((int) $size === 180 && !empty($settings['apple_touch_icon_url'])) {
-            return esc_url($settings['apple_touch_icon_url']);
+        if ($size === 180 && !empty($settings['apple_touch_icon_url'])) {
+            return $this->resolve_icon_url((string) $settings['apple_touch_icon_url'], $size);
         }
 
         if (!empty($settings['favicon_url'])) {
-            return esc_url($settings['favicon_url']);
+            return $this->resolve_icon_url((string) $settings['favicon_url'], $size);
         }
 
         return (string) $url;
+    }
+
+    /**
+     * Whether breadcrumb labels should prefer the SEO title.
+     *
+     * Off unless the site turns it on, so updating the plugin never rewrites an
+     * existing trail.
+     *
+     * @since 2.3.1
+     *
+     * @param array $settings Breadcrumb settings.
+     * @return bool
+     */
+    private function breadcrumbs_use_seo_title(array $settings): bool {
+        return !empty($settings['breadcrumb_use_seo_title']);
+    }
+
+    /**
+     * Label for a post in the breadcrumb trail.
+     *
+     * With the toggle on, the post's own SEO title wins — the same
+     * `_thinkrank_seo_title` value (variable tags resolved) the document title
+     * uses — so the trail under a search snippet reads the same as the snippet
+     * itself. Anything empty falls back to the raw post title; the global title
+     * pattern is deliberately NOT part of the chain, since resolving it would
+     * append the site name to every crumb.
+     *
+     * @since 2.3.1
+     *
+     * @param int   $post_id  Post ID.
+     * @param array $settings Breadcrumb settings.
+     * @return string Breadcrumb label.
+     */
+    private function get_breadcrumb_post_title(int $post_id, array $settings): string {
+        $title = (string) get_the_title($post_id);
+
+        if (!$this->breadcrumbs_use_seo_title($settings)) {
+            return $title;
+        }
+
+        $seo_title = trim((string) get_post_meta($post_id, '_thinkrank_seo_title', true));
+
+        if ('' === $seo_title) {
+            return $title;
+        }
+
+        $resolved = trim(\ThinkRank\SEO\Pattern_Resolver::resolve_value($seo_title, $post_id));
+
+        return '' !== $resolved ? $resolved : $title;
+    }
+
+    /**
+     * Label for a term in the breadcrumb trail.
+     *
+     * Term counterpart to {@see self::get_breadcrumb_post_title()}, resolving
+     * the term's `_thinkrank_seo_title` against its own values.
+     *
+     * @since 2.3.1
+     *
+     * @param object $term     Term object.
+     * @param array  $settings Breadcrumb settings.
+     * @return string Breadcrumb label.
+     */
+    private function get_breadcrumb_term_title($term, array $settings): string {
+        $name = (string) ($term->name ?? '');
+
+        if (!$this->breadcrumbs_use_seo_title($settings) || empty($term->term_id)) {
+            return $name;
+        }
+
+        $seo_title = trim((string) get_term_meta((int) $term->term_id, '_thinkrank_seo_title', true));
+
+        if ('' === $seo_title) {
+            return $name;
+        }
+
+        $resolved = trim(\ThinkRank\SEO\Pattern_Resolver::resolve_term_value($seo_title, (int) $term->term_id));
+
+        return '' !== $resolved ? $resolved : $name;
+    }
+
+    /**
+     * Resolve a configured icon URL to the derivative that fits $size.
+     *
+     * wp_site_icon() calls get_site_icon_url() four times — 32, 192, 180 and
+     * 270 — and pairs the first two with a hardcoded sizes="" attribute. This
+     * filter used to answer all four with the same configured URL, so one
+     * upload was declared as every size at once: a 1536x1536 original served
+     * to paint a 32px tab icon, under a sizes="32x32" label that was simply
+     * untrue (#571).
+     *
+     * Resolution mirrors core's own get_site_icon_url(), including the
+     * >= 512 -> 'full' branch, so ThinkRank's override and the core pipeline
+     * pick the same file for the same request.
+     *
+     * An unresolvable URL (one hosted off-site) is returned unchanged. Nothing
+     * is knowable about its dimensions, and suppressing it instead would leave
+     * the page with no rel="icon" at all — a worse outcome than an approximate
+     * size hint.
+     *
+     * @param string $configured Configured icon URL.
+     * @param int    $size       Icon size core is asking for.
+     * @return string Icon URL for that size.
+     */
+    private function resolve_icon_url(string $configured, int $size): string {
+        $cache_key = md5($configured) . ':' . $size;
+        $cached    = $this->icon_urls();
+
+        if (isset($cached[$cache_key])) {
+            return $cached[$cache_key];
+        }
+
+        $attachment_id = \ThinkRank\SEO\Site_Identity_Manager::icon_attachment_id($configured);
+
+        if (!$attachment_id) {
+            $resolved = esc_url($configured);
+        } else {
+            // Mirrors core: at 512 and above the original is what is wanted, and
+            // asking for an intermediate size that large would only fall back to it.
+            $size_data = $size >= 512 ? 'full' : [$size, $size];
+            $url       = wp_get_attachment_image_url($attachment_id, $size_data);
+            $resolved  = $url ? esc_url($url) : esc_url($configured);
+        }
+
+        $this->icon_urls[$cache_key] = $resolved;
+
+        if (!$this->icon_urls_dirty) {
+            $this->icon_urls_dirty = true;
+            // Written once, after the response is assembled, rather than once
+            // per size: wp_site_icon() resolves four in a row.
+            add_action('shutdown', [$this, 'persist_icon_urls'], 5);
+        }
+
+        return $resolved;
+    }
+
+    /**
+     * The resolved-icon-URL map, loaded from its transient on first use.
+     *
+     * @return array<string, string>
+     */
+    private function icon_urls(): array {
+        if ($this->icon_urls === null) {
+            $stored = get_transient(\ThinkRank\SEO\Site_Identity_Manager::ICON_URL_TRANSIENT);
+            $this->icon_urls = is_array($stored) ? $stored : [];
+        }
+
+        return $this->icon_urls;
+    }
+
+    /**
+     * Persist newly resolved icon URLs.
+     *
+     * Public because it runs on `shutdown`. Invalidated wholesale whenever the
+     * site identity settings are saved, which is the only moment the icon
+     * choice — or the derivatives behind it — can change.
+     *
+     * @return void
+     */
+    public function persist_icon_urls(): void {
+        if (!$this->icon_urls_dirty || !is_array($this->icon_urls)) {
+            return;
+        }
+
+        $this->icon_urls_dirty = false;
+        set_transient(
+            \ThinkRank\SEO\Site_Identity_Manager::ICON_URL_TRANSIENT,
+            $this->icon_urls,
+            DAY_IN_SECONDS
+        );
     }
 
     /**
@@ -3464,7 +3708,7 @@ class SEO_Manager {
                     if (!empty($categories)) {
                         $category = $categories[0];
                         $items[] = [
-                            'title' => $category->name,
+                            'title' => $this->get_breadcrumb_term_title($category, $settings),
                             'url' => get_category_link($category->term_id),
                             'position' => $position++
                         ];
@@ -3480,7 +3724,7 @@ class SEO_Manager {
                 // explicit off.
                 if ($settings['show_current_page'] ?? true) {
                     $items[] = [
-                        'title' => get_the_title($current_post_id),
+                        'title' => $this->get_breadcrumb_post_title($current_post_id, $settings),
                         'url' => get_permalink($current_post_id),
                         'position' => $position,
                         'current' => true
@@ -3499,7 +3743,7 @@ class SEO_Manager {
                     $parent = get_post($parent_id);
                     if ($parent) {
                         $parents[] = [
-                            'title' => get_the_title($parent->ID),
+                            'title' => $this->get_breadcrumb_post_title($parent->ID, $settings),
                             'url' => get_permalink($parent->ID),
                             'position' => 0 // Will be set later
                         ];
@@ -3521,7 +3765,7 @@ class SEO_Manager {
                 // Add current page
                 if ($settings['show_current_page'] ?? true) {
                     $items[] = [
-                        'title' => get_the_title($current_post_id),
+                        'title' => $this->get_breadcrumb_post_title($current_post_id, $settings),
                         'url' => get_permalink($current_post_id),
                         'position' => $position,
                         'current' => true
@@ -3539,7 +3783,7 @@ class SEO_Manager {
                 $parent = get_category($parent_id);
                 if ($parent && !is_wp_error($parent)) {
                     $parents[] = [
-                        'title' => $parent->name,
+                        'title' => $this->get_breadcrumb_term_title($parent, $settings),
                         'url' => get_category_link($parent->term_id),
                         'position' => 0 // Will be set later
                     ];
@@ -3561,7 +3805,7 @@ class SEO_Manager {
             // Add current category
             if ($settings['show_current_page'] ?? true) {
                 $items[] = [
-                    'title' => $category->name,
+                    'title' => $this->get_breadcrumb_term_title($category, $settings),
                     'url' => get_category_link($category->term_id),
                     'position' => $position,
                     'current' => true

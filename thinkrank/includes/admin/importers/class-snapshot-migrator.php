@@ -780,8 +780,28 @@ class Snapshot_Migrator {
                 continue;
             }
 
-            if (!$overwrite && get_option($option_name, '__tr_not_set__') !== '__tr_not_set__') {
+            $existing = get_option($option_name, '__tr_not_set__');
+
+            if (!$overwrite && $existing !== '__tr_not_set__') {
                 continue;
+            }
+
+            // An aggregate option is written whole, so a key the exporter
+            // stripped would be DELETED here rather than just left alone — an
+            // overwrite-restore would wipe this site's Google OAuth tokens and
+            // platform verification codes on the way to restoring everything
+            // around them. Carry the local values forward for exactly the keys
+            // export redacts, matching that redaction key for key and depth for
+            // depth.
+            if (is_array($value) && is_array($existing)) {
+                $value = $this->carry_forward_redacted(
+                    $value,
+                    $existing,
+                    array_merge(
+                        Thinkrank_Exporter::secret_setting_keys(),
+                        Thinkrank_Exporter::SECRET_OPTION_KEYS[$option_name] ?? []
+                    )
+                );
             }
 
             update_option($option_name, $value);
@@ -789,6 +809,39 @@ class Snapshot_Migrator {
         }
 
         return $written;
+    }
+
+    /**
+     * Put back the secrets the export stripped, from what this site already has.
+     *
+     * The mirror image of Thinkrank_Exporter::strip_secret_keys(): that walks
+     * the payload to any depth removing keys named as secrets, so this walks it
+     * to the same depth restoring them. A key the export DID carry is left
+     * alone — the carry-forward only fills a hole, so a deliberate change still
+     * lands.
+     *
+     * @since 2.3.1
+     *
+     * @param array    $incoming    The option value from the snapshot.
+     * @param array    $existing    The option value this site already holds.
+     * @param string[] $secret_keys Key names redaction removes.
+     * @return array
+     */
+    private function carry_forward_redacted(array $incoming, array $existing, array $secret_keys): array {
+        foreach ($existing as $key => $existing_value) {
+            if (is_string($key) && in_array($key, $secret_keys, true)) {
+                if (!array_key_exists($key, $incoming)) {
+                    $incoming[$key] = $existing_value;
+                }
+                continue;
+            }
+
+            if (is_array($existing_value) && isset($incoming[$key]) && is_array($incoming[$key])) {
+                $incoming[$key] = $this->carry_forward_redacted($incoming[$key], $existing_value, $secret_keys);
+            }
+        }
+
+        return $incoming;
     }
 
     /**

@@ -104,6 +104,7 @@ final class Settings_Key_Map {
 			'breadcrumb_separator'     => self::string( __( 'Separator drawn between breadcrumb items.', 'thinkrank' ) ),
 			'breadcrumb_prefix'        => self::string( __( 'Text shown before the breadcrumb trail.', 'thinkrank' ) ),
 			'show_current_page'        => self::boolean( __( 'Whether the current page appears in its own breadcrumb trail.', 'thinkrank' ) ),
+			'breadcrumb_use_seo_title' => self::boolean( __( 'Whether breadcrumb labels use the SEO title of a post or term when one is set, instead of its raw title.', 'thinkrank' ) ),
 
 			// Brand imagery.
 			'logo_url'                 => self::string( __( 'URL of the site logo.', 'thinkrank' ) ),

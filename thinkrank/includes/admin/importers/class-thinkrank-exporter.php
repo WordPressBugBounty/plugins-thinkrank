@@ -90,6 +90,30 @@ class Thinkrank_Exporter extends Abstract_Plugin_Exporter {
     ];
 
     /**
+     * Credential-shaped keys nested INSIDE an aggregate option.
+     *
+     * The flat secret list matches on key name wherever it appears, which is
+     * the right rule for names that are unambiguous on their own
+     * (`openai_api_key`). A bare `api_key` is not: it is only a secret because
+     * of the option it sits in, so it is scoped here rather than banned
+     * everywhere.
+     *
+     * IndexNow's key is public by design — the plugin serves it at
+     * `/<key>.txt` — so this is hygiene rather than a leak being closed. It is
+     * still stripped, because it is the only credential-shaped value that
+     * currently reaches an export and leaving one exception in place is what
+     * let redaction drift out of two of the three buckets to begin with.
+     *
+     * Snapshot_Migrator reads this to put the LOCAL value back on restore, so
+     * stripping a key here never wipes the one the receiving site already has.
+     *
+     * @var array<string, string[]> Option name => secret keys inside it.
+     */
+    public const SECRET_OPTION_KEYS = [
+        'thinkrank_instant_indexing_settings' => ['api_key'],
+    ];
+
+    /**
      * Constructor
      */
     public function __construct() {
@@ -313,13 +337,77 @@ class Thinkrank_Exporter extends Abstract_Plugin_Exporter {
             [
                 'type'          => 'settings',
                 'source_plugin' => self::SLUG,
-                'data'          => [
+                'data'          => $this->redact_secrets([
                     'options'   => $this->export_option_settings(),
                     'seo_table' => $this->export_seo_table_settings(),
                     'aggregate' => $this->export_aggregate_options(),
-                ],
+                ]),
             ],
         ];
+    }
+
+    /**
+     * Strip every secret from the assembled payload, once.
+     *
+     * Redaction used to live inside export_option_settings() alone, so it
+     * protected the bucket it was written for and neither of the other two:
+     * the settings table and the aggregate options were serialized verbatim.
+     * Nothing said they shouldn't be, which meant the day any of them held a
+     * real credential it would leave the site silently.
+     *
+     * Doing it here instead of per-bucket means a bucket added later is
+     * covered by construction rather than by remembering.
+     *
+     * @param array $data The three settings buckets.
+     * @return array The same buckets with secrets removed.
+     */
+    private function redact_secrets(array $data): array {
+        $secret_keys = self::secret_setting_keys();
+
+        foreach (['options', 'seo_table', 'aggregate'] as $bucket) {
+            if (isset($data[$bucket]) && is_array($data[$bucket])) {
+                $data[$bucket] = $this->strip_secret_keys($data[$bucket], $secret_keys);
+            }
+        }
+
+        // Option-scoped secrets: only a secret because of where they sit.
+        foreach (self::SECRET_OPTION_KEYS as $option_name => $option_secrets) {
+            if (!isset($data['aggregate'][$option_name]) || !is_array($data['aggregate'][$option_name])) {
+                continue;
+            }
+
+            foreach ($option_secrets as $secret_key) {
+                unset($data['aggregate'][$option_name][$secret_key]);
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Remove any key named as a secret, at any depth.
+     *
+     * Recursive on purpose: the settings table nests the stored key three
+     * levels down (category → context → id → key), and a stored value can
+     * itself be an array. A secret is a secret wherever it turns up.
+     *
+     * @param array    $data        Data to filter.
+     * @param string[] $secret_keys Key names that must never be exported.
+     * @return array
+     */
+    private function strip_secret_keys(array $data, array $secret_keys): array {
+        foreach ($data as $key => $value) {
+            if (is_string($key) && in_array($key, $secret_keys, true)) {
+                unset($data[$key]);
+                continue;
+            }
+
+            if (is_array($value)) {
+                $data[$key] = $this->strip_secret_keys($value, $secret_keys);
+            }
+        }
+
+        return $data;
     }
 
     /**
@@ -459,24 +547,26 @@ class Thinkrank_Exporter extends Abstract_Plugin_Exporter {
      * carry the `trenc:v1:` marker and are derived from the site's auth salts —
      * they could not be decrypted after a restore onto another site anyway.
      *
+     * The stripping itself is not done here: redact_secrets() runs over all
+     * three buckets once, so this returns the raw store.
+     *
      * @return array Setting key => value
      */
     private function export_option_settings(): array {
-        $settings = Settings::instance()->get_all();
-
-        foreach ($this->get_secret_setting_keys() as $secret_key) {
-            unset($settings[$secret_key]);
-        }
-
-        return $settings;
+        return Settings::instance()->get_all();
     }
 
     /**
      * Settings keys that must never appear in an export.
      *
+     * Public and static because Snapshot_Migrator needs the same list to undo
+     * the redaction on the way back in: an aggregate option is restored whole,
+     * so every key stripped here has to be carried forward from the receiving
+     * site or the restore deletes it.
+     *
      * @return string[]
      */
-    private function get_secret_setting_keys(): array {
+    public static function secret_setting_keys(): array {
         return array_values(
             array_unique(
                 array_merge(Settings::instance()->get_encrypted_keys(), self::EXTRA_SECRET_KEYS)

@@ -265,6 +265,12 @@ class Sitemap_Endpoint extends WP_REST_Controller {
         $settings  = $this->sitemap_generator->get_settings('site');
         $settings['last_generated'] = $timestamp;
         $this->sitemap_generator->save_settings('site', null, $settings);
+
+        // This generation wrote the same files the outstanding automatic rebuild
+        // was queued to write, so clear its marker (and any recorded failure)
+        // instead of leaving a request-time takeover to repeat the work.
+        $this->sitemap_generator->mark_regeneration_complete();
+
         return $timestamp;
     }
 
@@ -467,7 +473,19 @@ class Sitemap_Endpoint extends WP_REST_Controller {
                     if (!empty($options['sitemap_urls'][0]['url'])) {
                         $filename = basename(wp_parse_url($options['sitemap_urls'][0]['url'], PHP_URL_PATH));
                     }
-                    $this->save_sitemap_file($sitemap_xml, $filename);
+                    // A failed write has to surface here the way the index
+                    // branch surfaces one. Discarding it let record_generation()
+                    // advance last_generated and clear the pending marker and
+                    // the recorded failure, so an unwritable site root — the
+                    // exact case this endpoint reports health for — came back
+                    // as a healthy "Generated successfully".
+                    if (!$this->save_sitemap_file($sitemap_xml, $filename)) {
+                        return new WP_Error(
+                            'sitemap_generation_failed',
+                            'Failed to save sitemap: ' . $filename,
+                            ['status' => 500]
+                        );
+                    }
 
                     // Regenerate the standalone local business sitemap on the
                     // single-sitemap path too (parity with Rank Math).
@@ -913,7 +931,12 @@ class Sitemap_Endpoint extends WP_REST_Controller {
                 'data' => [
                     'settings' => $settings,
                     'context_type' => $context_type,
-                    'context_id' => $context_id
+                    'context_id' => $context_id,
+                    // Kept out of `settings` on purpose: this is generator state,
+                    // not something the settings POST round-trips.
+                    'health' => $context_type === 'site'
+                        ? $this->sitemap_generator->get_regeneration_health()
+                        : null
                 ],
                 'message' => 'Sitemap settings retrieved successfully'
             ], 200);
@@ -1305,7 +1328,7 @@ class Sitemap_Endpoint extends WP_REST_Controller {
      * @return bool True if lock acquired
      */
     private function acquire_generation_lock(): bool {
-        $lock_key = 'thinkrank_sitemap_generation_lock';
+        $lock_key = Sitemap_Generator::GENERATION_LOCK_TRANSIENT;
 
         if (get_transient($lock_key)) {
             return false; // Generation already in progress
@@ -1322,6 +1345,6 @@ class Sitemap_Endpoint extends WP_REST_Controller {
      * @return void
      */
     private function release_generation_lock(): void {
-        delete_transient('thinkrank_sitemap_generation_lock');
+        delete_transient(Sitemap_Generator::GENERATION_LOCK_TRANSIENT);
     }
 }

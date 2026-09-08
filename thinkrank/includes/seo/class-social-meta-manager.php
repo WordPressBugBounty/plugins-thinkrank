@@ -1894,14 +1894,19 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             return '' !== $post->post_excerpt ? $post->post_excerpt : get_bloginfo('description');
         }
 
-        // Try excerpt first
-        $description = get_the_excerpt($post);
+        // Try excerpt first. On a Bricks page core would derive that excerpt
+        // from the `post_content` Bricks throws away, so the visible body is
+        // used instead — a hand-written excerpt still wins (#651).
+        $superseding = Builder_Content::superseding_excerpt_source($post);
+        $description = '' !== $superseding
+            ? Pattern_Resolver::derive_excerpt($superseding, 30)
+            : get_the_excerpt($post);
 
         // If no excerpt, generate from content. Shortcodes and block delimiters
         // are removed the way core's wp_trim_excerpt() does, so a shortcode-built
         // page does not publish its source as og:description (#387).
         if (empty($description)) {
-            $description = Pattern_Resolver::derive_excerpt((string) $post->post_content, 30);
+            $description = Pattern_Resolver::derive_excerpt(Builder_Content::visible_content($post), 30);
         }
 
         // If still empty, use site description
