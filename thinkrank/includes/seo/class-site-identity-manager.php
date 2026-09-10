@@ -710,6 +710,15 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             ? $this->strip_robots_header($custom)
             : trim($this->generate_robots_txt()['content']);
 
+        // The per-agent AI directives are machine-owned, so they are composed
+        // here rather than stored: the textarea holds the user's body, with
+        // the fenced block stripped out of every read and re-applied on every
+        // render. A site-wide block already disallows everyone, so adding the
+        // per-agent group there would be noise restating the same refusal.
+        if (!$fully_blocked) {
+            $body = $this->apply_ai_crawler_block($body, $settings);
+        }
+
         if ($body === '') {
             return '';
         }
@@ -787,7 +796,10 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
 
         // Compare bodies, not raw strings: the auto-generated header carries a
         // regeneration timestamp that always differs and means nothing here.
-        $served = $this->strip_robots_header($effective['content']);
+        // The AI crawler block is composed at render time on both sides, so it
+        // is identical by construction and comparing it would only ever report
+        // a false drift the admin cannot act on.
+        $served = $this->strip_ai_crawler_block($this->strip_robots_header($effective['content']));
 
         // Measure against the body the editor is displaying — get_served_robots_body()
         // — not against render_robots_txt(). Two things made the old comparison
@@ -2763,6 +2775,8 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             'organization_schema', 'knowledge_graph',
             // Robots rules composed by the Robots.txt panel.
             'custom_robots_rules',
+            // Per-agent AI crawler allow/block map (#657).
+            'ai_crawler_rules',
             // Hero section.
             'hero_title', 'hero_subtitle', 'hero_cta_text', 'hero_cta_url',
             'hero_background_image',
@@ -2773,6 +2787,32 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             'business_email', 'business_latitude', 'business_longitude',
             'business_price_range', 'business_hours',
         ];
+    }
+
+    /**
+     * Sanitize settings, normalising the AI crawler rule map.
+     *
+     * The generic array sanitizer keeps the shape but says nothing about the
+     * values: a payload could store `ai_crawler_rules[gptbot] = "maybe"`, or a
+     * slug no crawler answers to, and both would round-trip through every
+     * later response. Normalising here rather than in the REST handler puts it
+     * on the one path every writer shares — the settings route, the robots
+     * route and the MCP abilities all land in save_settings() (#657).
+     *
+     * @since 2.5.0
+     *
+     * @param array  $settings     Settings to sanitize.
+     * @param string $context_type Context type.
+     * @return array Sanitized settings.
+     */
+    protected function sanitize_settings(array $settings, string $context_type = 'site'): array {
+        $sanitized = parent::sanitize_settings($settings, $context_type);
+
+        if (array_key_exists('ai_crawler_rules', $sanitized)) {
+            $sanitized['ai_crawler_rules'] = AI_Crawlers::normalize_rules($sanitized['ai_crawler_rules']);
+        }
+
+        return $sanitized;
     }
 
     /**
@@ -2798,6 +2838,10 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             'robots_txt_enabled' => true,
             'allow_search_engines' => true,
             'robots_txt_content' => '',
+            // Empty map = every AI crawler allowed. Defaults must stay
+            // permissive so an upgrade never starts blocking a crawler a site
+            // was happily serving (#657).
+            'ai_crawler_rules' => [],
             'logo_url' => '',
             'favicon_url' => '',
             'apple_touch_icon_url' => ''
@@ -3655,6 +3699,114 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * Opening fence of the machine-owned AI crawler region.
+     *
+     * @since 2.5.0
+     * @var string
+     */
+    public const AI_BLOCK_BEGIN = '# BEGIN ThinkRank AI crawlers';
+
+    /**
+     * Closing fence of the machine-owned AI crawler region.
+     *
+     * @since 2.5.0
+     * @var string
+     */
+    public const AI_BLOCK_END = '# END ThinkRank AI crawlers';
+
+    /**
+     * Render the fenced AI crawler region for the current settings.
+     *
+     * One `User-agent:` / `Disallow: /` record per blocked crawler. Allowed
+     * crawlers emit nothing at all: `Disallow:` with an empty value is the
+     * robots.txt way of saying "allow everything", but writing eighteen such
+     * records to say what silence already says would triple the file and
+     * invite the reading that an unlisted crawler is therefore refused.
+     *
+     * @since 2.5.0
+     *
+     * @param array $settings Site settings.
+     * @return string Fenced block, newline-terminated, or '' when nothing is blocked.
+     */
+    private function build_ai_crawler_block(array $settings): string {
+        $blocked = AI_Crawlers::blocked_slugs($settings['ai_crawler_rules'] ?? []);
+
+        if (empty($blocked)) {
+            return '';
+        }
+
+        $agents = AI_Crawlers::all();
+
+        $lines = [
+            self::AI_BLOCK_BEGIN,
+            '# Managed by ThinkRank — edits between these lines are overwritten.',
+        ];
+
+        foreach ($blocked as $slug) {
+            $lines[] = '';
+            $lines[] = 'User-agent: ' . $agents[$slug]['token'];
+            $lines[] = 'Disallow: /';
+        }
+
+        $lines[] = self::AI_BLOCK_END;
+
+        return implode("\n", $lines) . "\n";
+    }
+
+    /**
+     * Remove the fenced AI crawler region from a robots.txt body.
+     *
+     * Tolerates a missing closing fence rather than leaving the rest of the
+     * file swallowed: a truncated write, or someone deleting the END line by
+     * hand, would otherwise make every subsequent read drop everything below
+     * the opening fence.
+     *
+     * @since 2.5.0
+     *
+     * @param string $body Robots.txt body.
+     * @return string Body with the region removed.
+     */
+    public function strip_ai_crawler_block(string $body): string {
+        if (false === strpos($body, self::AI_BLOCK_BEGIN)) {
+            return $body;
+        }
+
+        $pattern = '/\R*' . preg_quote(self::AI_BLOCK_BEGIN, '/')
+            . '.*?(?:' . preg_quote(self::AI_BLOCK_END, '/') . '|\z)\R*/s';
+
+        return trim((string) preg_replace($pattern, "\n\n", $body, 1));
+    }
+
+    /**
+     * Put the current AI crawler region into a robots.txt body.
+     *
+     * Replaces an existing region in place so the block keeps its position in
+     * a hand-ordered file, and appends when there is none. Everything outside
+     * the fences is returned untouched — that is the whole point of fencing
+     * it, since the body is also a free-text field the user edits.
+     *
+     * @since 2.5.0
+     *
+     * @param string $body     Robots.txt body (fences optional).
+     * @param array  $settings Site settings.
+     * @return string Body carrying the current region.
+     */
+    private function apply_ai_crawler_block(string $body, array $settings): string {
+        $stripped = $this->strip_ai_crawler_block($body);
+        $block    = $this->build_ai_crawler_block($settings);
+
+        if ('' === $block) {
+            return $stripped;
+        }
+
+        if ('' === trim($stripped)) {
+            return trim($block);
+        }
+
+        return rtrim($stripped) . "\n\n" . trim($block);
+    }
+
+    /**
      * The auto-generated header prepended to the served robots.txt.
      *
      * Kept separate from the body so it is only ever added at render time with
@@ -3693,9 +3845,14 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
     public function get_served_robots_body(): string {
         $settings = $this->get_settings('site');
 
+        // The AI block is stripped from every one of these paths. A physical
+        // robots.txt we wrote carries it, and the stored override is whatever
+        // the textarea last held — so without this the block round-trips into
+        // the editor, gets saved as ordinary body text, and is then appended
+        // to a second time on the next render.
         $custom = trim((string) ($settings['robots_txt_content'] ?? ''));
         if ($custom !== '') {
-            return $this->strip_robots_header($custom);
+            return $this->strip_ai_crawler_block($this->strip_robots_header($custom));
         }
 
         $robots_file = ABSPATH . 'robots.txt';
@@ -3703,11 +3860,11 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPress.PHP.NoSilencedErrors.Discouraged -- an unreadable robots.txt is an expected state answered with an empty string.
             $raw = (string) @file_get_contents($robots_file);
             if ($raw !== '') {
-                return $this->strip_robots_header($raw);
+                return $this->strip_ai_crawler_block($this->strip_robots_header($raw));
             }
         }
 
-        return trim($this->generate_robots_txt()['content']);
+        return $this->strip_ai_crawler_block(trim($this->generate_robots_txt()['content']));
     }
     private function get_site_identity_data(array $settings): array {
         return [

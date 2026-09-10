@@ -391,6 +391,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-relative{
   position: relative;
 }
+.tr-root .tr-sticky{
+  position: sticky;
+}
 .tr-root .tr-inset-0{
   inset: 0px;
 }
@@ -462,6 +465,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-right-full{
   right: 100%;
 }
+.tr-root .tr-top-0{
+  top: 0px;
+}
 .tr-root .tr-top-1{
   top: 0.25rem;
 }
@@ -482,6 +488,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-top-full{
   top: 100%;
+}
+.tr-root .tr-z-10{
+  z-index: 10;
 }
 .tr-root .tr-z-50{
   z-index: 50;
@@ -748,6 +757,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-max-h-80{
   max-height: 20rem;
 }
+.tr-root .tr-max-h-\[70vh\]{
+  max-height: 70vh;
+}
 .tr-root .tr-max-h-full{
   max-height: 100%;
 }
@@ -831,6 +843,12 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-w-5{
   width: 1.25rem;
+}
+.tr-root .tr-w-52{
+  width: 13rem;
+}
+.tr-root .tr-w-56{
+  width: 14rem;
 }
 .tr-root .tr-w-6{
   width: 1.5rem;
@@ -1484,6 +1502,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   --tw-bg-opacity: 1;
   background-color: rgb(238 240 255 / var(--tw-bg-opacity, 1));
 }
+.tr-root .tr-bg-brand-bg\/30{
+  background-color: rgb(238 240 255 / 0.3);
+}
 .tr-root .tr-bg-brand-bg\/40{
   background-color: rgb(238 240 255 / 0.4);
 }
@@ -1541,6 +1562,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-bg-red-100{
   --tw-bg-opacity: 1;
   background-color: rgb(254 226 226 / var(--tw-bg-opacity, 1));
+}
+.tr-root .tr-bg-slate-50{
+  --tw-bg-opacity: 1;
+  background-color: rgb(248 250 252 / var(--tw-bg-opacity, 1));
 }
 .tr-root .tr-bg-success{
   --tw-bg-opacity: 1;
@@ -2038,6 +2063,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-text-secondary{
   --tw-text-opacity: 1;
   color: rgb(83 83 83 / var(--tw-text-opacity, 1));
+}
+.tr-root .tr-text-slate-300{
+  --tw-text-opacity: 1;
+  color: rgb(203 213 225 / var(--tw-text-opacity, 1));
 }
 .tr-root .tr-text-slate-400{
   --tw-text-opacity: 1;

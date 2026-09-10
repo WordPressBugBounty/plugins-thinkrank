@@ -105,6 +105,20 @@ class Global_SEO_Schema_Output {
 
         $settings = $this->get_global_seo_settings($post_type);
         if (($settings['schema_type'] ?? '') === 'Product') {
+            // ...but only if this class is actually going to emit it. The
+            // per-content-type Schema switch (#660) makes
+            // output_global_seo_schema() return before it builds anything, so
+            // claiming the entity here as well left the page with NO product
+            // structured data at all — strictly worse than the duplicate this
+            // method exists to prevent, and the opposite of what the docblock
+            // above promises for "ThinkRank's product schema disabled".
+            if (!\ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
+                \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
+                true
+            )) {
+                return $markup;
+            }
+
             return [];
         }
 
@@ -154,6 +168,15 @@ class Global_SEO_Schema_Output {
      * @return void
      */
     public function output_global_seo_schema(): void {
+        // Per-content-type schema switch. 'inherit' (the default) keeps schema
+        // on, exactly as before the matrix existed (#660).
+        if (!\ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
+            \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
+            true
+        )) {
+            return;
+        }
+
         // Archives get a CollectionPage schema instead of the per-post-type one
         if (!is_singular()) {
             $this->output_archive_schema();
@@ -328,6 +351,14 @@ class Global_SEO_Schema_Output {
      * @return bool True when structured data would be output for this post type.
      */
     public function would_output_schema(string $post_type): bool {
+        if (!\ThinkRank\SEO\Content_Type_Settings::is_enabled(
+            \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
+            $post_type,
+            true
+        )) {
+            return false;
+        }
+
         $settings = $this->get_global_seo_settings($post_type);
 
         return !empty($settings['schema_type']);

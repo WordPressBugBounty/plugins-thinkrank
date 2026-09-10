@@ -121,6 +121,14 @@ class SEO_Manager {
     private ?\ThinkRank\SEO\Image_SEO_Manager $image_seo_manager = null;
 
     /**
+     * External Links Manager instance
+     *
+     * @since 2.5.0
+     * @var \ThinkRank\SEO\External_Links_Manager|null
+     */
+    private ?\ThinkRank\SEO\External_Links_Manager $external_links_manager = null;
+
+    /**
      * Current page context
      *
      * @var string
@@ -181,6 +189,9 @@ class SEO_Manager {
 
         // Initialize Image SEO Manager
         $this->initialize_image_seo_manager();
+
+        // Initialize External Links Manager (rel=nofollow / target=_blank)
+        $this->initialize_external_links_manager();
 
         // Initialize current post and context data first
         add_action('wp', [$this, 'initialize_current_context']);
@@ -300,6 +311,15 @@ class SEO_Manager {
         // wp_site_icon() outputs it on the front-end (and previews pick it up)
         add_filter('get_site_icon_url', [$this, 'filter_site_icon_url'], 10, 2);
 
+        // Rewrite outbound anchors (rel=nofollow / target=_blank). Runs at
+        // the very end of the_content, after core's formatting AND after the
+        // image filter above, so it sees the markup the visitor will get. The
+        // stored post_content is never touched — turning the settings off
+        // restores the author's markup exactly.
+        add_filter('the_content', [$this, 'filter_external_links'], 100000);
+        add_filter('the_excerpt', [$this, 'filter_external_links'], 100000);
+        add_filter('widget_text_content', [$this, 'filter_external_links'], 100000);
+
         // Process image SEO in content
         add_filter('the_content', [$this, 'filter_content_images'], 99999);
         add_filter('post_thumbnail_html', [$this, 'filter_content_images'], 11, 2);
@@ -389,6 +409,46 @@ class SEO_Manager {
         }
 
         $this->image_seo_manager = new \ThinkRank\SEO\Image_SEO_Manager();
+    }
+
+    /**
+     * Initialize External Links Manager
+     *
+     * @since 2.5.0
+     * @return void
+     */
+    private function initialize_external_links_manager(): void {
+        if (!class_exists('ThinkRank\\SEO\\External_Links_Manager')) {
+            require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-external-links-manager.php';
+        }
+
+        $this->external_links_manager = new \ThinkRank\SEO\External_Links_Manager();
+    }
+
+    /**
+     * Filter rendered content to annotate external links
+     *
+     * @since 2.5.0
+     * @param mixed $content Content to filter; passed through untouched when
+     *                        it is not a string.
+     * @return mixed Filtered content.
+     */
+    public function filter_external_links($content) {
+        // No return type: a filter value another plugin hands through as null
+        // or an object belongs to whoever set it, and coercing it to '' would
+        // silently drop their content on the floor.
+        if (!is_string($content) || $content === '' || !$this->external_links_manager) {
+            return $content;
+        }
+
+        // Feeds carry the same markup to a reader we do not control; leave
+        // them as authored rather than annotating for a context that has no
+        // browser tab to open.
+        if (is_feed()) {
+            return $content;
+        }
+
+        return $this->external_links_manager->process_content($content);
     }
 
     /**
@@ -623,6 +683,12 @@ class SEO_Manager {
      * @return string Modified title
      */
     public function override_document_title($title): string {
+        // A content type with metas switched off keeps whatever title the theme
+        // and WordPress produce (#660).
+        if (!$this->metas_enabled()) {
+            return $title;
+        }
+
         // First priority: Post-specific ThinkRank metadata
         if ($this->has_thinkrank_metadata() && !empty($this->current_metadata['title'])) {
             return self::with_page_suffix($this->current_metadata['title']);
@@ -678,6 +744,10 @@ class SEO_Manager {
      * @return string Modified title
      */
     public function override_wp_title(string $title, string $sep = ''): string {
+        if (!$this->metas_enabled()) {
+            return $title;
+        }
+
         // First priority: Post-specific ThinkRank metadata
         if ($this->has_thinkrank_metadata() && !empty($this->current_metadata['title'])) {
             $site_name = get_bloginfo('name');
@@ -696,6 +766,23 @@ class SEO_Manager {
     }
 
     /**
+     * Whether ThinkRank owns the title and meta description for this request.
+     *
+     * Metas are on site-wide by default; the per-content-type matrix can switch
+     * them off for one content type, in which case ThinkRank stops overriding
+     * the document title and prints no meta description (#660).
+     *
+     * @since 2.5.0
+     * @return bool
+     */
+    private function metas_enabled(): bool {
+        return \ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
+            \ThinkRank\SEO\Content_Type_Settings::FEATURE_META,
+            true
+        );
+    }
+
+    /**
      * Output meta description (HIGH PRIORITY)
      * Priority: Post-specific metadata > Global SEO templates > Site Identity templates > WordPress defaults
      *
@@ -709,6 +796,10 @@ class SEO_Manager {
      */
     public function output_meta_description(): void {
         if (is_author()) {
+            return;
+        }
+
+        if (!$this->metas_enabled()) {
             return;
         }
 
@@ -774,6 +865,32 @@ class SEO_Manager {
     }
 
     /**
+     * Build the basic robots directive list from a set of robots flags.
+     *
+     * Shared by the search/404 branch of get_robots_meta_content() so those
+     * pages resolve their directives through the same rules as everything else
+     * rather than a hardcoded literal.
+     *
+     * @since 2.5.0
+     * @param array $settings Robots flags (index/noindex/nofollow/...).
+     * @return string[] Directives.
+     */
+    private static function build_robots_directives(array $settings): array {
+        $robots = [];
+
+        $robots[] = !empty($settings['noindex']) ? 'noindex' : 'index';
+        $robots[] = !empty($settings['nofollow']) ? 'nofollow' : 'follow';
+
+        foreach (['noarchive', 'noimageindex', 'nosnippet'] as $directive) {
+            if (!empty($settings[$directive])) {
+                $robots[] = $directive;
+            }
+        }
+
+        return $robots;
+    }
+
+    /**
      * Get robots meta content based on context and settings
      *
      * @return string Robots meta content
@@ -781,11 +898,20 @@ class SEO_Manager {
     private function get_robots_meta_content(): string {
         $robots = [];
 
-        // 404 and search results must never be indexed, regardless of the
-        // configured global/post-type directives. Links are still followed so
-        // crawlers can discover the rest of the site.
+        // 404 and search results are noindex/follow by default — the behaviour
+        // that used to be hardcoded here. It is now settings-driven (#660): the
+        // Content Type Matrix can give either its own robots directives, and an
+        // install that never touched them resolves to exactly the old pair.
         if (is_404() || is_search()) {
-            $robots = apply_filters('thinkrank_robots_meta', ['noindex', 'follow']);
+            $entity = is_404()
+                ? \ThinkRank\SEO\Content_Type_Settings::ENTITY_404
+                : \ThinkRank\SEO\Content_Type_Settings::ENTITY_SEARCH;
+
+            $robots = self::build_robots_directives(
+                \ThinkRank\SEO\Content_Type_Settings::resolve_robots_meta($entity)
+            );
+
+            $robots = apply_filters('thinkrank_robots_meta', $robots);
             return implode(', ', array_unique($robots));
         }
 
@@ -813,6 +939,22 @@ class SEO_Manager {
             if ($robots_enabled && isset($global_seo_settings[$post_type]['robots_meta']) && is_array($global_seo_settings[$post_type]['robots_meta'])) {
                 // Merge post type settings over global settings
                 $current_settings = array_merge($current_settings, $global_seo_settings[$post_type]['robots_meta']);
+            }
+        }
+
+        // 2b. Apply the per-entity directives for the non-singular content
+        // types the matrix covers — taxonomy archives plus author and date
+        // archives. Terms keep their own per-term override, applied further
+        // down so it still wins over the taxonomy-wide value (#660).
+        if (!is_singular()) {
+            $entity_key = \ThinkRank\SEO\Content_Type_Settings::current_entity_key();
+
+            if ($entity_key !== null) {
+                $entity_settings = \ThinkRank\SEO\Content_Type_Settings::get_entity_settings($entity_key);
+
+                if (!empty($entity_settings['robots_meta_enabled']) && is_array($entity_settings['robots_meta'] ?? null)) {
+                    $current_settings = array_merge($current_settings, $entity_settings['robots_meta']);
+                }
             }
         }
 
@@ -1361,6 +1503,15 @@ class SEO_Manager {
      * @return void
      */
     public function output_open_graph_tags(): void {
+        // Per-content-type Open Graph switch. 'inherit' (the default) keeps the
+        // site-wide Social Media setting, which the emitters below read (#660).
+        if (!\ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
+            \ThinkRank\SEO\Content_Type_Settings::FEATURE_OPEN_GRAPH,
+            true
+        )) {
+            return;
+        }
+
         // An error page has no shareable identity. Emitting Open Graph here
         // advertised the homepage as the og:url of a URL that does not exist.
         if ($this->current_context === '404') {
@@ -1575,6 +1726,14 @@ class SEO_Manager {
      * @return void
      */
     public function output_twitter_card_tags(): void {
+        // Per-content-type Twitter card switch; see output_open_graph_tags().
+        if (!\ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
+            \ThinkRank\SEO\Content_Type_Settings::FEATURE_TWITTER,
+            true
+        )) {
+            return;
+        }
+
         // Same reasoning as the Open Graph block: nothing on a 404 is shareable.
         if ($this->current_context === '404') {
             return;

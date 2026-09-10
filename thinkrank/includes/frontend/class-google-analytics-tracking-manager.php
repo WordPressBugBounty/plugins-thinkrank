@@ -86,7 +86,12 @@ class Google_Analytics_Tracking_Manager {
             return false;
         }
 
-        return true;
+        // Per-content-type analytics switch. 'inherit' (the default) keeps the
+        // site-wide auto-inject decision made above (#660).
+        return \ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
+            \ThinkRank\SEO\Content_Type_Settings::FEATURE_ANALYTICS,
+            true
+        );
     }
 
     /**

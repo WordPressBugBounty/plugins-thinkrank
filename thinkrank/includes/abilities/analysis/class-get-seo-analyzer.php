@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * Mirrors `GET /thinkrank/v1/seo-analyzer`: a crawl-free 0-100 audit with an
  * overall score, letter grade, and per-check results across the Basic,
- * Advanced, Content, Performance, and Security categories. Distinct from the
+ * Advanced, Content, Performance, Security and GEO/AEO categories. Distinct from the
  * per-post `get-seo-score` ability. Returns the cached result when available
  * (refreshed hourly); use `run-seo-analyzer` to force a fresh audit.
  */
@@ -32,7 +32,7 @@ class Get_Seo_Analyzer extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-seo-analyzer';
 		$this->label       = __( 'Get Site SEO Analyzer Audit', 'thinkrank' );
-		$this->description = __( 'Retrieve the latest whole-site SEO audit (Site SEO Analyzer): overall 0-100 score, letter grade, summary counts, and per-check results across Basic, Advanced, Content, Performance, and Security. Returns the cached audit (refreshed hourly); use run-seo-analyzer for a fresh run.', 'thinkrank' );
+		$this->description = __( 'Retrieve the latest whole-site SEO audit (Site SEO Analyzer): overall 0-100 score, letter grade, summary counts, and per-check results across Basic, Advanced, Content, Performance, Security and GEO/AEO. A failing per-item check (meta descriptions, image alt text, and the content-sampled GEO checks) lists what fails it in affected_posts (id, title, type, edit_url, url), with affected_total counting every failing item when the list is capped. Returns the cached audit (refreshed hourly); use run-seo-analyzer for a fresh run.', 'thinkrank' );
 	}
 
 	/**

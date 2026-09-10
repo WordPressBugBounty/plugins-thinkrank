@@ -81,6 +81,7 @@ return [
         'thinkrank_internal_links',
         'thinkrank_redirections',
         'thinkrank_broken_links',
+        'thinkrank_external_links',
         'thinkrank_woocommerce',
         'thinkrank_settings',
         'thinkrank_manage_roles',

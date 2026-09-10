@@ -50,7 +50,11 @@ class SEO_Scoring_Engine {
     ];
 
     /**
-     * Industry benchmark CTR values by position
+     * Industry benchmark CTR values by position, as percentages (0-100).
+     *
+     * Anything compared against these has to be in the same units: Search
+     * Console reports `ctr` as a fraction, so a caller sourcing it there
+     * multiplies by 100 before handing it to score_page_performance().
      *
      * @var array
      */
@@ -98,25 +102,66 @@ class SEO_Scoring_Engine {
     /**
      * Score individual page performance
      *
-     * @param array $page_data Page performance data
-     * @param array $benchmarks Industry benchmarks
-     * @return array Page performance score
+     * Each of the four dimensions is worth 25 and returns null when the data it
+     * scores is absent, so `overall_score` is the mean of what was actually
+     * measured, `measured` says how many that was, and `unmeasured` names the
+     * rest. Below two measured dimensions there is no `grade` at all: one
+     * dimension scaled to 100 would read as a perfect page.
+     *
+     * @param array $page_data  Page performance data. Recognised keys:
+     *                          `pageviews`, `sessions`, `position`,
+     *                          `impressions`, `ctr`, `index_verdict`, `path`.
+     *                          `ctr` is a PERCENTAGE (0-100), matching
+     *                          CTR_BENCHMARKS — Search Console returns a
+     *                          fraction, so multiply by 100 before passing it.
+     * @param array $benchmarks Industry benchmarks.
+     * @return array Page performance score: overall_score, grade, measured,
+     *               component_scores, unmeasured, page_path, recommendations.
      */
     public function score_page_performance(array $page_data, array $benchmarks): array {
-        $scores = [
-            'traffic_contribution' => $this->score_traffic_contribution($page_data),
-            'search_visibility' => $this->score_search_visibility($page_data),
-            'engagement_quality' => $this->score_engagement_quality($page_data),
-            'technical_health' => $this->score_technical_health($page_data)
-        ];
+        // A component returns null when the data it scores is absent. Averaging
+        // a placeholder in its place is what makes a dashboard lie: two of these
+        // four used to return a flat constant whatever they were handed, so a
+        // page with no analytics and no Search Console connection still scored
+        // 35 of a possible 100 for dimensions nobody had measured. Absent is
+        // reported as absent, and the overall score is the mean of what was
+        // actually measured.
+        $scores = array_filter(
+            [
+                'traffic_contribution' => $this->score_traffic_contribution($page_data),
+                'search_visibility' => $this->score_search_visibility($page_data),
+                'engagement_quality' => $this->score_engagement_quality($page_data),
+                'technical_health' => $this->score_technical_health($page_data)
+            ],
+            static function ($score) {
+                return null !== $score;
+            }
+        );
 
-        $overall_score = array_sum($scores) / count($scores);
-        $grade = $this->determine_grade($overall_score);
+        $measured = count($scores);
+
+        // Each component is worth 25 of the 100, so the mean of the measured
+        // ones scales back to the same 0-100 range no matter how many there are.
+        $overall_score = $measured > 0 ? (array_sum($scores) / $measured) * 4 : 0.0;
+
+        // A single measured dimension scaled to 100 reads as a perfect page,
+        // which is the same lie the flat constants told in a different shape.
+        // Below half the dimensions there is no headline number, only the
+        // per-dimension detail — and the caller is told how many were measured
+        // so it can say so.
+        $grade = $measured >= 2 ? $this->determine_grade($overall_score) : '';
 
         return [
             'overall_score' => round($overall_score, 1),
             'grade' => $grade,
+            'measured' => $measured,
             'component_scores' => $scores,
+            // What could not be measured, so a caller can say so rather than
+            // showing a dimension as passing.
+            'unmeasured' => array_values(array_diff(
+                ['traffic_contribution', 'search_visibility', 'engagement_quality', 'technical_health'],
+                array_keys($scores)
+            )),
             'page_path' => $page_data['path'] ?? '',
             'recommendations' => $this->generate_page_recommendations($scores, $page_data)
         ];
@@ -663,11 +708,19 @@ class SEO_Scoring_Engine {
     /**
      * Score traffic contribution for a page
      *
-     * @param array $page_data Page data
-     * @return float Traffic contribution score
+     * @param array $page_data Page data. Reads `pageviews`.
+     * @return float|null Traffic contribution score out of 25, or null when
+     *                    there is no analytics data to score.
      */
-    private function score_traffic_contribution(array $page_data): float {
-        $pageviews = $page_data['pageviews'] ?? 0;
+    private function score_traffic_contribution(array $page_data): ?float {
+        // Not the same question as "zero pageviews": a page with no analytics
+        // connected has no traffic data, and scoring it 10 would present the
+        // absence as a measurement.
+        if (!isset($page_data['pageviews'])) {
+            return null;
+        }
+
+        $pageviews = (int) $page_data['pageviews'];
 
         if ($pageviews >= 1000) {
             return 25.0; // High traffic page
@@ -683,26 +736,76 @@ class SEO_Scoring_Engine {
     /**
      * Score search visibility for a page
      *
-     * @param array $page_data Page data
-     * @return float Search visibility score
+     * @param array $page_data Page data. Reads `position`, `impressions` and
+     *                         `ctr` — `ctr` as a PERCENTAGE (0-100), because it
+     *                         is compared against CTR_BENCHMARKS, which are
+     *                         percentages. Search Console's API returns a
+     *                         fraction, so a caller reading it must multiply by
+     *                         100 first: passing 0.30 for a healthy 30% CTR
+     *                         would penalise the page silently.
+     * @return float|null Search visibility score out of 25, or null when the
+     *                    page has no Search Console position to score.
      */
-    private function score_search_visibility(array $page_data): float {
-        // This would be enhanced with actual search console data for the specific page
-        // For now, return a default score
-        return 15.0;
+    private function score_search_visibility(array $page_data): ?float {
+        // Search Console's average position for this page. Absent when the
+        // property is not connected, or when the page has never appeared in
+        // results — in which case there is nothing to score.
+        $position = isset($page_data['position']) ? (float) $page_data['position'] : 0.0;
+        if ($position <= 0) {
+            return null;
+        }
+
+        // Position bands rather than a linear scale: the difference between 1
+        // and 3 matters far more than the difference between 40 and 42.
+        if ($position <= 3) {
+            $score = 25.0;
+        } elseif ($position <= 10) {
+            $score = 20.0;
+        } elseif ($position <= 20) {
+            $score = 15.0;
+        } elseif ($position <= 50) {
+            $score = 10.0;
+        } else {
+            $score = 5.0;
+        }
+
+        // A page ranking well that nobody clicks is a title/description problem,
+        // and the score should show it. Only applied where there are enough
+        // impressions for the rate to mean anything.
+        $impressions = isset($page_data['impressions']) ? (int) $page_data['impressions'] : 0;
+        $ctr = isset($page_data['ctr']) ? (float) $page_data['ctr'] : null;
+
+        if ($impressions >= 100 && null !== $ctr) {
+            $expected = $this->get_expected_ctr($position);
+            if ($expected > 0 && $ctr < ($expected / 2)) {
+                $score = max(5.0, $score - 5.0);
+            }
+        }
+
+        return $score;
     }
 
     /**
      * Score engagement quality for a page
      *
-     * @param array $page_data Page data
-     * @return float Engagement quality score
+     * @param array $page_data Page data. Reads `sessions` and `pageviews`.
+     * @return float|null Engagement quality score out of 25, or null when
+     *                    there is no session data to score.
      */
-    private function score_engagement_quality(array $page_data): float {
-        $sessions = $page_data['sessions'] ?? 0;
-        $pageviews = $page_data['pageviews'] ?? 0;
+    private function score_engagement_quality(array $page_data): ?float {
+        if (!isset($page_data['sessions']) || !isset($page_data['pageviews'])) {
+            return null;
+        }
 
-        $pages_per_session = $sessions > 0 ? $pageviews / $sessions : 1;
+        $sessions = (int) $page_data['sessions'];
+        $pageviews = (int) $page_data['pageviews'];
+
+        if ($sessions <= 0) {
+            // No sessions is no engagement signal, not poor engagement.
+            return null;
+        }
+
+        $pages_per_session = $pageviews / $sessions;
 
         if ($pages_per_session >= 3.0) {
             return 25.0; // Excellent engagement
@@ -718,13 +821,31 @@ class SEO_Scoring_Engine {
     /**
      * Score technical health for a page
      *
-     * @param array $page_data Page data
-     * @return float Technical health score
+     * @param array $page_data Page data. Reads `index_verdict`.
+     * @return float|null Technical health score out of 25, or null when Search
+     *                    Console has no index verdict for the URL.
      */
-    private function score_technical_health(array $page_data): float {
-        // This would be enhanced with actual Core Web Vitals data for the specific page
-        // For now, return a default score
-        return 20.0;
+    private function score_technical_health(array $page_data): ?float {
+        // Search Console's index verdict for the URL, which is the technical
+        // signal ThinkRank can actually source per page. Core Web Vitals would
+        // be the other half and has no per-URL source here, so it is absent
+        // rather than assumed.
+        $verdict = isset($page_data['index_verdict'])
+            ? strtoupper((string) $page_data['index_verdict'])
+            : '';
+
+        switch ($verdict) {
+            case 'PASS':
+                return 25.0;
+            case 'PARTIAL':
+                return 15.0;
+            case 'FAIL':
+                return 0.0;
+            case 'EXCLUDED':
+                return 5.0;
+            default:
+                return null;
+        }
     }
 
     /**
@@ -737,16 +858,23 @@ class SEO_Scoring_Engine {
     private function generate_page_recommendations(array $scores, array $page_data): array {
         $recommendations = [];
 
-        if ($scores['traffic_contribution'] < 15) {
+        // isset(), not a bare index: an unmeasured component is absent from the
+        // map now, and advising someone to fix a dimension nobody measured is
+        // exactly the fabrication the null returns exist to prevent.
+        if (isset($scores['traffic_contribution']) && $scores['traffic_contribution'] < 15) {
             $recommendations[] = 'Improve content quality and SEO optimization to increase traffic';
         }
 
-        if ($scores['engagement_quality'] < 15) {
+        if (isset($scores['search_visibility']) && $scores['search_visibility'] < 15) {
+            $recommendations[] = 'This page ranks outside the first two pages — revisit its target query, title and depth';
+        }
+
+        if (isset($scores['engagement_quality']) && $scores['engagement_quality'] < 15) {
             $recommendations[] = 'Enhance content engagement with better formatting and internal links';
         }
 
-        if ($scores['technical_health'] < 15) {
-            $recommendations[] = 'Optimize page speed and Core Web Vitals performance';
+        if (isset($scores['technical_health']) && $scores['technical_health'] < 15) {
+            $recommendations[] = 'Search Console cannot fully index this URL — check its index status';
         }
 
         return $recommendations;

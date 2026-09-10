@@ -30,7 +30,7 @@ class Run_Seo_Analyzer extends Get_Seo_Analyzer {
 	public function __construct() {
 		$this->id          = 'thinkrank/run-seo-analyzer';
 		$this->label       = __( 'Run Site SEO Analyzer Audit', 'thinkrank' );
-		$this->description = __( 'Run a fresh whole-site SEO audit (Site SEO Analyzer), bypassing and refreshing the hourly cache. Returns the same payload as get-seo-analyzer: overall 0-100 score, grade, summary counts, and per-check results across Basic, Advanced, Content, Performance, and Security.', 'thinkrank' );
+		$this->description = __( 'Run a fresh whole-site SEO audit (Site SEO Analyzer), bypassing and refreshing the hourly cache. Returns the same payload as get-seo-analyzer: overall 0-100 score, grade, summary counts, and per-check results across Basic, Advanced, Content, Performance, Security and GEO/AEO. A failing per-item check (meta descriptions, image alt text, and the content-sampled GEO checks) lists what fails it in affected_posts (id, title, type, edit_url, url), with affected_total counting every failing item when the list is capped.', 'thinkrank' );
 	}
 
 	/**

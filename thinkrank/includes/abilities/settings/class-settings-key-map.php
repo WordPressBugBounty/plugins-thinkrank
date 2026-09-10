@@ -137,6 +137,7 @@ final class Settings_Key_Map {
 			// Indexing.
 			'allow_search_engines'     => self::boolean( __( 'Whether search engines are allowed to index the site.', 'thinkrank' ) ),
 			'robots_txt_enabled'       => self::boolean( __( 'Whether ThinkRank manages robots.txt. Its contents are set with thinkrank/update-robots-txt.', 'thinkrank' ) ),
+			'ai_crawler_rules'         => self::ai_crawler_rules(),
 		];
 	}
 
@@ -304,6 +305,37 @@ final class Settings_Key_Map {
 		return [
 			'type'                 => 'object',
 			'description'          => __( 'Opening hours per day of the week.', 'thinkrank' ),
+			'additionalProperties' => false,
+			'properties'           => $properties,
+		];
+	}
+
+	/**
+	 * The per-agent AI crawler allow/block map.
+	 *
+	 * Enumerating the known slugs rather than accepting a free-form object is
+	 * what makes this usable by an agent: the alternative is a caller guessing
+	 * `chatgpt` for a crawler registered as `chatgpt-user`, having the key
+	 * dropped as unknown, and being told the save succeeded — because it did,
+	 * with nothing in it.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function ai_crawler_rules(): array {
+		$properties = [];
+
+		foreach ( \ThinkRank\SEO\AI_Crawlers::for_display() as $agent ) {
+			$properties[ $agent['slug'] ] = [
+				'type'        => 'string',
+				'enum'        => [ 'allow', 'block' ],
+				/* translators: 1: crawler user-agent token, e.g. GPTBot. 2: what that crawler is for. */
+				'description' => sprintf( __( '%1$s — %2$s', 'thinkrank' ), $agent['token'], $agent['purpose'] ),
+			];
+		}
+
+		return [
+			'type'                 => 'object',
+			'description'          => __( 'Per-agent AI crawler rules. "block" writes a User-agent/Disallow pair for that crawler into robots.txt; "allow" (the default for any crawler not listed) writes nothing. Blocking Google-Extended does not affect normal Google Search indexing.', 'thinkrank' ),
 			'additionalProperties' => false,
 			'properties'           => $properties,
 		];

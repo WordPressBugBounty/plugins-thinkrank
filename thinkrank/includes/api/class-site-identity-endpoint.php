@@ -384,9 +384,15 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             // this the file goes stale and /robots.txt shows the old content
             // while the textarea shows the new — regardless of what the frontend
             // believed about the file's existence.
+            //
+            // ai_crawler_rules counts as a robots.txt change even though it is
+            // not the body: the directives it produces are composed into the
+            // served output at render time, so a physical file left alone here
+            // would keep serving the previous allow/block set (#657).
             if ($context_type === 'site'
                 && (array_key_exists('robots_txt_content', $settings)
-                    || array_key_exists('robots_txt_enabled', $settings))
+                    || array_key_exists('robots_txt_enabled', $settings)
+                    || array_key_exists('ai_crawler_rules', $settings))
             ) {
                 $this->identity_manager->sync_robots_txt_file();
             }
@@ -566,6 +572,22 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             // physical file in the web root that has drifted from the settings.
             $robots_data['effective'] = $this->identity_manager->get_robots_txt_delivery();
 
+            // The per-agent AI crawler surface (#657). The registry ships with
+            // the response rather than being duplicated in the bundle, so a
+            // crawler added by the `thinkrank_ai_crawlers` filter appears in
+            // the UI without a rebuild. Rules are returned normalised, so a
+            // crawler with nothing stored comes back explicitly allowed rather
+            // than as an absence the client has to interpret.
+            $settings = $this->identity_manager->get_settings('site');
+            $rules    = \ThinkRank\SEO\AI_Crawlers::normalize_rules($settings['ai_crawler_rules'] ?? []);
+
+            $robots_data['ai_crawlers'] = \ThinkRank\SEO\AI_Crawlers::for_display();
+            $robots_data['ai_crawler_rules'] = [];
+
+            foreach ($robots_data['ai_crawlers'] as $agent) {
+                $robots_data['ai_crawler_rules'][$agent['slug']] = $rules[$agent['slug']] ?? 'allow';
+            }
+
             return new WP_REST_Response([
                 'success' => true,
                 'data' => $robots_data,
@@ -622,6 +644,15 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             }
 
             $settings = ['robots_txt_enabled' => $enable_management];
+
+            // Per-agent AI crawler rules (#657). Only written when the caller
+            // sends them: this route is also the plain "re-sync the file" save,
+            // and defaulting a missing parameter to an empty map there would
+            // unblock every crawler the site had blocked.
+            $ai_rules = $request->get_param('ai_crawler_rules');
+            if (null !== $ai_rules) {
+                $settings['ai_crawler_rules'] = \ThinkRank\SEO\AI_Crawlers::normalize_rules($ai_rules);
+            }
 
             if ($regenerate) {
                 // Generate and validate robots.txt from the rules.
@@ -1106,6 +1137,15 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             // file was written when the caller had asked it not to be. ("0" is
             // falsy, which is why the failure was asymmetric.) Registering it
             // gets core's boolean coercion (#394).
+            'ai_crawler_rules' => [
+                'required' => false,
+                'type' => 'object',
+                'description' => 'Per-agent AI crawler rules, keyed by crawler slug, each "allow" or "block".',
+                'additionalProperties' => [
+                    'type' => 'string',
+                    'enum' => ['allow', 'block'],
+                ],
+            ],
             'write_to_file' => [
                 'required' => false,
                 'type' => 'boolean',

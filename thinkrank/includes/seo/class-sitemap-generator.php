@@ -1027,7 +1027,14 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         ], 'names');
 
         foreach ($custom_taxonomies as $taxonomy) {
-            if ($this->should_include_taxonomy($taxonomy)) {
+            if (!$this->should_include_taxonomy($taxonomy)) {
+                continue;
+            }
+
+            // Same as the post-type walk above: an explicit per-taxonomy flag
+            // now decides, and an unset flag keeps the previous "included"
+            // behaviour (#660).
+            if (\ThinkRank\SEO\Content_Type_Settings::is_included_in_sitemap('taxonomy', $taxonomy, $settings)) {
                 $taxonomies[] = $taxonomy;
             }
         }
@@ -1513,14 +1520,24 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             $post_types[] = 'page';
         }
 
-        // Auto-detect public custom post types that should be included
+        // Auto-detect public custom post types that should be included.
+        //
+        // A custom type's `include_<slug>` / `exclude_<slug>` flag is honoured
+        // here (#660). It was previously stored — additional_setting_keys()
+        // has always let those keys through — but never read, so a CPT was in
+        // the sitemap whatever the setting said. Unset still means included, so
+        // a site that never touched the flag is unaffected.
         $custom_post_types = get_post_types([
             'public' => true,
             '_builtin' => false
         ], 'names');
 
         foreach ($custom_post_types as $post_type) {
-            if ($this->should_include_post_type($post_type)) {
+            if (!$this->should_include_post_type($post_type)) {
+                continue;
+            }
+
+            if (\ThinkRank\SEO\Content_Type_Settings::is_included_in_sitemap('post_type', $post_type, $settings)) {
                 $post_types[] = $post_type;
             }
         }
@@ -1543,16 +1560,9 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // records, not standalone indexable URLs. BetterDocs `docs` and
         // WooCommerce `product` register exclude_from_search => false, so they
         // remain included.
-        if (!is_post_type_viewable($post_type)) {
-            return false;
-        }
-
-        $post_type_obj = get_post_type_object($post_type);
-        if (!$post_type_obj || !empty($post_type_obj->exclude_from_search)) {
-            return false;
-        }
-
-        return true;
+        // The predicate lives in Content_Type_Settings so the matrix can ask
+        // the same question before offering a switch for this post type.
+        return \ThinkRank\SEO\Content_Type_Settings::sitemap_accepts_post_type($post_type);
     }
 
     /**
@@ -1563,9 +1573,11 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return bool True if taxonomy should trigger regeneration
      */
     private function should_include_taxonomy(string $taxonomy): bool {
-        // Include all public taxonomies (presets control which sitemaps are created)
-        $taxonomy_obj = get_taxonomy($taxonomy);
-        return $taxonomy_obj && $taxonomy_obj->public;
+        // Public taxonomies only, and only the ones this generator can actually
+        // emit — the same predicate the content-type matrix asks before it
+        // offers a sitemap switch for one (presets still control which
+        // sitemaps are created).
+        return \ThinkRank\SEO\Content_Type_Settings::sitemap_accepts_taxonomy($taxonomy);
     }
 
     /**
@@ -2402,9 +2414,21 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // Public custom post types each get a child sitemap (parity with the
         // "complete" preset and with Rank Math, which lists every public CPT).
         foreach (get_post_types(['public' => true, '_builtin' => false], 'names') as $cpt) {
-            if ($this->should_include_post_type($cpt)) {
-                $urls[] = $this->build_child_sitemap_entry($cpt, $pattern);
+            if (!$this->should_include_post_type($cpt)) {
+                continue;
             }
+
+            // ...and the per-content-type sitemap switch (#660).
+            // get_enabled_post_types() already honours it, but this list is what
+            // index mode builds its children from — so without the same test a
+            // CPT the user had switched off still got its own child sitemap,
+            // created and streamed in full. The flags live in $inclusions, which
+            // is the settings array these children are derived from.
+            if (!\ThinkRank\SEO\Content_Type_Settings::is_included_in_sitemap('post_type', $cpt, $inclusions)) {
+                continue;
+            }
+
+            $urls[] = $this->build_child_sitemap_entry($cpt, $pattern);
         }
 
         return $urls;
@@ -2552,6 +2576,32 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             // 'pages', 'general', etc.) are not post type names, so this only
             // affects real custom post types.
             if (post_type_exists($type) && !$this->should_include_post_type($type)) {
+                continue;
+            }
+
+            // Same for the matrix switch: a child list saved before the user
+            // excluded this content type still names it, and regenerating from
+            // that list would rewrite the file they asked not to have. Built-in
+            // aggregates ('posts', 'pages', ...) are not post type names, so
+            // post_type_exists() keeps this to real custom post types.
+            if (post_type_exists($type)
+                && !\ThinkRank\SEO\Content_Type_Settings::is_included_in_sitemap('post_type', $type, $settings)) {
+                continue;
+            }
+
+            // The built-in aggregates carry their switch in the inclusion flag
+            // rather than under a post type name, and they are the four most
+            // people actually use. build_segmented_sitemap_urls() drops a child
+            // whose flag is empty; regenerating from a list saved while it was
+            // still on has to make the same decision, or turning Posts, Pages,
+            // Categories or Tags off in the matrix rewrites and re-lists the
+            // very file it was asked to remove.
+            // An absent flag means "not configured", which every other reader
+            // treats as included; only a flag that is present and off excludes.
+            $aggregate_flag = array_search($type, self::INCLUSION_CHILD_TYPES, true);
+            if ($aggregate_flag !== false
+                && array_key_exists($aggregate_flag, $settings)
+                && empty($settings[$aggregate_flag])) {
                 continue;
             }
 

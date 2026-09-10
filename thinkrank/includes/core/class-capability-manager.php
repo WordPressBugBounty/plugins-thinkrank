@@ -72,6 +72,7 @@ class Capability_Manager {
         'thinkrank_content_tools',
         'thinkrank_ai_insights',
         'thinkrank_internal_links',
+        'thinkrank_external_links',
         'thinkrank_redirections',
         'thinkrank_broken_links',
         'thinkrank_woocommerce',
@@ -117,6 +118,7 @@ class Capability_Manager {
             'thinkrank_content_tools'     => __('AI Tools', 'thinkrank'),
             'thinkrank_ai_insights'       => __('AI Insights', 'thinkrank'),
             'thinkrank_internal_links'    => __('Internal Links', 'thinkrank'),
+            'thinkrank_external_links'    => __('External Links', 'thinkrank'),
             'thinkrank_redirections'      => __('Redirections', 'thinkrank'),
             'thinkrank_broken_links'      => __('Broken Links', 'thinkrank'),
             'thinkrank_woocommerce'       => __('WooCommerce', 'thinkrank'),
@@ -156,6 +158,7 @@ class Capability_Manager {
             'author-archives'      => 'thinkrank_author_archives',
             'ai-insights'          => 'thinkrank_ai_insights',
             'internal-links'       => 'thinkrank_internal_links',
+            'external-links'       => 'thinkrank_external_links',
             'redirections'         => 'thinkrank_redirections',
             'broken-links'         => 'thinkrank_broken_links',
             'woocommerce'          => 'thinkrank_woocommerce',
@@ -202,6 +205,9 @@ class Capability_Manager {
             // Custom Schema (Pro) lives in the Schema Manager section but
             // registers its own /custom-schema/ prefix.
             'custom-schema'     => 'thinkrank_schema',
+            // Custom Field Mapping (Pro) also lives in the Schema Manager
+            // section and registers its own /field-mapping/ prefix.
+            'field-mapping'     => 'thinkrank_schema',
             'social-media'      => 'thinkrank_social_media',
             'social-platforms'  => 'thinkrank_settings',
             'sitemap'           => 'thinkrank_crawling',
@@ -212,6 +218,7 @@ class Capability_Manager {
             'instant-indexing'  => 'thinkrank_instant_indexing',
             'author-archives'   => 'thinkrank_author_archives',
             'internal-links'    => 'thinkrank_internal_links',
+            'external-links'    => 'thinkrank_external_links',
             'redirections'      => 'thinkrank_redirections',
             'broken-links'      => 'thinkrank_broken_links',
             'woocommerce'       => 'thinkrank_woocommerce',

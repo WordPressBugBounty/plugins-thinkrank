@@ -98,34 +98,6 @@ class Ai_Traffic_Tracker {
     ];
 
     /**
-     * User-agent fragments → AI crawler slug. Case-insensitive substring
-     * match. Order matters where one token contains another — more specific
-     * entries first.
-     *
-     * @var array<string, string>
-     */
-    private const CRAWLER_AGENTS = [
-        'OAI-SearchBot'        => 'oai-searchbot',
-        'ChatGPT-User'         => 'chatgpt-user',
-        'GPTBot'               => 'gptbot',
-        'Perplexity-User'      => 'perplexity-user',
-        'PerplexityBot'        => 'perplexitybot',
-        'Claude-SearchBot'     => 'claude-searchbot',
-        'Claude-User'          => 'claude-user',
-        'ClaudeBot'            => 'claudebot',
-        'anthropic-ai'         => 'anthropic-ai',
-        'Google-Extended'      => 'google-extended',
-        'Applebot-Extended'    => 'applebot-extended',
-        'meta-externalagent'   => 'meta-externalagent',
-        'meta-externalfetcher' => 'meta-externalfetcher',
-        'Bytespider'           => 'bytespider',
-        'Amazonbot'            => 'amazonbot',
-        'CCBot'                => 'ccbot',
-        'cohere-ai'            => 'cohere-ai',
-        'MistralAI-User'       => 'mistral-user',
-    ];
-
-    /**
      * Wire the front-end recorder and the retention cron.
      *
      * @return void
@@ -170,6 +142,10 @@ class Ai_Traffic_Tracker {
     /**
      * Classify a user agent as an AI crawler.
      *
+     * The agent list is `AI_Crawlers`, shared with the robots.txt panel — the
+     * two must agree about which bots exist, or a site blocks a crawler it is
+     * not counting (#657).
+     *
      * @param string $user_agent Raw user agent (may be empty).
      * @return string|null Crawler slug, or null when not a known AI crawler.
      */
@@ -178,7 +154,10 @@ class Ai_Traffic_Tracker {
             return null;
         }
 
-        foreach (self::CRAWLER_AGENTS as $fragment => $slug) {
+        // Token order is significant and owned by the registry: the first
+        // token found wins, so `Claude-SearchBot` has to be tested before
+        // `ClaudeBot`. See AI_Crawlers::AGENTS.
+        foreach (AI_Crawlers::token_map() as $fragment => $slug) {
             if (false !== stripos($user_agent, $fragment)) {
                 return $slug;
             }

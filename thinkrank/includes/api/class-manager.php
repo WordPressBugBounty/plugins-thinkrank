@@ -28,6 +28,7 @@ use ThinkRank\API\Social_Platforms_Endpoint;
 use ThinkRank\API\LLMs_Txt_Endpoint;
 use ThinkRank\API\Global_SEO_Endpoint;
 use ThinkRank\API\Image_SEO_Endpoint;
+use ThinkRank\API\External_Links_Endpoint;
 use ThinkRank\API\Instant_Indexing_Endpoint;
 use ThinkRank\API\Pillar_Content_Endpoint;
 use ThinkRank\API\Global_Robot_Meta_Endpoint;
@@ -481,6 +482,11 @@ class Manager {
                     'required' => false,
                     'default' => 'openai',
                     'sanitize_callback' => 'sanitize_key',
+                ],
+                'model' => [
+                    'type' => 'string',
+                    'required' => false,
+                    'sanitize_callback' => 'sanitize_text_field',
                 ],
             ],
         ]);
@@ -1413,6 +1419,11 @@ class Manager {
         try {
             $api_key = $request->get_param('api_key');
             $provider = $request->get_param('provider') ?: 'openai';
+            // The model the caller is asking about. Empty means "whatever is
+            // saved" — the settings screen sends the model currently on screen
+            // so an unsaved pick or a hand-typed id is what actually gets
+            // tested, rather than the last saved one.
+            $model = trim((string) $request->get_param('model'));
 
             // An unrecognised provider used to fall through to the Gemini arm
             // below, so a typo silently tested the wrong provider's key.
@@ -1447,13 +1458,13 @@ class Manager {
 
             // Test the connection with a simple API call
             if ($provider === 'openai') {
-                $result = $this->test_openai_connection($api_key);
+                $result = $this->test_openai_connection($api_key, $model);
             } elseif ($provider === 'claude') {
-                $result = $this->test_claude_connection($api_key);
+                $result = $this->test_claude_connection($api_key, $model);
             } elseif ($provider === 'openrouter') {
-                $result = $this->test_openrouter_connection($api_key);
+                $result = $this->test_openrouter_connection($api_key, $model);
             } else {
-                $result = $this->test_gemini_connection($api_key);
+                $result = $this->test_gemini_connection($api_key, $model);
             }
 
             return new \WP_REST_Response($result, $result['success'] ? 200 : 400);
@@ -1468,10 +1479,19 @@ class Manager {
     /**
      * Test OpenAI API connection
      *
+     * The models endpoint doubles as the model check: it answers with every id
+     * this key may call, so an unknown or unentitled model is caught here
+     * instead of at the first real generation.
+     *
      * @param string $api_key API key to test
+     * @param string $model   Model id to verify, or '' to use the saved one
      * @return array Test result
      */
-    private function test_openai_connection(string $api_key): array {
+    private function test_openai_connection(string $api_key, string $model = ''): array {
+        $model = $model !== ''
+            ? $model
+            : (string) \ThinkRank\Core\Settings::instance()->get('openai_model', \ThinkRank\Core\Settings::DEFAULT_OPENAI_MODEL);
+
         $url = 'https://api.openai.com/v1/models';
 
         $response = wp_remote_get($url, [
@@ -1495,9 +1515,26 @@ class Manager {
         if ($status_code === 200) {
             $data = json_decode($body, true);
             if (isset($data['data']) && is_array($data['data'])) {
+                $ids = array_column($data['data'], 'id');
+
+                if ($model !== '' && !in_array($model, $ids, true)) {
+                    return [
+                        'success' => false,
+                        'model' => $model,
+                        'model_available' => false,
+                        /* translators: %s: the model id that was tested. */
+                        'message' => sprintf(__('API key works, but the model "%s" is not available to this account.', 'thinkrank'), $model),
+                    ];
+                }
+
                 return [
                     'success' => true,
-                    'message' => __('OpenAI API connection successful!', 'thinkrank'),
+                    'model' => $model,
+                    'model_available' => $model !== '',
+                    'message' => $model !== ''
+                        /* translators: %s: the model id that was tested. */
+                        ? sprintf(__('OpenAI API connection successful — model "%s" is available.', 'thinkrank'), $model)
+                        : __('OpenAI API connection successful!', 'thinkrank'),
                     'models_count' => count($data['data']),
                 ];
             }
@@ -1517,9 +1554,14 @@ class Manager {
      * Test OpenRouter API connection
      *
      * @param string $api_key API key to test
+     * @param string $model   Model id to verify, or '' to use the saved one
      * @return array Test result
      */
-    private function test_openrouter_connection(string $api_key): array {
+    private function test_openrouter_connection(string $api_key, string $model = ''): array {
+        $model = $model !== ''
+            ? $model
+            : (string) \ThinkRank\Core\Settings::instance()->get('openrouter_model', \ThinkRank\Core\Settings::DEFAULT_OPENROUTER_MODEL);
+
         // Validate the key format first (OpenRouter keys start with "sk-or-").
         if (!str_starts_with($api_key, 'sk-or-')) {
             return [
@@ -1554,9 +1596,23 @@ class Manager {
         if ($status_code === 200) {
             $data = json_decode($body, true);
             if (isset($data['data']) && is_array($data['data'])) {
+                // The key is good; the catalogue is a separate document, so
+                // the model needs its own lookup.
+                if ($model !== '') {
+                    $model_check = $this->check_openrouter_model($api_key, $model);
+                    if ($model_check !== null) {
+                        return $model_check;
+                    }
+                }
+
                 return [
                     'success' => true,
-                    'message' => __('OpenRouter API connection successful!', 'thinkrank'),
+                    'model' => $model,
+                    'model_available' => $model !== '',
+                    'message' => $model !== ''
+                        /* translators: %s: the model id that was tested. */
+                        ? sprintf(__('OpenRouter API connection successful — model "%s" is available.', 'thinkrank'), $model)
+                        : __('OpenRouter API connection successful!', 'thinkrank'),
                 ];
             }
         }
@@ -1572,12 +1628,56 @@ class Manager {
     }
 
     /**
+     * Verify a model id against OpenRouter's public catalogue.
+     *
+     * @param string $api_key API key to authenticate the lookup
+     * @param string $model   Model id to look for
+     * @return array|null Failure payload when the model is unknown, null when it
+     *                    is available or when the catalogue could not be read —
+     *                    a listing hiccup must not fail an otherwise good key.
+     */
+    private function check_openrouter_model(string $api_key, string $model): ?array {
+        $response = wp_remote_get('https://openrouter.ai/api/v1/models', [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json',
+                'HTTP-Referer' => home_url('/'),
+                'X-Title' => 'ThinkRank',
+            ],
+            'timeout' => 10,
+        ]);
+
+        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+            return null;
+        }
+
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        if (!isset($data['data']) || !is_array($data['data'])) {
+            return null;
+        }
+
+        $ids = array_column($data['data'], 'id');
+        if (in_array($model, $ids, true)) {
+            return null;
+        }
+
+        return [
+            'success' => false,
+            'model' => $model,
+            'model_available' => false,
+            /* translators: %s: the model id that was tested. */
+            'message' => sprintf(__('API key works, but "%s" is not a model OpenRouter offers.', 'thinkrank'), $model),
+        ];
+    }
+
+    /**
      * Test Claude API connection
      *
      * @param string $api_key API key to test
+     * @param string $model   Model id to verify, or '' to use the saved one
      * @return array Test result
      */
-    private function test_claude_connection(string $api_key): array {
+    private function test_claude_connection(string $api_key, string $model = ''): array {
         // First validate the key format
         if (!str_starts_with($api_key, 'sk-ant-')) {
             return [
@@ -1589,10 +1689,16 @@ class Manager {
         // Test with a simple API call
         $url = 'https://api.anthropic.com/v1/messages';
 
-        // Get the configured Claude model, with fallback to a current model.
-        // Self-heal retired/unavailable IDs saved by earlier versions.
-        $claude_model = \ThinkRank\Core\Settings::instance()->get('claude_model', \ThinkRank\Core\Settings::DEFAULT_CLAUDE_MODEL);
-        $claude_model = \ThinkRank\AI\Claude_Client::normalize_model($claude_model);
+        // A model sent with the request is tested verbatim: normalizing it would
+        // quietly swap a typo for a working id and report success for a model
+        // the user never asked for. Only the saved fallback is self-healed, as
+        // that is the path where a retired id from an older release shows up.
+        if ($model !== '') {
+            $claude_model = $model;
+        } else {
+            $claude_model = \ThinkRank\Core\Settings::instance()->get('claude_model', \ThinkRank\Core\Settings::DEFAULT_CLAUDE_MODEL);
+            $claude_model = \ThinkRank\AI\Claude_Client::normalize_model($claude_model);
+        }
 
         $body = [
             'model' => $claude_model,
@@ -1628,14 +1734,30 @@ class Manager {
         if ($status_code === 200) {
             return [
                 'success' => true,
-                'message' => __('Claude API connection successful!', 'thinkrank'),
+                'model' => $claude_model,
+                'model_available' => true,
+                /* translators: %s: the model id that was tested. */
+                'message' => sprintf(__('Claude API connection successful — model "%s" is available.', 'thinkrank'), $claude_model),
             ];
         } else {
             $error_data = json_decode($response_body, true);
             $error_message = $error_data['error']['message'] ?? __('Unknown API error', 'thinkrank');
 
+            // 404 on /v1/messages means the key authenticated but the model id
+            // does not exist — say so, instead of blaming the key.
+            if ($status_code === 404) {
+                return [
+                    'success' => false,
+                    'model' => $claude_model,
+                    'model_available' => false,
+                    /* translators: %s: the model id that was tested. */
+                    'message' => sprintf(__('API key works, but the model "%s" was not found.', 'thinkrank'), $claude_model),
+                ];
+            }
+
             return [
                 'success' => false,
+                'model' => $claude_model,
                 /* translators: %1$d: HTTP status code, %2$s: error message from Claude API */
                 'message' => sprintf(__('Claude API error (%1$d): %2$s', 'thinkrank'), $status_code, $error_message),
             ];
@@ -1646,12 +1768,23 @@ class Manager {
      * Test Gemini API connection
      *
      * @param string $api_key API key to test
+     * @param string $model   Model id to verify, or '' to use the saved one
      * @return array Test result
      */
-    private function test_gemini_connection(string $api_key): array {
+    private function test_gemini_connection(string $api_key, string $model = ''): array {
         // Test with a simple API call
-        $gemini_model = \ThinkRank\Core\Settings::instance()->get('gemini_model', \ThinkRank\Core\Settings::DEFAULT_GEMINI_MODEL);
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$gemini_model}:generateContent?key={$api_key}";
+        $gemini_model = $model !== ''
+            ? $model
+            : (string) \ThinkRank\Core\Settings::instance()->get('gemini_model', \ThinkRank\Core\Settings::DEFAULT_GEMINI_MODEL);
+
+        // The model is a path segment, and ids may arrive with the "models/"
+        // prefix Google's own docs use.
+        $gemini_model = ltrim($gemini_model, '/');
+        $gemini_model = preg_replace('#^models/#', '', $gemini_model);
+
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+            . rawurlencode($gemini_model)
+            . ':generateContent?key=' . rawurlencode($api_key);
 
         $body = [
             'contents' => [
@@ -1688,14 +1821,30 @@ class Manager {
         if ($status_code === 200) {
             return [
                 'success' => true,
-                'message' => __('Gemini API connection successful!', 'thinkrank'),
+                'model' => $gemini_model,
+                'model_available' => true,
+                /* translators: %s: the model id that was tested. */
+                'message' => sprintf(__('Gemini API connection successful — model "%s" is available.', 'thinkrank'), $gemini_model),
             ];
         } else {
             $error_data = json_decode($response_body, true);
             $error_message = $error_data['error']['message'] ?? __('Unknown API error', 'thinkrank');
 
+            // Gemini answers 404 for a model id it does not serve; the key
+            // itself authenticated fine, so name the real problem.
+            if ($status_code === 404) {
+                return [
+                    'success' => false,
+                    'model' => $gemini_model,
+                    'model_available' => false,
+                    /* translators: %s: the model id that was tested. */
+                    'message' => sprintf(__('API key works, but the model "%s" was not found.', 'thinkrank'), $gemini_model),
+                ];
+            }
+
             return [
                 'success' => false,
+                'model' => $gemini_model,
                 /* translators: %1$d: HTTP status code, %2$s: error message from Gemini API */
                 'message' => sprintf(__('Gemini API error (%1$d): %2$s', 'thinkrank'), $status_code, $error_message),
             ];
@@ -1904,10 +2053,24 @@ class Manager {
         }
 
         try {
+            $content_type_matrix_endpoint = new \ThinkRank\API\Content_Type_Matrix_Endpoint();
+            $content_type_matrix_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register Content Type Matrix endpoint
+        }
+
+        try {
             $image_seo_endpoint = new Image_SEO_Endpoint();
             $image_seo_endpoint->register_routes();
         } catch (\Exception $e) {
             // Failed to register Image SEO endpoint
+        }
+
+        try {
+            $external_links_endpoint = new External_Links_Endpoint();
+            $external_links_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register External Links endpoint
         }
 
         // Import_Controller is deliberately NOT gated on enable_migration_tools.

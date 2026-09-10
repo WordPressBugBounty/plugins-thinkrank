@@ -230,6 +230,116 @@ final class Plan_Config {
     }
 
     /**
+     * Capability map for the llms.txt feature.
+     *
+     * Generating and editing llms.txt is FREE and stays free. What Pro adds is
+     * the usage policy: the `Training:` / `Summarization:` / `Embedding:` /
+     * `Require-Attribution:` directives that state what agents may do with the
+     * content, rather than describing the content itself (#160 in Pro).
+     *
+     * Schema:
+     *   usage_policy  bool  May publish usage-policy directives in llms.txt.
+     *
+     * @since 2.5.0
+     *
+     * @return array Capability map.
+     */
+    public static function llms_txt(): array {
+        $defaults = [
+            'usage_policy' => false,
+        ];
+
+        /**
+         * Filter the llms.txt capability map.
+         *
+         * ThinkRank Pro sets `usage_policy` to true; nothing in the free
+         * plugin ever does, so the directives simply never render without it.
+         *
+         * @since 2.5.0
+         *
+         * @param array $defaults Capability map (see schema above).
+         */
+        $caps = apply_filters('thinkrank_llms_txt_capabilities', $defaults);
+
+        return array_merge($defaults, is_array($caps) ? $caps : []);
+    }
+
+    /**
+     * Capability map for the Site SEO Analyzer.
+     *
+     * Running the audit and seeing the score is FREE and stays free. What Pro
+     * adds is memory: dated snapshots of each run, a score trend, and a
+     * side-by-side comparison of two runs (#161 in Pro). Free keeps exactly
+     * what it has today — the most recent run, cached for an hour.
+     *
+     * Schema:
+     *   history      bool  May persist and read audit snapshots.
+     *   history_runs int   Snapshots retained per site (0 = unlimited).
+     *
+     * @since 2.5.0
+     *
+     * @return array Capability map.
+     */
+    public static function seo_analyzer(): array {
+        $defaults = [
+            'history'      => false,
+            'history_runs' => 0,
+        ];
+
+        /**
+         * Filter the SEO Analyzer capability map.
+         *
+         * ThinkRank Pro sets `history` to true and declares how many runs it
+         * retains. Nothing in the free plugin ever does, so no snapshot is
+         * ever written without Pro.
+         *
+         * @since 2.5.0
+         *
+         * @param array $defaults Capability map (see schema above).
+         */
+        $caps = apply_filters('thinkrank_seo_analyzer_capabilities', $defaults);
+
+        return array_merge($defaults, is_array($caps) ? $caps : []);
+    }
+
+    /**
+     * Capability map for Focus Pages.
+     *
+     * Focus Pages is Pro: it is bulk (many pages in one run), historical, and
+     * depends on Pro-only rank data (thinkrank-pro#164). Free has no entry
+     * point in v1 — the per-post SEO score panel already answers the single-page
+     * on-page question.
+     *
+     * Schema:
+     *   enabled   bool  May curate and diagnose focus pages.
+     *   max_pages int   Pages that may be curated (0 = none).
+     *
+     * @since 2.5.0
+     *
+     * @return array Capability map.
+     */
+    public static function focus_pages(): array {
+        $defaults = [
+            'enabled'   => false,
+            'max_pages' => 0,
+        ];
+
+        /**
+         * Filter the Focus Pages capability map.
+         *
+         * ThinkRank Pro enables the feature and declares its own page cap,
+         * which bounds the external API cost of a refresh.
+         *
+         * @since 2.5.0
+         *
+         * @param array $defaults Capability map (see schema above).
+         */
+        $caps = apply_filters('thinkrank_focus_pages_capabilities', $defaults);
+
+        return array_merge($defaults, is_array($caps) ? $caps : []);
+    }
+
+    /**
      * Check a single capability for a given feature.
      *
      * Currently only the `email_report` feature is registered. Adding more
@@ -258,6 +368,12 @@ final class Plan_Config {
                 return self::focus_keywords();
             case 'ai_visibility':
                 return self::ai_visibility();
+            case 'llms_txt':
+                return self::llms_txt();
+            case 'seo_analyzer':
+                return self::seo_analyzer();
+            case 'focus_pages':
+                return self::focus_pages();
             default:
                 return [];
         }

@@ -240,16 +240,26 @@ class Global_SEO_Endpoint extends WP_REST_Controller {
         // told apart from a no-op save (payload identical to what's stored).
         $previous = $all_settings[$post_type] ?? null;
 
+        // MERGE, never replace. This entity row is shared: the Content Type
+        // Matrix stores its per-feature tri-states (meta_enabled, schema_enabled,
+        // open_graph_enabled, twitter_card_enabled, analytics_enabled) and its
+        // sitemap_include flag under the SAME key, and normalize_settings_patch()
+        // whitelists only the Global SEO fields — so a wholesale replace here
+        // silently dropped every matrix choice the moment the user saved the
+        // Global SEO screen next door. Global SEO's own keys still win, because
+        // sanitize_settings() emits them complete.
+        $merged = array_merge(is_array($previous) ? $previous : [], $sanitized_settings);
+
         // Update settings for this post type
-        $all_settings[$post_type] = $sanitized_settings;
+        $all_settings[$post_type] = $merged;
 
         // Save to database
         $updated = update_option(self::OPTION_NAME, $all_settings);
 
-        if ($updated || $previous === $sanitized_settings) {
+        if ($updated || $previous === $merged) {
             return new WP_REST_Response([
                 'success' => true,
-                'data' => $sanitized_settings,
+                'data' => $merged,
                 'post_type' => $post_type,
                 'message' => sprintf('Settings saved successfully for post type: %s', $post_type)
             ], 200);
@@ -301,8 +311,19 @@ class Global_SEO_Endpoint extends WP_REST_Controller {
         // Get all settings
         $all_settings = get_option(self::OPTION_NAME, []);
 
-        // Remove settings for this post type (will fall back to defaults)
-        unset($all_settings[$post_type]);
+        // Reset only what this screen owns. The entity row is shared with the
+        // Content Type Matrix, so dropping the whole row would reset the user's
+        // per-feature tri-states and sitemap choice as a side effect of a button
+        // that says nothing about them. DEFAULT_SETTINGS is the exact set of
+        // Global SEO keys, so anything outside it belongs to another screen.
+        $stored = $all_settings[$post_type] ?? [];
+        $kept   = is_array($stored) ? array_diff_key($stored, self::DEFAULT_SETTINGS) : [];
+
+        if ($kept === []) {
+            unset($all_settings[$post_type]);
+        } else {
+            $all_settings[$post_type] = $kept;
+        }
 
         // Save updated settings
         update_option(self::OPTION_NAME, $all_settings);

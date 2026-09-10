@@ -125,6 +125,22 @@ class Update_Site_Identity_Settings extends Ability_Base {
 		$result = $mgr->save_settings( 'site', null, $merged );
 
 		if ( $result ) {
+			// Mirror the REST route (class-site-identity-endpoint.php): a stored
+			// setting is not the served file. When a physical robots.txt exists,
+			// it keeps serving the previous body — and the previous allow/block
+			// set — until it is rewritten, so an agent that blocked GPTBot got
+			// `success: true` while the crawler was still allowed. Worse,
+			// get_robots_txt_delivery() strips the AI block before comparing, on
+			// the assumption the two are identical by construction, so the admin
+			// screen reported "in sync" over the drift. Only the keys that
+			// change the served output trigger the write.
+			if ( array_key_exists( 'robots_txt_content', $patch )
+				|| array_key_exists( 'robots_txt_enabled', $patch )
+				|| array_key_exists( 'ai_crawler_rules', $patch )
+			) {
+				$mgr->sync_robots_txt_file();
+			}
+
 			return [
 				'success' => true,
 				'message' => __( 'Site identity settings updated.', 'thinkrank' ),

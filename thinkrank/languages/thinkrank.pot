@@ -2,25 +2,28 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 2.4.0\n"
+"Project-Id-Version: ThinkRank 2.5.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-08T06:22:19+00:00\n"
+"POT-Creation-Date: 2026-09-10T11:56:49+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
 
 #. Plugin Name of the plugin
 #: thinkrank.php
-#: includes/abilities/class-abilities-registrar.php:308
+#: includes/abilities/class-abilities-registrar.php:312
 #: includes/admin/class-bulk-action-manager.php:82
-#: includes/admin/class-manager.php:218
-#: includes/admin/class-manager.php:219
+#: includes/admin/class-manager.php:231
+#: includes/admin/class-manager.php:232
 #: includes/admin/class-metabox-manager.php:404
+#: includes/editor/beaver/faq/faq.php:59
+#: includes/editor/beaver/howto/howto.php:49
+#: includes/editor/beaver/toc/toc.php:47
 #: includes/editor/class-bricks-elements-manager.php:125
 #: includes/editor/class-elementor-manager.php:56
 #: src/admin/components/App.js:156
@@ -171,7 +174,7 @@ msgid "Get Site SEO Analyzer Audit"
 msgstr ""
 
 #: includes/abilities/analysis/class-get-seo-analyzer.php:35
-msgid "Retrieve the latest whole-site SEO audit (Site SEO Analyzer): overall 0-100 score, letter grade, summary counts, and per-check results across Basic, Advanced, Content, Performance, and Security. Returns the cached audit (refreshed hourly); use run-seo-analyzer for a fresh run."
+msgid "Retrieve the latest whole-site SEO audit (Site SEO Analyzer): overall 0-100 score, letter grade, summary counts, and per-check results across Basic, Advanced, Content, Performance, Security and GEO/AEO. A failing per-item check (meta descriptions, image alt text, and the content-sampled GEO checks) lists what fails it in affected_posts (id, title, type, edit_url, url), with affected_total counting every failing item when the list is capped. Returns the cached audit (refreshed hourly); use run-seo-analyzer for a fresh run."
 msgstr ""
 
 #: includes/abilities/analysis/class-get-seo-insights.php:33
@@ -326,10 +329,10 @@ msgid "Run Site SEO Analyzer Audit"
 msgstr ""
 
 #: includes/abilities/analysis/class-run-seo-analyzer.php:33
-msgid "Run a fresh whole-site SEO audit (Site SEO Analyzer), bypassing and refreshing the hourly cache. Returns the same payload as get-seo-analyzer: overall 0-100 score, grade, summary counts, and per-check results across Basic, Advanced, Content, Performance, and Security."
+msgid "Run a fresh whole-site SEO audit (Site SEO Analyzer), bypassing and refreshing the hourly cache. Returns the same payload as get-seo-analyzer: overall 0-100 score, grade, summary counts, and per-check results across Basic, Advanced, Content, Performance, Security and GEO/AEO. A failing per-item check (meta descriptions, image alt text, and the content-sampled GEO checks) lists what fails it in affected_posts (id, title, type, edit_url, url), with affected_total counting every failing item when the list is capped."
 msgstr ""
 
-#: includes/abilities/class-abilities-registrar.php:309
+#: includes/abilities/class-abilities-registrar.php:313
 msgid "SEO settings, metadata, and analysis abilities powered by ThinkRank."
 msgstr ""
 
@@ -640,6 +643,108 @@ msgstr ""
 
 #: includes/abilities/indexing/class-submit-urls-to-index.php:106
 msgid "At least one valid URL is required."
+msgstr ""
+
+#: includes/abilities/links/class-external-links-ability-base.php:72
+msgid "Add rel=\"nofollow\" to every link pointing at another domain."
+msgstr ""
+
+#: includes/abilities/links/class-external-links-ability-base.php:76
+msgid "Add target=\"_blank\" to external links, along with the rel=\"noopener\" it requires."
+msgstr ""
+
+#: includes/abilities/links/class-external-links-ability-base.php:81
+msgid "Hosts neither switch touches. A full URL or a \"www.\" prefix is accepted and reduced to the host it matches on, so read the value back rather than assuming what was stored. Subdomains of a listed host are included."
+msgstr ""
+
+#: includes/abilities/links/class-get-external-links-settings.php:30
+msgid "Get ThinkRank External Link Settings"
+msgstr ""
+
+#: includes/abilities/links/class-get-external-links-settings.php:31
+msgid "Read the site-wide outbound-link settings: whether external links get rel=\"nofollow\", whether they open in a new tab, and the list of hosts excluded from both. The rewrite is applied while the page renders and never modifies stored post content. Use update-external-links-settings to change them."
+msgstr ""
+
+#: includes/abilities/links/class-update-external-links-settings.php:34
+msgid "Update ThinkRank External Link Settings"
+msgstr ""
+
+#: includes/abilities/links/class-update-external-links-settings.php:35
+msgid "Set the site-wide outbound-link settings: rel=\"nofollow\" on external links, opening them in a new tab, and the list of excluded hosts. Only the fields you send are changed. Exceptions are normalised to bare hosts, and the stored values are returned so you can see what was saved. Call get-external-links-settings to read the current values first."
+msgstr ""
+
+#: includes/abilities/links/class-update-external-links-settings.php:106
+msgid "Provide at least one setting to change."
+msgstr ""
+
+#: includes/abilities/links/class-update-external-links-settings.php:116
+msgid "Failed to update the external link settings."
+msgstr ""
+
+#: includes/abilities/matrix/class-get-content-type-matrix.php:43
+msgid "Get ThinkRank Content Type Matrix"
+msgstr ""
+
+#: includes/abilities/matrix/class-get-content-type-matrix.php:44
+msgid "Read the per-content-type SEO feature matrix: for each post type, taxonomy, archive and special page, whether metas, schema, Open Graph, Twitter cards and analytics are inherited, forced on, or forced off, plus its robots directives and sitemap inclusion. Also returns the site-wide value each \"inherit\" resolves to. Use this to discover valid entity keys, then update-content-type-matrix to change one."
+msgstr ""
+
+#: includes/abilities/matrix/class-get-content-type-matrix.php:92
+msgid "Entity key. A post type is its bare slug; everything else is prefixed: taxonomy:, archive:, special:."
+msgstr ""
+
+#: includes/abilities/matrix/class-get-content-type-matrix.php:102
+msgid "Which features this entity exposes. Search and 404 carry no schema, for example."
+msgstr ""
+
+#: includes/abilities/matrix/class-get-content-type-matrix.php:123
+msgid "The site-wide value each feature's \"inherit\" currently resolves to."
+msgstr ""
+
+#: includes/abilities/matrix/class-update-content-type-matrix.php:43
+msgid "Update ThinkRank Content Type Matrix"
+msgstr ""
+
+#: includes/abilities/matrix/class-update-content-type-matrix.php:44
+msgid "Set the SEO features for one content type: metas, schema, Open Graph, Twitter cards and analytics, each \"inherit\", \"on\" or \"off\", plus robots noindex and sitemap inclusion. Call get-content-type-matrix first for valid entity keys; a post type is its bare slug, other entities are prefixed with taxonomy:, archive: or special:."
+msgstr ""
+
+#: includes/abilities/matrix/class-update-content-type-matrix.php:71
+msgid "Entity key from get-content-type-matrix, e.g. \"post\", \"taxonomy:category\", \"archive:author\", \"special:404\"."
+msgstr ""
+
+#: includes/abilities/matrix/class-update-content-type-matrix.php:84
+msgid "Whether this entity is noindexed. Search results and the 404 page are noindexed by default."
+msgstr ""
+
+#: includes/abilities/matrix/class-update-content-type-matrix.php:88
+msgid "Whether this entity belongs in the XML sitemap. Only accepted for entities the sitemap generator emits."
+msgstr ""
+
+#: includes/abilities/matrix/class-update-content-type-matrix.php:113
+msgid "The entity as stored after the write: resolved feature values, robots directives and sitemap inclusion."
+msgstr ""
+
+#. translators: 1: the entity key that was sent. 2: comma-separated list of valid keys.
+#: includes/abilities/matrix/class-update-content-type-matrix.php:144
+#, php-format
+msgid "Unknown entity \"%1$s\". Valid keys on this site: %2$s."
+msgstr ""
+
+#. translators: 1: feature key. 2: entity key.
+#: includes/abilities/matrix/class-update-content-type-matrix.php:166
+#, php-format
+msgid "\"%1$s\" is not available for \"%2$s\"."
+msgstr ""
+
+#. translators: %s: entity key.
+#: includes/abilities/matrix/class-update-content-type-matrix.php:196
+#, php-format
+msgid "\"%s\" is not emitted in the sitemap, so its inclusion cannot be set."
+msgstr ""
+
+#: includes/abilities/matrix/class-update-content-type-matrix.php:209
+msgid "Provide at least one feature, noindex, or sitemap_include to change."
 msgstr ""
 
 #: includes/abilities/settings/class-get-author-archives-settings.php:48
@@ -1023,98 +1128,108 @@ msgstr ""
 msgid "Whether ThinkRank manages robots.txt. Its contents are set with thinkrank/update-robots-txt."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:150
+#: includes/abilities/settings/class-settings-key-map.php:151
 msgid "Whether XML sitemap generation is active."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:151
+#: includes/abilities/settings/class-settings-key-map.php:152
 msgid "Whether the sitemap regenerates automatically when content changes."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:152
+#: includes/abilities/settings/class-settings-key-map.php:153
 msgid "Whether to publish a sitemap index that links per-type sitemaps, rather than one flat file."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:155
+#: includes/abilities/settings/class-settings-key-map.php:156
 msgid "Maximum URLs per sitemap file before it is split."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:159
+#: includes/abilities/settings/class-settings-key-map.php:160
 msgid "Filename pattern for generated sitemaps, e.g. \"sitemap-{type}.xml\"."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:160
+#: includes/abilities/settings/class-settings-key-map.php:161
 msgid "Whether an XSL stylesheet is attached so the sitemap is readable in a browser."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:161
+#: includes/abilities/settings/class-settings-key-map.php:162
 msgid "Whether search engines are notified after the sitemap is regenerated."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:164
+#: includes/abilities/settings/class-settings-key-map.php:165
 msgid "Whether posts are included."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:165
+#: includes/abilities/settings/class-settings-key-map.php:166
 msgid "Whether pages are included."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:166
+#: includes/abilities/settings/class-settings-key-map.php:167
 msgid "Whether category archives are included."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:167
+#: includes/abilities/settings/class-settings-key-map.php:168
 msgid "Whether tag archives are included."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:168
+#: includes/abilities/settings/class-settings-key-map.php:169
 msgid "Whether image entries are included for each URL."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:169
+#: includes/abilities/settings/class-settings-key-map.php:170
 msgid "Whether featured images are included as image entries."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:172
+#: includes/abilities/settings/class-settings-key-map.php:173
 msgid "Comma-separated post IDs to leave out."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:173
+#: includes/abilities/settings/class-settings-key-map.php:174
 msgid "Comma-separated term IDs to leave out."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:174
+#: includes/abilities/settings/class-settings-key-map.php:175
 msgid "Whether privately published posts are left out."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:175
+#: includes/abilities/settings/class-settings-key-map.php:176
 msgid "Whether password-protected posts are left out."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:286
+#: includes/abilities/settings/class-settings-key-map.php:287
 msgid "Opening time as 24-hour HH:MM, or \"\" when closed."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:290
+#: includes/abilities/settings/class-settings-key-map.php:291
 msgid "Closing time as 24-hour HH:MM, or \"\" when closed."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:294
+#: includes/abilities/settings/class-settings-key-map.php:295
 msgid "Whether the business is closed all day."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:306
+#: includes/abilities/settings/class-settings-key-map.php:307
 msgid "Opening hours per day of the week."
 msgstr ""
 
+#. translators: 1: crawler user-agent token, e.g. GPTBot. 2: what that crawler is for.
+#: includes/abilities/settings/class-settings-key-map.php:332
+#, php-format
+msgid "%1$s — %2$s"
+msgstr ""
+
+#: includes/abilities/settings/class-settings-key-map.php:338
+msgid "Per-agent AI crawler rules. \"block\" writes a User-agent/Disallow pair for that crawler into robots.txt; \"allow\" (the default for any crawler not listed) writes nothing. Blocking Google-Extended does not affect normal Google Search indexing."
+msgstr ""
+
 #. translators: 1: the pages a title template applies to. 2: the list of available variable tags.
-#: includes/abilities/settings/class-settings-key-map.php:355
+#: includes/abilities/settings/class-settings-key-map.php:387
 #, php-format
 msgid "Title template for %1$s. Available tags: %2$s."
 msgstr ""
 
 #. translators: 1: the pages a title template applies to. 2: tags available everywhere. 3: tags available only on those pages.
-#: includes/abilities/settings/class-settings-key-map.php:357
+#: includes/abilities/settings/class-settings-key-map.php:389
 #, php-format
 msgid "Title template for %1$s. Available tags: %2$s, and on these pages also %3$s."
 msgstr ""
@@ -1389,17 +1504,17 @@ msgstr ""
 msgid "No valid site identity setting keys were provided."
 msgstr ""
 
-#: includes/abilities/settings/class-update-site-identity-settings.php:130
+#: includes/abilities/settings/class-update-site-identity-settings.php:146
 msgid "Site identity settings updated."
 msgstr ""
 
 #. translators: %s: reason the save failed.
-#: includes/abilities/settings/class-update-site-identity-settings.php:142
+#: includes/abilities/settings/class-update-site-identity-settings.php:158
 #, php-format
 msgid "Failed to update site identity settings: %s"
 msgstr ""
 
-#: includes/abilities/settings/class-update-site-identity-settings.php:143
+#: includes/abilities/settings/class-update-site-identity-settings.php:159
 msgid "Failed to update site identity settings."
 msgstr ""
 
@@ -1487,6 +1602,25 @@ msgstr ""
 msgid "Social platform settings updated."
 msgstr ""
 
+#: includes/admin/class-beaver-metabox.php:376
+#: includes/admin/class-manager.php:656
+#: includes/admin/class-metabox-manager.php:391
+#: src/bricks/index.js:223
+#: src/bricks/index.js:224
+#: src/divi/index.js:160
+#: src/divi/index.js:161
+#: src/elementor/index.js:39
+#: src/metabox/components/MetaboxDrawer.js:97
+#: src/metabox/components/MetaboxDrawer.js:149
+#: src/metabox/components/MetaboxDrawer.js:150
+#: src/metabox/components/MetaboxDrawer.js:155
+#: src/metabox/components/MetaboxDrawer.js:178
+#: src/metabox/HeaderButton.js:131
+#: src/oxygen/index.js:149
+#: src/oxygen/index.js:150
+msgid "ThinkRank SEO"
+msgstr ""
+
 #: includes/admin/class-dashboard-widget.php:82
 msgid "ThinkRank Website Insights"
 msgstr ""
@@ -1530,46 +1664,46 @@ msgstr ""
 msgid "Not Set"
 msgstr ""
 
-#: includes/admin/class-manager.php:230
-#: includes/admin/class-manager.php:231
+#: includes/admin/class-manager.php:243
+#: includes/admin/class-manager.php:244
 #: thinkrank.php:163
 #: src/admin/components/App.js:93
-#: src/admin/components/essential-seo/SidebarNavigation.js:100
+#: src/admin/components/essential-seo/SidebarNavigation.js:110
 #: src/admin/components/layout/TopNav.js:571
 msgid "Dashboard"
 msgstr ""
 
-#: includes/admin/class-manager.php:240
-#: includes/admin/class-manager.php:241
-#: includes/admin/class-manager.php:514
+#: includes/admin/class-manager.php:253
+#: includes/admin/class-manager.php:254
+#: includes/admin/class-manager.php:527
 #: src/admin/components/App.js:101
 #: src/admin/components/dashboard/QuickAccess.js:226
 #: src/admin/components/layout/TopNav.js:572
 msgid "Essential SEO"
 msgstr ""
 
-#: includes/admin/class-manager.php:250
-#: includes/admin/class-manager.php:251
-#: includes/admin/class-manager.php:526
-#: includes/core/class-capability-manager.php:117
+#: includes/admin/class-manager.php:263
+#: includes/admin/class-manager.php:264
+#: includes/admin/class-manager.php:539
+#: includes/core/class-capability-manager.php:118
 #: src/admin/components/App.js:109
 #: src/admin/components/dashboard/QuickAccess.js:232
 #: src/admin/components/layout/TopNav.js:573
 msgid "AI Tools"
 msgstr ""
 
-#: includes/admin/class-manager.php:260
-#: includes/admin/class-manager.php:261
+#: includes/admin/class-manager.php:273
+#: includes/admin/class-manager.php:274
 #: src/admin/components/App.js:133
 #: src/admin/components/layout/TopNav.js:574
 msgid "Usages"
 msgstr ""
 
-#: includes/admin/class-manager.php:270
-#: includes/admin/class-manager.php:271
+#: includes/admin/class-manager.php:283
+#: includes/admin/class-manager.php:284
 #: src/admin/components/App.js:117
-#: src/admin/components/essential-seo/SidebarNavigation.js:80
-#: src/admin/components/essential-seo/SidebarNavigation.js:275
+#: src/admin/components/essential-seo/SidebarNavigation.js:90
+#: src/admin/components/essential-seo/SidebarNavigation.js:316
 #: src/admin/components/import-export/ExportProgress.js:19
 #: src/admin/components/import-export/MigrateProgress.js:16
 #: src/admin/components/import-export/NativeExportCard.js:29
@@ -1580,96 +1714,78 @@ msgstr ""
 msgid "Settings"
 msgstr ""
 
-#: includes/admin/class-manager.php:290
-#: includes/admin/class-manager.php:291
-#: includes/admin/class-manager.php:596
+#: includes/admin/class-manager.php:303
+#: includes/admin/class-manager.php:304
+#: includes/admin/class-manager.php:609
 #: src/admin/components/App.js:141
 #: src/admin/components/pages/Settings.js:322
-#: src/admin/components/pages/Settings.js:2148
+#: src/admin/components/pages/Settings.js:2167
 msgid "Import / Export"
 msgstr ""
 
-#: includes/admin/class-manager.php:304
-#: includes/admin/class-manager.php:305
-#: includes/admin/class-manager.php:613
+#: includes/admin/class-manager.php:317
+#: includes/admin/class-manager.php:318
+#: includes/admin/class-manager.php:626
 #: src/admin/components/App.js:149
 #: src/admin/setup-wizard/SetupWizard.js:54
 msgid "Migration"
 msgstr ""
 
-#: includes/admin/class-manager.php:502
+#: includes/admin/class-manager.php:515
 msgid "ThinkRank Dashboard"
 msgstr ""
 
-#: includes/admin/class-manager.php:503
+#: includes/admin/class-manager.php:516
 msgid "AI-powered SEO optimization for WordPress"
 msgstr ""
 
-#: includes/admin/class-manager.php:515
+#: includes/admin/class-manager.php:528
 msgid "Configure your site-wide SEO settings with AI-powered optimization"
 msgstr ""
 
-#: includes/admin/class-manager.php:527
+#: includes/admin/class-manager.php:540
 msgid "AI-powered content tools including Content Planner and Metadata Generator"
 msgstr ""
 
-#: includes/admin/class-manager.php:538
+#: includes/admin/class-manager.php:551
 msgid "ThinkRank Settings"
 msgstr ""
 
-#: includes/admin/class-manager.php:539
+#: includes/admin/class-manager.php:552
 msgid "Configure your AI SEO settings"
 msgstr ""
 
-#: includes/admin/class-manager.php:575
+#: includes/admin/class-manager.php:588
 #: src/admin/components/dashboard/QuickAccess.js:238
 msgid "Usage Analytics"
 msgstr ""
 
-#: includes/admin/class-manager.php:576
+#: includes/admin/class-manager.php:589
 msgid "Track your AI usage, costs, and plugin performance analytics"
 msgstr ""
 
-#: includes/admin/class-manager.php:592
+#: includes/admin/class-manager.php:605
 msgid "Import / Export is not enabled."
 msgstr ""
 
-#: includes/admin/class-manager.php:609
+#: includes/admin/class-manager.php:622
 msgid "The Migration tools are not enabled."
 msgstr ""
 
-#: includes/admin/class-manager.php:643
-#: includes/admin/class-metabox-manager.php:391
-#: src/bricks/index.js:223
-#: src/bricks/index.js:224
-#: src/divi/index.js:160
-#: src/divi/index.js:161
-#: src/elementor/index.js:39
-#: src/metabox/components/MetaboxDrawer.js:97
-#: src/metabox/components/MetaboxDrawer.js:149
-#: src/metabox/components/MetaboxDrawer.js:150
-#: src/metabox/components/MetaboxDrawer.js:155
-#: src/metabox/components/MetaboxDrawer.js:178
-#: src/metabox/HeaderButton.js:131
-#: src/oxygen/index.js:149
-#: src/oxygen/index.js:150
-msgid "ThinkRank SEO"
-msgstr ""
-
-#: includes/admin/class-manager.php:726
+#: includes/admin/class-manager.php:739
 #: src/admin/components/dashboard/WelcomeCard.js:59
 msgid "Welcome to ThinkRank!"
 msgstr ""
 
-#: includes/admin/class-manager.php:727
+#: includes/admin/class-manager.php:740
 msgid "Thanks for installing ThinkRank. Add an AI provider key to unlock automatic titles, descriptions, and SEO scoring."
 msgstr ""
 
-#: includes/admin/class-manager.php:730
+#: includes/admin/class-manager.php:743
 msgid "Configure Settings"
 msgstr ""
 
-#: includes/admin/class-manager.php:733
+#: includes/admin/class-manager.php:746
 #: includes/admin/class-search-visibility-notice.php:136
 #: includes/admin/class-seo-notice.php:102
 #: src/admin/components/essential-seo/email-reporting/PassiveHints.js:125
@@ -1683,24 +1799,24 @@ msgstr ""
 msgid "Dismiss"
 msgstr ""
 
-#: includes/admin/class-manager.php:894
+#: includes/admin/class-manager.php:907
 msgid "Loading..."
 msgstr ""
 
-#: includes/admin/class-manager.php:895
+#: includes/admin/class-manager.php:908
 msgid "An error occurred"
 msgstr ""
 
-#: includes/admin/class-manager.php:896
+#: includes/admin/class-manager.php:909
 #: includes/admin/class-metabox-manager.php:934
 msgid "Success!"
 msgstr ""
 
-#: includes/admin/class-manager.php:897
+#: includes/admin/class-manager.php:910
 msgid "Are you sure?"
 msgstr ""
 
-#: includes/admin/class-manager.php:898
+#: includes/admin/class-manager.php:911
 #: includes/admin/class-post-list-columns.php:758
 #: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:1187
 #: src/admin/components/import-export/ConfirmationDialog.js:45
@@ -1711,14 +1827,14 @@ msgstr ""
 msgid "Cancel"
 msgstr ""
 
-#: includes/admin/class-manager.php:899
+#: includes/admin/class-manager.php:912
 #: includes/admin/class-post-list-columns.php:756
 #: src/admin/components/essential-seo/IntegrationsTab.js:458
 #: src/metabox/components/MetaboxDrawer.js:250
 msgid "Save"
 msgstr ""
 
-#: includes/admin/class-manager.php:948
+#: includes/admin/class-manager.php:961
 #: src/admin/components/content-brief/ContentStructure.js:1467
 #: src/admin/components/essential-seo/ai-insights/AIInsightsTab.js:679
 #: src/admin/components/pages/UsageAnalytics.js:19
@@ -1726,15 +1842,15 @@ msgstr ""
 msgid "Overview"
 msgstr ""
 
-#: includes/admin/class-manager.php:949
+#: includes/admin/class-manager.php:962
 msgid "ThinkRank.ai helps you optimize your content with AI-powered SEO suggestions."
 msgstr ""
 
-#: includes/admin/class-manager.php:953
+#: includes/admin/class-manager.php:966
 msgid "For more information:"
 msgstr ""
 
-#: includes/admin/class-manager.php:954
+#: includes/admin/class-manager.php:967
 #: src/admin/components/dashboard/QuickAccess.js:251
 #: src/admin/components/layout/TopNav.js:687
 #: src/admin/components/layout/TopNav.js:688
@@ -1742,7 +1858,7 @@ msgstr ""
 msgid "Documentation"
 msgstr ""
 
-#: includes/admin/class-manager.php:955
+#: includes/admin/class-manager.php:968
 msgid "Support"
 msgstr ""
 
@@ -1893,21 +2009,22 @@ msgstr ""
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:292
 #: src/admin/components/essential-seo/crawling-ai-indexing/GlobalRobotMeta.js:372
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1441
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:946
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1226
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:1265
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:213
-#: src/admin/components/essential-seo/GlobalSEOTab.js:717
+#: src/admin/components/essential-seo/ExternalLinksTab.js:499
+#: src/admin/components/essential-seo/GlobalSEOTab.js:728
 #: src/admin/components/essential-seo/instant-indexing/Settings.js:576
 #: src/admin/components/essential-seo/IntegrationsTab.js:457
 #: src/admin/components/essential-seo/IntegrationsTab.js:1751
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:454
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:503
 #: src/admin/components/essential-seo/site-identity/BreadcrumbSettings.js:78
 #: src/admin/components/essential-seo/site-identity/LocalSEO.js:143
 #: src/admin/components/essential-seo/SiteIdentityTab.js:1073
 #: src/admin/components/essential-seo/SocialMediaTab.js:1662
 #: src/admin/components/pages/MCP.js:219
-#: src/admin/components/pages/Settings.js:2197
-#: src/admin/components/pages/Settings.js:2387
+#: src/admin/components/pages/Settings.js:2216
+#: src/admin/components/pages/Settings.js:2406
 #: src/metabox/components/MetaboxDrawer.js:249
 msgid "Saving…"
 msgstr ""
@@ -2066,8 +2183,8 @@ msgid "The snapshot still holds data ThinkRank has not applied yet: %s. It stays
 msgstr ""
 
 #: includes/admin/importers/class-snapshot-migrator.php:2628
-#: includes/core/class-capability-manager.php:120
-#: src/admin/components/essential-seo/SidebarNavigation.js:200
+#: includes/core/class-capability-manager.php:122
+#: src/admin/components/essential-seo/SidebarNavigation.js:225
 #: src/admin/components/import-export/ExportProgress.js:17
 #: src/admin/components/import-export/PluginImportCard.js:37
 #: src/admin/components/import-export/PluginImportCard.js:47
@@ -2199,11 +2316,13 @@ msgstr ""
 msgid "Invalid security token. Please refresh the page and try again."
 msgstr ""
 
+#: includes/api/class-external-links-endpoint.php:150
 #: includes/api/class-image-seo-endpoint.php:210
 #: includes/api/class-instant-indexing-endpoint.php:395
 msgid "Settings updated successfully"
 msgstr ""
 
+#: includes/api/class-external-links-endpoint.php:159
 #: includes/api/class-image-seo-endpoint.php:216
 msgid "Failed to update settings"
 msgstr ""
@@ -2228,150 +2347,185 @@ msgstr ""
 msgid "Failed to clear history"
 msgstr ""
 
-#: includes/api/class-manager.php:629
-#: includes/api/class-manager.php:688
-#: includes/api/class-manager.php:718
+#: includes/api/class-manager.php:635
+#: includes/api/class-manager.php:694
+#: includes/api/class-manager.php:724
 #: includes/api/class-seo-analyzer-endpoint.php:158
 msgid "You must be logged in to access this endpoint."
 msgstr ""
 
-#: includes/api/class-manager.php:637
+#: includes/api/class-manager.php:643
 #: includes/api/class-setup-wizard-endpoint.php:635
 msgid "You do not have permission to access this endpoint."
 msgstr ""
 
-#: includes/api/class-manager.php:670
+#: includes/api/class-manager.php:676
 msgid "Rate limit exceeded. Please wait a moment and try again."
 msgstr ""
 
-#: includes/api/class-manager.php:696
+#: includes/api/class-manager.php:702
 msgid "You do not have permission to manage settings."
 msgstr ""
 
-#: includes/api/class-manager.php:726
+#: includes/api/class-manager.php:732
 msgid "You do not have permission to manage ThinkRank settings."
 msgstr ""
 
-#: includes/api/class-manager.php:959
+#: includes/api/class-manager.php:965
 msgid "Settings saved successfully"
 msgstr ""
 
-#: includes/api/class-manager.php:1076
+#: includes/api/class-manager.php:1082
 msgid "SEO metadata generated successfully"
 msgstr ""
 
-#: includes/api/class-manager.php:1126
+#: includes/api/class-manager.php:1132
 msgid "SEO title improved successfully"
 msgstr ""
 
-#: includes/api/class-manager.php:1176
+#: includes/api/class-manager.php:1182
 msgid "Meta description generated successfully"
 msgstr ""
 
-#: includes/api/class-manager.php:1228
+#: includes/api/class-manager.php:1234
 msgid "Explanation generated successfully"
 msgstr ""
 
-#: includes/api/class-manager.php:1274
+#: includes/api/class-manager.php:1280
 msgid "Added an authoritative source link"
 msgstr ""
 
-#: includes/api/class-manager.php:1323
+#: includes/api/class-manager.php:1329
 msgid "Added a keyword-focused paragraph"
 msgstr ""
 
-#: includes/api/class-manager.php:1350
+#: includes/api/class-manager.php:1356
 msgid "Post not found."
 msgstr ""
 
-#: includes/api/class-manager.php:1386
+#: includes/api/class-manager.php:1392
 msgid "Schema was already enabled for this post type."
 msgstr ""
 
 #. translators: %s: schema type.
-#: includes/api/class-manager.php:1388
+#: includes/api/class-manager.php:1394
 #, php-format
 msgid "Enabled %s schema for this post type."
 msgstr ""
 
 #. translators: %s: the unrecognised provider value.
-#: includes/api/class-manager.php:1423
+#: includes/api/class-manager.php:1434
 #, php-format
 msgid "Unknown AI provider: %s"
 msgstr ""
 
-#: includes/api/class-manager.php:1443
+#: includes/api/class-manager.php:1454
 msgid "No API key provided or saved for the selected provider."
 msgstr ""
 
-#: includes/api/class-manager.php:1488
+#: includes/api/class-manager.php:1508
 msgid "Failed to connect to OpenAI API: "
 msgstr ""
 
-#: includes/api/class-manager.php:1500
+#. translators: %s: the model id that was tested.
+#: includes/api/class-manager.php:1526
+#, php-format
+msgid "API key works, but the model \"%s\" is not available to this account."
+msgstr ""
+
+#. translators: %s: the model id that was tested.
+#: includes/api/class-manager.php:1536
+#, php-format
+msgid "OpenAI API connection successful — model \"%s\" is available."
+msgstr ""
+
+#: includes/api/class-manager.php:1537
 msgid "OpenAI API connection successful!"
 msgstr ""
 
-#: includes/api/class-manager.php:1508
-#: includes/api/class-manager.php:1566
-#: includes/api/class-manager.php:1635
-#: includes/api/class-manager.php:1695
+#: includes/api/class-manager.php:1545
+#: includes/api/class-manager.php:1622
+#: includes/api/class-manager.php:1744
+#: includes/api/class-manager.php:1831
 msgid "Unknown API error"
 msgstr ""
 
-#: includes/api/class-manager.php:1512
+#: includes/api/class-manager.php:1549
 msgid "OpenAI API Error: "
 msgstr ""
 
-#: includes/api/class-manager.php:1527
+#: includes/api/class-manager.php:1569
 msgid "Invalid OpenRouter API key format. Should start with \"sk-or-\""
 msgstr ""
 
-#: includes/api/class-manager.php:1547
+#: includes/api/class-manager.php:1589
 msgid "Failed to connect to OpenRouter API: "
 msgstr ""
 
-#: includes/api/class-manager.php:1559
+#. translators: %s: the model id that was tested.
+#: includes/api/class-manager.php:1614
+#, php-format
+msgid "OpenRouter API connection successful — model \"%s\" is available."
+msgstr ""
+
+#: includes/api/class-manager.php:1615
 msgid "OpenRouter API connection successful!"
 msgstr ""
 
-#: includes/api/class-manager.php:1570
+#: includes/api/class-manager.php:1626
 msgid "OpenRouter API Error: "
 msgstr ""
 
-#: includes/api/class-manager.php:1585
+#. translators: %s: the model id that was tested.
+#: includes/api/class-manager.php:1669
+#, php-format
+msgid "API key works, but \"%s\" is not a model OpenRouter offers."
+msgstr ""
+
+#: includes/api/class-manager.php:1685
 msgid "Invalid Claude API key format. Should start with \"sk-ant-\""
 msgstr ""
 
-#: includes/api/class-manager.php:1621
+#: includes/api/class-manager.php:1727
 msgid "Failed to connect to Claude API: "
 msgstr ""
 
-#: includes/api/class-manager.php:1631
-msgid "Claude API connection successful!"
+#. translators: %s: the model id that was tested.
+#: includes/api/class-manager.php:1740
+#, php-format
+msgid "Claude API connection successful — model \"%s\" is available."
+msgstr ""
+
+#. translators: %s: the model id that was tested.
+#: includes/api/class-manager.php:1754
+#: includes/api/class-manager.php:1841
+#, php-format
+msgid "API key works, but the model \"%s\" was not found."
 msgstr ""
 
 #. translators: %1$d: HTTP status code, %2$s: error message from Claude API
-#: includes/api/class-manager.php:1640
+#: includes/api/class-manager.php:1762
 #, php-format
 msgid "Claude API error (%1$d): %2$s"
 msgstr ""
 
-#: includes/api/class-manager.php:1681
+#: includes/api/class-manager.php:1814
 msgid "Failed to connect to Gemini API: "
 msgstr ""
 
-#: includes/api/class-manager.php:1691
-msgid "Gemini API connection successful!"
+#. translators: %s: the model id that was tested.
+#: includes/api/class-manager.php:1827
+#, php-format
+msgid "Gemini API connection successful — model \"%s\" is available."
 msgstr ""
 
 #. translators: %1$d: HTTP status code, %2$s: error message from Gemini API
-#: includes/api/class-manager.php:1700
+#: includes/api/class-manager.php:1849
 #, php-format
 msgid "Gemini API error (%1$d): %2$s"
 msgstr ""
 
-#: includes/api/class-manager.php:1767
+#: includes/api/class-manager.php:1916
 msgid "Content analyzed successfully"
 msgstr ""
 
@@ -2483,7 +2637,7 @@ msgstr ""
 msgid "You do not have permission to deactivate plugins."
 msgstr ""
 
-#: includes/api/class-site-identity-endpoint.php:779
+#: includes/api/class-site-identity-endpoint.php:810
 msgid "Site name is required to run AI optimization."
 msgstr ""
 
@@ -2497,8 +2651,10 @@ msgstr ""
 
 #: includes/api/class-sitemap-endpoint.php:1259
 #: includes/api/class-sitemap-endpoint.php:1291
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:223
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:236
+#: includes/editor/beaver/faq/faq.php:305
+#: includes/editor/beaver/howto/howto.php:317
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:379
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:392
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:257
 #: src/blocks/faq-block/edit.js:92
 #: src/blocks/howto-block/edit.js:96
@@ -2614,102 +2770,108 @@ msgstr ""
 msgid "Reporting period label, e.g. \"May 1 – May 30\""
 msgstr ""
 
-#: includes/core/class-capability-manager.php:106
+#: includes/core/class-capability-manager.php:107
 msgid "Access ThinkRank"
 msgstr ""
 
-#: includes/core/class-capability-manager.php:107
-#: src/admin/components/essential-seo/SidebarNavigation.js:63
-#: src/admin/components/essential-seo/SidebarNavigation.js:313
+#: includes/core/class-capability-manager.php:108
+#: src/admin/components/essential-seo/SidebarNavigation.js:73
+#: src/admin/components/essential-seo/SidebarNavigation.js:354
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:62
 #: src/admin/components/essential-seo/SiteIdentityTab.js:77
 msgid "Site Identity"
 msgstr ""
 
-#: includes/core/class-capability-manager.php:108
-#: src/admin/components/essential-seo/SidebarNavigation.js:98
-#: src/admin/components/essential-seo/SidebarNavigation.js:328
+#: includes/core/class-capability-manager.php:109
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:65
+#: src/admin/components/essential-seo/SidebarNavigation.js:108
+#: src/admin/components/essential-seo/SidebarNavigation.js:374
 #: src/admin/setup-wizard/SetupWizard.js:90
 msgid "Analytics"
 msgstr ""
 
-#: includes/core/class-capability-manager.php:109
+#: includes/core/class-capability-manager.php:110
 #: src/admin/components/essential-seo/performance/CWVSection.js:407
-#: src/admin/components/essential-seo/SidebarNavigation.js:125
-#: src/admin/components/essential-seo/SidebarNavigation.js:333
+#: src/admin/components/essential-seo/SidebarNavigation.js:135
+#: src/admin/components/essential-seo/SidebarNavigation.js:379
 msgid "Performance"
 msgstr ""
 
-#: includes/core/class-capability-manager.php:110
-#: src/admin/components/essential-seo/SidebarNavigation.js:153
-#: src/admin/components/essential-seo/SidebarNavigation.js:343
-msgid "Bulk SEO Optimization"
-msgstr ""
-
 #: includes/core/class-capability-manager.php:111
-#: src/admin/components/essential-seo/SidebarNavigation.js:158
-#: src/admin/components/essential-seo/SidebarNavigation.js:353
-#: src/admin/components/pages/MCP.js:31
-msgid "Image SEO"
+#: src/admin/components/essential-seo/SidebarNavigation.js:163
+#: src/admin/components/essential-seo/SidebarNavigation.js:389
+msgid "Bulk SEO Optimization"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:112
 #: src/admin/components/essential-seo/SidebarNavigation.js:168
-#: src/admin/components/essential-seo/SidebarNavigation.js:363
-msgid "Schema Manager"
+#: src/admin/components/essential-seo/SidebarNavigation.js:399
+#: src/admin/components/pages/MCP.js:31
+msgid "Image SEO"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:113
-#: src/admin/components/essential-seo/SidebarNavigation.js:233
-#: src/admin/components/essential-seo/SidebarNavigation.js:368
-msgid "Social Media"
+#: src/admin/components/essential-seo/SidebarNavigation.js:178
+#: src/admin/components/essential-seo/SidebarNavigation.js:414
+msgid "Schema Manager"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:114
-#: src/admin/components/essential-seo/SidebarNavigation.js:242
-msgid "Crawling & AI Indexing"
+#: src/admin/components/essential-seo/SidebarNavigation.js:258
+#: src/admin/components/essential-seo/SidebarNavigation.js:419
+msgid "Social Media"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:115
-#: src/admin/components/essential-seo/SidebarNavigation.js:271
-msgid "Instant Indexing"
+#: src/admin/components/essential-seo/SidebarNavigation.js:278
+msgid "Crawling & AI Indexing"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:116
+#: src/admin/components/essential-seo/SidebarNavigation.js:312
+msgid "Instant Indexing"
+msgstr ""
+
+#: includes/core/class-capability-manager.php:117
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:271
-#: src/admin/components/essential-seo/SidebarNavigation.js:79
-#: src/admin/components/essential-seo/SidebarNavigation.js:348
+#: src/admin/components/essential-seo/SidebarNavigation.js:89
+#: src/admin/components/essential-seo/SidebarNavigation.js:394
 msgid "Author Archives"
 msgstr ""
 
-#: includes/core/class-capability-manager.php:118
+#: includes/core/class-capability-manager.php:119
 #: src/admin/components/essential-seo/ai-insights/AIInsightsTab.js:1265
-#: src/admin/components/essential-seo/SidebarNavigation.js:141
-#: src/admin/components/essential-seo/SidebarNavigation.js:338
+#: src/admin/components/essential-seo/SidebarNavigation.js:151
+#: src/admin/components/essential-seo/SidebarNavigation.js:384
 msgid "AI Insights"
 msgstr ""
 
-#: includes/core/class-capability-manager.php:119
-#: src/admin/components/essential-seo/SidebarNavigation.js:189
+#: includes/core/class-capability-manager.php:120
+#: src/admin/components/essential-seo/SidebarNavigation.js:204
 msgid "Internal Links"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:121
-#: src/admin/components/essential-seo/SidebarNavigation.js:211
-msgid "Broken Links"
-msgstr ""
-
-#: includes/core/class-capability-manager.php:122
-#: src/admin/components/essential-seo/SidebarNavigation.js:222
-#: src/admin/components/essential-seo/SidebarNavigation.js:383
-msgid "WooCommerce"
+#: src/admin/components/essential-seo/SidebarNavigation.js:215
+msgid "External Links"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:123
-msgid "Settings & API Keys"
+#: src/admin/components/essential-seo/SidebarNavigation.js:236
+msgid "Broken Links"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:124
+#: src/admin/components/essential-seo/SidebarNavigation.js:247
+#: src/admin/components/essential-seo/SidebarNavigation.js:434
+msgid "WooCommerce"
+msgstr ""
+
+#: includes/core/class-capability-manager.php:125
+msgid "Settings & API Keys"
+msgstr ""
+
+#: includes/core/class-capability-manager.php:126
 msgid "Manage Roles"
 msgstr ""
 
@@ -2803,12 +2965,49 @@ msgstr ""
 msgid "We collect non-sensitive diagnostic data and plugin usage information — your site URL, WordPress &amp; PHP version, active plugins &amp; theme, and admin email. This lets us keep ThinkRank compatible with the most popular plugins and themes. No spam, we promise."
 msgstr ""
 
+#: includes/editor/beaver/faq/faq.php:57
 #: includes/editor/bricks/class-faq-element.php:69
 #: includes/editor/elementor/class-faq-widget.php:35
 #: src/blocks/faq-block/index.js:18
 msgid "FAQ (ThinkRank)"
 msgstr ""
 
+#: includes/editor/beaver/faq/faq.php:58
+msgid "An accordion of questions and answers that emits FAQPage schema."
+msgstr ""
+
+#: includes/editor/beaver/faq/faq.php:91
+#: includes/editor/bricks/class-faq-element.php:165
+msgid "Add a question to get started."
+msgstr ""
+
+#: includes/editor/beaver/faq/faq.php:302
+#: includes/editor/beaver/faq/faq.php:312
+#: includes/editor/beaver/faq/faq.php:354
+#: includes/editor/bricks/class-faq-element.php:121
+#: includes/editor/elementor/class-faq-widget.php:75
+#: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:1515
+#: src/admin/components/essential-seo/schema/forms/SchemaFAQForm.js:175
+#: src/admin/components/essential-seo/schema/forms/SchemaFAQForm.js:189
+#: src/blocks/faq-block/edit.js:158
+msgid "Question"
+msgstr ""
+
+#: includes/editor/beaver/faq/faq.php:317
+#: includes/editor/bricks/class-faq-element.php:125
+#: includes/editor/elementor/class-faq-widget.php:80
+#: src/admin/components/essential-seo/schema/forms/SchemaFAQForm.js:205
+#: src/blocks/faq-block/edit.js:177
+msgid "Answer"
+msgstr ""
+
+#: includes/editor/beaver/faq/faq.php:330
+#: includes/editor/bricks/class-faq-element.php:116
+#: includes/editor/elementor/class-faq-widget.php:85
+msgid "Questions"
+msgstr ""
+
+#: includes/editor/beaver/faq/faq.php:337
 #: includes/editor/bricks/class-faq-element.php:97
 #: includes/editor/elementor/class-faq-widget.php:60
 #: src/blocks/faq-block/edit.js:103
@@ -2816,6 +3015,7 @@ msgstr ""
 msgid "Section heading"
 msgstr ""
 
+#: includes/editor/beaver/faq/faq.php:338
 #: includes/editor/bricks/class-faq-element.php:99
 #: includes/editor/elementor/class-faq-widget.php:62
 #: src/blocks/faq-block/edit.js:108
@@ -2823,6 +3023,9 @@ msgstr ""
 msgid "Frequently asked questions"
 msgstr ""
 
+#: includes/editor/beaver/faq/faq.php:343
+#: includes/editor/beaver/howto/howto.php:360
+#: includes/editor/beaver/toc/toc.php:263
 #: includes/editor/bricks/class-faq-element.php:103
 #: includes/editor/bricks/class-howto-element.php:113
 #: includes/editor/bricks/class-toc-element.php:109
@@ -2835,6 +3038,9 @@ msgstr ""
 msgid "Heading tag"
 msgstr ""
 
+#: includes/editor/beaver/faq/faq.php:349
+#: includes/editor/beaver/howto/howto.php:366
+#: includes/editor/beaver/toc/toc.php:269
 #: includes/editor/bricks/class-faq-element.php:109
 #: includes/editor/bricks/class-howto-element.php:119
 #: includes/editor/bricks/class-toc-element.php:115
@@ -2844,76 +3050,141 @@ msgstr ""
 msgid "Paragraph"
 msgstr ""
 
-#: includes/editor/bricks/class-faq-element.php:116
-#: includes/editor/elementor/class-faq-widget.php:85
-msgid "Questions"
-msgstr ""
-
-#: includes/editor/bricks/class-faq-element.php:121
-#: includes/editor/elementor/class-faq-widget.php:75
-#: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:1515
-#: src/admin/components/essential-seo/schema/forms/SchemaFAQForm.js:175
-#: src/admin/components/essential-seo/schema/forms/SchemaFAQForm.js:189
-#: src/blocks/faq-block/edit.js:158
-msgid "Question"
-msgstr ""
-
-#: includes/editor/bricks/class-faq-element.php:125
-#: includes/editor/elementor/class-faq-widget.php:80
-#: src/admin/components/essential-seo/schema/forms/SchemaFAQForm.js:205
-#: src/blocks/faq-block/edit.js:177
-msgid "Answer"
-msgstr ""
-
-#: includes/editor/bricks/class-faq-element.php:131
-msgid "What is your refund policy?"
-msgstr ""
-
-#: includes/editor/bricks/class-faq-element.php:132
-msgid "Describe the answer here."
-msgstr ""
-
+#: includes/editor/beaver/faq/faq.php:361
 #: includes/editor/bricks/class-faq-element.php:138
 #: includes/editor/elementor/class-faq-widget.php:93
 #: src/blocks/faq-block/edit.js:122
 msgid "Open first item by default"
 msgstr ""
 
+#: includes/editor/beaver/faq/faq.php:364
+#: includes/editor/beaver/faq/faq.php:383
+#: includes/editor/beaver/howto/howto.php:387
+#: includes/editor/beaver/howto/howto.php:419
+#: includes/editor/beaver/toc/toc.php:303
+#: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:1571
+msgid "Yes"
+msgstr ""
+
+#: includes/editor/beaver/faq/faq.php:365
+#: includes/editor/beaver/faq/faq.php:384
+#: includes/editor/beaver/howto/howto.php:388
+#: includes/editor/beaver/howto/howto.php:420
+#: includes/editor/beaver/toc/toc.php:304
+#: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:1575
+msgid "No"
+msgstr ""
+
+#: includes/editor/beaver/faq/faq.php:373
+#: includes/editor/beaver/howto/howto.php:409
+#: includes/editor/beaver/toc/toc.php:293
+#: includes/editor/bricks/class-howto-element.php:95
+#: includes/editor/elementor/class-howto-widget.php:126
+#: src/admin/components/content-brief/ContentStructure.js:1497
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:62
+#: src/metabox/components/MetaboxApp.js:353
+msgid "Schema"
+msgstr ""
+
+#: includes/editor/beaver/faq/faq.php:380
 #: includes/editor/bricks/class-faq-element.php:144
 #: includes/editor/elementor/class-faq-widget.php:99
 #: src/blocks/faq-block/edit.js:132
 msgid "Output FAQ schema (JSON-LD)"
 msgstr ""
 
+#: includes/editor/beaver/faq/faq.php:386
 #: includes/editor/bricks/class-faq-element.php:147
 #: includes/editor/elementor/class-faq-widget.php:100
 #: src/blocks/faq-block/edit.js:136
 msgid "Adds FAQPage structured data for rich results."
 msgstr ""
 
-#: includes/editor/bricks/class-faq-element.php:165
-msgid "Add a question to get started."
-msgstr ""
-
+#: includes/editor/beaver/howto/howto.php:47
 #: includes/editor/bricks/class-howto-element.php:62
 #: includes/editor/elementor/class-howto-widget.php:36
 #: src/blocks/howto-block/index.js:19
 msgid "HowTo (ThinkRank)"
 msgstr ""
 
-#: includes/editor/bricks/class-howto-element.php:90
-#: includes/editor/elementor/class-howto-widget.php:111
-#: src/blocks/howto-block/edit.js:155
-msgid "Total time"
+#: includes/editor/beaver/howto/howto.php:48
+msgid "A numbered list of steps that emits HowTo schema."
 msgstr ""
 
-#: includes/editor/bricks/class-howto-element.php:95
-#: includes/editor/elementor/class-howto-widget.php:126
-#: src/admin/components/content-brief/ContentStructure.js:1497
-#: src/metabox/components/MetaboxApp.js:353
-msgid "Schema"
+#: includes/editor/beaver/howto/howto.php:70
+#: includes/editor/bricks/class-howto-element.php:192
+msgid "Add a step to get started."
 msgstr ""
 
+#: includes/editor/beaver/howto/howto.php:99
+#: includes/editor/bricks/class-howto-element.php:223
+#: includes/editor/elementor/class-howto-widget.php:172
+#: src/blocks/howto-block/edit.js:307
+msgid "Total time:"
+msgstr ""
+
+#. translators: %d: number of days.
+#: includes/editor/beaver/howto/howto.php:207
+#: includes/editor/bricks/class-howto-element.php:330
+#: includes/editor/elementor/class-howto-widget.php:214
+#, php-format
+msgid "%d day"
+msgid_plural "%d days"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of hours.
+#: includes/editor/beaver/howto/howto.php:211
+#: includes/editor/bricks/class-howto-element.php:334
+#: includes/editor/elementor/class-howto-widget.php:218
+#, php-format
+msgid "%d hour"
+msgid_plural "%d hours"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of minutes.
+#: includes/editor/beaver/howto/howto.php:215
+#: includes/editor/bricks/class-howto-element.php:338
+#: includes/editor/elementor/class-howto-widget.php:222
+#, php-format
+msgid "%d minute"
+msgid_plural "%d minutes"
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/editor/beaver/howto/howto.php:314
+#: includes/editor/beaver/howto/howto.php:377
+msgid "Step"
+msgstr ""
+
+#: includes/editor/beaver/howto/howto.php:324
+#: includes/editor/bricks/class-howto-element.php:136
+#: includes/editor/elementor/class-howto-widget.php:81
+#: src/blocks/howto-block/edit.js:199
+msgid "Step title"
+msgstr ""
+
+#: includes/editor/beaver/howto/howto.php:329
+#: includes/editor/bricks/class-howto-element.php:140
+#: includes/editor/elementor/class-howto-widget.php:86
+msgid "Step description"
+msgstr ""
+
+#: includes/editor/beaver/howto/howto.php:335
+#: includes/editor/bricks/class-howto-element.php:144
+#: includes/editor/elementor/class-howto-widget.php:90
+msgid "Step image"
+msgstr ""
+
+#: includes/editor/beaver/howto/howto.php:347
+#: includes/editor/bricks/class-howto-element.php:131
+#: includes/editor/elementor/class-howto-widget.php:95
+msgid "Steps"
+msgstr ""
+
+#: includes/editor/beaver/howto/howto.php:354
+#: includes/editor/beaver/toc/toc.php:257
 #: includes/editor/bricks/class-howto-element.php:107
 #: includes/editor/bricks/class-toc-element.php:103
 #: includes/editor/elementor/class-howto-widget.php:61
@@ -2923,6 +3194,7 @@ msgstr ""
 msgid "Title"
 msgstr ""
 
+#: includes/editor/beaver/howto/howto.php:355
 #: includes/editor/bricks/class-howto-element.php:109
 #: includes/editor/elementor/class-howto-widget.php:63
 #: src/blocks/howto-block/edit.js:116
@@ -2930,6 +3202,7 @@ msgstr ""
 msgid "How to …"
 msgstr ""
 
+#: includes/editor/beaver/howto/howto.php:371
 #: includes/editor/bricks/class-howto-element.php:126
 #: includes/editor/elementor/class-howto-widget.php:75
 #: src/admin/components/essential-seo/schema/forms/SchemaEventForm.js:351
@@ -2941,25 +3214,138 @@ msgstr ""
 msgid "Description"
 msgstr ""
 
-#: includes/editor/bricks/class-howto-element.php:131
-#: includes/editor/elementor/class-howto-widget.php:95
-msgid "Steps"
+#: includes/editor/beaver/howto/howto.php:384
+#: includes/editor/bricks/class-howto-element.php:157
+#: includes/editor/elementor/class-howto-widget.php:103
+#: src/blocks/howto-block/edit.js:130
+msgid "Numbered steps"
 msgstr ""
 
-#: includes/editor/bricks/class-howto-element.php:136
-#: includes/editor/elementor/class-howto-widget.php:81
-#: src/blocks/howto-block/edit.js:199
-msgid "Step title"
+#: includes/editor/beaver/howto/howto.php:396
+#: src/admin/components/essential-seo/schema/forms/SchemaVideoObjectForm.js:128
+msgid "Duration"
 msgstr ""
 
-#: includes/editor/bricks/class-howto-element.php:140
-#: includes/editor/elementor/class-howto-widget.php:86
-msgid "Step description"
+#: includes/editor/beaver/howto/howto.php:401
+#: includes/editor/bricks/class-howto-element.php:365
+#: includes/editor/elementor/class-howto-widget.php:114
+#: src/admin/components/essential-seo/performance/HistoricalSection.js:229
+#: src/blocks/howto-block/edit.js:159
+msgid "Days"
 msgstr ""
 
-#: includes/editor/bricks/class-howto-element.php:144
-#: includes/editor/elementor/class-howto-widget.php:90
-msgid "Step image"
+#: includes/editor/beaver/howto/howto.php:402
+#: includes/editor/bricks/class-howto-element.php:366
+#: includes/editor/elementor/class-howto-widget.php:114
+#: src/blocks/howto-block/edit.js:168
+msgid "Hours"
+msgstr ""
+
+#: includes/editor/beaver/howto/howto.php:403
+#: includes/editor/bricks/class-howto-element.php:367
+#: includes/editor/elementor/class-howto-widget.php:114
+#: src/blocks/howto-block/edit.js:177
+msgid "Minutes"
+msgstr ""
+
+#: includes/editor/beaver/howto/howto.php:416
+#: includes/editor/bricks/class-howto-element.php:173
+#: includes/editor/elementor/class-howto-widget.php:130
+#: src/blocks/howto-block/edit.js:140
+msgid "Output HowTo schema (JSON-LD)"
+msgstr ""
+
+#: includes/editor/beaver/howto/howto.php:422
+#: includes/editor/bricks/class-howto-element.php:176
+#: includes/editor/elementor/class-howto-widget.php:131
+#: src/blocks/howto-block/edit.js:144
+msgid "Adds HowTo structured data for rich results."
+msgstr ""
+
+#: includes/editor/beaver/toc/toc.php:45
+#: includes/editor/bricks/class-toc-element.php:75
+#: includes/editor/elementor/class-toc-widget.php:38
+#: src/blocks/toc-block/index.js:18
+msgid "Table of Contents (ThinkRank)"
+msgstr ""
+
+#: includes/editor/beaver/toc/toc.php:46
+msgid "An automatic index of the page headings, with navigation schema."
+msgstr ""
+
+#: includes/editor/beaver/toc/toc.php:89
+#: includes/editor/bricks/class-toc-element.php:183
+#: includes/editor/elementor/class-toc-widget.php:121
+msgid "Table of contents"
+msgstr ""
+
+#: includes/editor/beaver/toc/toc.php:250
+msgid "Contents"
+msgstr ""
+
+#: includes/editor/beaver/toc/toc.php:258
+#: includes/editor/bricks/class-toc-element.php:105
+#: includes/editor/elementor/class-toc-widget.php:59
+#: includes/editor/elementor/class-toc-widget.php:65
+#: src/blocks/toc-block/edit.js:206
+msgid "Table of Contents"
+msgstr ""
+
+#: includes/editor/beaver/toc/toc.php:274
+#: includes/editor/bricks/class-toc-element.php:122
+#: includes/editor/elementor/class-toc-widget.php:77
+#: src/blocks/toc-block/edit.js:122
+msgid "Include headings up to"
+msgstr ""
+
+#: includes/editor/beaver/toc/toc.php:280
+#: includes/editor/bricks/class-toc-element.php:130
+#: includes/editor/elementor/class-toc-widget.php:84
+#: src/blocks/toc-block/edit.js:139
+msgid "List style"
+msgstr ""
+
+#: includes/editor/beaver/toc/toc.php:283
+#: includes/editor/bricks/class-toc-element.php:133
+#: includes/editor/elementor/class-toc-widget.php:88
+msgid "Bulleted"
+msgstr ""
+
+#: includes/editor/beaver/toc/toc.php:284
+#: includes/editor/bricks/class-toc-element.php:134
+#: includes/editor/elementor/class-toc-widget.php:89
+msgid "Numbered"
+msgstr ""
+
+#: includes/editor/beaver/toc/toc.php:285
+#: includes/editor/bricks/class-toc-element.php:135
+#: includes/editor/elementor/class-toc-widget.php:90
+msgid "Plain"
+msgstr ""
+
+#: includes/editor/beaver/toc/toc.php:300
+#: includes/editor/bricks/class-toc-element.php:142
+msgid "Output navigation schema (JSON-LD)"
+msgstr ""
+
+#: includes/editor/beaver/toc/toc.php:306
+#: includes/editor/bricks/class-toc-element.php:145
+#: src/blocks/toc-block/edit.js:151
+msgid "Adds SiteNavigationElement structured data for the listed sections."
+msgstr ""
+
+#: includes/editor/bricks/class-faq-element.php:131
+msgid "What is your refund policy?"
+msgstr ""
+
+#: includes/editor/bricks/class-faq-element.php:132
+msgid "Describe the answer here."
+msgstr ""
+
+#: includes/editor/bricks/class-howto-element.php:90
+#: includes/editor/elementor/class-howto-widget.php:111
+#: src/blocks/howto-block/edit.js:155
+msgid "Total time"
 msgstr ""
 
 #: includes/editor/bricks/class-howto-element.php:150
@@ -2970,134 +3356,6 @@ msgstr ""
 msgid "Describe what to do here."
 msgstr ""
 
-#: includes/editor/bricks/class-howto-element.php:157
-#: includes/editor/elementor/class-howto-widget.php:103
-#: src/blocks/howto-block/edit.js:130
-msgid "Numbered steps"
-msgstr ""
-
-#: includes/editor/bricks/class-howto-element.php:173
-#: includes/editor/elementor/class-howto-widget.php:130
-#: src/blocks/howto-block/edit.js:140
-msgid "Output HowTo schema (JSON-LD)"
-msgstr ""
-
-#: includes/editor/bricks/class-howto-element.php:176
-#: includes/editor/elementor/class-howto-widget.php:131
-#: src/blocks/howto-block/edit.js:144
-msgid "Adds HowTo structured data for rich results."
-msgstr ""
-
-#: includes/editor/bricks/class-howto-element.php:192
-msgid "Add a step to get started."
-msgstr ""
-
-#: includes/editor/bricks/class-howto-element.php:223
-#: includes/editor/elementor/class-howto-widget.php:172
-#: src/blocks/howto-block/edit.js:307
-msgid "Total time:"
-msgstr ""
-
-#. translators: %d: number of days.
-#: includes/editor/bricks/class-howto-element.php:330
-#: includes/editor/elementor/class-howto-widget.php:214
-#, php-format
-msgid "%d day"
-msgid_plural "%d days"
-msgstr[0] ""
-msgstr[1] ""
-
-#. translators: %d: number of hours.
-#: includes/editor/bricks/class-howto-element.php:334
-#: includes/editor/elementor/class-howto-widget.php:218
-#, php-format
-msgid "%d hour"
-msgid_plural "%d hours"
-msgstr[0] ""
-msgstr[1] ""
-
-#. translators: %d: number of minutes.
-#: includes/editor/bricks/class-howto-element.php:338
-#: includes/editor/elementor/class-howto-widget.php:222
-#, php-format
-msgid "%d minute"
-msgid_plural "%d minutes"
-msgstr[0] ""
-msgstr[1] ""
-
-#: includes/editor/bricks/class-howto-element.php:365
-#: includes/editor/elementor/class-howto-widget.php:114
-#: src/admin/components/essential-seo/performance/HistoricalSection.js:229
-#: src/blocks/howto-block/edit.js:159
-msgid "Days"
-msgstr ""
-
-#: includes/editor/bricks/class-howto-element.php:366
-#: includes/editor/elementor/class-howto-widget.php:114
-#: src/blocks/howto-block/edit.js:168
-msgid "Hours"
-msgstr ""
-
-#: includes/editor/bricks/class-howto-element.php:367
-#: includes/editor/elementor/class-howto-widget.php:114
-#: src/blocks/howto-block/edit.js:177
-msgid "Minutes"
-msgstr ""
-
-#: includes/editor/bricks/class-toc-element.php:75
-#: includes/editor/elementor/class-toc-widget.php:38
-#: src/blocks/toc-block/index.js:18
-msgid "Table of Contents (ThinkRank)"
-msgstr ""
-
-#: includes/editor/bricks/class-toc-element.php:105
-#: includes/editor/elementor/class-toc-widget.php:59
-#: includes/editor/elementor/class-toc-widget.php:65
-#: src/blocks/toc-block/edit.js:206
-msgid "Table of Contents"
-msgstr ""
-
-#: includes/editor/bricks/class-toc-element.php:122
-#: includes/editor/elementor/class-toc-widget.php:77
-#: src/blocks/toc-block/edit.js:122
-msgid "Include headings up to"
-msgstr ""
-
-#: includes/editor/bricks/class-toc-element.php:130
-#: includes/editor/elementor/class-toc-widget.php:84
-#: src/blocks/toc-block/edit.js:139
-msgid "List style"
-msgstr ""
-
-#: includes/editor/bricks/class-toc-element.php:133
-#: includes/editor/elementor/class-toc-widget.php:88
-msgid "Bulleted"
-msgstr ""
-
-#: includes/editor/bricks/class-toc-element.php:134
-#: includes/editor/elementor/class-toc-widget.php:89
-msgid "Numbered"
-msgstr ""
-
-#: includes/editor/bricks/class-toc-element.php:135
-#: includes/editor/elementor/class-toc-widget.php:90
-msgid "Plain"
-msgstr ""
-
-#: includes/editor/bricks/class-toc-element.php:142
-msgid "Output navigation schema (JSON-LD)"
-msgstr ""
-
-#: includes/editor/bricks/class-toc-element.php:145
-#: src/blocks/toc-block/edit.js:151
-msgid "Adds SiteNavigationElement structured data for the listed sections."
-msgstr ""
-
-#: includes/editor/bricks/class-toc-element.php:183
-#: includes/editor/elementor/class-toc-widget.php:121
-msgid "Table of contents"
-msgstr ""
-
 #: includes/editor/elementor/class-faq-widget.php:56
 msgid "FAQ"
 msgstr ""
@@ -3106,57 +3364,57 @@ msgstr ""
 msgid "Guide"
 msgstr ""
 
-#: includes/frontend/class-global-seo-schema-output.php:231
+#: includes/frontend/class-global-seo-schema-output.php:254
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:51
 #: src/admin/components/essential-seo/SocialMediaTab.js:1215
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:31
 msgid "Blog"
 msgstr ""
 
-#: includes/frontend/class-google-analytics-tracking-manager.php:214
+#: includes/frontend/class-google-analytics-tracking-manager.php:219
 msgid "Invalid GA4 Measurement ID format. Expected format: G-XXXXXXXXXX"
 msgstr ""
 
 #. translators: %s: Error message from WordPress HTTP request
-#: includes/frontend/class-google-analytics-tracking-manager.php:233
+#: includes/frontend/class-google-analytics-tracking-manager.php:238
 #, php-format
 msgid "Could not verify tracking: %s"
 msgstr ""
 
 #. translators: %d: HTTP status code number (e.g., 404, 500)
-#: includes/frontend/class-google-analytics-tracking-manager.php:248
+#: includes/frontend/class-google-analytics-tracking-manager.php:253
 #, php-format
 msgid "Could not verify tracking: HTTP %d response"
 msgstr ""
 
-#: includes/frontend/class-google-analytics-tracking-manager.php:267
+#: includes/frontend/class-google-analytics-tracking-manager.php:272
 msgid "No GA4 Measurement ID found on your homepage. Add your ID above, or check that your GA4 tag is installed."
 msgstr ""
 
 #. translators: %s: GA4 measurement ID found on the site.
-#: includes/frontend/class-google-analytics-tracking-manager.php:300
+#: includes/frontend/class-google-analytics-tracking-manager.php:305
 #, php-format
 msgid "✅ GA4 tracking detected and working — found %s on your site."
 msgstr ""
 
-#: includes/frontend/class-google-analytics-tracking-manager.php:303
+#: includes/frontend/class-google-analytics-tracking-manager.php:308
 msgid "✅ GA4 tracking code detected and working correctly!"
 msgstr ""
 
-#: includes/frontend/class-google-analytics-tracking-manager.php:316
+#: includes/frontend/class-google-analytics-tracking-manager.php:321
 msgid "⚠️ GA4 script not detected. Please check your configuration or enable auto-inject."
 msgstr ""
 
-#: includes/frontend/class-google-analytics-tracking-manager.php:323
+#: includes/frontend/class-google-analytics-tracking-manager.php:328
 msgid "⚠️ Measurement ID not found in tracking code. Please verify your Measurement ID."
 msgstr ""
 
-#: includes/frontend/class-google-analytics-tracking-manager.php:329
+#: includes/frontend/class-google-analytics-tracking-manager.php:334
 msgid "⚠️ GA4 tracking code not properly configured. Please check your setup."
 msgstr ""
 
 #. translators: %d: page number.
-#: includes/frontend/class-seo-manager.php:667
+#: includes/frontend/class-seo-manager.php:733
 #, php-format
 msgid "Page %d"
 msgstr ""
@@ -3531,6 +3789,28 @@ msgstr ""
 msgid "Every 45 Minutes"
 msgstr ""
 
+#: includes/seo/class-content-type-settings.php:308
+msgid "Blog posts index"
+msgstr ""
+
+#: includes/seo/class-content-type-settings.php:320
+#: src/admin/components/pages/MCP.js:32
+msgid "Author archives"
+msgstr ""
+
+#: includes/seo/class-content-type-settings.php:330
+msgid "Date archives"
+msgstr ""
+
+#: includes/seo/class-content-type-settings.php:344
+#: src/admin/components/layout/NavSearch.js:267
+msgid "Search results"
+msgstr ""
+
+#: includes/seo/class-content-type-settings.php:354
+msgid "404 page"
+msgstr ""
+
 #: includes/seo/class-email-report-data-provider.php:75
 msgid "Analytics integration not available."
 msgstr ""
@@ -3551,6 +3831,47 @@ msgstr ""
 #: includes/seo/class-email-report-renderer.php:326
 #, php-format
 msgid "This report was generated by ThinkRank for %s."
+msgstr ""
+
+#: includes/seo/class-external-links-manager.php:126
+#: src/admin/components/essential-seo/ExternalLinksTab.js:365
+msgid "Add nofollow to external links"
+msgstr ""
+
+#: includes/seo/class-external-links-manager.php:127
+msgid "Adds rel=\"nofollow\" to links pointing at another domain."
+msgstr ""
+
+#: includes/seo/class-external-links-manager.php:132
+#: src/admin/components/essential-seo/ExternalLinksTab.js:392
+msgid "Open external links in a new tab"
+msgstr ""
+
+#: includes/seo/class-external-links-manager.php:133
+msgid "Adds target=\"_blank\" (and the required rel=\"noopener\") to links pointing at another domain."
+msgstr ""
+
+#: includes/seo/class-external-links-manager.php:138
+#: src/admin/components/essential-seo/ExternalLinksTab.js:427
+msgid "Exceptions"
+msgstr ""
+
+#: includes/seo/class-external-links-manager.php:139
+msgid "Domains that keep the markup the author wrote. Matched on host, subdomains included."
+msgstr ""
+
+#. translators: %s: setting key
+#: includes/seo/class-external-links-manager.php:168
+#, php-format
+msgid "%s must be a boolean value."
+msgstr ""
+
+#: includes/seo/class-external-links-manager.php:176
+msgid "The exception list must be an array of domains."
+msgstr ""
+
+#: includes/seo/class-external-links-manager.php:180
+msgid "Both external link options are off, so outbound links render exactly as authored."
 msgstr ""
 
 #: includes/seo/class-image-seo-manager.php:171
@@ -3780,67 +4101,113 @@ msgstr ""
 msgid "Runs in batches over your media library. With AI alt text enabled this uses your AI provider key."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:110
+#: includes/seo/class-seo-analyzer-fixer.php:77
+msgid "Allow AI answer engines to crawl this site"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:81
+msgid "Sets the answer-engine crawlers (ChatGPT, Claude, Perplexity, Google-Extended) to Allow. Crawlers that only collect training data keep whatever setting you gave them."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:84
+msgid "Publish llms.txt"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:85
+msgid "Publishes /llms.txt from your saved LLMs.txt settings. It needs those fields filled in first."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:121
 msgid "This issue cannot be fixed automatically."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:138
+#: includes/seo/class-seo-analyzer-fixer.php:153
 msgid "No handler is registered for this fix."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:151
+#: includes/seo/class-seo-analyzer-fixer.php:166
 msgid "Search engines can now index this site."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:173
+#: includes/seo/class-seo-analyzer-fixer.php:188
 msgid "The sitemap setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:178
+#: includes/seo/class-seo-analyzer-fixer.php:193
 msgid "Your XML sitemap is now enabled."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:191
+#: includes/seo/class-seo-analyzer-fixer.php:206
 msgid "The schema module is unavailable."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:210
+#: includes/seo/class-seo-analyzer-fixer.php:225
 msgid "The schema setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:215
+#: includes/seo/class-seo-analyzer-fixer.php:230
 msgid "Automatic structured data is now enabled."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:248
+#: includes/seo/class-seo-analyzer-fixer.php:263
 msgid "Every image in your media library already has alt text."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:281
+#: includes/seo/class-seo-analyzer-fixer.php:296
 msgid "No images could be filled automatically. Check your alt text format under Essential SEO → Image SEO, or add alt text manually in the Media Library."
 msgstr ""
 
 #. translators: 1: images updated in this batch, 2: images still to process.
-#: includes/seo/class-seo-analyzer-fixer.php:294
+#: includes/seo/class-seo-analyzer-fixer.php:309
 #, php-format
 msgid "Added alt text to %1$d images. %2$d still to go — run the fix again to continue."
 msgstr ""
 
 #. translators: %d: number of images updated.
-#: includes/seo/class-seo-analyzer-fixer.php:300
+#: includes/seo/class-seo-analyzer-fixer.php:315
 #, php-format
 msgid "Added alt text to %d images. Your media library is done."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:57
+#: includes/seo/class-seo-analyzer-fixer.php:356
+msgid "The AI crawler rules could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
+msgstr ""
+
+#. translators: %s: comma-separated crawler names.
+#: includes/seo/class-seo-analyzer-fixer.php:376
+#, php-format
+msgid "The crawler rules were saved, but your robots.txt still blocks %s. That block comes from your own robots.txt content, a robots.txt file in your site root, or the site-wide search-engine setting — edit it under Essential SEO → Crawling and AI Indexing."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:384
+msgid "AI answer engines can now crawl and cite your site."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:404
+msgid "The llms.txt module is unavailable."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:415
+msgid "llms.txt could not be published because its settings are incomplete. Fill in Website Description, Key Features and Target Audience under Essential SEO → Crawling and AI Indexing → LLMs.txt, then try again."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:427
+msgid "llms.txt could not be written. Check that your site root is writable."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:433
+msgid "Your llms.txt is now published at /llms.txt."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:64
 msgid "Basic SEO"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:58
+#: includes/seo/class-seo-analyzer.php:65
 msgid "Advanced SEO"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:59
+#: includes/seo/class-seo-analyzer.php:66
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:667
 #: src/admin/components/seo/SEOScoreSummary.js:418
 #: src/blocks/faq-block/edit.js:99
@@ -3849,266 +4216,443 @@ msgstr ""
 msgid "Content"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:60
+#: includes/seo/class-seo-analyzer.php:67
 msgid "Performance & Technical"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:61
+#: includes/seo/class-seo-analyzer.php:68
 msgid "Security"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:349
-#: includes/seo/class-seo-analyzer.php:357
+#: includes/seo/class-seo-analyzer.php:72
+msgid "AI Search (GEO)"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:438
+#: includes/seo/class-seo-analyzer.php:446
 msgid "Site title is set"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:351
+#: includes/seo/class-seo-analyzer.php:440
 msgid "Your site has no title. Search engines and browsers use it as your brand name."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:352
+#: includes/seo/class-seo-analyzer.php:441
 msgid "Set a site title under Settings → General → Site Title."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:359
+#: includes/seo/class-seo-analyzer.php:448
 msgid "Your site title is configured."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:376
-#: includes/seo/class-seo-analyzer.php:384
+#: includes/seo/class-seo-analyzer.php:465
+#: includes/seo/class-seo-analyzer.php:473
 msgid "Tagline is customized"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:378
+#: includes/seo/class-seo-analyzer.php:467
 msgid "Your tagline is blank or still the WordPress default. Search engines may use it as your homepage description."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:379
+#: includes/seo/class-seo-analyzer.php:468
 msgid "Write a descriptive tagline under Settings → General → Tagline."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:386
+#: includes/seo/class-seo-analyzer.php:475
 msgid "Your tagline is set and ready to describe your site."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:445
-#: includes/seo/class-seo-analyzer.php:453
+#: includes/seo/class-seo-analyzer.php:534
+#: includes/seo/class-seo-analyzer.php:542
 msgid "Site is visible to search engines"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:447
+#: includes/seo/class-seo-analyzer.php:536
 msgid "Your site is telling search engines not to index it — it will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:448
+#: includes/seo/class-seo-analyzer.php:537
 msgid "Untick \"Discourage search engines from indexing this site\" under Settings → Reading."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:455
+#: includes/seo/class-seo-analyzer.php:544
 msgid "Your site allows search engines to index it."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:469
-#: includes/seo/class-seo-analyzer.php:477
+#: includes/seo/class-seo-analyzer.php:558
+#: includes/seo/class-seo-analyzer.php:566
 msgid "Search-friendly permalinks"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:471
+#: includes/seo/class-seo-analyzer.php:560
 msgid "Your site uses plain, numeric URLs (e.g. ?p=123). Descriptive URLs are easier for search engines and users."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:472
+#: includes/seo/class-seo-analyzer.php:561
 msgid "Choose a pretty permalink structure (e.g. Post name) under Settings → Permalinks."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:479
+#: includes/seo/class-seo-analyzer.php:568
 msgid "Your permalinks are search-friendly."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:509
-#: includes/seo/class-seo-analyzer.php:517
+#: includes/seo/class-seo-analyzer.php:598
+#: includes/seo/class-seo-analyzer.php:606
 msgid "XML sitemap is enabled"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:511
+#: includes/seo/class-seo-analyzer.php:600
 msgid "Your XML sitemap is turned off. Search engines rely on it to discover new pages quickly."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:512
+#: includes/seo/class-seo-analyzer.php:601
 msgid "Enable the XML sitemap under Essential SEO → Crawling & AI Indexing → XML Sitemap."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:519
+#: includes/seo/class-seo-analyzer.php:608
 msgid "Your XML sitemap is enabled and pointing crawlers to your content."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:529
+#: includes/seo/class-seo-analyzer.php:618
 msgid "Structured data configured"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:535
+#: includes/seo/class-seo-analyzer.php:624
 msgid "Structured data is configured for your content."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:546
+#: includes/seo/class-seo-analyzer.php:635
 msgid "Structured data is running on ThinkRank's built-in defaults. Reviewing the schema type for each post type gives you control over how rich results appear."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:547
+#: includes/seo/class-seo-analyzer.php:636
 msgid "Choose a schema type for each post type under Essential SEO → Bulk SEO Optimization."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:554
+#: includes/seo/class-seo-analyzer.php:643
 msgid "No schema/structured data is configured or emitted. Schema powers rich results in search."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:555
+#: includes/seo/class-seo-analyzer.php:644
 msgid "Turn on automatic structured data, or choose a schema type for each post type under Essential SEO → Bulk SEO Optimization."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:705
+#: includes/seo/class-seo-analyzer.php:803
 msgid "Posts have meta descriptions"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:723
+#: includes/seo/class-seo-analyzer.php:812
+#: includes/seo/class-seo-analyzer.php:1834
+#: includes/seo/class-seo-analyzer.php:1921
+#: includes/seo/class-seo-analyzer.php:1978
+#: includes/seo/class-seo-analyzer.php:1999
+#: includes/seo/class-seo-analyzer.php:2022
 msgid "No published content to check yet."
 msgstr ""
 
 #. translators: 1: posts with meta description, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:757
+#: includes/seo/class-seo-analyzer.php:849
 #, php-format
 msgid "%1$d of your %2$d most recent posts have a meta description."
 msgstr ""
 
 #. translators: 1: posts missing a meta description, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:766
+#: includes/seo/class-seo-analyzer.php:858
 #, php-format
 msgid "%1$d of your %2$d most recent posts are missing a meta description. Search engines fall back to arbitrary page text for their snippets."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:767
+#: includes/seo/class-seo-analyzer.php:859
 msgid "Add meta descriptions in the ThinkRank SEO panel when editing a post — or use Bulk SEO Optimization to generate them with AI."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:779
+#: includes/seo/class-seo-analyzer.php:872
 msgid "Images have alt text"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:794
+#: includes/seo/class-seo-analyzer.php:887
 msgid "No images in your media library to check yet."
 msgstr ""
 
 #. translators: 1: images with alt text, 2: total images.
-#: includes/seo/class-seo-analyzer.php:819
+#: includes/seo/class-seo-analyzer.php:912
 #, php-format
 msgid "%1$d of your %2$d images have alt text."
 msgstr ""
 
 #. translators: 1: images missing alt text, 2: total images.
-#: includes/seo/class-seo-analyzer.php:828
+#: includes/seo/class-seo-analyzer.php:921
 #, php-format
 msgid "%1$d of your %2$d images are missing alt text. Alt text drives image search rankings and is an accessibility requirement."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:829
+#: includes/seo/class-seo-analyzer.php:922
 msgid "Under Essential SEO → Image SEO, turn on \"Save alt text to the Media Library\" and run \"Fill missing alt text\" to populate them from your format, or add alt text manually in the Media Library."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:852
-#: includes/seo/class-seo-analyzer.php:862
+#: includes/seo/class-seo-analyzer.php:982
+#: includes/seo/class-seo-analyzer.php:992
 msgid "Supported PHP version"
 msgstr ""
 
 #. translators: %s: current PHP version.
-#: includes/seo/class-seo-analyzer.php:855
+#: includes/seo/class-seo-analyzer.php:985
 #, php-format
 msgid "You are running PHP %s, which no longer receives active support. Newer PHP is faster and more secure."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:856
+#: includes/seo/class-seo-analyzer.php:986
 msgid "Ask your host to upgrade to PHP 8.1 or newer."
 msgstr ""
 
 #. translators: %s: current PHP version.
-#: includes/seo/class-seo-analyzer.php:865
+#: includes/seo/class-seo-analyzer.php:995
 #, php-format
 msgid "You are running a supported PHP version (%s)."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:879
-#: includes/seo/class-seo-analyzer.php:886
+#: includes/seo/class-seo-analyzer.php:1009
+#: includes/seo/class-seo-analyzer.php:1016
 msgid "Persistent object cache"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:881
+#: includes/seo/class-seo-analyzer.php:1011
 msgid "A persistent object cache is active, reducing database load."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:888
+#: includes/seo/class-seo-analyzer.php:1018
 msgid "No persistent object cache is active. On busier sites this means more database queries per request."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:889
+#: includes/seo/class-seo-analyzer.php:1019
 msgid "Enable a persistent object cache (e.g. Redis or Memcached) via your host or a caching plugin."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:913
-#: includes/seo/class-seo-analyzer.php:921
+#: includes/seo/class-seo-analyzer.php:1043
+#: includes/seo/class-seo-analyzer.php:1051
 msgid "Site uses HTTPS (SSL)"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:915
+#: includes/seo/class-seo-analyzer.php:1045
 msgid "Your site URL is not served over HTTPS. HTTPS is a confirmed ranking signal and required for user trust."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:916
+#: includes/seo/class-seo-analyzer.php:1046
 msgid "Install an SSL certificate and set your WordPress Address / Site Address to https:// under Settings → General."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:923
+#: includes/seo/class-seo-analyzer.php:1053
 msgid "Your site is served securely over HTTPS."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:936
-#: includes/seo/class-seo-analyzer.php:943
+#: includes/seo/class-seo-analyzer.php:1066
+#: includes/seo/class-seo-analyzer.php:1073
 msgid "File editing disabled"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:938
+#: includes/seo/class-seo-analyzer.php:1068
 msgid "The dashboard plugin/theme file editor is disabled, reducing your attack surface."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:945
+#: includes/seo/class-seo-analyzer.php:1075
 msgid "The built-in file editor is enabled. If an admin account is compromised, an attacker could edit your PHP files from wp-admin."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:946
+#: includes/seo/class-seo-analyzer.php:1076
 msgid "Add define('DISALLOW_FILE_EDIT', true); to your wp-config.php."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:965
-#: includes/seo/class-seo-analyzer.php:973
+#: includes/seo/class-seo-analyzer.php:1095
+#: includes/seo/class-seo-analyzer.php:1103
 msgid "Errors not shown publicly"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:967
+#: includes/seo/class-seo-analyzer.php:1097
 msgid "Debug output is displayed on the front end. Visible PHP errors can leak server paths and internals."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:968
+#: includes/seo/class-seo-analyzer.php:1098
 msgid "Set define('WP_DEBUG_DISPLAY', false); (or turn off WP_DEBUG) in wp-config.php on production."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:975
+#: includes/seo/class-seo-analyzer.php:1105
 msgid "PHP errors are not displayed to visitors."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:1770
+#: includes/seo/class-seo-analyzer.php:1375
+msgid "(no title)"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1446
+msgid "AI answer engines can crawl your site"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1453
+msgid "ChatGPT, Claude, Perplexity and Google AI Overviews can all reach your content and cite it."
+msgstr ""
+
+#. translators: %s: comma-separated crawler names.
+#: includes/seo/class-seo-analyzer.php:1471
+#, php-format
+msgid "Your robots.txt blocks every AI answer engine (%s), so your pages cannot be cited in AI answers at all."
+msgstr ""
+
+#. translators: %s: comma-separated crawler names.
+#: includes/seo/class-seo-analyzer.php:1473
+#, php-format
+msgid "Your robots.txt blocks these AI answer engines: %s. Their assistants cannot read or cite your pages."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1474
+msgid "Under Essential SEO → Crawling & AI Indexing → Robots.txt, set the answer-engine crawlers to Allow. Blocking the training-only crawlers (GPTBot, ClaudeBot, CCBot) is a separate choice and does not cost you citations."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1615
+msgid "llms.txt is published"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1621
+msgid "The llms.txt module is unavailable, so this could not be checked."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1631
+msgid "Your llms.txt is published, so AI assistants have a summary of your site and its key pages."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1639
+msgid "No llms.txt is published. It is the file AI assistants read to learn what your site is about and which pages matter."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1640
+msgid "Fill in the fields under Essential SEO → Crawling & AI Indexing → LLMs.txt and publish it."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1652
+msgid "Answer-ready structured data"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1658
+msgid "Your site publishes FAQ, How-To or Q&A structured data, which AI answers can quote question-and-answer pairs from directly."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1662
+msgid "Add a ThinkRank FAQ or How-To block, widget or element to your key pages, or enable the FAQPage / HowTo schema types under Essential SEO → Schema."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1670
+msgid "Your pages publish Article or WebPage structured data, but no FAQ, How-To or Q&A schema. Those are the types AI answers quote from."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1678
+msgid "Your pages publish no structured data at all, so an AI assistant has to infer what each page is from its prose."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1823
+msgid "Pages open with a direct answer"
+msgstr ""
+
+#. translators: 1: matching posts, 2: sampled posts.
+#: includes/seo/class-seo-analyzer.php:1830
+#, php-format
+msgid "%1$d of your %2$d most recent pages open with a concise, quotable answer."
+msgstr ""
+
+#. translators: 1: posts without one, 2: sampled posts.
+#: includes/seo/class-seo-analyzer.php:1832
+#, php-format
+msgid "%1$d of your %2$d most recent pages do not open with a concise answer. AI assistants quote the first self-contained passage they find, and a long preamble gives them nothing to lift."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1833
+msgid "Open each page with a 40–60 word paragraph that answers its title directly, before any background or introduction."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1912
+msgid "Headings phrased as questions"
+msgstr ""
+
+#. translators: 1: matching posts, 2: sampled posts.
+#: includes/seo/class-seo-analyzer.php:1917
+#, php-format
+msgid "%1$d of your %2$d most recent pages use question-style headings."
+msgstr ""
+
+#. translators: 1: posts without one, 2: sampled posts.
+#: includes/seo/class-seo-analyzer.php:1919
+#, php-format
+msgid "%1$d of your %2$d most recent pages have no question-style heading. Assistants match a user's question against your headings first."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1920
+msgid "Phrase at least one H2 or H3 per page as the question it answers — \"How does X work?\" rather than \"Overview\"."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1969
+msgid "Content uses lists or tables"
+msgstr ""
+
+#. translators: 1: matching posts, 2: sampled posts.
+#: includes/seo/class-seo-analyzer.php:1974
+#, php-format
+msgid "%1$d of your %2$d most recent pages present information in lists or tables."
+msgstr ""
+
+#. translators: 1: posts without one, 2: sampled posts.
+#: includes/seo/class-seo-analyzer.php:1976
+#, php-format
+msgid "%1$d of your %2$d most recent pages are unbroken prose. Steps, comparisons and specifications are extracted far more reliably from a list or table."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1977
+msgid "Break steps, comparisons and specifications out of the paragraphs into list or table blocks."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1990
+msgid "Pages have enough depth to cite"
+msgstr ""
+
+#. translators: 1: matching posts, 2: sampled posts.
+#: includes/seo/class-seo-analyzer.php:1995
+#, php-format
+msgid "%1$d of your %2$d most recent pages have enough substance for an assistant to cite."
+msgstr ""
+
+#. translators: 1: thin posts, 2: sampled posts.
+#: includes/seo/class-seo-analyzer.php:1997
+#, php-format
+msgid "%1$d of your %2$d most recent pages are under 300 words. An assistant with a choice of sources rarely quotes the thinnest one."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1998
+msgid "Expand thin pages so each one answers its topic completely, or merge them into a page that does."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:2013
+msgid "Content has been updated recently"
+msgstr ""
+
+#. translators: 1: matching posts, 2: sampled posts.
+#: includes/seo/class-seo-analyzer.php:2018
+#, php-format
+msgid "%1$d of your %2$d most recent pages were revised within the last year."
+msgstr ""
+
+#. translators: 1: stale posts, 2: sampled posts.
+#: includes/seo/class-seo-analyzer.php:2020
+#, php-format
+msgid "%1$d of your %2$d most recent pages have not been revised in over a year. AI answers favour sources that look current."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:2021
+msgid "Review your most important pages, update what has changed, and save them so their modified date reflects the revision."
+msgstr ""
+
+#: includes/seo/class-site-identity-manager.php:1782
 msgid "Invalid title separator specified."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:1969
-#: includes/seo/class-sitemap-generator.php:2089
+#: includes/seo/class-sitemap-generator.php:1981
+#: includes/seo/class-sitemap-generator.php:2101
 msgid "The sitemap files could not be written to the site root."
 msgstr ""
 
@@ -4234,11 +4778,11 @@ msgstr ""
 msgid "ThinkRank requires WordPress 6.0 or higher. Please upgrade your WordPress installation."
 msgstr ""
 
-#: thinkrank.php:456
+#: thinkrank.php:457
 msgid "ThinkRank activation failed. Please check your server logs."
 msgstr ""
 
-#: thinkrank.php:457
+#: thinkrank.php:458
 msgid "Plugin Activation Error"
 msgstr ""
 
@@ -4374,7 +4918,7 @@ msgstr ""
 #: src/admin/components/ai/MetadataGenerator.js:275
 #: src/admin/components/common/OptimizationButton.js:38
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:800
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:438
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:594
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:558
 #: src/admin/components/essential-seo/schema/SchemaDeployment.js:454
 #: src/admin/components/essential-seo/SocialMediaTab.js:1072
@@ -4487,7 +5031,7 @@ msgid "Copy focus keyword"
 msgstr ""
 
 #: src/admin/components/ai/MetadataGenerator.js:591
-#: src/admin/components/essential-seo/SidebarNavigation.js:193
+#: src/admin/components/essential-seo/SidebarNavigation.js:208
 #: src/admin/components/essential-seo/SiteIdentityTab.js:956
 msgid "AI Suggestions"
 msgstr ""
@@ -4497,7 +5041,7 @@ msgid "Use This Variation"
 msgstr ""
 
 #: src/admin/components/ai/SerpPreview.js:129
-#: src/admin/components/essential-seo/GlobalSEOTab.js:525
+#: src/admin/components/essential-seo/GlobalSEOTab.js:536
 #: src/metabox/components/SerpPreview.js:43
 msgid "Search Engine Preview"
 msgstr ""
@@ -4596,7 +5140,7 @@ msgid "Category"
 msgstr ""
 
 #: src/admin/components/common/BreadcrumbPreview.js:18
-#: src/admin/components/essential-seo/GlobalSEOTab.js:105
+#: src/admin/components/essential-seo/GlobalSEOTab.js:110
 #: src/admin/components/essential-seo/schema/forms/SchemaReviewForm.js:31
 #: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:156
 #: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:164
@@ -4783,7 +5327,7 @@ msgstr ""
 
 #: src/admin/components/common/MediaPicker.js:578
 #: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:256
-#: src/admin/components/pages/Settings.js:1582
+#: src/admin/components/pages/Settings.js:1601
 msgid "Replace"
 msgstr ""
 
@@ -4827,7 +5371,7 @@ msgstr ""
 
 #: src/admin/components/common/OptimizationButton.js:32
 #: src/admin/components/essential-seo/SearchConsoleSettings.js:332
-#: src/admin/components/pages/Settings.js:1808
+#: src/admin/components/pages/Settings.js:1827
 msgid "Test Connection"
 msgstr ""
 
@@ -5168,8 +5712,8 @@ msgstr ""
 
 #: src/admin/components/content-brief/ContentStructure.js:296
 #: src/admin/components/content-brief/ContentStructure.js:1472
-#: src/admin/components/essential-seo/GlobalSEOTab.js:102
-#: src/admin/components/essential-seo/GlobalSEOTab.js:110
+#: src/admin/components/essential-seo/GlobalSEOTab.js:107
+#: src/admin/components/essential-seo/GlobalSEOTab.js:115
 #: src/admin/components/essential-seo/SocialMediaTab.js:1211
 #: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:128
 #: src/metabox/components/metabox-schema-tab/MetaboxSchemaTab.js:148
@@ -5461,7 +6005,7 @@ msgstr ""
 #: src/admin/components/content-brief/KeywordInput.js:17
 #: src/admin/components/essential-seo/analytics/DashboardSection.js:2014
 #: src/admin/components/essential-seo/schema/forms/SchemaProductForm.js:278
-#: src/admin/components/essential-seo/SidebarNavigation.js:101
+#: src/admin/components/essential-seo/SidebarNavigation.js:111
 msgid "Keywords"
 msgstr ""
 
@@ -5706,73 +6250,118 @@ msgstr ""
 msgid "Grade %s"
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:275
+#. translators: %d: number of items that fail this check.
+#: src/admin/components/dashboard/SiteHealthAudit.js:283
+#, js-format
+msgid "%d item to fix:"
+msgid_plural "%d items to fix:"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of items listed.
+#: src/admin/components/dashboard/SiteHealthAudit.js:296
+#, js-format
+msgid "The most recent %d are listed."
+msgstr ""
+
+#: src/admin/components/dashboard/SiteHealthAudit.js:357
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:360
+msgid "View"
+msgstr ""
+
+#. translators: 1: first item shown, 2: last item shown, 3: total items.
+#: src/admin/components/dashboard/SiteHealthAudit.js:379
+#, js-format
+msgid "Showing %1$d–%2$d of %3$d"
+msgstr ""
+
+#: src/admin/components/dashboard/SiteHealthAudit.js:398
+#: src/admin/components/essential-seo/instant-indexing/History.js:424
+#: src/admin/components/essential-seo/KeywordsTab.js:338
+#: src/admin/components/pages/UsageBreakdown.js:105
+msgid "Previous"
+msgstr ""
+
+#. translators: 1: current page, 2: total pages.
+#: src/admin/components/dashboard/SiteHealthAudit.js:403
+#, js-format
+msgid "Page %1$d of %2$d"
+msgstr ""
+
+#: src/admin/components/dashboard/SiteHealthAudit.js:414
+#: src/admin/components/essential-seo/instant-indexing/History.js:444
+#: src/admin/components/essential-seo/KeywordsTab.js:382
+#: src/admin/components/pages/UsageBreakdown.js:124
+msgid "Next"
+msgstr ""
+
+#: src/admin/components/dashboard/SiteHealthAudit.js:447
 msgid "Fixed."
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:284
+#: src/admin/components/dashboard/SiteHealthAudit.js:456
 msgid "Could not apply this fix."
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:358
+#: src/admin/components/dashboard/SiteHealthAudit.js:530
 msgid "How to fix: "
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:392
+#: src/admin/components/dashboard/SiteHealthAudit.js:572
 msgid "Fixing…"
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:394
+#: src/admin/components/dashboard/SiteHealthAudit.js:574
 msgid "Fix this for me"
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:422
+#: src/admin/components/dashboard/SiteHealthAudit.js:602
 msgid "SEO audit categories"
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:522
-#: src/admin/components/dashboard/SiteHealthAudit.js:533
+#: src/admin/components/dashboard/SiteHealthAudit.js:702
+#: src/admin/components/dashboard/SiteHealthAudit.js:713
 msgid "We could not load the site analysis. Please try again."
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:561
+#: src/admin/components/dashboard/SiteHealthAudit.js:741
 msgid "Site analysis complete."
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:565
-#: src/admin/components/dashboard/SiteHealthAudit.js:578
-#: src/admin/components/dashboard/SiteHealthAudit.js:720
+#: src/admin/components/dashboard/SiteHealthAudit.js:745
+#: src/admin/components/dashboard/SiteHealthAudit.js:758
+#: src/admin/components/dashboard/SiteHealthAudit.js:900
 msgid "We could not run the site analysis right now. Please try again."
 msgstr ""
 
 #. translators: 1: passed count, 2: warning count, 3: failed count.
-#: src/admin/components/dashboard/SiteHealthAudit.js:593
+#: src/admin/components/dashboard/SiteHealthAudit.js:773
 #, js-format
 msgid "%1$d passed · %2$d warnings · %3$d failed"
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:612
+#: src/admin/components/dashboard/SiteHealthAudit.js:792
 msgid "Analyzing your site…"
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:646
+#: src/admin/components/dashboard/SiteHealthAudit.js:826
 msgid "Site SEO Audit"
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:657
+#: src/admin/components/dashboard/SiteHealthAudit.js:837
 msgid "A whole-site audit of your SEO setup, content, performance, and security no Google connection needed."
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:705
+#: src/admin/components/dashboard/SiteHealthAudit.js:885
 #: src/metabox/components/panels/AnalysisPanel.js:159
 msgid "Analyzing…"
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:706
+#: src/admin/components/dashboard/SiteHealthAudit.js:886
 msgid "Re-analyze"
 msgstr ""
 
-#: src/admin/components/dashboard/SiteHealthAudit.js:794
+#: src/admin/components/dashboard/SiteHealthAudit.js:974
 msgid "See details"
 msgstr ""
 
@@ -5973,18 +6562,20 @@ msgid "Auto AI generates missing SEO titles and descriptions on publish using yo
 msgstr ""
 
 #: src/admin/components/essential-seo/ai-insights/AIInsightsTab.js:1097
-#: src/admin/components/pages/Settings.js:1947
-#: src/admin/components/pages/Settings.js:2158
-#: src/admin/components/pages/Settings.js:2363
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:56
+#: src/admin/components/pages/Settings.js:1966
+#: src/admin/components/pages/Settings.js:2177
+#: src/admin/components/pages/Settings.js:2382
 msgid "On"
 msgstr ""
 
 #: src/admin/components/essential-seo/ai-insights/AIInsightsTab.js:1098
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:57
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:211
 #: src/admin/components/pages/MCP.js:172
-#: src/admin/components/pages/Settings.js:1948
-#: src/admin/components/pages/Settings.js:2159
-#: src/admin/components/pages/Settings.js:2364
+#: src/admin/components/pages/Settings.js:1967
+#: src/admin/components/pages/Settings.js:2178
+#: src/admin/components/pages/Settings.js:2383
 #: src/admin/setup-wizard/steps/StepMcpServer.js:307
 msgid "Off"
 msgstr ""
@@ -6039,7 +6630,7 @@ msgid "Last run failed for “%1$s”: %2$s"
 msgstr ""
 
 #: src/admin/components/essential-seo/ai-insights/AIInsightsTab.js:1246
-#: src/admin/components/essential-seo/SidebarNavigation.js:147
+#: src/admin/components/essential-seo/SidebarNavigation.js:157
 msgid "AI Traffic"
 msgstr ""
 
@@ -6092,7 +6683,7 @@ msgid "Add a key to choose a model."
 msgstr ""
 
 #: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:232
-#: src/admin/components/pages/Settings.js:2529
+#: src/admin/components/pages/Settings.js:2548
 msgid "API key"
 msgstr ""
 
@@ -6103,18 +6694,18 @@ msgid "%s API key"
 msgstr ""
 
 #: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:296
-#: src/admin/components/pages/Settings.js:1649
+#: src/admin/components/pages/Settings.js:1668
 msgid "Hide API key"
 msgstr ""
 
 #: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:297
-#: src/admin/components/pages/Settings.js:1653
+#: src/admin/components/pages/Settings.js:1672
 msgid "Show API key"
 msgstr ""
 
 #: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:348
-#: src/admin/components/pages/Settings.js:1743
-#: src/admin/components/pages/Settings.js:2519
+#: src/admin/components/pages/Settings.js:1762
+#: src/admin/components/pages/Settings.js:2538
 msgid "Model"
 msgstr ""
 
@@ -6413,14 +7004,6 @@ msgstr ""
 msgid "Best platform"
 msgstr ""
 
-#: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:1571
-msgid "Yes"
-msgstr ""
-
-#: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:1575
-msgid "No"
-msgstr ""
-
 #: src/admin/components/essential-seo/ai-insights/BrandVisibilityPanel.js:1597
 msgid "Visibility over time"
 msgstr ""
@@ -6444,8 +7027,8 @@ msgstr ""
 #: src/admin/components/essential-seo/analytics/AnalyticsTab.js:254
 #: src/admin/components/essential-seo/analytics/AnalyticsTab.js:302
 #: src/admin/components/essential-seo/crawling-ai-indexing/GlobalRobotMeta.js:130
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:181
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:390
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:242
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:546
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:298
 #: src/admin/components/essential-seo/ImageSEOTab.js:346
 #: src/admin/components/essential-seo/ImageSEOTab.js:380
@@ -6495,7 +7078,7 @@ msgid "Regenerating…"
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/AnalyticsTab.js:767
-#: src/admin/components/essential-seo/SidebarNavigation.js:108
+#: src/admin/components/essential-seo/SidebarNavigation.js:118
 msgid "Rank Tracker"
 msgstr ""
 
@@ -6516,7 +7099,7 @@ msgid "Follow your progress over time to prove your SEO results"
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/AnalyticsTab.js:797
-#: src/admin/components/essential-seo/SidebarNavigation.js:113
+#: src/admin/components/essential-seo/SidebarNavigation.js:123
 msgid "Traffic Recovery"
 msgstr ""
 
@@ -6537,7 +7120,7 @@ msgid "Apply an optimized title and meta description, then re-score in one click
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/AnalyticsTab.js:831
-#: src/admin/components/essential-seo/SidebarNavigation.js:118
+#: src/admin/components/essential-seo/SidebarNavigation.js:128
 msgid "Index Status"
 msgstr ""
 
@@ -6581,14 +7164,14 @@ msgstr ""
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1442
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:1266
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:956
-#: src/admin/components/essential-seo/GlobalSEOTab.js:776
+#: src/admin/components/essential-seo/GlobalSEOTab.js:793
 #: src/admin/components/essential-seo/ImageSEOTab.js:1001
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:455
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:504
 #: src/admin/components/essential-seo/SearchConsoleSettings.js:457
 #: src/admin/components/essential-seo/SiteIdentityTab.js:1074
 #: src/admin/components/essential-seo/SocialMediaTab.js:1663
-#: src/admin/components/pages/Settings.js:1796
-#: src/admin/components/pages/Settings.js:2125
+#: src/admin/components/pages/Settings.js:1815
+#: src/admin/components/pages/Settings.js:2144
 msgid "Save Settings"
 msgstr ""
 
@@ -7080,8 +7663,8 @@ msgstr ""
 
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:45
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:52
-#: src/admin/components/essential-seo/GlobalSEOTab.js:363
-#: src/admin/components/essential-seo/GlobalSEOTab.js:369
+#: src/admin/components/essential-seo/GlobalSEOTab.js:374
+#: src/admin/components/essential-seo/GlobalSEOTab.js:380
 #: src/admin/components/essential-seo/ImageSEOTab.js:67
 #: src/admin/components/essential-seo/site-identity/TitleFormats.js:86
 #: src/admin/components/essential-seo/site-identity/TitleFormats.js:92
@@ -7093,8 +7676,8 @@ msgid "+ Site Title"
 msgstr ""
 
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:46
-#: src/admin/components/essential-seo/GlobalSEOTab.js:364
-#: src/admin/components/essential-seo/GlobalSEOTab.js:371
+#: src/admin/components/essential-seo/GlobalSEOTab.js:375
+#: src/admin/components/essential-seo/GlobalSEOTab.js:382
 #: src/admin/components/essential-seo/ImageSEOTab.js:72
 #: src/admin/components/essential-seo/site-identity/TitleFormats.js:87
 #: src/admin/components/essential-seo/site-identity/TitleFormats.js:98
@@ -7118,7 +7701,7 @@ msgid "Author Archives settings saved successfully!"
 msgstr ""
 
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:167
-#: src/admin/components/essential-seo/GlobalSEOTab.js:265
+#: src/admin/components/essential-seo/GlobalSEOTab.js:276
 #: src/admin/components/essential-seo/instant-indexing/Settings.js:246
 #: src/admin/components/essential-seo/IntegrationsTab.js:582
 #: src/admin/components/pages/Settings.js:1012
@@ -7127,7 +7710,7 @@ msgid "Failed to save settings. Please try again."
 msgstr ""
 
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:192
-#: src/admin/components/essential-seo/GlobalSEOTab.js:346
+#: src/admin/components/essential-seo/GlobalSEOTab.js:357
 #: src/admin/components/essential-seo/ImageSEOTab.js:446
 #: src/admin/components/essential-seo/site-identity/TitleFormats.js:145
 #: src/metabox/components/ui/VariableTags.js:36
@@ -7135,7 +7718,7 @@ msgid "Use variables:"
 msgstr ""
 
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:206
-#: src/admin/components/essential-seo/GlobalSEOTab.js:353
+#: src/admin/components/essential-seo/GlobalSEOTab.js:364
 #: src/admin/components/essential-seo/ImageSEOTab.js:461
 #: src/admin/components/essential-seo/site-identity/TitleFormats.js:152
 #: src/metabox/components/ui/VariableTags.js:43
@@ -7152,7 +7735,7 @@ msgstr ""
 
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:242
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:269
-#: src/admin/components/essential-seo/GlobalSEOTab.js:319
+#: src/admin/components/essential-seo/GlobalSEOTab.js:330
 #: src/admin/hooks/useAutosaveSettings.js:158
 msgid "Couldn’t save that change."
 msgstr ""
@@ -7276,13 +7859,147 @@ msgstr ""
 msgid "Connect with Google"
 msgstr ""
 
-#: src/admin/components/essential-seo/ContentArea.js:102
-#: src/admin/components/essential-seo/ContentArea.js:117
+#: src/admin/components/essential-seo/ContentArea.js:108
+#: src/admin/components/essential-seo/ContentArea.js:123
 msgid "Select a section from the sidebar to get started."
 msgstr ""
 
-#: src/admin/components/essential-seo/ContentArea.js:133
+#: src/admin/components/essential-seo/ContentArea.js:139
 msgid "You do not have permission to access this section."
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:55
+msgid "Inherit"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:61
+msgid "Metas"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:63
+#: src/admin/components/essential-seo/SidebarNavigation.js:260
+msgid "Open Graph"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:64
+msgid "Twitter card"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:69
+msgid "Post types"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:70
+#: src/admin/setup-wizard/steps/Step3SiteSetup.js:221
+msgid "Taxonomies"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:71
+msgid "Archives"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:72
+msgid "Special pages"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:78
+msgid "All content types"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:79
+msgid "Pinned only"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:80
+msgid "Untouched only"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:109
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:113
+msgid "Not available for this content type"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:218
+msgid "Could not save that change. Nothing was applied."
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:304
+msgid "Could not load the content type matrix. Nothing has been changed, retry before editing."
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:315
+msgid "inherit = on"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:316
+msgid "inherit = off"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:323
+#: src/admin/components/essential-seo/SidebarNavigation.js:39
+msgid "Content Type Matrix"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:324
+msgid "Switch each SEO feature per content type. Inherit follows the site-wide setting, so a matrix you never touch changes nothing."
+msgstr ""
+
+#. translators: %d: how many feature cells are pinned on or off rather than inherited.
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:333
+#, js-format
+msgid "%d cell pinned"
+msgid_plural "%d cells pinned"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:341
+msgid "All inherited"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:350
+msgid "Search content types"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:354
+msgid "Search content types…"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:369
+msgid "Inherit follows the site-wide value named under each column. On and Off pin the feature for that content type only."
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:380
+msgid "No content types match"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:381
+msgid "Nothing here matches your search and filter."
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:394
+msgid "Clear filters"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:404
+msgid "Content type"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:418
+msgid "No-index"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:421
+msgid "Sitemap"
+msgstr ""
+
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:471
+msgid "Reset to inherit"
+msgstr ""
+
+#. translators: 1: content type label, 2: feature name.
+#: src/admin/components/essential-seo/ContentTypeMatrix.js:491
+#, js-format
+msgid "%1$s, %2$s"
 msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/GlobalRobotMeta.js:70
@@ -7294,7 +8011,7 @@ msgid "Global Robot Meta settings saved successfully!"
 msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/GlobalRobotMeta.js:166
-#: src/admin/components/essential-seo/GlobalSEOTab.js:733
+#: src/admin/components/essential-seo/GlobalSEOTab.js:750
 msgid "Loading settings…"
 msgstr ""
 
@@ -7303,7 +8020,7 @@ msgid "Global Robot Meta"
 msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/GlobalRobotMeta.js:199
-#: src/admin/components/essential-seo/GlobalSEOTab.js:624
+#: src/admin/components/essential-seo/GlobalSEOTab.js:635
 msgid "Robots Meta"
 msgstr ""
 
@@ -7384,7 +8101,7 @@ msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:50
 #: src/admin/components/essential-seo/schema-tab/validation.js:307
-#: src/admin/components/essential-seo/SidebarNavigation.js:178
+#: src/admin/components/essential-seo/SidebarNavigation.js:188
 #: src/admin/components/essential-seo/SocialMediaTab.js:1207
 msgid "Website"
 msgstr ""
@@ -7439,8 +8156,8 @@ msgid "Served by WordPress"
 msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:219
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:323
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:404
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:479
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:560
 msgid "Too many requests. Please wait a few minutes before trying again."
 msgstr ""
 
@@ -7888,191 +8605,251 @@ msgstr ""
 msgid "Click \"Validate Configuration\" to check your LLMs.txt setup for errors and optimization opportunities."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:128
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:167
 msgid "Could not load your robots.txt settings. Nothing has been changed — retry before editing."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:290
+#. translators: %s: crawler user-agent token, e.g. GPTBot.
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:293
+#, js-format
+msgid "%s is now blocked in robots.txt."
+msgstr ""
+
+#. translators: %s: crawler user-agent token, e.g. GPTBot.
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:298
+#, js-format
+msgid "%s is allowed again."
+msgstr ""
+
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:317
+msgid "Every AI crawler is now blocked."
+msgstr ""
+
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:318
+msgid "Every AI crawler is allowed again."
+msgstr ""
+
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:446
 msgid "Robots.txt content generated successfully!"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:296
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:452
 msgid "File written to server."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:300
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:456
 msgid "Note: File not written to server - "
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:314
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:470
 msgid "Failed to generate robots.txt content."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:330
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:486
 msgid "You do not have permission to generate robots.txt files."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:380
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:536
 msgid "Robots.txt settings saved successfully!"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:395
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:551
 msgid "Failed to save robots.txt settings."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:411
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:567
 msgid "You do not have permission to modify robots.txt settings."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:437
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:593
 msgid "Generate Robots.txt"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:453
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:609
 msgid "A physical robots.txt file in your site root. Your web server serves this file directly, so WordPress and the content below are bypassed."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:458
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:614
 msgid "Your custom content below, served by WordPress."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:463
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:619
 msgid "Auto-generated by ThinkRank from your settings, served by WordPress."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:468
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:624
 msgid "WordPress default. ThinkRank's robots.txt management is off, so your settings below are not being served."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:484
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:640
 msgid "Physical file"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:486
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:642
 msgid "Custom content"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:488
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:644
 msgid "Auto-generated"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:490
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:646
 msgid "WordPress default"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:500
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:656
 msgid "Loading robots.txt settings…"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:510
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:666
 msgid "Your robots.txt settings could not be read, so this screen has nothing to edit yet. Nothing has changed — retry to load them."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:521
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:677
 msgid "Robots.txt Management"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:527
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:683
 msgid "Robots.txt management is on."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:528
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:684
 msgid "Robots.txt management is off."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:531
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:687
 msgid "Enable Robots.txt Management"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:549
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:705
 msgid "Robots.txt management is disabled. Enable to configure search engine access and generate robots.txt files."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:560
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:716
 msgid "Currently Served"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:561
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:717
 msgid "What crawlers receive when they request /robots.txt right now."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:620
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:776
 msgid "Search engines are discouraged from indexing this site, so crawlers receive “Disallow: /” instead of the rules below. Re-enable “Allow Search Engines” here and “Search engine visibility” under Settings → Reading to serve them."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:624
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:780
 msgid "The robots.txt file on your server no longer matches these settings, so your changes are not reaching crawlers. Use “Generate Robots.txt” to rewrite the file from the content below."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:660
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:816
 msgid "WordPress is serving its own default robots.txt."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:672
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:828
 msgid "Search Engine Access"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:673
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:829
 msgid "Control how search engines can crawl your site."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:684
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:840
 msgid "Allow Search Engines"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:688
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:844
 msgid "Allow search engines to index your site"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:711
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:867
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:606
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:663
 msgid "Sitemap URLs"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:721
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:877
 msgid "Sitemap URLs are automatically included from your Sitemap settings configuration."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:725
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:881
 msgid "Sitemap generation is currently disabled. Enable it in Sitemap settings to include sitemap URLs in robots.txt."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:755
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:911
 msgid "Current sitemaps:"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:809
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:965
 msgid "No sitemaps configured"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:835
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:991
 msgid "Configure sitemaps in sitemap settings"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:848
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:896
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1004
+msgid "AI Crawlers"
+msgstr ""
+
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1005
+msgid "Choose which AI crawlers may read your content. Blocking one writes a rule for it into your robots.txt; everything else you have written there is left alone."
+msgstr ""
+
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1030
+msgid "Allow all AI crawlers"
+msgstr ""
+
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1034
+msgid "Block all AI crawlers"
+msgstr ""
+
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1049
+msgid "No AI crawlers are registered."
+msgstr ""
+
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1057
+msgid "Blocking Google-Extended stops your content training Gemini. It does not affect normal Google Search indexing or your rankings — those are a different crawler."
+msgstr ""
+
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1064
+msgid "Every AI crawler is currently allowed, and your robots.txt carries no AI rules."
+msgstr ""
+
+#. translators: 1: number of blocked crawlers. 2: total number of known crawlers.
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1070
+#, js-format
+msgid "%1$d of %2$d AI crawlers blocked."
+msgstr ""
+
+#. translators: %s: crawler user-agent token, e.g. GPTBot.
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1103
+#, js-format
+msgid "Block %s"
+msgstr ""
+
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1128
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1176
 msgid "Robots.txt Content"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:849
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:900
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1129
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1180
 msgid "Custom robots.txt content. Leave empty to use auto-generated content."
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:871
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1151
 msgid "Enable Robots.txt management first"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:885
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1165
 msgid "View Robots.txt"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:915
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1195
 msgid "Enter a description…"
 msgstr ""
 
-#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:947
+#: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1227
 msgid "Save Change"
 msgstr ""
 
@@ -8215,7 +8992,7 @@ msgstr ""
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:274
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:210
 #: src/admin/components/pages/MCP.js:174
-#: src/admin/components/pages/Settings.js:1501
+#: src/admin/components/pages/Settings.js:1520
 #: src/admin/setup-wizard/steps/Step5Ecosystem.js:134
 #: src/admin/setup-wizard/steps/StepMcpServer.js:306
 msgid "Active"
@@ -8512,49 +9289,74 @@ msgstr ""
 msgid "Directory traversal not allowed in sitemap URL"
 msgstr ""
 
-#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:84
-#: src/admin/components/essential-seo/SidebarNavigation.js:255
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:85
+#: src/admin/components/essential-seo/SidebarNavigation.js:291
 msgid "Publisher Sitemaps"
 msgstr ""
 
-#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:88
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:89
 msgid "Publish news or video content? Dedicated News and Video sitemaps help Google surface your content in Google News and video search results."
 msgstr ""
 
-#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:93
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:94
 msgid "Generate a Google News sitemap for your latest articles"
 msgstr ""
 
-#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:97
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:98
 msgid "Generate a Video sitemap so your videos get indexed"
 msgstr ""
 
-#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:101
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:102
 msgid "Keep both updated automatically as you publish"
 msgstr ""
 
-#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:119
-#: src/admin/components/essential-seo/SidebarNavigation.js:264
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:120
+#: src/admin/components/essential-seo/SidebarNavigation.js:300
 msgid "Markdown for AI"
 msgstr ""
 
-#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:123
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:124
 msgid "AI agents that fetch your pages have to dig your content out of a full HTML document. Serve them a clean Markdown copy of the same URL instead, while visitors keep the normal page."
 msgstr ""
 
-#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:128
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:129
 msgid "Answer the same URL with Markdown when an agent asks for it"
 msgstr ""
 
-#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:132
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:133
 msgid "Choose which post types serve Markdown"
 msgstr ""
 
-#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:136
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:137
 msgid "Your HTML page stays canonical, so nothing about your SEO changes"
 msgstr ""
 
-#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:149
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:155
+#: src/admin/components/essential-seo/SidebarNavigation.js:305
+msgid "AI Usage Policy"
+msgstr ""
+
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:159
+msgid "Your llms.txt describes what your site is about, but says nothing about what AI companies may do with it. Publish a usage policy alongside it so crawlers read your terms before they train on your work."
+msgstr ""
+
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:164
+msgid "Allow or disallow model training on your content"
+msgstr ""
+
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:168
+msgid "Decide separately about summarization and embedding"
+msgstr ""
+
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:172
+msgid "Require attribution when an assistant quotes you"
+msgstr ""
+
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:176
+msgid "Published at the top of llms.txt, where crawlers look first"
+msgstr ""
+
+#: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:189
 #: src/admin/components/essential-seo/InstantIndexing.js:72
 msgid "Please select a sub-section from the navigation."
 msgstr ""
@@ -8601,7 +9403,7 @@ msgid "Loading email report settings…"
 msgstr ""
 
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:381
-#: src/admin/components/essential-seo/SidebarNavigation.js:104
+#: src/admin/components/essential-seo/SidebarNavigation.js:114
 msgid "Email Reporting"
 msgstr ""
 
@@ -8797,52 +9599,178 @@ msgstr ""
 msgid "See Pro plans"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:44
+#: src/admin/components/essential-seo/ExternalLinksTab.js:172
+msgid "An outbound link renders as"
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:183
+msgid "A link you excluded renders as"
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:194
+msgid "Both switches are off, so outbound links render exactly as written."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:198
+msgid "Highlighted attributes are added at render time. Anything the author already wrote is kept, and no value is ever added twice."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:288
+msgid "Exception list saved."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:294
+msgid "Failed to save the exception list. Please try again."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:325
+msgid "Could not load your external link settings. Nothing has been changed, retry before editing."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:348
+msgid "Link attributes"
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:349
+msgid "Applied while the page renders. Your post content is never modified, so switching these off restores the original markup."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:356
+msgid "Rewriting"
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:369
+msgid "Adds rel=\"nofollow\" to every link pointing at another domain."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:377
+msgid "External links now carry rel=\"nofollow\"."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:381
+msgid "External links no longer carry rel=\"nofollow\"."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:396
+msgid "Adds target=\"_blank\" along with the rel=\"noopener\" it requires."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:404
+msgid "External links now open in a new tab."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:408
+msgid "External links now open in the same tab."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:428
+msgid "Domains listed here keep the markup the author wrote, so neither switch above touches them. One per line; subdomains are included."
+msgstr ""
+
+#. translators: %d: how many domains are excluded.
+#: src/admin/components/essential-seo/ExternalLinksTab.js:437
+#, js-format
+msgid "%d domain"
+msgid_plural "%d domains"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:452
+msgid "Nothing is being rewritten right now, so this list has no effect. Turn on a switch above for it to apply."
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:460
+msgid "Excluded domains"
+msgstr ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:464
+msgid "A full URL or a \"www.\" prefix is fine; it is reduced to the host it matches on."
+msgstr ""
+
+#. translators: %d: how many domains the edited list holds.
+#: src/admin/components/essential-seo/ExternalLinksTab.js:479
+#, js-format
+msgid "%d domain in this list, not saved yet."
+msgid_plural "%d domains in this list, not saved yet."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/ExternalLinksTab.js:500
+msgid "Save Exceptions"
+msgstr ""
+
+#: src/admin/components/essential-seo/FocusPagesTab.js:23
+#: src/admin/components/essential-seo/SidebarNavigation.js:267
+#: src/admin/components/essential-seo/SidebarNavigation.js:364
+msgid "Focus Pages"
+msgstr ""
+
+#: src/admin/components/essential-seo/FocusPagesTab.js:24
+msgid "ThinkRank can tell you a page scores 62. It cannot yet tell you why that page is not ranking the answer is spread across the SEO score, Search Console, Analytics, your tracked keywords and the index report. Focus Pages joins them, per page, on one screen."
+msgstr ""
+
+#: src/admin/components/essential-seo/FocusPagesTab.js:29
+msgid "Pick the handful of pages that matter and watch them together"
+msgstr ""
+
+#: src/admin/components/essential-seo/FocusPagesTab.js:33
+msgid "Each page diagnosed dimension by dimension, from real data only"
+msgstr ""
+
+#: src/admin/components/essential-seo/FocusPagesTab.js:37
+msgid "Every failing dimension links to the screen that fixes it"
+msgstr ""
+
+#: src/admin/components/essential-seo/FocusPagesTab.js:41
+msgid "Refreshed on a schedule, so quota-limited APIs are never called on page load"
+msgstr ""
+
+#: src/admin/components/essential-seo/GlobalSEOTab.js:45
 msgid "This is a sample excerpt showing how your description will appear in search results."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:103
+#: src/admin/components/essential-seo/GlobalSEOTab.js:108
 msgid "WebPage"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:104
+#: src/admin/components/essential-seo/GlobalSEOTab.js:109
 msgid "Media"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:111
+#: src/admin/components/essential-seo/GlobalSEOTab.js:116
 msgid "NewsArticle"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:112
+#: src/admin/components/essential-seo/GlobalSEOTab.js:117
 msgid "BlogPosting"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:117
+#: src/admin/components/essential-seo/GlobalSEOTab.js:122
 msgid "ImageObject"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:118
+#: src/admin/components/essential-seo/GlobalSEOTab.js:123
 msgid "VideoObject"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:204
+#: src/admin/components/essential-seo/GlobalSEOTab.js:215
 msgid "Could not load your Global SEO settings. Nothing has been changed — retry before editing."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:256
+#: src/admin/components/essential-seo/GlobalSEOTab.js:267
 msgid "Bulk SEO Optimization settings saved successfully!"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:306
+#: src/admin/components/essential-seo/GlobalSEOTab.js:317
 msgid "Link suggestions are on."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:307
+#: src/admin/components/essential-seo/GlobalSEOTab.js:318
 msgid "Link suggestions are off."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:362
-#: src/admin/components/essential-seo/GlobalSEOTab.js:370
+#: src/admin/components/essential-seo/GlobalSEOTab.js:373
+#: src/admin/components/essential-seo/GlobalSEOTab.js:381
 #: src/metabox/components/panels/GeneralPanel.js:23
 #: src/metabox/components/panels/GeneralPanel.js:31
 #: src/metabox/components/SocialTab.js:30
@@ -8850,135 +9778,135 @@ msgstr ""
 msgid "+ Title"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:368
+#: src/admin/components/essential-seo/GlobalSEOTab.js:379
 #: src/metabox/components/panels/GeneralPanel.js:29
 #: src/metabox/components/SocialTab.js:35
 msgid "+ Excerpt"
 msgstr ""
 
 #. translators: %s: singular content type name, e.g. Page, Media.
-#: src/admin/components/essential-seo/GlobalSEOTab.js:387
+#: src/admin/components/essential-seo/GlobalSEOTab.js:398
 #, js-format
 msgid "Sample %s Title"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:401
+#: src/admin/components/essential-seo/GlobalSEOTab.js:412
 msgid "SEO Settings"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:402
+#: src/admin/components/essential-seo/GlobalSEOTab.js:413
 msgid "Configure default SEO settings for all"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:411
+#: src/admin/components/essential-seo/GlobalSEOTab.js:422
 msgid "Title Format"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:412
+#: src/admin/components/essential-seo/GlobalSEOTab.js:423
 msgid "Default title template for this post type."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:434
+#: src/admin/components/essential-seo/GlobalSEOTab.js:445
 msgid "Description Format"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:435
+#: src/admin/components/essential-seo/GlobalSEOTab.js:446
 msgid "Default meta description template for this post type."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:463
+#: src/admin/components/essential-seo/GlobalSEOTab.js:474
 msgid "Default Schema Type"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:464
+#: src/admin/components/essential-seo/GlobalSEOTab.js:475
 msgid "Structured-data type assigned to each item by default."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:483
+#: src/admin/components/essential-seo/GlobalSEOTab.js:494
 msgid "Default Article Type"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:484
+#: src/admin/components/essential-seo/GlobalSEOTab.js:495
 msgid "Sub-type used when the schema type is Article."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:504
+#: src/admin/components/essential-seo/GlobalSEOTab.js:515
 msgid "Default Media Type"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:505
+#: src/admin/components/essential-seo/GlobalSEOTab.js:516
 msgid "Media sub-type used when the schema type is Media."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:625
+#: src/admin/components/essential-seo/GlobalSEOTab.js:636
 msgid "Select custom robots meta, such as `nofollow`, `noarchive`, etc. for single"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:625
+#: src/admin/components/essential-seo/GlobalSEOTab.js:636
 msgid "pages. Otherwise the default meta will be used, as set in the Global Meta tab."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:652
+#: src/admin/components/essential-seo/GlobalSEOTab.js:663
 #: src/metabox/components/MetaboxRobotsTab.js:96
 msgid "Advanced Robots Meta"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:658
+#: src/admin/components/essential-seo/GlobalSEOTab.js:669
 #: src/metabox/components/MetaboxRobotsTab.js:108
 msgid "Snippet"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:660
+#: src/admin/components/essential-seo/GlobalSEOTab.js:671
 msgid "Snippet length (-1 for none)"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:667
+#: src/admin/components/essential-seo/GlobalSEOTab.js:678
 #: src/metabox/components/MetaboxRobotsTab.js:135
 msgid "Video Preview"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:669
+#: src/admin/components/essential-seo/GlobalSEOTab.js:680
 msgid "Set the max video preview duration. Use -1 for unlimited."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:676
+#: src/admin/components/essential-seo/GlobalSEOTab.js:687
 #: src/metabox/components/MetaboxRobotsTab.js:167
 msgid "Image Preview"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:680
+#: src/admin/components/essential-seo/GlobalSEOTab.js:691
 #: src/metabox/components/MetaboxRobotsTab.js:183
 msgid "None"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:684
+#: src/admin/components/essential-seo/GlobalSEOTab.js:695
 #: src/metabox/components/MetaboxRobotsTab.js:187
 msgid "Standard"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:688
+#: src/admin/components/essential-seo/GlobalSEOTab.js:699
 #: src/metabox/components/MetaboxRobotsTab.js:194
 msgid "Large"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:692
+#: src/admin/components/essential-seo/GlobalSEOTab.js:703
 msgid "Set the max image preview size."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:708
+#: src/admin/components/essential-seo/GlobalSEOTab.js:719
 #: src/metabox/components/PillarContentSuggestions.js:243
 msgid "Link Suggestions"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:709
+#: src/admin/components/essential-seo/GlobalSEOTab.js:720
 msgid "Enable link suggestions and pillar content feature for this post type."
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:718
+#: src/admin/components/essential-seo/GlobalSEOTab.js:729
 msgid "Enable link suggestions"
 msgstr ""
 
-#: src/admin/components/essential-seo/GlobalSEOTab.js:743
+#: src/admin/components/essential-seo/GlobalSEOTab.js:760
 msgid "Your Global SEO settings could not be read, so this screen has nothing to edit yet. Nothing has changed — retry to load them."
 msgstr ""
 
@@ -9056,7 +9984,7 @@ msgid "Format used for the new title attribute values."
 msgstr ""
 
 #: src/admin/components/essential-seo/ImageSEOTab.js:580
-#: src/admin/components/essential-seo/SidebarNavigation.js:162
+#: src/admin/components/essential-seo/SidebarNavigation.js:172
 msgid "Image SEO Settings"
 msgstr ""
 
@@ -9340,7 +10268,7 @@ msgstr ""
 #: src/admin/components/essential-seo/instant-indexing/History.js:335
 #: src/admin/components/essential-seo/instant-indexing/SubmitURLs.js:418
 #: src/admin/components/essential-seo/instant-indexing/SubmitURLs.js:479
-#: src/admin/components/essential-seo/SidebarNavigation.js:279
+#: src/admin/components/essential-seo/SidebarNavigation.js:320
 msgid "Submit URLs"
 msgstr ""
 
@@ -9356,22 +10284,10 @@ msgstr ""
 msgid "Time"
 msgstr ""
 
-#: src/admin/components/essential-seo/instant-indexing/History.js:424
-#: src/admin/components/essential-seo/KeywordsTab.js:338
-#: src/admin/components/pages/UsageBreakdown.js:105
-msgid "Previous"
-msgstr ""
-
 #. translators: 1: Current page number, 2: Total pages
 #: src/admin/components/essential-seo/instant-indexing/History.js:429
 #, js-format
 msgid "Page %1$s of %2$s"
-msgstr ""
-
-#: src/admin/components/essential-seo/instant-indexing/History.js:444
-#: src/admin/components/essential-seo/KeywordsTab.js:382
-#: src/admin/components/pages/UsageBreakdown.js:124
-msgid "Next"
 msgstr ""
 
 #: src/admin/components/essential-seo/instant-indexing/History.js:461
@@ -9462,8 +10378,8 @@ msgstr ""
 
 #: src/admin/components/essential-seo/instant-indexing/Settings.js:417
 #: src/admin/components/essential-seo/instant-indexing/Settings.js:436
-#: src/admin/components/pages/Settings.js:1538
-#: src/admin/components/pages/Settings.js:1601
+#: src/admin/components/pages/Settings.js:1557
+#: src/admin/components/pages/Settings.js:1620
 msgid "API Key"
 msgstr ""
 
@@ -10274,8 +11190,8 @@ msgid "Loading roles…"
 msgstr ""
 
 #: src/admin/components/essential-seo/RoleManagerTab.js:116
-#: src/admin/components/essential-seo/SidebarNavigation.js:289
-#: src/admin/components/essential-seo/SidebarNavigation.js:388
+#: src/admin/components/essential-seo/SidebarNavigation.js:330
+#: src/admin/components/essential-seo/SidebarNavigation.js:439
 msgid "Role Manager"
 msgstr ""
 
@@ -10449,38 +11365,58 @@ msgstr ""
 msgid "Failed to sync contact hours from Local SEO. Please try again."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:235
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:248
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:238
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:251
 #: src/admin/components/essential-seo/SocialMediaTab.js:1039
 msgid "Sync from Site Identity"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:270
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:273
 msgid "Test Rich Results"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:291
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:316
 msgid "Site Schema Manager"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:379
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:391
 msgid "Custom Schema & Display Conditions"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:383
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:395
 msgid "Go beyond the built-in schema types. Build any structured data you need and control exactly where it appears across your site."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:388
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:400
 msgid "Create custom JSON-LD schema for any content type"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:392
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:404
 msgid "Target it with display conditions (post type, taxonomy, single page)"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:396
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:408
 msgid "Add rich results like Recipe, FAQ, or JobPosting with ease"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:427
+msgid "Custom Fields to Schema"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:431
+msgid "Bind a post type to a schema type and fill its properties straight from your custom fields no JSON-LD to write, and no schema to maintain post by post."
+msgstr ""
+
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:436
+msgid "Map ACF, SCF, Meta Box, Pods and ACPT fields onto schema properties"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:440
+msgid "Bind any post type to Product, Event, Recipe, Course, JobPosting and more"
+msgstr ""
+
+#: src/admin/components/essential-seo/schema-tab/SchemaTab.js:444
+msgid "Preview the generated schema against a real post before it goes live"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/utils.js:39
@@ -10488,7 +11424,7 @@ msgstr ""
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:253
 #: src/admin/components/essential-seo/schema/forms/SchemaReviewForm.js:40
 #: src/admin/components/essential-seo/schema/forms/SchemaSoftwareForm.js:79
-#: src/admin/components/essential-seo/SidebarNavigation.js:175
+#: src/admin/components/essential-seo/SidebarNavigation.js:185
 #: src/admin/config/schema-settings-config.js:205
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:93
 msgid "Organization"
@@ -11020,7 +11956,7 @@ msgid "Schema is generated from these sections click to manage each one"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:227
-#: src/admin/components/essential-seo/SidebarNavigation.js:69
+#: src/admin/components/essential-seo/SidebarNavigation.js:79
 #: src/admin/components/essential-seo/SiteIdentityTab.js:89
 msgid "Business Info"
 msgstr ""
@@ -11066,7 +12002,7 @@ msgid "Contact point information"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:276
-#: src/admin/components/essential-seo/SidebarNavigation.js:68
+#: src/admin/components/essential-seo/SidebarNavigation.js:78
 #: src/admin/components/essential-seo/SiteIdentityTab.js:88
 msgid "Hero & Branding"
 msgstr ""
@@ -11110,7 +12046,7 @@ msgid "Logo"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:353
-#: src/admin/components/pages/Settings.js:2533
+#: src/admin/components/pages/Settings.js:2552
 msgid "Configured"
 msgstr ""
 
@@ -11628,7 +12564,7 @@ msgid "The review text"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaSoftwareForm.js:78
-#: src/admin/components/essential-seo/SidebarNavigation.js:177
+#: src/admin/components/essential-seo/SidebarNavigation.js:187
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:84
 msgid "Person"
 msgstr ""
@@ -11894,10 +12830,6 @@ msgstr ""
 msgid "When the video was published. Defaults to the post date."
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaVideoObjectForm.js:128
-msgid "Duration"
-msgstr ""
-
 #: src/admin/components/essential-seo/schema/forms/SchemaVideoObjectForm.js:136
 msgid "ISO 8601 format, e.g. PT1M33S for 1 min 33 sec."
 msgstr ""
@@ -12078,7 +13010,7 @@ msgid "Deploy Schema"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/SchemaDeployment.js:285
-#: src/admin/components/essential-seo/SidebarNavigation.js:184
+#: src/admin/components/essential-seo/SidebarNavigation.js:199
 msgid "Deployment"
 msgstr ""
 
@@ -12385,7 +13317,7 @@ msgid "Failed to refresh the property list."
 msgstr ""
 
 #: src/admin/components/essential-seo/SearchConsoleSettings.js:303
-#: src/admin/components/pages/Settings.js:1560
+#: src/admin/components/pages/Settings.js:1579
 #: src/admin/setup-wizard/steps/Step4Analytics.js:31
 msgid "Connected"
 msgstr ""
@@ -12410,144 +13342,172 @@ msgstr ""
 msgid "Refresh property list"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:65
+#: src/admin/components/essential-seo/SEOAnalyzerTab.js:29
+msgid "Audit history"
+msgstr ""
+
+#: src/admin/components/essential-seo/SEOAnalyzerTab.js:30
+msgid "Re-running the audit replaces the old result, so a score on its own never tells you whether the site improved. Pro keeps every run and shows what changed between any two of them."
+msgstr ""
+
+#: src/admin/components/essential-seo/SEOAnalyzerTab.js:35
+msgid "A score trend across your recent audits"
+msgstr ""
+
+#: src/admin/components/essential-seo/SEOAnalyzerTab.js:39
+msgid "Compare two runs side by side, check by check"
+msgstr ""
+
+#: src/admin/components/essential-seo/SEOAnalyzerTab.js:43
+msgid "See exactly which checks improved and which regressed"
+msgstr ""
+
+#: src/admin/components/essential-seo/SidebarNavigation.js:75
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:55
 #: src/admin/components/essential-seo/SiteIdentityTab.js:85
 msgid "Basic Info"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:66
+#: src/admin/components/essential-seo/SidebarNavigation.js:76
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:56
 #: src/admin/components/essential-seo/SiteIdentityTab.js:86
 msgid "Title Formats"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:67
+#: src/admin/components/essential-seo/SidebarNavigation.js:77
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:57
 #: src/admin/components/essential-seo/SiteIdentityTab.js:87
 msgid "Breadcrumbs"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:74
-#: src/admin/components/essential-seo/SidebarNavigation.js:318
+#: src/admin/components/essential-seo/SidebarNavigation.js:84
+#: src/admin/components/essential-seo/SidebarNavigation.js:359
 msgid "SEO Analyzer"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:75
+#: src/admin/components/essential-seo/SidebarNavigation.js:85
 msgid "Site Audit"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:84
-#: src/admin/components/essential-seo/SidebarNavigation.js:323
+#: src/admin/components/essential-seo/SidebarNavigation.js:94
+#: src/admin/components/essential-seo/SidebarNavigation.js:369
 msgid "Integrations"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:88
+#: src/admin/components/essential-seo/SidebarNavigation.js:98
 msgid "Google Services"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:92
+#: src/admin/components/essential-seo/SidebarNavigation.js:102
 msgid "Social Platforms"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:129
+#: src/admin/components/essential-seo/SidebarNavigation.js:139
 msgid "Core Web Vitals"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:133
+#: src/admin/components/essential-seo/SidebarNavigation.js:143
 msgid "Opportunities"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:135
+#: src/admin/components/essential-seo/SidebarNavigation.js:145
 msgid "Historical Data"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:136
+#: src/admin/components/essential-seo/SidebarNavigation.js:146
 msgid "Diagnostics"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:172
+#: src/admin/components/essential-seo/SidebarNavigation.js:182
 msgid "Schema Settings"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:174
+#: src/admin/components/essential-seo/SidebarNavigation.js:184
 msgid "Schema Types"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:176
+#: src/admin/components/essential-seo/SidebarNavigation.js:186
 msgid "LocalBusiness"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:181
+#: src/admin/components/essential-seo/SidebarNavigation.js:191
 msgid "Custom Schema"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:204
+#: src/admin/components/essential-seo/SidebarNavigation.js:196
+msgid "Custom Fields"
+msgstr ""
+
+#: src/admin/components/essential-seo/SidebarNavigation.js:219
+msgid "Link Attributes"
+msgstr ""
+
+#: src/admin/components/essential-seo/SidebarNavigation.js:229
 msgid "Redirects & 404s"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:215
+#: src/admin/components/essential-seo/SidebarNavigation.js:240
 msgid "Link Report"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:226
+#: src/admin/components/essential-seo/SidebarNavigation.js:251
 msgid "Product SEO"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:235
-msgid "Open Graph"
-msgstr ""
-
-#: src/admin/components/essential-seo/SidebarNavigation.js:236
+#: src/admin/components/essential-seo/SidebarNavigation.js:261
 msgid "Twitter Cards"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:237
+#: src/admin/components/essential-seo/SidebarNavigation.js:262
 #: src/admin/components/essential-seo/SocialMediaTab.js:1461
 #: src/metabox/components/SocialTab.js:453
 #: src/metabox/components/SocialTab.js:514
 msgid "Preview"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:246
+#: src/admin/components/essential-seo/SidebarNavigation.js:271
+msgid "Diagnosis"
+msgstr ""
+
+#: src/admin/components/essential-seo/SidebarNavigation.js:282
 msgid "Global Robots Meta"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:250
+#: src/admin/components/essential-seo/SidebarNavigation.js:286
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:58
 #: src/admin/components/essential-seo/SiteIdentityTab.js:90
 msgid "Robots.txt"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:252
+#: src/admin/components/essential-seo/SidebarNavigation.js:288
 msgid "XML Sitemap"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:260
+#: src/admin/components/essential-seo/SidebarNavigation.js:296
 msgid "LLMs.txt for AI"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:283
+#: src/admin/components/essential-seo/SidebarNavigation.js:324
 msgid "History"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:293
+#: src/admin/components/essential-seo/SidebarNavigation.js:334
 msgid "Access Control"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:358
+#: src/admin/components/essential-seo/SidebarNavigation.js:404
 msgid "Link Manager"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:373
+#: src/admin/components/essential-seo/SidebarNavigation.js:424
 msgid "Crawling"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:378
+#: src/admin/components/essential-seo/SidebarNavigation.js:429
 msgid "Indexing"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:542
+#: src/admin/components/essential-seo/SidebarNavigation.js:594
 msgid "Settings navigation"
 msgstr ""
 
@@ -13948,7 +14908,7 @@ msgid "Re-scan"
 msgstr ""
 
 #: src/admin/components/import-export/ImportExportTab.js:250
-#: src/admin/components/pages/Settings.js:2465
+#: src/admin/components/pages/Settings.js:2484
 msgid "Before you re-import"
 msgstr ""
 
@@ -14053,7 +15013,7 @@ msgstr ""
 
 #. translators: %s: formatted record count.
 #: src/admin/components/import-export/NativeExportCard.js:292
-#: src/admin/components/pages/Settings.js:2166
+#: src/admin/components/pages/Settings.js:2185
 #, js-format
 msgid "%s records"
 msgstr ""
@@ -14370,10 +15330,6 @@ msgstr ""
 msgid "Search settings…"
 msgstr ""
 
-#: src/admin/components/layout/NavSearch.js:267
-msgid "Search results"
-msgstr ""
-
 #: src/admin/components/layout/NavSearch.js:327
 msgid "navigate"
 msgstr ""
@@ -14437,10 +15393,6 @@ msgstr ""
 
 #: src/admin/components/pages/MCP.js:30
 msgid "LLMs.txt generation & status"
-msgstr ""
-
-#: src/admin/components/pages/MCP.js:32
-msgid "Author archives"
 msgstr ""
 
 #: src/admin/components/pages/MCP.js:33
@@ -14891,17 +15843,17 @@ msgid "AI Provider"
 msgstr ""
 
 #: src/admin/components/pages/Settings.js:318
-#: src/admin/components/pages/Settings.js:1937
+#: src/admin/components/pages/Settings.js:1956
 msgid "Data Management"
 msgstr ""
 
 #: src/admin/components/pages/Settings.js:323
-#: src/admin/components/pages/Settings.js:2353
+#: src/admin/components/pages/Settings.js:2372
 msgid "Migration Tools"
 msgstr ""
 
 #: src/admin/components/pages/Settings.js:335
-#: src/admin/components/pages/Settings.js:2624
+#: src/admin/components/pages/Settings.js:2643
 msgid "Encrypted at rest and stored only on your site."
 msgstr ""
 
@@ -15036,275 +15988,275 @@ msgstr ""
 msgid "Please enter an API key first."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1154
+#: src/admin/components/pages/Settings.js:1172
 msgid "API connection successful!"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1158
+#: src/admin/components/pages/Settings.js:1177
 msgid "API connection failed. Please check your API key and try again."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1168
+#: src/admin/components/pages/Settings.js:1187
 msgid "Failed to test API connection."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1175
+#: src/admin/components/pages/Settings.js:1194
 msgid "Network error. Please check your internet connection."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1183
+#: src/admin/components/pages/Settings.js:1202
 msgid "Invalid API key. Please check your credentials."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1188
+#: src/admin/components/pages/Settings.js:1207
 msgid "Rate limit exceeded. Please try again later."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1193
+#: src/admin/components/pages/Settings.js:1212
 msgid "Connection failed:"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1205
+#: src/admin/components/pages/Settings.js:1224
 msgid "No API key is currently saved."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1211
+#: src/admin/components/pages/Settings.js:1230
 msgid "Are you sure you want to clear the saved API key? This action cannot be undone."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1234
+#: src/admin/components/pages/Settings.js:1253
 msgid "API key cleared successfully."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1244
+#: src/admin/components/pages/Settings.js:1263
 msgid "Failed to clear API key."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1250
+#: src/admin/components/pages/Settings.js:1269
 msgid "Failed to clear API key. Please try again."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1265
+#: src/admin/components/pages/Settings.js:1284
 msgid "Enter new API key to update…"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1300
+#: src/admin/components/pages/Settings.js:1319
 msgid "Custom model…"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1417
+#: src/admin/components/pages/Settings.js:1436
 msgid "Choose provider"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1421
+#: src/admin/components/pages/Settings.js:1440
 msgid "AI provider"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1519
+#: src/admin/components/pages/Settings.js:1538
 msgid "Choose an AI provider to get started"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1525
+#: src/admin/components/pages/Settings.js:1544
 msgid "Select a provider above, then add its API key to enable AI features."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1589
+#: src/admin/components/pages/Settings.js:1608
 msgid "Masked preview of your saved key. Choose Replace to enter a new one."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1709
+#: src/admin/components/pages/Settings.js:1728
 msgid "Enter a new key to replace the saved one."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1713
+#: src/admin/components/pages/Settings.js:1732
 msgid "Encrypted and stored securely. You pay the provider directly."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1733
+#: src/admin/components/pages/Settings.js:1752
 msgid "Cancel and keep current key"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1755
+#: src/admin/components/pages/Settings.js:1774
 msgid "Model used for all AI content generation."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1763
+#: src/admin/components/pages/Settings.js:1782
 msgid "Custom model"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1778
+#: src/admin/components/pages/Settings.js:1797
 msgid "Enter the exact model id from your provider. Use this to run a newly released or unlisted model."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1816
+#: src/admin/components/pages/Settings.js:1835
 msgid "Clear API Key"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1826
+#: src/admin/components/pages/Settings.js:1845
 msgid "Getting started"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1872
+#: src/admin/components/pages/Settings.js:1891
 msgid "Your key stays private"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1878
+#: src/admin/components/pages/Settings.js:1897
 msgid "You bring your own key, so you stay in control."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1952
+#: src/admin/components/pages/Settings.js:1971
 msgid "Control what happens to your data when the plugin is removed. When enabled, all plugin data including API keys, content briefs, and configuration will be permanently erased on uninstall."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1963
+#: src/admin/components/pages/Settings.js:1982
 msgid "Delete all data on uninstall"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1975
+#: src/admin/components/pages/Settings.js:1994
 msgid "Data deletion is enabled. Uninstalling ThinkRank will permanently erase all settings and content briefs. This cannot be undone."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2004
+#: src/admin/components/pages/Settings.js:2023
 msgid "Preserved by default"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2010
+#: src/admin/components/pages/Settings.js:2029
 msgid "Kept after uninstall"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2019
+#: src/admin/components/pages/Settings.js:2038
 msgid "API keys & provider settings"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2023
+#: src/admin/components/pages/Settings.js:2042
 msgid "Generated content briefs"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2027
+#: src/admin/components/pages/Settings.js:2046
 msgid "Plugin configuration"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2072
+#: src/admin/components/pages/Settings.js:2091
 msgid "Always cleaned up"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2078
+#: src/admin/components/pages/Settings.js:2097
 msgid "Removed on uninstall"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2087
+#: src/admin/components/pages/Settings.js:2106
 msgid "Temporary cache data"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2088
+#: src/admin/components/pages/Settings.js:2107
 msgid "Usage analytics"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2089
+#: src/admin/components/pages/Settings.js:2108
 msgid "Plugin activation flags"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2178
+#: src/admin/components/pages/Settings.js:2197
 msgid "Download everything ThinkRank stores as a single file, and load it back on this site or any other. Useful as a backup before big changes, for moving a site, or simply so your SEO data is never locked in here."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2190
+#: src/admin/components/pages/Settings.js:2209
 msgid "Enable Import / Export"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2207
+#: src/admin/components/pages/Settings.js:2226
 msgid "What an export includes"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2210
+#: src/admin/components/pages/Settings.js:2229
 msgid "Everything below travels in one JSON file. A CSV view of your post SEO data is available too, for spreadsheets or another plugin’s importer."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2225
+#: src/admin/components/pages/Settings.js:2244
 msgid "Could not read your data counts just now. The export itself is unaffected — open Import / Export to run one."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2270
+#: src/admin/components/pages/Settings.js:2289
 msgid "Included"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2277
+#: src/admin/components/pages/Settings.js:2296
 msgid "Nothing yet"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2304
+#: src/admin/components/pages/Settings.js:2323
 msgid "Open Import / Export"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2313
+#: src/admin/components/pages/Settings.js:2332
 msgid "Turned off the Import / Export screen is hidden. Nothing has been deleted; switch this on whenever you want to export or restore."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2328
+#: src/admin/components/pages/Settings.js:2347
 msgid "Your API keys stay here"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2330
+#: src/admin/components/pages/Settings.js:2349
 msgid "Provider API keys and verification tokens are excluded from every export, so a file is safe to hand to a teammate or keep as a backup. Re-enter them after restoring onto a new site."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2368
+#: src/admin/components/pages/Settings.js:2387
 msgid "Bring your existing SEO data into ThinkRank. Turning this on adds a \"Migration\" menu item so you can import titles, descriptions, canonicals, robots rules, social meta, redirects, and settings from another SEO plugin handy if you skipped migration during setup or need to re-import updated data."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2380
+#: src/admin/components/pages/Settings.js:2399
 msgid "Enable Migration Tools"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2397
+#: src/admin/components/pages/Settings.js:2416
 msgid "Platforms you can migrate from"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2403
+#: src/admin/components/pages/Settings.js:2422
 msgid "ThinkRank imports SEO data directly from these plugins even after your initial setup."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2435
+#: src/admin/components/pages/Settings.js:2454
 msgid "Supported"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2453
+#: src/admin/components/pages/Settings.js:2472
 msgid "Open Migration"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2467
+#: src/admin/components/pages/Settings.js:2486
 msgid "Running a migration again may overwrite existing ThinkRank settings and metadata where applicable. We recommend creating a database backup before re-importing."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2499
+#: src/admin/components/pages/Settings.js:2518
 msgid "Active configuration"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2544
+#: src/admin/components/pages/Settings.js:2563
 msgid "Get an API key"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2547
+#: src/admin/components/pages/Settings.js:2566
 msgid "Sign in to your provider and create a key."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2614
+#: src/admin/components/pages/Settings.js:2633
 msgid "Why your own key?"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2619
+#: src/admin/components/pages/Settings.js:2638
 msgid "Pay your AI provider directly, with no markup."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2623
+#: src/admin/components/pages/Settings.js:2642
 msgid "Unlimited generations at provider rates."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2628
+#: src/admin/components/pages/Settings.js:2647
 msgid "Switch providers anytime without losing data."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2660
+#: src/admin/components/pages/Settings.js:2679
 msgid "Need help?"
 msgstr ""
 
@@ -16383,10 +17335,6 @@ msgstr ""
 
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:188
 msgid "Include in sitemap"
-msgstr ""
-
-#: src/admin/setup-wizard/steps/Step3SiteSetup.js:221
-msgid "Taxonomies"
 msgstr ""
 
 #: src/admin/setup-wizard/steps/Step4Analytics.js:20

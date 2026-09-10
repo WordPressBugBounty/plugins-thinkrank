@@ -73,6 +73,17 @@ class SEO_Analyzer_Fixer {
                 'label'   => __('Fill in missing image alt text', 'thinkrank'),
                 'warning' => __('Runs in batches over your media library. With AI alt text enabled this uses your AI provider key.', 'thinkrank'),
             ],
+            'ai_crawler_access' => [
+                'label'   => __('Allow AI answer engines to crawl this site', 'thinkrank'),
+                // Only the answer engines are unblocked. Saying so matters:
+                // people block the training crawlers on purpose, and a fix
+                // that quietly reversed that decision would be a betrayal.
+                'warning' => __('Sets the answer-engine crawlers (ChatGPT, Claude, Perplexity, Google-Extended) to Allow. Crawlers that only collect training data keep whatever setting you gave them.', 'thinkrank'),
+            ],
+            'llms_txt' => [
+                'label'   => __('Publish llms.txt', 'thinkrank'),
+                'warning' => __('Publishes /llms.txt from your saved LLMs.txt settings. It needs those fields filled in first.', 'thinkrank'),
+            ],
         ];
 
         /**
@@ -119,6 +130,10 @@ class SEO_Analyzer_Fixer {
                 return $this->fix_schema();
             case 'image_alt_text':
                 return $this->fix_image_alt_text();
+            case 'ai_crawler_access':
+                return $this->fix_ai_crawler_access();
+            case 'llms_txt':
+                return $this->fix_llms_txt();
         }
 
         /**
@@ -304,6 +319,119 @@ class SEO_Analyzer_Fixer {
                 'updated'   => $updated,
                 'remaining' => $remaining,
             ],
+        ];
+    }
+
+    /**
+     * Set every AI answer-engine crawler to `allow`.
+     *
+     * Deliberately narrow: only the crawlers that decide whether the site can
+     * be CITED are touched. GPTBot, ClaudeBot, CCBot and the other
+     * training-only agents keep whatever the user chose for them — blocking
+     * those is an editorial position, not a misconfiguration.
+     *
+     * @since 2.5.0
+     * @return array
+     * @throws \Exception When the rules cannot be saved, or when something
+     *                    other than the rule map is still blocking them.
+     */
+    private function fix_ai_crawler_access(): array {
+        $manager  = new Site_Identity_Manager();
+        $settings = $manager->get_settings('site');
+        $settings = is_array($settings) ? $settings : [];
+
+        $rules = isset($settings['ai_crawler_rules']) && is_array($settings['ai_crawler_rules'])
+            ? $settings['ai_crawler_rules']
+            : [];
+
+        foreach (SEO_Analyzer::GEO_ANSWER_AGENTS as $slug) {
+            if (AI_Crawlers::exists($slug)) {
+                $rules[$slug] = 'allow';
+            }
+        }
+
+        $settings['ai_crawler_rules'] = $rules;
+
+        if (!$manager->save_settings('site', null, $settings)) {
+            throw new \Exception(esc_html__('The AI crawler rules could not be saved. Check the PHP error log for the ThinkRank line naming the cause.', 'thinkrank'));
+        }
+
+        // The directives are composed into the served body at render time, but
+        // a physical robots.txt in the web root is a copy the web server hands
+        // out directly — saving the rules does not touch it. Re-sync from a
+        // fresh manager (the one above holds the pre-save settings) or the fix
+        // changes only the file nobody is reading.
+        (new Site_Identity_Manager())->sync_robots_txt_file();
+
+        // The rules are only one of the things that can disallow a crawler: a
+        // hand-written robots.txt body, a physical robots.txt in the web root,
+        // and the site-wide search block all outrank them. Ask the served file
+        // again rather than reporting a success it contradicts.
+        $still_blocked = (new SEO_Analyzer())->blocked_answer_agents();
+
+        if (!empty($still_blocked)) {
+            throw new \Exception(
+                sprintf(
+                    /* translators: %s: comma-separated crawler names. */
+                    esc_html__('The crawler rules were saved, but your robots.txt still blocks %s. That block comes from your own robots.txt content, a robots.txt file in your site root, or the site-wide search-engine setting — edit it under Essential SEO → Crawling and AI Indexing.', 'thinkrank'),
+                    esc_html(implode(', ', $still_blocked))
+                )
+            );
+        }
+
+        return [
+            'fixed'   => true,
+            'message' => __('AI answer engines can now crawl and cite your site.', 'thinkrank'),
+            'data'    => [],
+        ];
+    }
+
+    /**
+     * Generate and publish /llms.txt from the saved LLMs.txt settings.
+     *
+     * The document is built from settings the user already wrote, so this is a
+     * publish, not authorship. Incomplete settings produce an invalid document
+     * and are refused rather than written — a half-empty llms.txt is worse
+     * than none, because an assistant will read it and believe it.
+     *
+     * @since 2.5.0
+     * @return array
+     * @throws \Exception When the module is unavailable, the settings are
+     *                    incomplete, or the write fails.
+     */
+    private function fix_llms_txt(): array {
+        if (!class_exists('ThinkRank\\SEO\\LLMs_Txt_Manager')) {
+            throw new \Exception(esc_html__('The llms.txt module is unavailable.', 'thinkrank'));
+        }
+
+        $manager   = new LLMs_Txt_Manager();
+        $generated = $manager->generate_llms_txt([], []);
+
+        $validation = isset($generated['validation']) && is_array($generated['validation'])
+            ? $generated['validation']
+            : [];
+
+        if (empty($validation['valid'])) {
+            throw new \Exception(esc_html__('llms.txt could not be published because its settings are incomplete. Fill in Website Description, Key Features and Target Audience under Essential SEO → Crawling and AI Indexing → LLMs.txt, then try again.', 'thinkrank'));
+        }
+
+        $content = (string) ($generated['content'] ?? '');
+        $write   = $manager->write_llms_txt_to_file($content);
+
+        if (empty($write['success'])) {
+            $reason = (string) ($write['message'] ?? '');
+
+            throw new \Exception(
+                '' !== $reason
+                    ? esc_html($reason)
+                    : esc_html__('llms.txt could not be written. Check that your site root is writable.', 'thinkrank')
+            );
+        }
+
+        return [
+            'fixed'   => true,
+            'message' => __('Your llms.txt is now published at /llms.txt.', 'thinkrank'),
+            'data'    => [],
         ];
     }
 }

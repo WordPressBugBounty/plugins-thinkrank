@@ -45,6 +45,10 @@ use ThinkRank\Abilities\Settings\Update_Image_Seo_Settings;
 use ThinkRank\Abilities\Settings\Get_Llms_Txt_Settings;
 use ThinkRank\Abilities\Settings\Update_Llms_Txt_Settings;
 use ThinkRank\Abilities\Settings\Get_Robots_Meta_Settings;
+use ThinkRank\Abilities\Links\Get_External_Links_Settings;
+use ThinkRank\Abilities\Links\Update_External_Links_Settings;
+use ThinkRank\Abilities\Matrix\Get_Content_Type_Matrix;
+use ThinkRank\Abilities\Matrix\Update_Content_Type_Matrix;
 use ThinkRank\Abilities\Settings\Update_Robots_Meta_Settings;
 use ThinkRank\Abilities\Settings\Get_Instant_Indexing_Settings;
 use ThinkRank\Abilities\Settings\Update_Instant_Indexing_Settings;
@@ -348,6 +352,10 @@ class Abilities_Registrar {
 			new Get_Llms_Txt_Settings(),
 			new Update_Llms_Txt_Settings(),
 			new Get_Robots_Meta_Settings(),
+			new Get_External_Links_Settings(),
+			new Update_External_Links_Settings(),
+			new Get_Content_Type_Matrix(),
+			new Update_Content_Type_Matrix(),
 			new Update_Robots_Meta_Settings(),
 			new Get_Instant_Indexing_Settings(),
 			new Update_Instant_Indexing_Settings(),

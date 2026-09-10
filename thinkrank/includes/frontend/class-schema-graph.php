@@ -105,6 +105,16 @@ class Schema_Graph {
     private const FAQ_BRICKS_ELEMENT = 'thinkrank-faq';
 
     /**
+     * The Beaver Builder FAQ module's slug, as stored in its layout nodes.
+     *
+     * Matches `ThinkRank_Beaver_FAQ_Module::SLUG`. Duplicated as a literal
+     * rather than referenced, because that class extends `FLBuilderModule` and
+     * so cannot be loaded at all when Beaver Builder is inactive — which is
+     * exactly the site that still has a stored layout, after a builder switch.
+     */
+    private const FAQ_BEAVER_MODULE = 'thinkrank-faq';
+
+    /**
      * Third-party Elementor widgets that publish their own FAQPage.
      *
      * Maps widgetType to the setting whose 'yes' arms that widget's FAQ schema,
@@ -481,6 +491,7 @@ class Schema_Graph {
 
         $this->collect_elementor_faq($post);
         $this->collect_bricks_faq($post);
+        $this->collect_beaver_faq($post);
     }
 
     /**
@@ -606,6 +617,56 @@ class Schema_Graph {
      */
     private function collect_bricks_faq(\WP_Post $post): void {
         $this->walk_bricks($this->bricks_tree((int) $post->ID));
+    }
+
+    /**
+     * Collect FAQ questions from Beaver Builder FAQ modules.
+     *
+     * Beaver Builder keeps its layout in postmeta as a map of node objects and
+     * leaves `post_content` alone, so — unlike Bricks — there is no
+     * "supersedes post_content" gate to apply: a block FAQ left in the body and
+     * a module FAQ in the layout can both genuinely be on the page, and both
+     * belong in the one FAQPage.
+     *
+     * The published layout is preferred over the draft for the same reason the
+     * rest of the plugin prefers it: a draft holds edits no visitor has been
+     * served yet, and schema must describe the page as delivered.
+     *
+     * @since 2.5.0
+     * @param \WP_Post $post Post being viewed.
+     * @return void
+     */
+    private function collect_beaver_faq(\WP_Post $post): void {
+        $layout = get_post_meta($post->ID, '_fl_builder_data', true);
+
+        if (!is_array($layout) || empty($layout)) {
+            return;
+        }
+
+        foreach ($layout as $node) {
+            $settings = is_object($node) ? ($node->settings ?? null) : ($node['settings'] ?? null);
+            $settings = is_object($settings) ? get_object_vars($settings) : $settings;
+
+            if (!is_array($settings) || ($settings['type'] ?? '') !== self::FAQ_BEAVER_MODULE) {
+                continue;
+            }
+
+            // Mirrors ThinkRank_Beaver_FAQ_Module::schema_enabled(): Beaver
+            // Builder stores a cleared toggle as the string '0'.
+            if (empty($settings['output_schema'])) {
+                continue;
+            }
+
+            $rows = $settings['faqs'] ?? [];
+            $rows = is_array($rows) ? array_map(
+                static function ($row) {
+                    return is_object($row) ? get_object_vars($row) : $row;
+                },
+                $rows
+            ) : [];
+
+            $this->absorb_content_faq($this->questions_from_pairs($rows));
+        }
     }
 
     /**

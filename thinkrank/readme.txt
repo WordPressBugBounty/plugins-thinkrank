@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.4.0
+Stable tag: 2.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -370,6 +370,24 @@ Yes, ThinkRank is a free WordPress SEO plugin with bring-your-own-key AI feature
 
 == Changelog ==
 
+= 2.5.0 =
+Release Date: 2026-09-10
+
+- New: The Site SEO Audit now scores your site for AI search. A new "AI Search (GEO)" category reports whether ChatGPT, Claude, Perplexity and Google AI Overviews can crawl you, whether llms.txt is published, whether your pages carry FAQ or How-To structured data, and whether your writing is shaped the way AI answers quote from — a direct answer up top, question headings, lists and tables, enough depth, and a recent revision date. Blocked crawlers and a missing llms.txt each come with a one-click fix. Because the new category is scored like every other one, your overall audit score will move the first time it runs after this update
+- New: Every audit finding now names the pages it is about. Instead of "7 of your 8 most recent pages do not open with a concise answer", you get the list, each title linking straight to its editor — for the AI Search checks, for missing meta descriptions, and for images without alt text
+- New: Choose which AI crawlers may read your site. Eighteen crawlers — ChatGPT, Claude, Perplexity, Gemini, Apple, Meta and more — each with its own switch and a plain description of what it does, written into your robots.txt inside a marked block that leaves everything you wrote there alone. Nothing changes until you switch something on, and the screen states plainly that blocking Google-Extended does not affect normal Google Search indexing
+- New: Automatic nofollow and "open in a new tab" for external links, with an exception list for partners and affiliates that should keep passing link equity. Applied as the page renders, so your post content is never rewritten and switching it off restores exactly what you wrote
+- New: A per-content-type matrix for your SEO automation. Turn meta tags, schema, Open Graph, Twitter cards, analytics, no-index and sitemap inclusion on or off for each post type, taxonomy, archive, search results and 404 page. Every switch starts on "Inherit", so a site that never opens the screen behaves exactly as before
+- New: Beaver Builder support. The ThinkRank panel now opens inside the Beaver builder with your current SEO score on its toolbar, and FAQ, How-To and Table of Contents modules publish the same structured data their block, Elementor and Bricks counterparts do
+- New: "Test Connection" now checks your AI model as well as your key, so a mistyped or unavailable model id is reported as exactly that instead of passing as a working connection
+- Fixed: Saving the Posts or Pages SEO screen wiped the per-content-type switches you had set for that content type in the new matrix
+- Fixed: The Site SEO Audit could quietly drop six of its AI Search checks — and report a higher overall score — on a site with content that is not valid UTF-8, usually the legacy of an old import
+- Fixed: Turning schema off for products removed WooCommerce's own product structured data too, leaving the page with none at all
+- Fixed: Turning a content type's sitemap off left its sitemap file published and still listed in your sitemap index
+- Fixed: Saving the Robots.txt screen without editing it switched your site to a manually written robots.txt for good, so later changes — a new sitemap, the AI crawler rules — stopped reaching /robots.txt
+- Fixed: If the Link Attributes screen failed to load, the next keystroke saved empty settings over your stored exception list
+- Fixed: Asking an AI assistant to change your crawler rules updated the settings but not the served robots.txt file
+
 = 2.4.0 =
 Release Date: 2026-09-08
 
@@ -449,32 +467,12 @@ Release Date: 2026-08-31
 - Changed: An AI assistant connecting to ThinkRank now receives a short orientation for the session — what ThinkRank is, where to start, which tools to call in which order, what its connection is allowed to do, and that site content it reads is data rather than instructions
 - Fixed: The performance history API's metric filter returned nothing for the page-speed score and dropped the dates from single-metric responses. The admin screens were unaffected; direct API and AI-assistant consumers were not
 
-= 2.1.0 =
-Release Date: 2026-08-27
-
-- New: Each keyword check in the SEO panel now names every focus keyword and its state. A row where one of three keywords matched reads "1 of 3 matched" with a tick beside the ones that matched and a cross beside the ones that did not, instead of a single tick that looked like a pass
-- New: When an Elementor accordion is already publishing its own FAQ schema for a page, ThinkRank stops publishing a second one — two FAQ blocks on one URL is a structured-data error
-- Changed: The setup wizard now fills in as a preview of the wizard itself while it loads, instead of a spinner that jumped the whole screen into place when it finished
-- Fixed: A focus keyword counted as found inside longer words — "art" matched "start", "cat" matched "category", "ai" matched "said" and "email". Every keyword row reported the same phantom placement at once. Languages written without spaces, such as Chinese, Japanese and Thai, are unaffected
-- Fixed: Editing the permalink in the Classic Editor and saving put the old address back
-- Fixed: FAQ images in a block published a single fixed-size image, so opening an answer shifted the page, and an image deleted from the media library left a broken picture on the page and in your structured data. Images now come from the media library with the right sizes for each screen. Existing FAQ blocks get this with no re-save
-- Fixed: The FAQ and How-To blocks' buttons — add image, move up, move down, duplicate, remove, add question — were invisible in the editor, so the per-item image could not be reached at all
-- Fixed: Pages built with Beaver Builder read as empty to SEO analysis, so scores and recommendations ignored everything in the layout
-- Fixed: On sites behind a reverse proxy, automatic llms.txt delivery chose the one mode that cannot state a character set, which turned accented letters into mojibake. Those sites now move themselves to the correct mode; a site that deliberately chose the static file keeps it and is told what to expect
-- Fixed: ThinkRank left its sitemap, llms.txt, robots.txt and IndexNow key in the site root after the plugin was deactivated or deleted. They are removed now, and restored if you reactivate
-- Fixed: Connecting an AI assistant failed with an authentication error on Apache servers running PHP as CGI or FastCGI, while the same token worked on the longer address
-- Fixed: An AI connection stopped working after a domain change, a move to staging, or a host's "reset security keys" — the connection read as missing and was silently replaced, locking out every assistant already using it. The discovery files that name your site are kept in step with your address now
-- Fixed: A busy AI assistant could wipe out a connection it had just been given, after which every request failed with nothing to explain it
-- Fixed: Some AI clients were refused at the consent screen for sending back exactly the callback address they had registered
-- Fixed: Fewer database queries on every visitor's page load
-
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.5.0 =
+Adds an AI Search (GEO) audit category, per-crawler AI controls for robots.txt, automatic nofollow for external links, a per-content-type SEO matrix, and Beaver Builder support. Fixes a Global SEO save wiping matrix switches. Recommended for all sites.
+
 = 2.4.0 =
 Adds FAQ, How-To and Table of Contents elements for Bricks Builder, SEO titles in breadcrumbs, and an SEO score rating speed from real measurements. Fixes duplicate structured data on Bricks pages, wrong-sized favicons, and descriptions leaking onto 404 pages. Recommended for all sites.
-
-= 2.3.0 =
-Adds Bricks Builder support: the SEO panel inside the builder, the score on its toolbar, and Bricks content actually analysed. Fixes a truncated cost figure, an invented trend on "All time", the AI referrals chart, and email reports sent at the wrong time or with no data. Recommended for all sites.
