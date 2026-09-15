@@ -49,12 +49,17 @@ return [
         'thinkrank_regenerate_sitemap',
         'thinkrank_regenerate_sitemap_settings',
         'thinkrank_ai_traffic_prune',
-        'thinkrank_auto_ai_optimize',
         'thinkrank_instant_indexing_reconcile',
         'thinkrank_instant_indexing_submit',
         'thinkrank_email_report_tick',
+        // Retired with the Brand Visibility feature. Still listed so deactivation
+        // and uninstall clear events a site scheduled before it was removed.
         'thinkrank_bv_tick',
         'thinkrank_bv_watchdog',
+        // Moved to ThinkRank Pro with Auto AI metadata, which schedules its own
+        // `thinkrank_pro_` hook. Still listed so events queued before the move
+        // are cleared.
+        'thinkrank_auto_ai_optimize',
     ],
 
     /*

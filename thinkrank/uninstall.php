@@ -190,7 +190,9 @@ class ThinkRank_Uninstaller {
             $wpdb->prefix . 'thinkrank_email_report_logs',
             // AI Visibility Tables. These were registered in Database_Schema but
             // never listed here, so an uninstall left them behind — bv_tasks in
-            // particular holds the full text of every AI answer (#302).
+            // particular holds the full text of every AI answer (#302). The
+            // three Brand Visibility tables are no longer created, but sites
+            // that used the feature before it was removed still have them.
             $wpdb->prefix . 'thinkrank_ai_traffic',
             $wpdb->prefix . 'thinkrank_brand_visibility_checks',
             $wpdb->prefix . 'thinkrank_bv_runs',

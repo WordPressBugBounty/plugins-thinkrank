@@ -453,11 +453,8 @@ class Manager {
             'canManageRoles' => Capability_Manager::current_user_can(Capability_Manager::MANAGE_ROLES),
             // Pro detection flag
             'isPro' => Plan_Config::is_pro(),
-            // Data update frequency (Pro: daily, Free: every 3 days)
-            'dataUpdateFrequency' => Plan_Config::is_pro() ? 'daily' : '3days',
-            // NB: no per-feature capability maps here. Email Reporting reads
-            // its capabilities from GET /thinkrank/v1/email-report/config;
-            // localizing a second copy only invited the two to drift.
+            // NB: no per-feature capability maps here; each screen reads its
+            // own state over REST, so a localized copy cannot drift from it.
             // MCP (Model Context Protocol) connection details for the MCP page.
             'mcp' => $this->get_mcp_globals(),
             // Google OAuth: JS only ever gets a nonce-signed admin-post URL.

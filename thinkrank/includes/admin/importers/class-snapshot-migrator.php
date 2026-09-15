@@ -1268,17 +1268,15 @@ class Snapshot_Migrator {
      * Migrate the post's focus keywords.
      *
      * Reads the full list from the snapshot's `focus_keywords` (falling back to
-     * the single `focus_keyword`) and persists via Focus_Keywords::save_with_
-     * overflow(): the first MAX keywords are the base, the rest are stored as
-     * gated overflow (free) that Pro unlocks automatically. Never overwrites
-     * existing ThinkRank focus keywords.
+     * the single `focus_keyword`) and persists via Focus_Keywords::save(). Never
+     * overwrites existing ThinkRank focus keywords.
      *
-     * Posts whose source exceeded the free limit are recorded in `$truncations`
-     * so the import summary can surface them as a Pro upsell.
+     * Posts whose source had more keywords than were stored are recorded in
+     * `$truncations` so the import summary can report them.
      *
      * @param int        $post_id      Target post ID.
      * @param array      $data         Canonical record data.
-     * @param array|null $truncations  Accumulator: appended with overflow info.
+     * @param array|null $truncations  Accumulator: appended with what was dropped.
      * @return bool True when keywords were written.
      */
     private function migrate_focus_keywords(int $post_id, array $data, ?array &$truncations = null): bool {
@@ -1289,7 +1287,8 @@ class Snapshot_Migrator {
             $keywords = [$data['focus_keyword']];
         }
 
-        if (empty(Focus_Keywords::normalize($keywords, 0))) {
+        $all = Focus_Keywords::normalize($keywords, 0);
+        if (empty($all)) {
             return false;
         }
 
@@ -1298,17 +1297,17 @@ class Snapshot_Migrator {
             return false;
         }
 
-        $result = Focus_Keywords::save_with_overflow($post_id, $keywords);
+        $saved = Focus_Keywords::save($post_id, $all);
 
-        if (!empty($result['overflow']) && is_array($truncations)) {
+        if (count($saved) < count($all) && is_array($truncations)) {
             $truncations[] = [
                 'post_id' => $post_id,
-                'kept'    => count($result['kept']),
-                'gated'   => $result['overflow'],
+                'kept'    => count($saved),
+                'dropped' => array_slice($all, count($saved)),
             ];
         }
 
-        return !empty($result['kept']);
+        return !empty($saved);
     }
 
     /**
@@ -2552,12 +2551,13 @@ class Snapshot_Migrator {
     }
 
     /**
-     * Migrate the source plugin's scheduled SEO email report cadence into
-     * ThinkRank's Email Reporting config.
+     * Carry the source plugin's scheduled SEO email report over as ThinkRank's
+     * Email Reporting switch.
      *
      * Only touches a config the user has not enabled yet, and never turns
      * reports ON unless the source had them on — an unexpected recurring email
-     * after an import would be worse than a missing one.
+     * after an import would be worse than a missing one. The source cadence is
+     * not carried: the report's schedule is not a setting this plugin stores.
      *
      * @param array $extended Canonical settings `extended` payload
      * @return bool True if the config was written
@@ -2577,13 +2577,7 @@ class Snapshot_Migrator {
             return false;
         }
 
-        $frequency = (int) ($reports['frequency_days'] ?? 0);
-        $update = ['enabled' => true];
-        if ($frequency > 0) {
-            $update['frequency_days'] = $frequency;
-        }
-
-        $config_manager->save(array_merge($current, $update));
+        $config_manager->save(['enabled' => true]);
 
         return true;
     }

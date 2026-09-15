@@ -158,9 +158,9 @@ class OpenAI_Client {
             $body['max_completion_tokens'] = $safe_tokens;
 
             // GPT-5 models accept reasoning_effort ('minimal'…'high'). Callers
-            // wanting a quick consumer-style answer (e.g. brand-visibility
-            // probes) pass 'minimal' so hidden reasoning can't consume the
-            // whole completion budget and return empty text. Only the GPT-5
+            // wanting a quick answer pass a low level so hidden reasoning
+            // can't consume the whole completion budget and return empty
+            // text. Only the GPT-5
             // family gets it: o1 rejects the parameter outright.
             if (isset($options['reasoning_effort']) && str_starts_with($options['model'], 'gpt-5')) {
                 $body['reasoning_effort'] = (string) $options['reasoning_effort'];

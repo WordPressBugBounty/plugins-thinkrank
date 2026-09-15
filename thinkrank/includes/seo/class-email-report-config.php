@@ -2,15 +2,16 @@
 /**
  * Email Report Config
  *
- * Persistence layer for the per-site Email Reporting settings. Stores a
- * single associative array under the `thinkrank_email_report_config` option
- * — one row per site is enough; we don't shard by user. Values are
- * sanitized at the boundary and capability-clamped via Plan_Config so a
- * free plan never accidentally persists Pro values that don't belong.
+ * Persistence layer for the per-site Email Reporting state. Stores a single
+ * associative array under the `thinkrank_email_report_config` option.
  *
- * Pro plugin can extend the saved schema by hooking
- * `thinkrank_email_report_config_schema` (added fields are sanitized
- * if a callback is provided).
+ * The free report is fixed: every 30 days, to the site admin email, with every
+ * section. What is stored is only whether it is on and when it last and next
+ * runs. ThinkRank Pro owns the schedule, recipient and branding settings and
+ * supplies them through the `thinkrank_email_report_config` filter (#673).
+ *
+ * Keys a save does not own are left in the stored array untouched, so values an
+ * earlier release wrote there (recipients, branding) survive for Pro to pick up.
  *
  * @package ThinkRank
  * @subpackage SEO
@@ -20,8 +21,6 @@
 declare(strict_types=1);
 
 namespace ThinkRank\SEO;
-
-use ThinkRank\Core\Plan_Config;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -37,262 +36,170 @@ final class Email_Report_Config {
     private const OPTION_KEY = 'thinkrank_email_report_config';
 
     /**
-     * Load defaults helper. Lazy-loads the config defaults file because
-     * it lives outside the autoloader path (it's procedural functions).
+     * Days between reports when nothing filters the schedule.
      */
-    private function defaults(): array {
+    public const FREQUENCY_DAYS = 30;
+
+    /**
+     * Load the procedural defaults file, which lives outside the autoloader.
+     */
+    private function load_defaults_file(): void {
         if (!function_exists('thinkrank_get_default_email_report_config')) {
             require_once THINKRANK_PLUGIN_DIR . 'includes/config/email-report-settings-config.php';
         }
-        return thinkrank_get_default_email_report_config();
     }
 
     /**
-     * Read the current config. Always merges over defaults so newly added
-     * keys (e.g. after a plugin update) are populated even on existing sites.
+     * The stored option, as an array.
+     */
+    private function stored(): array {
+        $stored = get_option(self::OPTION_KEY, []);
+
+        return is_array($stored) ? $stored : [];
+    }
+
+    /**
+     * The resolved config every consumer reads.
+     *
+     * @return array{enabled: bool, frequency_days: int, recipients: string[], sections_enabled: string[], next_scheduled_at: ?string, last_sent_at: ?string}
      */
     public function get(): array {
-        $stored = get_option(self::OPTION_KEY, []);
-        if (!is_array($stored)) {
-            $stored = [];
-        }
-        return array_merge($this->defaults(), $stored);
+        $this->load_defaults_file();
+
+        $stored = $this->stored();
+        $state  = [
+            'enabled'           => !empty($stored['enabled']),
+            'next_scheduled_at' => $stored['next_scheduled_at'] ?? null,
+            'last_sent_at'      => $stored['last_sent_at'] ?? null,
+        ];
+
+        $report = [
+            'frequency_days'   => self::FREQUENCY_DAYS,
+            'recipients'       => [(string) get_option('admin_email')],
+            'sections_enabled' => array_keys(thinkrank_get_email_report_default_sections()),
+        ];
+
+        /**
+         * Filter what the report covers and who receives it.
+         *
+         * ThinkRank Pro returns its own schedule, recipients and sections here.
+         * Extra keys are passed through to the renderer and mailer filters.
+         * The on/off switch and schedule timestamps are not filterable.
+         *
+         * @since 2.6.0
+         *
+         * @param array $report {
+         *     @type int      $frequency_days   Days between reports.
+         *     @type string[] $recipients       Recipient addresses.
+         *     @type string[] $sections_enabled Section keys, in render order.
+         * }
+         * @param array $state  Stored on/off switch and schedule timestamps.
+         */
+        $filtered = apply_filters('thinkrank_email_report_config', $report, $state);
+        $filtered = is_array($filtered) ? $filtered : $report;
+
+        return array_merge(
+            $filtered,
+            [
+                'frequency_days'   => max(1, (int) ($filtered['frequency_days'] ?? self::FREQUENCY_DAYS)),
+                'recipients'       => $this->normalize_recipients($filtered['recipients'] ?? []),
+                'sections_enabled' => $this->normalize_section_keys($filtered['sections_enabled'] ?? []),
+            ],
+            $state
+        );
     }
 
     /**
-     * Save the config. Returns the post-sanitize array that was persisted
-     * so callers can echo it back to the client and avoid a second read.
+     * Save the on/off switch. Returns the resolved config after the write.
      *
-     * Sanitization happens here, not in the REST args layer — the REST
-     * layer accepts intent, this layer enforces invariants. That way the
-     * cron-driven path (which doesn't go through REST) gets the same guarantees.
+     * The first enable seeds `next_scheduled_at` so the UI shows a real "Next
+     * report" date immediately. The scheduler still re-seeds on its first tick
+     * for any other path that flips enable on.
      */
     public function save(array $input): array {
-        $sanitized = $this->sanitize($input);
+        $this->load_defaults_file();
 
-        // Defense-in-depth: re-clamp at save time even though sanitize() also clamps.
-        $sanitized['frequency_days'] = Plan_Config::clamp_email_report_frequency((int) $sanitized['frequency_days']);
-        $sanitized['recipients'] = Plan_Config::clamp_email_report_recipients($sanitized['recipients']);
+        $stored = $this->stored() + thinkrank_get_default_email_report_config();
 
-        $previous = get_option(self::OPTION_KEY, []);
-        $previous = is_array($previous) ? $previous : [];
-        $frequency_changed = isset($previous['frequency_days'])
-            && (int) $previous['frequency_days'] !== (int) $sanitized['frequency_days'];
-
-        // Seed next_scheduled_at on first enable so the UI shows a real
-        // "Next report" date immediately. The scheduler still re-seeds on
-        // its first tick for any other path that flips enable on.
-        //
-        // A frequency change also has to move the date: carrying the old
-        // timestamp through meant a user switching 30 → 7 days still waited
-        // out the original 30-day window before the new cadence took effect.
-        if ($sanitized['enabled'] && (empty($sanitized['next_scheduled_at']) || $frequency_changed)) {
-            // Anchor off the last send when we have one, so shortening the
-            // cadence brings the next report forward instead of adding a
-            // fresh full period on top of time already elapsed.
-            // last_sent_at is a site-local wall clock (current_time('mysql')).
-            // strtotime() would read it as UTC and skew the whole cadence by
-            // the site's offset, so resolve it in the site timezone instead.
-            $anchor = $frequency_changed && !empty($sanitized['last_sent_at'])
-                ? (int) get_gmt_from_date((string) $sanitized['last_sent_at'], 'U')
-                : time();
-            $anchor = $anchor ?: time();
-
-            $next = strtotime('+' . max(1, (int) $sanitized['frequency_days']) . ' days', $anchor);
-
-            // Never schedule into the past — a big cadence cut on an old
-            // last_sent_at means "due now", which the next tick picks up.
-            $sanitized['next_scheduled_at'] = wp_date(
-                'Y-m-d H:i:s',
-                max($next ?: time(), time())
-            );
+        if (array_key_exists('enabled', $input)) {
+            $stored['enabled'] = (bool) filter_var($input['enabled'], FILTER_VALIDATE_BOOLEAN);
         }
 
-        update_option(self::OPTION_KEY, $sanitized, false);
+        if ($stored['enabled'] && empty($stored['next_scheduled_at'])) {
+            $next = strtotime('+' . $this->get()['frequency_days'] . ' days');
+
+            $stored['next_scheduled_at'] = wp_date('Y-m-d H:i:s', max($next ?: time(), time()));
+        }
+
+        update_option(self::OPTION_KEY, $stored, false);
+
+        $config = $this->get();
 
         /**
          * Fires after Email Report config is saved.
          *
-         * Pro plugin uses this to re-validate its own added fields, refresh
-         * an audit table, or trigger a re-schedule.
-         *
          * @since 1.9.0
          *
-         * @param array $sanitized The persisted config.
+         * @param array $config The resolved config.
          */
-        do_action('thinkrank_email_report_settings_saved', $sanitized);
+        do_action('thinkrank_email_report_settings_saved', $config);
 
-        return $sanitized;
+        return $config;
     }
 
     /**
-     * Pure sanitization — no DB writes. Useful for previews and tests.
+     * Move the next send after the report's frequency changed.
      *
-     * Free vs. Pro behavior: Pro-only fields are accepted into the array
-     * even on free, but their values are coerced to defaults if the user
-     * isn't allowed to set them. Why keep them at all? So if the user
-     * upgrades, their previously-saved values aren't lost.
+     * Called by whatever changed the frequency (ThinkRank Pro) with the value
+     * it had before. Carrying the old timestamp through meant switching 30 → 7
+     * days still waited out the original 30-day window. The new date anchors
+     * off the last send when there is one, so shortening the cadence brings the
+     * next report forward instead of adding a full period on top of time
+     * already elapsed.
+     *
+     * @param int $previous_frequency_days Frequency before the change.
+     * @return array The resolved config.
      */
-    public function sanitize(array $input): array {
-        $defaults = $this->defaults();
-        $caps = Plan_Config::email_report();
-        $limits = function_exists('thinkrank_get_email_report_field_limits')
-            ? thinkrank_get_email_report_field_limits()
-            : [];
+    public function reschedule(int $previous_frequency_days): array {
+        $config = $this->get();
 
-        // Existing stored values are the baseline — partial updates (e.g.
-        // a toggle-only POST or a Pro field added later) merge over the
-        // saved config rather than reverting unsupplied keys to defaults.
-        $stored = get_option(self::OPTION_KEY, []);
-        if (!is_array($stored)) {
-            $stored = [];
-        }
-        $existing = array_merge($defaults, $stored);
-
-        $clean = [];
-
-        $clean['enabled'] = isset($input['enabled'])
-            ? !empty($input['enabled'])
-            : (bool) $existing['enabled'];
-
-        $clean['frequency_days'] = Plan_Config::clamp_email_report_frequency(
-            isset($input['frequency_days']) ? (int) $input['frequency_days'] : (int) $existing['frequency_days']
-        );
-
-        $clean['recipients'] = Plan_Config::clamp_email_report_recipients(
-            $this->normalize_recipients($input['recipients'] ?? $existing['recipients'])
-        );
-
-        // Subject: free plan always uses the default. Pro: keep existing
-        // when input doesn't include the key, accept new when it does.
-        //
-        // The subject carries variable tags (%site_title%, %date%, %period%),
-        // so it is sanitized as a template: sanitize_text_field() reads %date%
-        // as percent-encoding and stores "te%" (#521). intro_text/footer_text
-        // take the same tags but go through wp_kses_post(), which leaves them
-        // alone, and header_background holds a colour rather than a template.
-        if (!empty($caps['custom_subject']) && array_key_exists('subject_template', $input)) {
-            $subject = Pattern_Resolver::sanitize_template((string) $input['subject_template']);
-            if ($subject === '') {
-                $subject = (string) $defaults['subject_template'];
-            }
-        } elseif (!empty($caps['custom_subject'])) {
-            $subject = (string) $existing['subject_template'];
-        } else {
-            $subject = (string) $defaults['subject_template'];
-        }
-        $clean['subject_template'] = $this->trim_to($subject, $limits['subject_template'] ?? 200);
-
-        // Logo URL: free plan stays null. Pro: only overwrite when the key
-        // is present in input (so partial updates don't blank the logo).
-        $clean['logo_url'] = $this->resolve_optional_url(
-            $caps,
-            'custom_logo',
-            $input,
-            'logo_url',
-            $existing['logo_url'] ?? null,
-            $limits['logo_url'] ?? 2048
-        );
-
-        $clean['logo_link'] = $this->resolve_optional_url(
-            $caps,
-            'logo_link',
-            $input,
-            'logo_link',
-            $existing['logo_link'] ?? null,
-            $limits['logo_link'] ?? 2048
-        );
-
-        $clean['header_background'] = $this->resolve_optional_text(
-            $caps,
-            'header_background',
-            $input,
-            'header_background',
-            $existing['header_background'] ?? null,
-            $limits['header_background'] ?? 500
-        );
-
-        // Free is forced to the default toggle (true) so the dashboard CTA
-        // still appears. Pro: prefer input, fall back to existing, then default.
-        $clean['link_to_full_report'] = empty($caps['link_to_full_report'])
-            ? (bool) $defaults['link_to_full_report']
-            : (
-                array_key_exists('link_to_full_report', $input)
-                    ? (bool) $input['link_to_full_report']
-                    : (bool) $existing['link_to_full_report']
-            );
-
-        $clean['intro_text'] = $this->resolve_optional_rich_text(
-            $caps,
-            'intro_text',
-            $input,
-            'intro_text',
-            $existing['intro_text'] ?? null,
-            $limits['intro_text'] ?? 5000
-        );
-
-        $clean['footer_text'] = $this->resolve_optional_rich_text(
-            $caps,
-            'footer_text',
-            $input,
-            'footer_text',
-            $existing['footer_text'] ?? null,
-            $limits['footer_text'] ?? 5000
-        );
-
-        $clean['additional_css'] = empty($caps['additional_css'])
-            ? null
-            : (
-                array_key_exists('additional_css', $input)
-                    ? $this->sanitize_css($input['additional_css'], $limits['additional_css'] ?? 20000)
-                    : ($existing['additional_css'] ?? null)
-            );
-
-        // Sections: Free is locked to all-on. Pro user submits the list,
-        // falling back to existing when the key is missing.
-        if (empty($caps['sections_configurable'])) {
-            $clean['sections_enabled'] = (array) $defaults['sections_enabled'];
-        } elseif (array_key_exists('sections_enabled', $input)) {
-            $clean['sections_enabled'] = $this->sanitize_section_keys($input['sections_enabled']);
-        } else {
-            $clean['sections_enabled'] = (array) $existing['sections_enabled'];
+        if (empty($config['enabled']) || $previous_frequency_days === (int) $config['frequency_days']) {
+            return $config;
         }
 
-        // Schedule timestamps are server-managed — never trust client input.
-        $clean['next_scheduled_at'] = $stored['next_scheduled_at'] ?? null;
-        $clean['last_sent_at']      = $stored['last_sent_at']      ?? null;
+        // last_sent_at is a site-local wall clock (current_time('mysql')).
+        // strtotime() would read it as UTC and skew the whole cadence by the
+        // site's offset, so resolve it in the site timezone instead.
+        $anchor = !empty($config['last_sent_at'])
+            ? (int) get_gmt_from_date((string) $config['last_sent_at'], 'U')
+            : time();
+        $anchor = $anchor ?: time();
 
-        /**
-         * Filter the sanitized config before persistence.
-         *
-         * Pro plugin uses this to sanitize fields it has added via
-         * `thinkrank_email_report_config_schema`. The filter receives the
-         * raw input alongside the sanitized output so consumers can read
-         * pro-only field intent without re-parsing the request.
-         *
-         * @since 1.9.0
-         *
-         * @param array $clean Sanitized config so far.
-         * @param array $input Raw input as received.
-         */
-        return apply_filters('thinkrank_email_report_config_sanitized', $clean, $input);
+        $next = strtotime('+' . (int) $config['frequency_days'] . ' days', $anchor);
+
+        // Never schedule into the past — a big cadence cut on an old
+        // last_sent_at means "due now", which the next tick picks up.
+        return $this->update_schedule(
+            $config['last_sent_at'],
+            wp_date('Y-m-d H:i:s', max($next ?: time(), time()))
+        );
     }
 
     /**
      * Update only the schedule timestamps. Called from the scheduler after
-     * a successful send so we don't round-trip the whole sanitize() flow
-     * (the rest of the config hasn't changed).
+     * a send.
      */
     public function update_schedule(?string $last_sent_at, ?string $next_scheduled_at): array {
-        $current = $this->get();
-        $current['last_sent_at'] = $last_sent_at;
-        $current['next_scheduled_at'] = $next_scheduled_at;
-        update_option(self::OPTION_KEY, $current, false);
-        return $current;
+        $stored = $this->stored();
+        $stored['last_sent_at']      = $last_sent_at;
+        $stored['next_scheduled_at'] = $next_scheduled_at;
+        update_option(self::OPTION_KEY, $stored, false);
+
+        return $this->get();
     }
 
     /**
-     * Normalize a recipient input that might arrive as a string
+     * Normalize a recipient list that might arrive as a string
      * ("a@x.com, b@x.com") or as an array.
      *
      * @param mixed $raw
@@ -319,84 +226,17 @@ final class Email_Report_Config {
     }
 
     /**
-     * Resolve an optional URL field with partial-update semantics.
-     * Free plan: always null. Pro: prefer input, fall back to existing.
-     */
-    private function resolve_optional_url(array $caps, string $cap_key, array $input, string $field, $existing, int $max_len): ?string {
-        if (empty($caps[$cap_key])) {
-            return null;
-        }
-        if (array_key_exists($field, $input)) {
-            return $this->sanitize_url($input[$field], $max_len);
-        }
-        return is_string($existing) && $existing !== '' ? $existing : null;
-    }
-
-    private function resolve_optional_text(array $caps, string $cap_key, array $input, string $field, $existing, int $max_len): ?string {
-        if (empty($caps[$cap_key])) {
-            return null;
-        }
-        if (array_key_exists($field, $input)) {
-            $raw = $input[$field];
-            return is_string($raw)
-                ? $this->trim_to(sanitize_text_field($raw), $max_len)
-                : null;
-        }
-        return is_string($existing) && $existing !== '' ? $existing : null;
-    }
-
-    private function resolve_optional_rich_text(array $caps, string $cap_key, array $input, string $field, $existing, int $max_len): ?string {
-        if (empty($caps[$cap_key])) {
-            return null;
-        }
-        if (array_key_exists($field, $input)) {
-            return $this->sanitize_rich_text($input[$field], $max_len);
-        }
-        return is_string($existing) && $existing !== '' ? $existing : null;
-    }
-
-    private function sanitize_url($raw, int $max_len): ?string {
-        if (!is_string($raw) || $raw === '') {
-            return null;
-        }
-        $url = esc_url_raw(trim($raw));
-        if ($url === '') {
-            return null;
-        }
-        return $this->trim_to($url, $max_len);
-    }
-
-    private function sanitize_rich_text($raw, int $max_len): ?string {
-        if (!is_string($raw) || $raw === '') {
-            return null;
-        }
-        $clean = wp_kses_post($raw);
-        return $this->trim_to($clean, $max_len);
-    }
-
-    private function sanitize_css($raw, int $max_len): ?string {
-        if (!is_string($raw) || $raw === '') {
-            return null;
-        }
-        // wp_strip_all_tags + length cap is enough — actual CSS-in-email
-        // safety is an email-client problem we can't solve server-side.
-        $clean = wp_strip_all_tags($raw);
-        return $this->trim_to($clean, $max_len);
-    }
-
-    /**
+     * Keep known section keys, in the order given.
+     *
      * @param mixed $raw
      * @return string[]
      */
-    private function sanitize_section_keys($raw): array {
+    private function normalize_section_keys($raw): array {
         if (!is_array($raw)) {
             return [];
         }
-        $allowed = function_exists('thinkrank_get_email_report_default_sections')
-            ? array_keys(thinkrank_get_email_report_default_sections())
-            : [];
         $allowed = array_unique(array_merge(
-            $allowed,
+            array_keys(thinkrank_get_email_report_default_sections()),
             (array) apply_filters('thinkrank_email_report_section_keys', [])
         ));
         $clean = [];
@@ -410,12 +250,5 @@ final class Email_Report_Config {
             }
         }
         return array_values(array_unique($clean));
-    }
-
-    private function trim_to(string $value, int $max_len): string {
-        if (function_exists('mb_substr')) {
-            return mb_substr($value, 0, $max_len);
-        }
-        return substr($value, 0, $max_len);
     }
 }

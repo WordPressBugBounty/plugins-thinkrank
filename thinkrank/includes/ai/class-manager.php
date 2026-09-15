@@ -965,29 +965,6 @@ class Manager {
      * @return array{ai_text:string,tokens:int}
      */
     /**
-     * Public plain-text completion against the configured provider.
-     *
-     * Thin gate over request_completion() for callers that need a free-form
-     * answer rather than a structured SEO artifact (e.g. the brand-visibility
-     * checker, which asks the model a user-style question and inspects the
-     * reply). Provider differences are already normalized inside.
-     *
-     * @since 1.27.0
-     *
-     * @param string $prompt     Prompt to send.
-     * @param int    $max_tokens Output token ceiling.
-     * @return array{ai_text:string,tokens:int}
-     * @throws \Exception When no AI client is configured/available.
-     */
-    public function answer_prompt(string $prompt, int $max_tokens = 1024, array $options = []): array {
-        if (!$this->client) {
-            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
-        }
-
-        return $this->request_completion($prompt, $max_tokens, $options);
-    }
-
-    /**
      * Detect a provider-side refusal or content-policy block and fail with
      * the real reason. Each provider signals these differently, and none of
      * the signals set the content field the extraction chain looks for — left
@@ -1071,8 +1048,8 @@ class Manager {
             ?? $response['usage']['output_tokens']
             ?? ($response['usageMetadata']['totalTokenCount'] ?? 0);
 
-        // Diagnostics for callers that must explain an empty answer (e.g. the
-        // brand-visibility probe): why generation stopped, and how much of the
+        // Diagnostics for callers that must explain an empty answer: why
+        // generation stopped, and how much of the
         // completion budget hidden reasoning consumed (OpenAI reasoning models).
         // All three provider shapes are read — Gemini reports the stop reason
         // per candidate, so without that arm the diagnostic was always blank

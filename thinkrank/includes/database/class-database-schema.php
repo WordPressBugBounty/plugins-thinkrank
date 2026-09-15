@@ -245,32 +245,11 @@ class Database_Schema {
             'foreign_keys' => []
         ],
 
-        // === AI VISIBILITY TABLES (2) ===
+        // === AI VISIBILITY TABLES (1) ===
         'ai_traffic' => [
             'description' => 'Daily aggregate counters for AI referral traffic, AI crawler hits, and the all-traffic baseline',
             'primary_key' => 'id',
             'indexes' => ['day', 'kind'],
-            'foreign_keys' => []
-        ],
-        'brand_visibility_checks' => [
-            'description' => 'History of AI brand-visibility checks run through the configured AI provider',
-            'primary_key' => 'id',
-            'indexes' => ['checked_at', 'query_text'],
-            'foreign_keys' => []
-        ],
-        'bv_runs' => [
-            'description' => 'Brand Visibility v2 analysis runs: one row per run, with its config snapshot, progress counters and computed aggregates',
-            'primary_key' => 'id',
-            'indexes' => ['status', 'started_at', 'finished_at'],
-            'foreign_keys' => []
-        ],
-        'bv_tasks' => [
-            'description' => 'Brand Visibility v2 units of work: one row per query x platform x sample, processed off-request by cron ticks',
-            'primary_key' => 'id',
-            'indexes' => ['run_id', 'status'],
-            'composite_indexes' => [
-                'run_status' => ['run_id', 'status'],
-            ],
             'foreign_keys' => []
         ]
     ];
@@ -295,7 +274,7 @@ class Database_Schema {
         'content' => ['content_briefs'],
         'scoring' => ['seo_scores'],
         'reporting' => ['email_report_logs'],
-        'ai_visibility' => ['ai_traffic', 'brand_visibility_checks', 'bv_runs', 'bv_tasks']
+        'ai_visibility' => ['ai_traffic']
     ];
 
     /**
@@ -721,12 +700,6 @@ class Database_Schema {
                 // AI Visibility Tables
             case 'ai_traffic':
                 return $this->get_ai_traffic_table_sql($full_table_name, $charset_collate);
-            case 'bv_runs':
-                return $this->get_bv_runs_table_sql($full_table_name, $charset_collate);
-            case 'bv_tasks':
-                return $this->get_bv_tasks_table_sql($full_table_name, $charset_collate);
-            case 'brand_visibility_checks':
-                return $this->get_brand_visibility_checks_table_sql($full_table_name, $charset_collate);
 
             default:
                 throw new \InvalidArgumentException('Unknown table: ' . esc_html($table_name));
@@ -1808,110 +1781,6 @@ class Database_Schema {
             UNIQUE KEY uniq_bucket (day, kind, source, path),
             KEY idx_day (day),
             KEY idx_kind (kind)
-        ) {$charset_collate};";
-    }
-
-    /**
-     * Get SQL for the brand visibility checks table.
-     *
-     * One row per (query, check run): whether the AI provider's answer
-     * mentioned the brand and/or cited the site's domain, plus a short
-     * excerpt for context.
-     *
-     * @since 1.27.0
-     *
-     * @param string $table_name      Full table name
-     * @param string $charset_collate Charset and collation
-     * @return string SQL for table creation
-     */
-    private function get_brand_visibility_checks_table_sql(string $table_name, string $charset_collate): string {
-        return "CREATE TABLE `{$table_name}` (
-            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-            checked_at datetime NOT NULL,
-            query_text varchar(191) NOT NULL,
-            provider varchar(20) NOT NULL DEFAULT '',
-            model varchar(80) NOT NULL DEFAULT '',
-            mentioned tinyint(1) NOT NULL DEFAULT 0,
-            cited tinyint(1) NOT NULL DEFAULT 0,
-            excerpt text NULL,
-            answer longtext NULL,
-            PRIMARY KEY (id),
-            KEY idx_checked (checked_at),
-            KEY idx_query (query_text)
-        ) {$charset_collate};";
-    }
-
-    /**
-     * Brand Visibility v2 — analysis runs.
-     *
-     * One row per "Run analysis". `config` snapshots the brand profile,
-     * competitors, queries and platforms the run was started with, so a run's
-     * results stay interpretable after the user edits their setup. `results`
-     * holds the computed aggregates (index, mention rate, share of voice,
-     * per-platform and per-query breakdowns) written once by the finalizer.
-     *
-     * @since 1.28.0
-     *
-     * @param string $table_name      Full table name.
-     * @param string $charset_collate Charset/collation clause.
-     * @return string CREATE TABLE statement.
-     */
-    private function get_bv_runs_table_sql(string $table_name, string $charset_collate): string {
-        return "CREATE TABLE `{$table_name}` (
-            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-            status varchar(20) NOT NULL DEFAULT 'queued',
-            started_at datetime NOT NULL,
-            finished_at datetime NULL,
-            tasks_total int(11) NOT NULL DEFAULT 0,
-            tasks_done int(11) NOT NULL DEFAULT 0,
-            tasks_failed int(11) NOT NULL DEFAULT 0,
-            config longtext NULL,
-            results longtext NULL,
-            error text NULL,
-            PRIMARY KEY (id),
-            KEY idx_status (status),
-            KEY idx_started (started_at),
-            KEY idx_finished (finished_at)
-        ) {$charset_collate};";
-    }
-
-    /**
-     * Brand Visibility v2 — individual probe tasks.
-     *
-     * One row per (query x platform x sample). Sampling is the whole point:
-     * a single LLM answer is noise, so a mention rate is only meaningful as
-     * mentions/samples. Rows are processed off-request by cron ticks, which is
-     * what keeps a 100+ call run from timing out a REST request, and what lets
-     * an interrupted run resume instead of restarting.
-     *
-     * @since 1.28.0
-     *
-     * @param string $table_name      Full table name.
-     * @param string $charset_collate Charset/collation clause.
-     * @return string CREATE TABLE statement.
-     */
-    private function get_bv_tasks_table_sql(string $table_name, string $charset_collate): string {
-        return "CREATE TABLE `{$table_name}` (
-            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-            run_id bigint(20) unsigned NOT NULL,
-            query_text varchar(500) NOT NULL,
-            query_type varchar(20) NOT NULL DEFAULT 'branded',
-            platform varchar(20) NOT NULL DEFAULT '',
-            sample_index tinyint(3) unsigned NOT NULL DEFAULT 0,
-            status varchar(20) NOT NULL DEFAULT 'pending',
-            attempts tinyint(3) unsigned NOT NULL DEFAULT 0,
-            mentioned tinyint(1) NOT NULL DEFAULT 0,
-            cited tinyint(1) NOT NULL DEFAULT 0,
-            sentiment varchar(10) NOT NULL DEFAULT '',
-            competitors text NULL,
-            excerpt text NULL,
-            answer longtext NULL,
-            error text NULL,
-            updated_at datetime NULL,
-            PRIMARY KEY (id),
-            KEY idx_run (run_id),
-            KEY idx_status (status),
-            KEY run_status (run_id, status)
         ) {$charset_collate};";
     }
 }

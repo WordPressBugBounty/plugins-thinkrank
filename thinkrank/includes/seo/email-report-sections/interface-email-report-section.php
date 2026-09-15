@@ -46,11 +46,8 @@ interface Email_Report_Section_Interface {
     public function default_enabled(): bool;
 
     /**
-     * The Plan_Config capability required to render this section.
-     *
-     * Return null for free sections. AI Highlights returns 'ai_highlights'.
-     * The renderer skips sections whose capability is not satisfied without
-     * raising an error — no surprises if a downgrade hides a Pro section.
+     * Retained for compatibility with sections written against 1.9. The
+     * registry no longer consults it; return null.
      */
     public function requires_capability(): ?string;
 

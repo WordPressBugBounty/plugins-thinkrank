@@ -2,6 +2,21 @@
 /**
  * Beaver Builder integration for the ThinkRank SEO metabox.
  *
+ * @package ThinkRank
+ * @since   2.2.2
+ */
+
+declare(strict_types=1);
+
+namespace ThinkRank\Admin;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+/**
+ * Wires the React metabox into the Beaver Builder editor.
+ *
  * Beaver Builder's editor is a front-end editing overlay, not a standalone SPA:
  * it loads the post on its own permalink with `?fl_builder` and paints its own
  * chrome (top bar, panels, settings modals) over the rendered page. It does NOT
@@ -77,21 +92,6 @@
  * ordinary pass: `FLBuilderUIIFrame::enqueue_scripts()` re-runs it only when it
  * has already fired, which is what keeps the media library available to the
  * drawer's social-image picker after the queue is emptied.
- *
- * @package ThinkRank
- * @since   2.2.2
- */
-
-declare(strict_types=1);
-
-namespace ThinkRank\Admin;
-
-if (!defined('ABSPATH')) {
-    exit;
-}
-
-/**
- * Wires the React metabox into the Beaver Builder editor.
  */
 class Beaver_Metabox {
 

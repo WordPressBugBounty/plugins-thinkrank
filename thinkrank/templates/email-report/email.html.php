@@ -9,10 +9,10 @@
  *    support <style> blocks. Anything that must render reliably is inline.
  *  - Tables for outer layout — most reliable across clients (especially
  *    older Outlook versions).
- *  - The `additional_css` block (Pro-only) is injected as a <style> tag so
- *    advanced agencies can theme without us re-engineering inline rules
- *    every time. The PRD calls out that CSS support varies — that's their
- *    risk to take.
+ *  - The header logo, logo link, header background, intro, footer, extra CSS
+ *    and dashboard link are slots filled through the
+ *    `thinkrank_email_report_payload` filter. Extra CSS goes into a <style>
+ *    tag; CSS support varies across email clients.
  *
  * @var array $payload
  *

@@ -200,7 +200,7 @@ class Content_Brief_Generator {
      * same budget) are spent before any visible output (issue #286).
      *
      * A brief is a structured planning task, so 'low' is a provisional middle
-     * ground — Brand Visibility uses 'minimal' for quick consumer-style answers.
+     * ground between 'minimal' and the model's default.
      * The level is filterable so a site can trade latency for more reasoning;
      * returning '' opts out entirely and lets the model use its default effort.
      * Only the GPT-5 family consumes this — o1/o3, gpt-4o and the non-OpenAI

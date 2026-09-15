@@ -122,53 +122,6 @@ class Integrations_Endpoint extends WP_REST_Controller {
             ]
         );
 
-        // Verify GA4 tracking
-        register_rest_route(
-            $this->namespace,
-            '/' . $this->rest_base . '/verify-ga4-tracking',
-            [
-                [
-                    'methods' => 'POST',
-                    'callback' => [$this, 'verify_ga4_tracking'],
-                    'permission_callback' => [$this, 'check_manage_permissions'],
-                    'args' => [
-                        'measurement_id' => [
-                            // Optional, and an empty string is meaningful:
-                            // verify_tracking() then discovers the ID from the
-                            // live homepage. A `required` + `pattern` arg
-                            // rejected that at the REST layer before the
-                            // handler ran, which is why verification was
-                            // unreachable on sites with no stored ID (#250).
-                            'required' => false,
-                            'type' => 'string',
-                            'default' => '',
-                            // No regex delimiters — WP's REST validator wraps the
-                            // pattern in its own (#...#u), so a leading/trailing
-                            // slash would require literal slashes in the value.
-                            // The empty alternative keeps discovery reachable
-                            // while still rejecting a malformed ID.
-                            'pattern' => '^(G-[A-Z0-9]{10})?$',
-                            'sanitize_callback' => 'sanitize_text_field',
-                            'description' => 'GA4 Measurement ID in format G-XXXXXXXXXX. Omit or leave empty to auto-detect the ID from the site homepage.'
-                        ]
-                    ]
-                ]
-            ]
-        );
-
-        // Detect GA4 conflicts
-        register_rest_route(
-            $this->namespace,
-            '/' . $this->rest_base . '/detect-ga4-conflicts',
-            [
-                [
-                    'methods' => 'GET',
-                    'callback' => [$this, 'detect_ga4_conflicts'],
-                    'permission_callback' => [$this, 'check_read_permissions']
-                ]
-            ]
-        );
-
         // Get Search Console Sites
         register_rest_route(
             $this->namespace,
@@ -339,14 +292,6 @@ class Integrations_Endpoint extends WP_REST_Controller {
         $settings['google_search_console_api_key'] = $this->settings->get('google_search_console_api_key');
         $settings['google_pagespeed_api_key'] = $this->settings->get('google_pagespeed_api_key');
 
-        // Get GA4 tracking settings (let Settings class handle defaults)
-        $settings['ga4_measurement_id'] = $this->settings->get('ga4_measurement_id');
-        $settings['ga4_auto_inject'] = $this->settings->get('ga4_auto_inject');
-        $settings['ga4_anonymize_ip'] = $this->settings->get('ga4_anonymize_ip');
-        $settings['ga4_exclude_admin'] = $this->settings->get('ga4_exclude_admin');
-        $settings['ga4_tracking_verified'] = $this->settings->get('ga4_tracking_verified');
-        $settings['ga4_last_verification'] = $this->settings->get('ga4_last_verification');
-
         // Get other integration settings (let Settings class handle defaults)
         $settings['api_timeout'] = $this->settings->get('api_timeout');
         $settings['enable_rate_limiting'] = $this->settings->get('enable_rate_limiting');
@@ -417,19 +362,7 @@ class Integrations_Endpoint extends WP_REST_Controller {
             }
         }
 
-        $text = ['ga4_measurement_id', 'ga4_last_verification'];
-
-        foreach ($text as $key) {
-            if (array_key_exists($key, $settings)) {
-                $sanitized[$key] = sanitize_text_field($settings[$key]);
-            }
-        }
-
         $booleans = [
-            'ga4_auto_inject',
-            'ga4_anonymize_ip',
-            'ga4_exclude_admin',
-            'ga4_tracking_verified',
             'enable_rate_limiting',
             'auto_test_connections',
             'retry_failed_requests',
@@ -918,7 +851,7 @@ class Integrations_Endpoint extends WP_REST_Controller {
      * revoke) and running live connection tests manage the site's third-party
      * credentials, so they require an administrator — `thinkrank_settings` is
      * delegatable to non-admin roles through the Role Manager. Mirrors the
-     * pattern used by the brand-visibility and AI-insights key writes.
+     * pattern used by the AI-insights settings writes.
      *
      * @since 1.29.0
      * @return bool Permission status
@@ -927,78 +860,6 @@ class Integrations_Endpoint extends WP_REST_Controller {
         return current_user_can('manage_options');
     }
 
-    /**
-     * Verify GA4 tracking
-     * Following ThinkRank API response patterns
-     *
-     * @since 1.0.0
-     * @param WP_REST_Request $request Request object
-     * @return WP_REST_Response|WP_Error Response object
-     */
-    public function verify_ga4_tracking(WP_REST_Request $request) {
-        try {
-            // Empty is allowed and meaningful: verify_tracking() then reads the
-            // homepage and discovers whichever GA4 ID is actually serving. The
-            // old 400 made verification impossible on OAuth-connected sites
-            // that never typed an ID in — precisely the reported case (#250).
-            $measurement_id = (string) ( $request->get_param('measurement_id') ?? '' );
-
-            // Load tracking manager
-            if (!class_exists('ThinkRank\\Frontend\\Google_Analytics_Tracking_Manager')) {
-                require_once THINKRANK_PLUGIN_DIR . 'includes/frontend/class-google-analytics-tracking-manager.php';
-            }
-
-            $tracking_manager = new \ThinkRank\Frontend\Google_Analytics_Tracking_Manager();
-            $verification_result = $tracking_manager->verify_tracking($measurement_id);
-
-            return new WP_REST_Response([
-                'success' => true,
-                'data' => $verification_result,
-                'message' => 'Tracking verification completed'
-            ], 200);
-        } catch (\Exception $e) {
-            return new WP_Error(
-                'verification_failed',
-                'Tracking verification failed: ' . $e->getMessage(),
-                ['status' => 500]
-            );
-        }
-    }
-
-    /**
-     * Detect GA4 conflicts
-     * Following ThinkRank API response patterns
-     *
-     * @since 1.0.0
-     * @param WP_REST_Request $request Request object
-     * @return WP_REST_Response|WP_Error Response object
-     */
-    public function detect_ga4_conflicts(WP_REST_Request $request) {
-        try {
-            // Load tracking manager
-            if (!class_exists('ThinkRank\\Frontend\\Google_Analytics_Tracking_Manager')) {
-                require_once THINKRANK_PLUGIN_DIR . 'includes/frontend/class-google-analytics-tracking-manager.php';
-            }
-
-            $tracking_manager = new \ThinkRank\Frontend\Google_Analytics_Tracking_Manager();
-            $conflicts = $tracking_manager->detect_existing_tracking();
-
-            return new WP_REST_Response([
-                'success' => true,
-                'data' => [
-                    'conflicts' => $conflicts,
-                    'has_conflicts' => !empty($conflicts)
-                ],
-                'message' => 'Conflict detection completed'
-            ], 200);
-        } catch (\Exception $e) {
-            return new WP_Error(
-                'conflict_detection_failed',
-                'Conflict detection failed: ' . $e->getMessage(),
-                ['status' => 500]
-            );
-        }
-    }
     /**
      * Fingerprint the currently connected Google account.
      *

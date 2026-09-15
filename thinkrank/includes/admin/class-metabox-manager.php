@@ -973,8 +973,6 @@ JS;
                 || !empty($this->settings->get('claude_api_key', ''))
                 || !empty($this->settings->get('gemini_api_key', ''))
                 || !empty($this->settings->get('openrouter_api_key', '')),
-            // Focus keywords plan limits (max_keywords; 0 = unlimited).
-            'focusKeywords' => Plan_Config::focus_keywords(),
             // Resolved Global/Bulk SEO variable-tag patterns for this post, shown
             // as placeholder previews when a field is empty (the frontend applies
             // these same patterns on output). Typing a value overrides them.

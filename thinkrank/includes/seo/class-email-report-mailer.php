@@ -8,7 +8,7 @@
  * Responsibilities:
  *  - Build From/Reply-To/Content-Type headers
  *  - Resolve subject template tokens
- *  - Truncate recipients to plan-allowed maximum (defense-in-depth)
+ *  - Drop invalid and duplicate recipients
  *  - Return a structured result with per-recipient outcome
  *
  * Not its job:
@@ -25,8 +25,6 @@ declare(strict_types=1);
 
 namespace ThinkRank\SEO;
 
-use ThinkRank\Core\Plan_Config;
-
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -39,17 +37,20 @@ if (!defined('ABSPATH')) {
 final class Email_Report_Mailer {
 
     /**
+     * Subject line when nothing filters it.
+     */
+    public const DEFAULT_SUBJECT = '%site_title% SEO performance report';
+
+    /**
      * Send a rendered email report.
      *
-     * @param array  $config Per-site config (recipients, subject_template).
+     * @param array  $config Resolved config (recipients).
      * @param string $html   Rendered HTML body.
      * @param array  $tokens Tokens to substitute in subject (date, period, …).
      * @return array{success:bool,recipients:array<string,bool>,subject:string,error?:string}
      */
     public function send(array $config, string $html, array $tokens = []): array {
-        $recipients = Plan_Config::clamp_email_report_recipients(
-            (array) ($config['recipients'] ?? [])
-        );
+        $recipients = $this->valid_recipients((array) ($config['recipients'] ?? []));
 
         if (empty($recipients)) {
             return [
@@ -60,7 +61,19 @@ final class Email_Report_Mailer {
             ];
         }
 
-        $subject = $this->resolve_subject((string) ($config['subject_template'] ?? ''), $tokens);
+        /**
+         * Filter the subject template before token substitution.
+         *
+         * ThinkRank Pro returns its custom subject line here.
+         *
+         * @since 2.6.0
+         *
+         * @param string $template Subject template.
+         * @param array  $config   Resolved config.
+         */
+        $template = (string) apply_filters('thinkrank_email_report_subject_template', self::DEFAULT_SUBJECT, $config);
+
+        $subject = $this->resolve_subject($template, $tokens);
 
         /**
          * Filter the rendered HTML one last time before send.
@@ -105,7 +118,7 @@ final class Email_Report_Mailer {
      */
     private function resolve_subject(string $template, array $tokens): string {
         if ($template === '') {
-            $template = '%site_title% SEO performance report';
+            $template = self::DEFAULT_SUBJECT;
         }
 
         $defaults = [
@@ -172,6 +185,21 @@ final class Email_Report_Mailer {
         $headers = (array) apply_filters('thinkrank_email_report_headers', $headers, $config);
 
         return array_values(array_filter($headers, 'is_string'));
+    }
+
+    /**
+     * Unique, valid addresses, in the order given.
+     *
+     * @param array $recipients Candidate addresses.
+     * @return string[]
+     */
+    private function valid_recipients(array $recipients): array {
+        $valid = array_filter(
+            array_map(static fn ($r) => is_string($r) ? trim($r) : '', $recipients),
+            static fn (string $r): bool => $r !== '' && (bool) is_email($r)
+        );
+
+        return array_values(array_unique($valid));
     }
 
     private function first_recipient(array $recipients): string {

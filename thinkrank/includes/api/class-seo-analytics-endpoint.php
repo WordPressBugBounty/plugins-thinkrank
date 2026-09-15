@@ -146,19 +146,6 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
             ]
         );
 
-        // Get indexing status
-        register_rest_route(
-            $this->namespace,
-            '/' . $this->rest_base . '/indexing-status',
-            [
-                [
-                    'methods' => 'GET',
-                    'callback' => [$this, 'get_indexing_status'],
-                    'permission_callback' => [$this, 'check_permissions'],
-                ]
-            ]
-        );
-
         // Refresh cached data
         register_rest_route(
             $this->namespace,
@@ -181,52 +168,6 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
                     'methods' => 'GET',
                     'callback' => [$this, 'get_client_status'],
                     'permission_callback' => [$this, 'check_permissions'],
-                ]
-            ]
-        );
-
-        // ========================================
-        // SEO Intelligence Enhancement Endpoints
-        // ========================================
-
-        // Get intelligent dashboard data with trends and insights
-        register_rest_route(
-            $this->namespace,
-            '/' . $this->rest_base . '/intelligent-dashboard',
-            [
-                [
-                    'methods' => 'GET',
-                    'callback' => [$this, 'get_intelligent_dashboard'],
-                    'permission_callback' => [$this, 'check_data_permissions'],
-                    'args' => $this->get_dashboard_args()
-                ]
-            ]
-        );
-
-        // Get intelligent SEO opportunities with prioritization
-        register_rest_route(
-            $this->namespace,
-            '/' . $this->rest_base . '/intelligent-opportunities',
-            [
-                [
-                    'methods' => 'GET',
-                    'callback' => [$this, 'get_intelligent_opportunities'],
-                    'permission_callback' => [$this, 'check_data_permissions'],
-                    'args' => $this->get_opportunities_args()
-                ]
-            ]
-        );
-
-        // Get SEO insights
-        register_rest_route(
-            $this->namespace,
-            '/' . $this->rest_base . '/insights',
-            [
-                [
-                    'methods' => 'GET',
-                    'callback' => [$this, 'get_seo_insights'],
-                    'permission_callback' => [$this, 'check_data_permissions'],
-                    'args' => $this->get_dashboard_args()
                 ]
             ]
         );
@@ -425,30 +366,6 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
             return new WP_Error(
                 'setup_failed',
                 'Search Console setup failed: ' . $e->getMessage(),
-                ['status' => 500]
-            );
-        }
-    }
-
-    /**
-     * Get indexing status
-     *
-     * @param WP_REST_Request $request Request object
-     * @return WP_REST_Response|WP_Error Response object
-     */
-    public function get_indexing_status(WP_REST_Request $request) {
-        try {
-            $indexing_status = $this->analytics_manager->get_indexing_status();
-
-            return new WP_REST_Response([
-                'success' => true,
-                'data' => $indexing_status,
-                'message' => 'Indexing status retrieved successfully'
-            ], 200);
-        } catch (\Exception $e) {
-            return new WP_Error(
-                'indexing_status_failed',
-                'Failed to retrieve indexing status: ' . $e->getMessage(),
                 ['status' => 500]
             );
         }
@@ -952,126 +869,5 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
         }
 
         return true;
-    }
-
-    // ========================================
-    // SEO Intelligence Enhancement Endpoints
-    // ========================================
-
-    /**
-     * Get intelligent dashboard data with trends and insights
-     *
-     * @param WP_REST_Request $request Request object
-     * @return WP_REST_Response|WP_Error Response object
-     */
-    public function get_intelligent_dashboard(WP_REST_Request $request) {
-        try {
-            $date_range = $request->get_param('date_range');
-
-            // Cache the intelligence computation (trend analysis + generators are
-            // expensive) so the AI-insights panel doesn't recompute every load.
-            $response = $this->cached_response(
-                'intelligent_dashboard',
-                function () use ($date_range) {
-                    $intelligent_data = $this->analytics_manager->get_intelligent_dashboard_data($date_range);
-
-                    return [
-                        'success'   => isset($intelligent_data['success']) ? $intelligent_data['success'] : false,
-                        'data'      => $intelligent_data['data'] ?? null,
-                        'message'   => $intelligent_data['message'] ?? 'Intelligent dashboard data retrieved',
-                        'timestamp' => current_time('mysql'),
-                    ];
-                },
-                ['date_range' => $date_range]
-            );
-
-            // Always return 200 for successful API calls, even when no data available.
-            return new WP_REST_Response($response, 200);
-
-        } catch (\Exception $e) {
-            return new WP_Error(
-                'intelligent_dashboard_error',
-                'Failed to retrieve intelligent dashboard data: ' . $e->getMessage(),
-                ['status' => 500]
-            );
-        }
-    }
-
-    /**
-     * Get intelligent SEO opportunities with prioritization
-     *
-     * @param WP_REST_Request $request Request object
-     * @return WP_REST_Response|WP_Error Response object
-     */
-    public function get_intelligent_opportunities(WP_REST_Request $request) {
-        try {
-            $date_range = $request->get_param('date_range');
-
-            // Cache the opportunity detection so it doesn't recompute every load.
-            $response = $this->cached_response(
-                'intelligent_opportunities',
-                function () use ($date_range) {
-                    $intelligent_opportunities = $this->analytics_manager->get_intelligent_seo_opportunities($date_range);
-
-                    return [
-                        'success'   => isset($intelligent_opportunities['success']) ? $intelligent_opportunities['success'] : false,
-                        'data'      => $intelligent_opportunities['data'] ?? null,
-                        'message'   => $intelligent_opportunities['message'] ?? 'Intelligent opportunities retrieved',
-                        'timestamp' => current_time('mysql'),
-                    ];
-                },
-                ['date_range' => $date_range]
-            );
-
-            // Always return 200 for successful API calls, even when no data available.
-            return new WP_REST_Response($response, 200);
-
-        } catch (\Exception $e) {
-            return new WP_Error(
-                'intelligent_opportunities_error',
-                'Failed to retrieve intelligent opportunities: ' . $e->getMessage(),
-                ['status' => 500]
-            );
-        }
-    }
-
-    /**
-     * Get SEO insights
-     *
-     * @param WP_REST_Request $request Request object
-     * @return WP_REST_Response|WP_Error Response object
-     */
-    public function get_seo_insights(WP_REST_Request $request) {
-        try {
-            $date_range = $request->get_param('date_range');
-
-            // Endpoint-level cache for consistency with the other two intelligence
-            // calls (the manager also caches insights internally).
-            $response = $this->cached_response(
-                'seo_insights',
-                function () use ($date_range) {
-                    $insights = $this->analytics_manager->get_seo_insights($date_range);
-
-                    return [
-                        'success'   => isset($insights['success']) ? $insights['success'] : false,
-                        'data'      => $insights['data'] ?? null,
-                        'cached'    => $insights['cached'] ?? false,
-                        'message'   => $insights['message'] ?? 'SEO insights retrieved',
-                        'timestamp' => current_time('mysql'),
-                    ];
-                },
-                ['date_range' => $date_range]
-            );
-
-            // Always return 200 for successful API calls, even when no data available.
-            return new WP_REST_Response($response, 200);
-
-        } catch (\Exception $e) {
-            return new WP_Error(
-                'seo_insights_error',
-                'Failed to retrieve SEO insights: ' . $e->getMessage(),
-                ['status' => 500]
-            );
-        }
     }
 }

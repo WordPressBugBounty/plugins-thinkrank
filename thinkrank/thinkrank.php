@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 2.5.0
+ * Version: 2.6.0
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Requires PHP: 7.4
  * 
  * @package ThinkRank
- * @version 2.5.0
+ * @version 2.6.0
  * @since 1.0.0
  */
 
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '2.5.0');
+define('THINKRANK_VERSION', '2.6.0');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -177,7 +177,7 @@ final class ThinkRank {
         try {
             $this->maybe_update_database();
             $this->register_sitemap_cron_listeners();
-            $this->register_brand_visibility_cron();
+            $this->clear_retired_brand_visibility_cron();
             $this->load_components();
             $this->init_components();
             $this->load_template_functions();
@@ -291,27 +291,22 @@ final class ThinkRank {
     }
 
     /**
-     * Register the Brand Visibility run-drain listener.
+     * Unschedule the cron events left behind by the removed Brand Visibility
+     * feature.
      *
-     * Runs on plugins_loaded (via init()) rather than from the REST endpoint,
-     * because the ticks that drain a run are WP-Cron requests — they never
-     * reach rest_api_init, so registering the listener there would mean a run
-     * starts and then never progresses.
+     * A site that ran a Brand Visibility check can still carry its drain tick
+     * and watchdog. Their callbacks, and the watchdog's custom recurrence, no
+     * longer exist, so the events would only fire into nothing.
+     * wp_unschedule_hook() walks the autoloaded cron array and writes nothing
+     * when the hook is absent, so this costs nothing once they are gone.
+     * Deactivation and uninstall clear the same hooks (cleanup-manifest.php).
      *
      * @return void
      */
-    private function register_brand_visibility_cron(): void {
-        add_action(ThinkRank\AI\Brand_Visibility_Runner::TICK_HOOK, static function () {
-            (new ThinkRank\AI\Brand_Visibility_Runner())->tick();
-        });
-
-        // Safety net: a tick killed by a fatal or a worker timeout never
-        // reaches its own reschedule, which would strand the run. The
-        // watchdog re-arms the drain and unschedules itself when idle.
-        add_filter('cron_schedules', [ThinkRank\AI\Brand_Visibility_Runner::class, 'add_cron_interval']); // phpcs:ignore WordPress.WP.CronInterval.ChangeDetected
-        add_action(ThinkRank\AI\Brand_Visibility_Runner::WATCHDOG_HOOK, static function () {
-            (new ThinkRank\AI\Brand_Visibility_Runner())->watchdog();
-        });
+    private function clear_retired_brand_visibility_cron(): void {
+        foreach (['thinkrank_bv_tick', 'thinkrank_bv_watchdog'] as $hook) {
+            wp_unschedule_hook($hook);
+        }
     }
 
     /**
@@ -363,7 +358,6 @@ final class ThinkRank {
             'google_oauth' => new ThinkRank\Integrations\Google_OAuth_Proxy(),
             'multilingual' => new ThinkRank\Integrations\Multilingual_Manager(),
             'ai_traffic' => new ThinkRank\SEO\Ai_Traffic_Tracker(),
-            'auto_ai' => new ThinkRank\SEO\Auto_Ai_Optimizer(),
             'analytics' => new ThinkRank\SEO\Analytics_Manager(),
             'abilities' => new ThinkRank\Abilities\Abilities_Registrar(),
             'mcp' => new ThinkRank\Mcp\Mcp_Manager(),

@@ -258,10 +258,6 @@ class Settings_Manager {
                 'ga_analytics_account_id',
                 'ga_analytics_data_stream_id',
 
-                // GA4 Tracking Code Injection (Pro)
-                'ga4_auto_inject',
-                'ga4_measurement_id',
-
                 // Search Console configuration
                 'search_console_property',
 

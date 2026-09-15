@@ -65,7 +65,6 @@ use ThinkRank\Abilities\Analysis\Get_Llms_Txt_Status;
 use ThinkRank\Abilities\Analysis\Generate_Llms_Txt;
 use ThinkRank\Abilities\Analysis\Publish_Llms_Txt;
 use ThinkRank\Abilities\Analysis\Get_Seo_Analytics_Data;
-use ThinkRank\Abilities\Analysis\Get_Seo_Insights;
 use ThinkRank\Abilities\Analysis\Get_Seo_Opportunities;
 use ThinkRank\Abilities\Analysis\Get_Seo_Score;
 use ThinkRank\Abilities\Analysis\Get_Seo_Analyzer;
@@ -372,7 +371,6 @@ class Abilities_Registrar {
 			new Generate_Llms_Txt(),
 			new Publish_Llms_Txt(),
 			new Get_Seo_Analytics_Data(),
-			new Get_Seo_Insights(),
 			new Get_Seo_Opportunities(),
 			new Get_Seo_Score(),
 			new Get_Seo_Analyzer(),

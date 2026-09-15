@@ -32,7 +32,7 @@ class Get_Integrations_Status extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-integrations-status';
 		$this->label       = __( 'Get Integrations Status', 'thinkrank' );
-		$this->description = __( 'Report the connection status of the Google Analytics, Search Console, and PageSpeed integrations (connected/configured flags, GA4 measurement ID, selected Search Console site). Never returns API keys or OAuth tokens.', 'thinkrank' );
+		$this->description = __( 'Report the connection status of the Google Analytics, Search Console, and PageSpeed integrations (connected/configured flags, selected GA4 property, selected Search Console site). Never returns API keys or OAuth tokens.', 'thinkrank' );
 	}
 
 	/**
@@ -135,43 +135,31 @@ class Get_Integrations_Status extends Ability_Base {
 		$ps_key        = (string) $settings->get( 'google_pagespeed_api_key', '' );
 		$ps_configured = Google_PageSpeed_Client::site_has_credentials();
 
-		// ThinkRank's own tag-injection state (see the google_analytics block).
-		$ga4_measurement_id = (string) $settings->get( 'ga4_measurement_id', '' );
-		$ga4_verified       = (bool) $settings->get( 'ga4_tracking_verified', false );
+		$google_analytics = [
+			'configured'  => $ga_configured,
+			// The selected GA4 property, in the Admin API's
+			// "properties/XXXXXXXX" form. Empty means no property picked,
+			// which is the usual reason GA is connected but unusable.
+			'property_id' => $ga_property,
+		];
+
+		/**
+		 * Filters the google_analytics block of the integrations status.
+		 *
+		 * ThinkRank Pro, which installs the GA4 tag, adds its state here as
+		 * `tag_injection`. That describes the tag Pro prints, not whether the
+		 * site has a working GA4 tag (#250); `configured` answers whether
+		 * ThinkRank can read Analytics data.
+		 *
+		 * @since 2.6.0
+		 *
+		 * @param array<string, mixed> $google_analytics Status block.
+		 */
+		$filtered = apply_filters( 'thinkrank_integrations_status_google_analytics', $google_analytics );
 
 		return [
 			'google_account_connected' => (bool) $settings->get( 'google_account_connected', false ),
-			'google_analytics'         => [
-				'configured'        => $ga_configured,
-				// The selected GA4 property, in the Admin API's
-				// "properties/XXXXXXXX" form. Empty means no property picked,
-				// which is the usual reason GA is connected but unusable.
-				'property_id'       => $ga_property,
-
-				// The two fields below describe ThinkRank's OWN optional
-				// tag-injection feature — NOT whether the site has a working
-				// GA4 tag. On an OAuth-connected site that never used
-				// injection they are legitimately empty/false, and a client
-				// read that as "GA4 tracking is broken" on a site whose tag
-				// was working fine (#250). They are nested and named for what
-				// they actually are so the payload cannot be misread; the
-				// question "can ThinkRank read Analytics data?" is answered by
-				// `configured` above.
-				//
-				// Kept at the top level as well, deprecated, so an existing
-				// consumer does not break on this release.
-				'tag_injection'     => [
-					'measurement_id'      => $ga4_measurement_id,
-					'auto_inject_enabled' => (bool) $settings->get( 'ga4_auto_inject', false ),
-					'last_check_passed'   => $ga4_verified,
-					'last_checked'        => (string) $settings->get( 'ga4_last_verification', '' ),
-				],
-
-				/** @deprecated 1.27.0 Use tag_injection.measurement_id. */
-				'measurement_id'    => $ga4_measurement_id,
-				/** @deprecated 1.27.0 Use tag_injection.last_check_passed. */
-				'tracking_verified' => $ga4_verified,
-			],
+			'google_analytics'         => is_array( $filtered ) ? $filtered : $google_analytics,
 			'search_console'           => [
 				'configured' => $sc_configured,
 				// Was reading `google_search_console_site` — a key with no

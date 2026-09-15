@@ -18,7 +18,6 @@ declare(strict_types=1);
 
 namespace ThinkRank\SEO;
 
-use ThinkRank\Core\Plan_Config;
 use Throwable;
 
 if (!defined('ABSPATH')) {
@@ -64,8 +63,6 @@ final class Email_Report_Renderer {
         // describes this render and never a previous one.
         $this->sections_with_data = 0;
 
-        $caps = Plan_Config::email_report();
-
         $shared_context = array_merge([
             'site_url' => (string) home_url(),
             'frequency_days' => (int) ($config['frequency_days'] ?? 30),
@@ -78,28 +75,26 @@ final class Email_Report_Renderer {
 
         $sections_html = $this->render_sections($config, $shared_context);
 
-        $intro_text  = empty($caps['intro_text']) ? '' : (string) ($config['intro_text'] ?? '');
-        $footer_text = empty($caps['footer_text']) ? $this->default_footer() : (string) ($config['footer_text'] ?? $this->default_footer());
-
         $payload = [
             'config'         => $config,
-            'caps'           => $caps,
             'context'        => $shared_context,
             'sections_html'  => $sections_html,
-            'header_logo'    => $this->resolve_logo($config, $caps),
-            'header_bg'      => empty($caps['header_background']) ? '' : (string) ($config['header_background'] ?? ''),
-            'logo_link'      => empty($caps['logo_link']) ? '' : (string) ($config['logo_link'] ?? ''),
-            'intro_text'     => $this->apply_text_tokens($intro_text, $shared_context),
-            'footer_text'    => $this->apply_text_tokens($footer_text, $shared_context),
-            'additional_css' => empty($caps['additional_css']) ? '' : (string) ($config['additional_css'] ?? ''),
-            'cta_url'        => $this->resolve_cta_url($config, $caps),
+            'header_logo'    => $this->default_logo(),
+            'header_bg'      => '',
+            'logo_link'      => '',
+            'intro_text'     => '',
+            'footer_text'    => $this->default_footer(),
+            'additional_css' => '',
+            'cta_url'        => $this->dashboard_url(),
             'site_title'     => (string) get_bloginfo('name'),
         ];
 
         /**
          * Filter the assembled payload before the layout template runs.
          *
-         * Pro can rewrite logo/header/footer here without touching the renderer.
+         * The layout's presentation slots — header logo, logo link, header
+         * background, intro, footer, extra CSS and the dashboard link — are
+         * filled here. ThinkRank Pro fills them from its branding settings.
          *
          * @since 1.9.0
          *
@@ -108,6 +103,11 @@ final class Email_Report_Renderer {
          * @param array $shared_context
          */
         $payload = (array) apply_filters('thinkrank_email_report_payload', $payload, $config, $shared_context);
+
+        // Tokens resolve after the filter, so text supplied through it gets
+        // the same %site_title% / %period% substitution as the defaults.
+        $payload['intro_text']  = $this->apply_text_tokens((string) ($payload['intro_text'] ?? ''), $shared_context);
+        $payload['footer_text'] = $this->apply_text_tokens((string) ($payload['footer_text'] ?? ''), $shared_context);
 
         $layout = $this->locate_layout();
         if (!is_readable($layout)) {
@@ -257,13 +257,9 @@ final class Email_Report_Renderer {
             . '</section>';
     }
 
-    private function resolve_logo(array $config, array $caps): string {
-        if (!empty($caps['custom_logo']) && !empty($config['logo_url'])) {
-            return (string) $config['logo_url'];
-        }
-        // No bundled default logo asset yet — return empty so the layout
-        // falls back to a text-rendered site title in the header. Pro
-        // (or a follow-up) can ship a real PNG and wire it via this filter.
+    private function default_logo(): string {
+        // No bundled default logo asset — empty makes the layout fall back to
+        // a text-rendered site title in the header.
         /**
          * Filter the default email logo URL.
          *
@@ -274,17 +270,14 @@ final class Email_Report_Renderer {
         return (string) apply_filters('thinkrank_email_report_default_logo', '');
     }
 
-    private function resolve_cta_url(array $config, array $caps): string {
-        if (empty($config['link_to_full_report'])) {
-            return '';
-        }
+    private function dashboard_url(): string {
         // The dashboard analytics view URL — admin-side. The recipient must
         // be logged in to see it, but the link still gives them a clear path.
         return (string) admin_url('admin.php?page=thinkrank-essential-seo#analytics');
     }
 
     /**
-     * Substitute the documented %tokens% (see thinkrank_get_email_report_tokens)
+     * Substitute %site_title%, %site_url%, %date% and %period%
      * in free-text fields like the intro and footer. Previously only the subject
      * line ran token substitution, so these tokens rendered literally in the body.
      *

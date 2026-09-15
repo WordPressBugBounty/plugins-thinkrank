@@ -742,7 +742,6 @@ class Post_List_Columns {
                 'actionSave' => \ThinkRank\Admin\Seo_Quick_Edit_Ajax::get_ajax_action_save(),
                 'titleMax' => 60,
                 'descriptionMax' => 160,
-                'keywordLimit' => \ThinkRank\SEO\Focus_Keywords::limit(),
                 'i18n' => [
                     'modalTitle' => __('Quick Edit SEO', 'thinkrank'),
                     'seoTitle' => __('SEO Title', 'thinkrank'),
@@ -750,8 +749,7 @@ class Post_List_Columns {
                     'metaDescription' => __('Meta Description', 'thinkrank'),
                     'metaDescriptionHelp' => __('Keep it under 160 characters for best results.', 'thinkrank'),
                     'focusKeywords' => __('Focus Keywords', 'thinkrank'),
-                    /* translators: %d: maximum number of focus keywords */
-                    'focusKeywordsHelp' => __('Separate keywords with commas. Up to %d keywords.', 'thinkrank'),
+                    'focusKeywordsHelp' => __('Separate keywords with commas. The first keyword is primary.', 'thinkrank'),
                     'inheritedHint' => __('Leave empty to inherit from your Global SEO pattern.', 'thinkrank'),
                     'save' => __('Save', 'thinkrank'),
                     'saving' => __('Saving…', 'thinkrank'),

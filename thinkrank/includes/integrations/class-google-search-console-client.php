@@ -309,39 +309,6 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
     }
 
     /**
-     * Get page performance data for SEO analytics
-     *
-     * @param string $site_url Site URL to get data for
-     * @param string $date_range Date range for data
-     * @param int $limit Number of pages to retrieve
-     * @return array Page performance data
-     * @throws \Exception If API request fails
-     */
-    public function get_page_performance(string $site_url, string $date_range = '30d', int $limit = 25): array {
-        $result = $this->get_search_performance($site_url, $date_range, ['page'], $limit);
-
-        $pages = [];
-        $rows = $result['rows'] ?? [];
-
-        foreach ($rows as $row) {
-            $pages[] = [
-                'page' => $row['keys'][0] ?? '',
-                'clicks' => $row['clicks'] ?? 0,
-                'impressions' => $row['impressions'] ?? 0,
-                'ctr' => round(($row['ctr'] ?? 0) * 100, 2), // Convert to percentage
-                'position' => round($row['position'] ?? 0, 1)
-            ];
-        }
-
-        return [
-            'pages' => $pages,
-            'site_url' => $site_url,
-            'date_range' => $date_range,
-            'total_pages' => count($pages)
-        ];
-    }
-
-    /**
      * Get device performance breakdown for mobile SEO insights
      *
      * @param string $site_url Site URL to get data for
@@ -401,49 +368,6 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
             'site_url' => $site_url,
             'date_range' => $date_range
         ];
-    }
-
-    /**
-     * Get site indexing status and coverage data
-     *
-     * @param string $site_url Site URL to check
-     * @return array Indexing status and coverage data
-     * @throws \Exception If API request fails
-     */
-    public function get_indexing_status(string $site_url): array {
-        try {
-            // Get overall search performance to estimate indexed pages
-            $performance = $this->get_search_performance($site_url, '30d', ['page'], 1000);
-            $indexed_pages = count($performance['rows'] ?? []);
-
-            // Get basic site info
-            $sites = $this->list_sites();
-            $site_info = null;
-
-            foreach ($sites['siteEntry'] ?? [] as $site) {
-                if ($site['siteUrl'] === $site_url) {
-                    $site_info = $site;
-                    break;
-                }
-            }
-
-            return [
-                'site_url' => $site_url,
-                'is_verified' => !is_null($site_info),
-                'indexed_pages_estimate' => $indexed_pages,
-                'permission_level' => $site_info['permissionLevel'] ?? 'none',
-                'last_updated' => gmdate('Y-m-d H:i:s')
-            ];
-        } catch (\Exception $e) {
-            return [
-                'site_url' => $site_url,
-                'is_verified' => false,
-                'indexed_pages_estimate' => 0,
-                'permission_level' => 'none',
-                'error' => $e->getMessage(),
-                'last_updated' => gmdate('Y-m-d H:i:s')
-            ];
-        }
     }
 
     /**

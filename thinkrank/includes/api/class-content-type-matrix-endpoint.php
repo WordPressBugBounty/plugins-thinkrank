@@ -285,16 +285,26 @@ class Content_Type_Matrix_Endpoint extends WP_REST_Controller {
             $social  = $manager->get_settings('site');
         }
 
-        $ga_measurement_id = (string) \ThinkRank\Core\Settings::instance()->get('ga4_measurement_id', '');
-        $ga_auto_inject    = (bool) \ThinkRank\Core\Settings::instance()->get('ga4_auto_inject', false);
-
-        return [
+        $defaults = [
             Content_Type_Settings::FEATURE_META       => true,
             Content_Type_Settings::FEATURE_SCHEMA     => true,
             Content_Type_Settings::FEATURE_OPEN_GRAPH => !empty($social['enable_open_graph'] ?? $social['og_enabled'] ?? false),
             Content_Type_Settings::FEATURE_TWITTER    => !empty($social['enable_twitter_cards'] ?? $social['twitter_enabled'] ?? false),
-            Content_Type_Settings::FEATURE_ANALYTICS  => $ga_auto_inject && $ga_measurement_id !== '',
+            // The GA4 tag this switch gates is installed by ThinkRank Pro,
+            // which answers the filter below with its own site-wide state.
+            Content_Type_Settings::FEATURE_ANALYTICS  => false,
         ];
+
+        /**
+         * Filters the site-wide value each 'inherit' matrix cell resolves to.
+         *
+         * @since 2.6.0
+         *
+         * @param array<string, bool> $defaults Feature key => site-wide value.
+         */
+        $filtered = apply_filters('thinkrank_content_type_matrix_global_defaults', $defaults);
+
+        return is_array($filtered) ? array_map('boolval', $filtered + $defaults) : $defaults;
     }
 
     /**

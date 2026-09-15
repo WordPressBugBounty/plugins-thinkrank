@@ -232,35 +232,6 @@ class Settings {
         'enable_meta_generation' => true,
         'enable_schema_markup' => true,
 
-        // Auto AI Optimization (on-publish metadata fill; #248 P1)
-        'auto_ai_meta_enabled' => false,
-        'auto_ai_meta_post_types' => ['post'],
-
-        // Brand Visibility v2. The brand profile drives question generation
-        // and mention detection; per-platform keys let this feature query
-        // several assistants without changing the site-wide AI provider.
-        'bv_brand_name' => '',
-        'bv_variants' => [],
-        'bv_location' => '',
-        'bv_category' => '',
-        'bv_description' => '',
-        'bv_competitors' => [],
-        'bv_queries' => [],
-        'bv_platforms' => ['chatgpt'],
-        'bv_samples' => 1,
-        'bv_key_chatgpt' => '',
-        'bv_key_gemini' => '',
-        'bv_key_claude' => '',
-        'bv_key_perplexity' => '',
-        // Empty = use the platform's default model (see Brand_Visibility_Providers).
-        'bv_model_chatgpt' => '',
-        'bv_model_gemini' => '',
-        'bv_model_claude' => '',
-        'bv_model_perplexity' => '',
-
-        // AI Brand Visibility (BYO-key checks; #248 P1)
-        'brand_visibility_queries' => [],
-
         // Author Archives Settings
         'author_archives_enabled' => true,
         'author_archives_index' => true,
@@ -296,14 +267,6 @@ class Settings {
         // Integration Settings
         'google_analytics_id' => '',
         'search_console_property' => '',
-
-        // GA4 Tracking Settings
-        'ga4_measurement_id' => '',
-        'ga4_auto_inject' => false,
-        'ga4_anonymize_ip' => false,
-        'ga4_exclude_admin' => false,
-        'ga4_tracking_verified' => false,
-        'ga4_last_verification' => '',
 
         // SEO Analytics Settings
         'seo_analytics_enabled' => false,
@@ -880,13 +843,11 @@ class Settings {
                 return sanitize_text_field($value);
 
             case 'robots_txt_content':
-            case 'bv_description':
                 // Multi-line content — sanitize_text_field() collapses newlines
                 // and would flatten the whole file onto a single line. set()
                 // routes every write through here, so a caller that chose
-                // sanitize_textarea_field() itself (Brand_Visibility_Endpoint
-                // does, for bv_description) is otherwise silently overridden
-                // by the default: arm below (#587).
+                // sanitize_textarea_field() itself is otherwise silently
+                // overridden by the default: arm below (#587).
                 return sanitize_textarea_field($value);
 
             default:
@@ -897,10 +858,9 @@ class Settings {
                 } elseif (is_array($value)) {
                     // Recurse rather than drop. Skipping nested members was
                     // harmless while this ran only on the register_setting()
-                    // path, but set() now routes every write through here and
-                    // structured settings — bv_competitors is a list of
-                    // ['name','url'] maps, bv_queries a list of ['text','type']
-                    // — were being silently emptied on save.
+                    // path, but set() now routes every write through here, and
+                    // structured settings (lists of maps) were being silently
+                    // emptied on save.
                     return $this->sanitize_array_recursive($value);
                 }
                 return $value;

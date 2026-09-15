@@ -39,14 +39,6 @@ class SEO_Manager {
      *
      * @var array
      */
-    /**
-     * Page-specific schemas the free tier renders on one page.
-     *
-     * @since 2.0.1
-     * @var int
-     */
-    private const FREE_PAGE_SCHEMA_LIMIT = 2;
-
     private array $current_metadata = [];
 
     /**
@@ -183,9 +175,6 @@ class SEO_Manager {
 
         // Initialize Global SEO Schema Output
         $this->initialize_global_seo_schema();
-
-        // Initialize Google Analytics Tracking Manager
-        $this->initialize_google_analytics_tracking();
 
         // Initialize Image SEO Manager
         $this->initialize_image_seo_manager();
@@ -382,20 +371,6 @@ class SEO_Manager {
         // Initialize Global SEO Schema Output and store reference
         $this->global_seo_schema = new Global_SEO_Schema_Output();
         $this->global_seo_schema->init();
-    }
-
-    /**
-     * Initialize Google Analytics Tracking Manager
-     *
-     * @return void
-     */
-    private function initialize_google_analytics_tracking(): void {
-        if (!class_exists('ThinkRank\\Frontend\\Google_Analytics_Tracking_Manager')) {
-            require_once THINKRANK_PLUGIN_DIR . 'includes/frontend/class-google-analytics-tracking-manager.php';
-        }
-
-        // Initialize Google Analytics Tracking Manager
-        new \ThinkRank\Frontend\Google_Analytics_Tracking_Manager();
     }
 
     /**
@@ -2788,32 +2763,23 @@ class SEO_Manager {
             $page_specific_schemas = $this->schema_manager->get_deployed_schemas($context_type, $context_id);
 
             if (!empty($page_specific_schemas)) {
-                // Apply filter for Pro to allow multiple schemas
+                // Every deployed schema is rendered, on every plan. How many a
+                // page carries is decided when schemas are activated in the
+                // editor, not trimmed here by plan (#673).
+
+                /**
+                 * Filter the page-specific schemas rendered on the current page.
+                 *
+                 * @param array  $page_specific_schemas Deployed schemas keyed by schema type.
+                 * @param string $context_type          Context type (post, page, product, site).
+                 * @param int    $context_id            Post ID.
+                 */
                 $page_specific_schemas = apply_filters(
                     'thinkrank_page_schemas_to_render',
                     $page_specific_schemas,
                     $context_type,
                     $context_id
                 );
-
-                // Free tier renders at most self::FREE_PAGE_SCHEMA_LIMIT
-                // page-specific schemas; Pro renders all of them.
-                //
-                // Both comments here used to say the free limit was 1 while the
-                // code allowed 2 (#405). The number the code enforces is what
-                // has shipped, so that is what stands — lowering it would take
-                // a schema away from every free site on upgrade — and it now
-                // lives in one named place instead of twice in prose and twice
-                // in a literal.
-                if (!\ThinkRank\Core\Plan_Config::is_pro()
-                    && count($page_specific_schemas) > self::FREE_PAGE_SCHEMA_LIMIT) {
-                    $page_specific_schemas = array_slice(
-                        $page_specific_schemas,
-                        0,
-                        self::FREE_PAGE_SCHEMA_LIMIT,
-                        true
-                    );
-                }
 
                 foreach ($page_specific_schemas as $schema_type => $schema_info) {
                     Schema_Graph::instance()->add_primary($schema_info['data'], (string) $schema_type, 'schema_manager');

@@ -141,7 +141,6 @@ class Seo_Quick_Edit_Ajax {
             'effective_title'       => \ThinkRank\SEO\Pattern_Resolver::effective_title($post_id),
             'effective_description' => \ThinkRank\SEO\Pattern_Resolver::effective_description($post_id),
             'focus_keywords'        => \ThinkRank\SEO\Focus_Keywords::get($post_id),
-            'keyword_limit'         => \ThinkRank\SEO\Focus_Keywords::limit(),
             'edit_link'             => get_edit_post_link($post_id, 'raw'),
         ]);
     }

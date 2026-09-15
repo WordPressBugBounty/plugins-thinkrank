@@ -1976,13 +1976,6 @@ class Manager {
         }
 
         try {
-            $brand_visibility_endpoint = new Brand_Visibility_Endpoint();
-            $brand_visibility_endpoint->register_routes();
-        } catch (\Exception $e) {
-            // Failed to register Brand Visibility endpoint
-        }
-
-        try {
             $performance_endpoint = new Performance_Endpoint();
             $performance_endpoint->register_routes();
         } catch (\Exception $e) {

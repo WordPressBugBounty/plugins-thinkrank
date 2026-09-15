@@ -199,8 +199,6 @@ class Capability_Manager {
             'global-robot-meta' => 'thinkrank_crawling',
             'image-seo'         => 'thinkrank_image_seo',
             'ai-insights'       => 'thinkrank_ai_insights',
-            // Brand Visibility is part of the AI Insights section.
-            'brand-visibility'  => 'thinkrank_ai_insights',
             'schema'            => 'thinkrank_schema',
             // Custom Schema (Pro) lives in the Schema Manager section but
             // registers its own /custom-schema/ prefix.

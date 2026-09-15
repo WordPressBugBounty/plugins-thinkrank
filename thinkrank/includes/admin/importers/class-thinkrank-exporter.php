@@ -76,8 +76,9 @@ class Thinkrank_Exporter extends Abstract_Plugin_Exporter {
 
     /**
      * Secrets that are NOT in Settings::$encrypted_keys but must never reach an
-     * export file either: the Brand Visibility per-platform API keys, which are
-     * stored as plain settings today.
+     * export file either: the per-platform API keys of the removed Brand
+     * Visibility feature. They were stored as plain options, and a site that
+     * used the feature still has them, so the exclusion outlives the feature.
      *
      * The encrypted keys themselves come from Settings::get_encrypted_keys() so
      * this list cannot drift from that one.
@@ -138,8 +139,8 @@ class Thinkrank_Exporter extends Abstract_Plugin_Exporter {
     /**
      * Every type a ThinkRank export can carry.
      *
-     * Pro's data lives in its own tables (redirections, 404 logs, rank tracker,
-     * Brand Visibility runs), which the free plugin cannot read. Rather than
+     * Pro's data lives in its own tables (redirections, 404 logs, rank tracker),
+     * which the free plugin cannot read. Rather than
      * leaving Pro users with a half-export, Pro registers its types here and
      * supplies the records through `thinkrank_export_records`; the restore side
      * hands them back through `thinkrank_restore_records`. Free ships the seam

@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace ThinkRank\Abilities\Settings;
 
 use ThinkRank\Abilities\Ability_Base;
-use ThinkRank\Core\Plan_Config;
 use ThinkRank\SEO\Email_Report_Manager;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -20,11 +19,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Retrieves ThinkRank Email Reporting settings.
  *
- * Mirrors `GET /thinkrank/v1/email-report/config`: returns the per-site report
- * config (enable toggle, frequency, recipients, branding/content fields), the
- * plan capability map (which fields are editable on the current plan), the next
- * scheduled run, the available report sections, and the tokens usable in text
- * fields. Read-only.
+ * Mirrors `GET /thinkrank/v1/email-report/config`: returns the resolved report
+ * config (on/off, frequency, recipients, enabled sections), the next scheduled
+ * run and the section catalog. Read-only.
  */
 class Get_Email_Report_Settings extends Ability_Base {
 	/**
@@ -33,7 +30,7 @@ class Get_Email_Report_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-email-report-settings';
 		$this->label       = __( 'Get ThinkRank Email Report Settings', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank Email Reporting settings: enable toggle, frequency, recipients, branding/content fields, the plan capability map, the next scheduled send, the available report sections, and the tokens usable in text fields. Use update-email-report-settings to change them, and send-email-report-test to send one now.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank Email Reporting settings: whether the scheduled SEO report is on, how often it is sent (days), who receives it, which sections it includes, the next scheduled send, and the section catalog. Use update-email-report-settings to switch it on or off, and send-email-report-test to send one now.', 'thinkrank' );
 	}
 
 	/**
@@ -73,28 +70,18 @@ class Get_Email_Report_Settings extends Ability_Base {
 		return [
 			'type'       => 'object',
 			'properties' => [
-				'config'       => [
+				'config'   => [
 					'type'                 => 'object',
-					'description'          => __( 'The current per-site Email Reporting config.', 'thinkrank' ),
+					'description'          => __( 'The resolved Email Reporting config: enabled, frequency_days, recipients, sections_enabled and the schedule timestamps.', 'thinkrank' ),
 					'additionalProperties' => true,
 				],
-				'capabilities' => [
-					'type'                 => 'object',
-					'description'          => __( 'Which fields the current plan allows editing.', 'thinkrank' ),
-					'additionalProperties' => true,
-				],
-				'next_run'     => [
+				'next_run' => [
 					'type'        => [ 'string', 'null' ],
 					'description' => __( 'ISO-8601 timestamp of the next scheduled report, or null when disabled.', 'thinkrank' ),
 				],
-				'sections'     => [
+				'sections' => [
 					'type'        => 'array',
 					'description' => __( 'The available report sections and their labels.', 'thinkrank' ),
-				],
-				'tokens'       => [
-					'type'                 => 'object',
-					'description'          => __( 'Tokens usable in subject/intro/footer text.', 'thinkrank' ),
-					'additionalProperties' => true,
 				],
 			],
 		];
@@ -117,16 +104,10 @@ class Get_Email_Report_Settings extends Ability_Base {
 			);
 		}
 
-		if ( ! function_exists( 'thinkrank_get_email_report_tokens' ) ) {
-			require_once THINKRANK_PLUGIN_DIR . 'includes/config/email-report-settings-config.php';
-		}
-
 		return [
-			'config'       => $manager->config()->get(),
-			'capabilities' => Plan_Config::email_report(),
-			'next_run'     => $manager->scheduler()->next_run_iso(),
-			'sections'     => $manager->registry()->describe_for_ui(),
-			'tokens'       => thinkrank_get_email_report_tokens(),
+			'config'   => $manager->config()->get(),
+			'next_run' => $manager->scheduler()->next_run_iso(),
+			'sections' => $manager->registry()->describe_for_ui(),
 		];
 	}
 
