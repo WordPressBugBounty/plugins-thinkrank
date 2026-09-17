@@ -94,7 +94,14 @@ class ThinkRank_Beaver_TOC_Module extends FLBuilderModule {
 
         echo $output; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 
-        $this->render_builder_script($uid, $max_level, !empty($settings['output_schema']));
+        // The TOC schema is built client-side, so it bypasses both Schema_Graph
+        // and the block filter and kept publishing an ItemList with Schema
+        // switched off (#688).
+        $schema = !empty($settings['output_schema'])
+            && (!class_exists('ThinkRank\\Frontend\\Schema_Graph')
+                || \ThinkRank\Frontend\Schema_Graph::output_allowed());
+
+        $this->render_builder_script($uid, $max_level, $schema);
     }
 
     /**

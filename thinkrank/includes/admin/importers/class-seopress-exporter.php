@@ -652,7 +652,10 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
             if ($post) {
                 $replacements['%%post_title%%']    = $post->post_title;
                 $replacements['%%title%%']         = $post->post_title;
-                $replacements['%%post_excerpt%%']  = wp_trim_words($post->post_excerpt ?: wp_trim_words(wp_strip_all_tags($post->post_content), 55), 55);
+                $replacements['%%post_excerpt%%']  = \ThinkRank\Core\Seo_Text::trim_words(
+                    $post->post_excerpt ?: \ThinkRank\Core\Seo_Text::trim_words(wp_strip_all_tags($post->post_content), 55),
+                    55
+                );
                 $replacements['%%post_date%%']     = get_the_date('', $post);
                 $replacements['%%post_modified_date%%'] = get_the_modified_date('', $post);
                 $replacements['%%post_author%%']   = get_the_author_meta('display_name', (int) $post->post_author);

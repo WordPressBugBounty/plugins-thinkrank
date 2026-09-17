@@ -326,6 +326,12 @@ class Database_Schema {
                 // Create table using dbDelta for WordPress compatibility
                 $result = dbDelta($sql);
 
+                // dbDelta reports nothing when the database refuses the
+                // statement, so wpdb's own error is the only account of why.
+                // Read it now: table_exists() runs a query of its own, and
+                // every wpdb query starts by clearing last_error.
+                $db_error = (string) $this->wpdb->last_error;
+
                 // Verify table creation
                 if ($this->table_exists($full_table_name)) {
                     $results['tables_created'][] = $full_table_name;
@@ -336,10 +342,6 @@ class Database_Schema {
                     // Add constraints if needed
                     $this->add_table_constraints($table_name);
                 } else {
-                    // dbDelta reports nothing when the database refuses the
-                    // statement, so wpdb's own error is the only account of why.
-                    $db_error = (string) $this->wpdb->last_error;
-
                     $results['tables_failed'][] = $full_table_name;
                     $results['errors'][] = "Failed to create table: {$full_table_name}"
                         . ('' !== $db_error ? ' — ' . $db_error : '');
@@ -664,7 +666,13 @@ class Database_Schema {
      */
     private function get_table_sql(string $table_name): string {
         $full_table_name = $this->get_table_name($table_name);
-        $charset_collate = $this->db_config['charset_collate'];
+
+        // Pin the engine instead of inheriting the server's
+        // default_storage_engine. The indexes below assume InnoDB: MyISAM caps
+        // a key at 1000 bytes (seo_settings and seo_social exceed it) and
+        // rejects descending indexes (seo_schema), so on a server defaulting
+        // to MyISAM those tables were never created (#725).
+        $charset_collate = trim('ENGINE=InnoDB ' . $this->db_config['charset_collate']);
 
         switch ($table_name) {
             // SEO Tables
@@ -1726,32 +1734,27 @@ class Database_Schema {
     }
 
     /**
-     * Check if MySQL supports JSON column type with caching
+     * Check if the database server supports the JSON column type
      *
-     * Uses WordPress's built-in database version detection and caches the result
-     * to avoid repeated database queries during schema creation.
+     * MySQL added JSON in 5.7.8 and MariaDB in 10.2.7. MariaDB's own 10.x
+     * number passes any MySQL threshold, and on older PHP the server string
+     * carries a `5.5.5-` replication prefix that db_version() reads as the
+     * version, so MariaDB's version is taken from the server string itself.
+     * Neither lookup queries the database.
      *
      * @since 1.0.0
-     * @return bool True if MySQL 5.7+ supports JSON columns
+     * @return bool True if the server supports JSON columns
      */
     private function get_mysql_json_support(): bool {
-        // Check if we have cached result
-        static $json_support = null;
-
-        if ($json_support !== null) {
-            return $json_support;
-        }
-
-        // Use WordPress's built-in database version method
         global $wpdb;
 
-        // Get MySQL version using WordPress method (safer than direct query)
-        $mysql_version = $wpdb->db_version();
+        $server_info = method_exists($wpdb, 'db_server_info') ? (string) $wpdb->db_server_info() : '';
 
-        // Cache the result for subsequent calls
-        $json_support = version_compare($mysql_version, '5.7.0', '>=');
+        if (preg_match('/(\d+(?:\.\d+)+)-MariaDB/i', $server_info, $matches)) {
+            return version_compare($matches[1], '10.2.7', '>=');
+        }
 
-        return $json_support;
+        return version_compare((string) $wpdb->db_version(), '5.7.8', '>=');
     }
 
     /**

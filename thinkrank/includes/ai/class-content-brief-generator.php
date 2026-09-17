@@ -537,7 +537,7 @@ class Content_Brief_Generator {
                 throw new \Exception('The AI blocked this request under its content policy. Try a different topic or less sensitive keywords.');
             }
             if ('length' === $finish) {
-                throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try a shorter content length or fewer competitor URLs.');
+                throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try fewer competitor URLs, or a model with a larger output limit. A shorter content length will not help: it asks for a smaller budget, not a smaller answer.');
             }
         }
 
@@ -548,7 +548,7 @@ class Content_Brief_Generator {
                 throw new \Exception('The AI declined to generate this brief for this topic. Try a different topic or less sensitive keywords.');
             }
             if ('max_tokens' === $stop_reason) {
-                throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try a shorter content length or fewer competitor URLs.');
+                throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try fewer competitor URLs, or a model with a larger output limit. A shorter content length will not help: it asks for a smaller budget, not a smaller answer.');
             }
         }
 
@@ -568,7 +568,7 @@ class Content_Brief_Generator {
             throw new \Exception('The AI blocked this request under its content policy. Try a different topic or less sensitive keywords.');
         }
         if ('MAX_TOKENS' === $gemini_finish) {
-            throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try a shorter content length or fewer competitor URLs.');
+            throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try fewer competitor URLs, or a model with a larger output limit. A shorter content length will not help: it asks for a smaller budget, not a smaller answer.');
         }
     }
 

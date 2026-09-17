@@ -49,6 +49,25 @@ class SEO_Analyzer {
     private const ANSWER_FAQ_NAME   = 'thinkrank-faq';
     private const ANSWER_HOWTO_NAME = 'thinkrank-howto';
 
+    /**
+     * Element names page builders give their own accordion / FAQ widgets.
+     *
+     * Detection used to recognise ThinkRank's surfaces only, so an FAQ built
+     * with the builder's own accordion was invisible — and the check then
+     * advised adding FAQ content to a site that already had it (#686). Used
+     * for the "is there Q&A content here?" question only; whether ThinkRank
+     * *emits* schema for it is a separate question, still answered by
+     * ThinkRank's own element names.
+     *
+     * @since 2.7.0
+     * @var string[]
+     */
+    private const GENERIC_QA_ELEMENT_MARKERS = [
+        'accordion',   // Elementor, Bricks, Beaver Builder, Breakdance, Oxygen
+        'toggle',      // Elementor
+        'faq',         // Widely used in third-party add-on element names
+    ];
+
     // Check result statuses.
     public const PASSED  = 'passed';
     public const WARNING = 'warning';
@@ -1185,6 +1204,14 @@ class SEO_Analyzer {
     private $sample_post_ids = null;
 
     /**
+     * Memoised answer to "does this site publish Q&A content?".
+     *
+     * @since 2.7.0
+     * @var bool|null
+     */
+    private $site_has_qa_content = null;
+
+    /**
      * The sampled post ids, fetched once and shared by every check that reads
      * the same slice.
      *
@@ -1659,7 +1686,16 @@ class SEO_Analyzer {
             ];
         }
 
-        $how_to_fix = __('Add a ThinkRank FAQ or How-To block, widget or element to your key pages, or enable the FAQPage / HowTo schema types under Essential SEO → Schema.', 'thinkrank');
+        // Only advise FAQ/HowTo markup where there is question-and-answer
+        // content to mark up. This used to be assigned unconditionally and
+        // reused by both branches below, so a site of ordinary articles was
+        // told to enable FAQPage — and a user who follows that gets FAQPage
+        // schema with an empty or invented mainEntity, which is the failure
+        // #494 documents. The check is allowed to report the gap; it is not
+        // allowed to recommend manufacturing the content (#686).
+        $how_to_fix = $this->site_has_qa_content()
+            ? __('Add a ThinkRank FAQ or How-To block, widget or element to the pages that answer questions, or enable the FAQPage / HowTo schema types under Essential SEO → Schema.', 'thinkrank')
+            : __('Only mark up question-and-answer content you already publish. If this site does not answer discrete questions, answer-shaped schema does not apply and there is nothing to fix here.', 'thinkrank');
 
         // Article/WebPage schema still tells an engine what the page is; the
         // gap is the answer pairing, not structured data as a whole.
@@ -1678,6 +1714,145 @@ class SEO_Analyzer {
             'message'    => __('Your pages publish no structured data at all, so an AI assistant has to infer what each page is from its prose.', 'thinkrank'),
             'how_to_fix' => $how_to_fix,
         ];
+    }
+
+    /**
+     * Whether the site plausibly publishes question-and-answer content.
+     *
+     * Deliberately a different question from has_answer_schema(). That one asks
+     * "does ThinkRank emit answer markup?", which is what the check reports on.
+     * This one asks "is there anything here that answer markup would describe?",
+     * which is what decides whether recommending it is sound advice — and it has
+     * to see content ThinkRank did not author, because an FAQ built with a page
+     * builder's own accordion is still an FAQ (#686).
+     *
+     * Any one signal is enough; all of them are bounded.
+     *
+     * @since 2.7.0
+     * @return bool
+     */
+    private function site_has_qa_content(): bool {
+        if (null !== $this->site_has_qa_content) {
+            return $this->site_has_qa_content;
+        }
+
+        $this->site_has_qa_content = $this->qa_content_markers_exist()
+            || $this->sample_has_question_headings();
+
+        return $this->site_has_qa_content;
+    }
+
+    /**
+     * Q&A markers in stored content or builder trees, site-wide.
+     *
+     * Two bounded queries rather than a walk over the content sample: the
+     * sample is the 100 most recent posts and pages, so a site whose only FAQ
+     * lives in a custom post type, or further back than that, answered "no
+     * answer content" while publishing exactly that (#686).
+     *
+     * @since 2.7.0
+     * @return bool
+     */
+    private function qa_content_markers_exist(): bool {
+        global $wpdb;
+
+        // Block markup and core's details/summary block, in any public type.
+        $content_markers = ['wp:thinkrank/faq', 'wp:thinkrank/howto', 'wp:details'];
+        $clauses         = [];
+        $values          = [];
+
+        foreach ($content_markers as $marker) {
+            $clauses[] = 'p.post_content LIKE %s';
+            $values[]  = '%' . $wpdb->esc_like($marker) . '%';
+        }
+
+        // The OR list is one '%s' per entry in a fixed class-level marker list,
+        // so its length varies but its content never comes from input; every
+        // value goes through prepare(). phpcs cannot see that, and this is the
+        // usual variable-length-IN exemption.
+        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $found = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT 1 FROM {$wpdb->posts} p
+                  WHERE p.post_status = 'publish'
+                    AND (" . implode(' OR ', $clauses) . ')
+                  LIMIT 1',
+                ...$values
+            )
+        );
+        // phpcs:enable
+
+        if (1 === $found) {
+            return true;
+        }
+
+        // Builder trees: ThinkRank's own elements, and the builders' generic
+        // accordion/toggle/FAQ elements, which are what a non-ThinkRank FAQ
+        // is actually built from.
+        $meta_keys = self::builder_meta_keys();
+
+        if (empty($meta_keys)) {
+            return false;
+        }
+
+        $markers = array_merge(
+            [self::ANSWER_FAQ_NAME, self::ANSWER_HOWTO_NAME],
+            self::GENERIC_QA_ELEMENT_MARKERS
+        );
+
+        $key_placeholders = implode(', ', array_fill(0, count($meta_keys), '%s'));
+        $marker_clauses   = [];
+        $marker_values    = [];
+
+        foreach ($markers as $marker) {
+            $marker_clauses[] = 'pm.meta_value LIKE %s';
+            $marker_values[]  = '%' . $wpdb->esc_like($marker) . '%';
+        }
+
+        // Same exemption: both placeholder runs are sized from fixed lists —
+        // the builder meta keys and the marker list — and every value is
+        // prepared.
+        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $found = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT 1 FROM {$wpdb->postmeta} pm
+                   INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                  WHERE p.post_status = 'publish'
+                    AND pm.meta_key IN ({$key_placeholders})
+                    AND (" . implode(' OR ', $marker_clauses) . ')
+                  LIMIT 1',
+                ...array_merge($meta_keys, $marker_values)
+            )
+        );
+        // phpcs:enable
+
+        return 1 === $found;
+    }
+
+    /**
+     * Whether the sampled content asks questions in its headings.
+     *
+     * The weakest signal and the last one tried: prose that poses questions is
+     * content answer markup could describe, even where nothing has been marked
+     * up yet. Runs over the existing sample, so it costs nothing extra.
+     *
+     * @since 2.7.0
+     * @return bool
+     */
+    private function sample_has_question_headings(): bool {
+        foreach ($this->get_content_sample() as $row) {
+            $content = (string) ($row['content'] ?? '');
+
+            if ('' === $content) {
+                continue;
+            }
+
+            if (preg_match('/<h[2-4][^>]*>\s*[^<]*\?\s*<\/h[2-4]>/i', $content)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1727,7 +1902,92 @@ class SEO_Analyzer {
             }
         }
 
+        // ...and again beyond the sample, which is the 100 most recent posts
+        // and pages. A site whose only FAQ lives in a custom post type, or
+        // simply further back than that, reported no answer schema while
+        // ThinkRank was publishing exactly that (#686). Added alongside the
+        // walk above rather than replacing it: the sample is already loaded and
+        // resolves Bricks trees, so it stays the primary source and this only
+        // extends the reach.
+        foreach ($this->answer_content_candidates() as $post_id => $content) {
+            if ($this->has_answer_content($post_id, $content)) {
+                return true;
+            }
+        }
+
         return false;
+    }
+
+    /**
+     * Posts that might carry a ThinkRank FAQ / How-To, from anywhere on the site.
+     *
+     * Narrowed in SQL to posts whose content or builder meta names one of
+     * ThinkRank's answer surfaces, so the per-post confirmation below runs over
+     * a handful of rows rather than the whole site.
+     *
+     * @since 2.7.0
+     * @return array<int,string> Post id => raw content.
+     */
+    private function answer_content_candidates(): array {
+        global $wpdb;
+
+        $markers = [self::ANSWER_FAQ_NAME, self::ANSWER_HOWTO_NAME, 'wp:thinkrank/faq', 'wp:thinkrank/howto'];
+
+        $content_clauses = [];
+        $content_values  = [];
+        foreach ($markers as $marker) {
+            $content_clauses[] = 'p.post_content LIKE %s';
+            $content_values[]  = '%' . $wpdb->esc_like($marker) . '%';
+        }
+
+        $meta_keys = self::builder_meta_keys();
+        $meta_sql  = '';
+        $values    = $content_values;
+
+        if (!empty($meta_keys)) {
+            $meta_clauses = [];
+            $meta_values  = [];
+            foreach ($markers as $marker) {
+                $meta_clauses[] = 'pm.meta_value LIKE %s';
+                $meta_values[]  = '%' . $wpdb->esc_like($marker) . '%';
+            }
+
+            $key_placeholders = implode(', ', array_fill(0, count($meta_keys), '%s'));
+            $meta_sql         = " OR EXISTS (
+                       SELECT 1 FROM {$wpdb->postmeta} pm
+                        WHERE pm.post_id = p.ID
+                          AND pm.meta_key IN ({$key_placeholders})
+                          AND (" . implode(' OR ', $meta_clauses) . ')
+                   )';
+            $values = array_merge($content_values, $meta_keys, $meta_values);
+        }
+
+        $values[] = self::CONTENT_SAMPLE_SIZE;
+
+        // Same exemption as qa_content_markers_exist(): the clause lists are
+        // sized from fixed marker and meta-key lists, and every value is
+        // prepared.
+        // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT p.ID, p.post_content FROM {$wpdb->posts} p
+                  WHERE p.post_status = 'publish'
+                    AND ((" . implode(' OR ', $content_clauses) . ")
+                         {$meta_sql})
+                  ORDER BY p.post_date DESC
+                  LIMIT %d",
+                ...$values
+            ),
+            ARRAY_A
+        );
+        // phpcs:enable
+
+        $candidates = [];
+        foreach ((array) $rows as $row) {
+            $candidates[(int) $row['ID']] = (string) $row['post_content'];
+        }
+
+        return $candidates;
     }
 
     /**
@@ -1782,7 +2042,71 @@ class SEO_Analyzer {
             }
         }
 
+        // Oxygen and Breakdance were missing entirely, so a ThinkRank FAQ
+        // element placed inside one of those pages reported no answer schema
+        // while the page was publishing exactly that (#686). Builder_Content
+        // already knows every key involved — Oxygen 6 is Breakdance under the
+        // hood, and older releases used two other keys — so ask it rather than
+        // keeping a second list that can drift.
+        foreach (self::builder_meta_keys() as $meta_key) {
+            if ('_fl_builder_data' === $meta_key || '_elementor_data' === $meta_key) {
+                continue; // Handled above, in their own storage shapes.
+            }
+
+            $stored = get_post_meta($post_id, $meta_key, true);
+
+            if (self::blob_names_answer_element($stored)) {
+                return true;
+            }
+        }
+
         return false;
+    }
+
+    /**
+     * Builder meta keys, or [] when Builder_Content is unavailable.
+     *
+     * Mirrors the defensive load in bricks_has_answer_element(): the analyzer
+     * must degrade to "no answer content found" on a partial checkout rather
+     * than fatal mid-audit.
+     *
+     * @since 2.7.0
+     * @return string[]
+     */
+    private static function builder_meta_keys(): array {
+        if (!class_exists('ThinkRank\\SEO\\Builder_Content')) {
+            $file = THINKRANK_PLUGIN_DIR . 'includes/seo/class-builder-content.php';
+            if (!file_exists($file)) {
+                return [];
+            }
+            require_once $file;
+        }
+
+        return Builder_Content::builder_meta_keys();
+    }
+
+    /**
+     * Whether a stored builder blob names a ThinkRank FAQ or How-To.
+     *
+     * The blob is a JSON tree for Breakdance/Oxygen 6 and a shortcode string
+     * for Oxygen classic, so this matches on the element name appearing in the
+     * serialized form rather than parsing each dialect.
+     *
+     * @since 2.7.0
+     * @param mixed $stored Raw meta value.
+     * @return bool
+     */
+    private static function blob_names_answer_element($stored): bool {
+        if (is_array($stored)) {
+            $stored = wp_json_encode($stored);
+        }
+
+        if (!is_string($stored) || '' === $stored) {
+            return false;
+        }
+
+        return false !== strpos($stored, self::ANSWER_FAQ_NAME)
+            || false !== strpos($stored, self::ANSWER_HOWTO_NAME);
     }
 
     /**

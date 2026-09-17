@@ -244,17 +244,111 @@ class Claude_Client {
     }
 
     /**
+     * Output-token ceiling per model family, longest prefix wins.
+     *
+     * Matched by prefix so a dated snapshot (`claude-haiku-4-5-20251001`) and a
+     * point release (`claude-fable-5-1`) resolve to their family. Order matters
+     * only in that lookup walks longest-first, which is what keeps
+     * `claude-fable-5-1` from matching `claude-fable-5`.
+     *
+     * @since 2.7.0
+     * @var array<string, int>
+     */
+    private const MODEL_OUTPUT_LIMITS = [
+        // 128K output.
+        'claude-fable-5-1'   => 128000,
+        'claude-fable-5'     => 128000,
+        'claude-mythos-5-1'  => 128000,
+        'claude-mythos-5'    => 128000,
+        'claude-opus-5'      => 128000,
+        'claude-opus-4-8'    => 128000,
+        'claude-opus-4-7'    => 128000,
+        'claude-opus-4-6'    => 128000,
+        'claude-sonnet-5'    => 128000,
+        'claude-sonnet-4-6'  => 128000,
+        // 64K output.
+        'claude-haiku-4-5'   => 64000,
+    ];
+
+    /**
+     * Upper bound per use case, applied after the percentage.
+     *
+     * Two reasons these exist rather than letting the percentage run against a
+     * 128K ceiling.
+     *
+     * Requests here are a single blocking HTTP call with a 120s timeout and no
+     * streaming, so 0.9 x 128000 would risk running past the timeout instead of
+     * returning — trading a truncation failure for a timeout failure. 16000
+     * leaves room for the brief's JSON plus reasoning tokens while staying
+     * answerable; raise it only alongside streaming.
+     *
+     * And correcting the ceiling would otherwise inflate every other use case
+     * as a side effect — seo_metadata would jump from ~1,229 tokens to ~19,200
+     * purely because this bug was fixed. Metadata generation already works, so
+     * it keeps its cost profile (#665).
+     *
+     * @since 2.7.0
+     * @var array<string, int>
+     */
+    private const USE_CASE_TOKEN_CAPS = [
+        'content_brief' => 16000,
+        'llms_txt'      => 16000,
+        'analysis'      => 8000,
+        'seo_metadata'  => 4000,
+        'optimization'  => 4000,
+        'default'       => 4000,
+    ];
+
+    /**
+     * Ceiling for a model this table does not know.
+     *
+     * The previous behaviour for every model, kept for older and unrecognised
+     * ones: 8192 is accepted without an extended-output beta header, so it is
+     * the safe answer when we cannot identify the family.
+     *
+     * @since 2.7.0
+     * @var int
+     */
+    private const FALLBACK_OUTPUT_LIMIT = 8192;
+
+    /**
      * Maximum completion (output) tokens accepted for a single Claude request.
      *
-     * 8192 is accepted by every current Claude model without the extended-output
-     * beta header, so it is a safe per-request ceiling. Kept as a method (rather
-     * than a constant) to mirror the other clients and allow per-model tuning.
+     * This returned a flat 8192 for every model and ignored $model entirely, so
+     * Content Brief was capped at a fraction of the available budget and
+     * truncated before its structured JSON completed — on every Claude model,
+     * every time. Current models also emit reasoning tokens from the same
+     * output budget, which is why it failed so reliably rather than
+     * intermittently (#665).
      *
-     * @param string $model Model ID (reserved for future per-model limits).
+     * @param string $model Model ID.
      * @return int Maximum output tokens.
      */
     private function get_max_completion_tokens(string $model): int {
-        return 8192;
+        $model = strtolower(trim($model));
+
+        if ('' === $model) {
+            return self::FALLBACK_OUTPUT_LIMIT;
+        }
+
+        $limits = self::MODEL_OUTPUT_LIMITS;
+
+        // Longest prefix first, so a point release never matches the shorter
+        // family id that is a prefix of it.
+        uksort(
+            $limits,
+            static function (string $a, string $b): int {
+                return strlen($b) <=> strlen($a);
+            }
+        );
+
+        foreach ($limits as $prefix => $limit) {
+            if (0 === strpos($model, $prefix)) {
+                return $limit;
+            }
+        }
+
+        return self::FALLBACK_OUTPUT_LIMIT;
     }
 
     /**
@@ -279,7 +373,11 @@ class Claude_Client {
         ];
         $percentage = $recommendations[$use_case] ?? 0.15;
 
-        return (int) ($max_tokens * $percentage);
+        $budget = (int) ($max_tokens * $percentage);
+
+        $cap = self::USE_CASE_TOKEN_CAPS[$use_case] ?? self::USE_CASE_TOKEN_CAPS['default'];
+
+        return max(1, min($budget, $cap));
     }
 
     /**

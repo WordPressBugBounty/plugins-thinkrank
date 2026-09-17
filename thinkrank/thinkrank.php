@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 2.6.0
+ * Version: 2.7.0
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Requires PHP: 7.4
  * 
  * @package ThinkRank
- * @version 2.6.0
+ * @version 2.7.0
  * @since 1.0.0
  */
 
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '2.6.0');
+define('THINKRANK_VERSION', '2.7.0');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -350,6 +350,11 @@ final class ThinkRank {
             'seo_notice' => new ThinkRank\Admin\SEO_Notice(),
             'search_visibility_notice' => new ThinkRank\Admin\Search_Visibility_Notice(),
             'performance_collector' => new ThinkRank\SEO\Performance_Data_Collector(),
+            'query_guard' => new ThinkRank\SEO\Query_Guard(),
+            'feeds' => new ThinkRank\SEO\Feed_Manager(),
+            'sitemap_stylesheet' => new ThinkRank\SEO\Sitemap_Stylesheet(),
+            'oembed' => new ThinkRank\SEO\Oembed_Manager(),
+            'content_visibility' => new ThinkRank\SEO\Content_Visibility(),
             'instant_indexing' => new ThinkRank\SEO\Instant_Indexing_Manager(),
             'instant_indexing_reconciler' => new ThinkRank\SEO\Instant_Indexing_Reconciler(),
             'author_archives' => new ThinkRank\SEO\Author_Archives_Manager(),

@@ -692,7 +692,84 @@ class SEO_Manager {
      * @param string $title Resolved title.
      * @return string Title with the page indicator, when there is one.
      */
+    /**
+     * The archive's subject, without the label WordPress prefixes it with.
+     *
+     * `get_the_archive_title()` returns "Month: September 2026", "Archives:
+     * Recipes", "Category: Uncategorized" — the label is core's, aimed at an
+     * archive heading on the page, and it reads badly in a browser tab, an
+     * og:title or a search result. Category, tag and author contexts already
+     * avoid it by using the raw name; the generic archive context did not, so
+     * date, custom-post-type and custom-taxonomy archives carried it (#640).
+     *
+     * Removed through core's own `get_the_archive_title_prefix` filter rather
+     * than by matching the prefix text, because that text is translated and
+     * differs per archive type — a string comparison would work in English and
+     * silently stop working everywhere else.
+     *
+     * A site that wants a prefix can put one in its title template, where it is
+     * visible and editable, instead of inheriting one it cannot see.
+     *
+     * @since 2.7.0
+     *
+     * @return string Archive subject, with markup and the core prefix removed.
+     */
+    private static function archive_subject(): string {
+        $drop_prefix = static function (): string {
+            return '';
+        };
+
+        add_filter('get_the_archive_title_prefix', $drop_prefix, 99);
+
+        $title = (string) get_the_archive_title();
+
+        remove_filter('get_the_archive_title_prefix', $drop_prefix, 99);
+
+        // The <span> core wraps the subject in survives the prefix filter.
+        return trim(wp_strip_all_tags($title));
+    }
+
+    /**
+     * Remove HTML from a title that is about to be emitted.
+     *
+     * A title carrying markup is broken twice over, in two different ways, and
+     * both were reaching real pages: inside `<title>` the tags render literally,
+     * because that element is RCDATA and never parses them; inside `og:title`
+     * and `twitter:title` they are attribute-escaped, so the reader sees
+     * `&lt;em&gt;` as visible text (#640).
+     *
+     * Applied at the point of emission rather than at each source, so it covers
+     * every branch that can produce a title — post meta, Global SEO templates,
+     * Site Identity templates — without each having to remember.
+     *
+     * Unconditional rather than a setting: there is no title for which markup is
+     * the correct output. The filter is the escape hatch for anyone who
+     * disagrees, and lets a site keep entities it deliberately encoded.
+     *
+     * @since 2.7.0
+     *
+     * @param string $title Title about to be emitted.
+     * @return string Title with any markup removed.
+     */
+    public static function strip_title_tags(string $title): string {
+        /**
+         * Filter whether HTML is stripped from generated titles.
+         *
+         * @since 2.7.0
+         *
+         * @param bool   $strip Whether to strip. Default true.
+         * @param string $title The title being emitted.
+         */
+        if (!apply_filters('thinkrank_strip_title_tags', true, $title)) {
+            return $title;
+        }
+
+        return trim(wp_strip_all_tags($title));
+    }
+
     public static function with_page_suffix(string $title): string {
+        $title = self::strip_title_tags($title);
+
         $page = self::current_page_number();
 
         if ($page <= 1 || '' === $title) {
@@ -785,9 +862,11 @@ class SEO_Manager {
             self::note_opening_comment();
 
             // Ensure description is within optimal length (150-160 characters)
-            if (strlen($description) > 160) {
-                $description = wp_trim_words($description, 25, '...');
-            }
+            // Measure and cut in CHARACTERS. strlen() counts bytes, so a Thai or
+            // CJK description tripped this limit at a third of its length, and
+            // wp_trim_words() then cut by a unit the locale chooses — 25 words in
+            // English, 25 characters in Thai (#687).
+            $description = \ThinkRank\Core\Seo_Text::trim_to_length($description);
 
             echo "<!-- ThinkRank SEO Meta Description -->\n";
             echo '<meta name="description" content="' . esc_attr($description) . '" />' . "\n";
@@ -1301,7 +1380,7 @@ class SEO_Manager {
      * @param array $og_tags Open Graph tags array
      * @return void
      */
-    private function output_social_og_tags(array $og_tags): void {
+    private function output_social_og_tags(array $og_tags, array $extra_images = []): void {
         // Honor the thinkrank_og_type filter here too — this "Enhanced" path is
         // the active OG emitter, so add-ons (e.g. Pro's WooCommerce module which
         // sets 'product' on product pages) must be applied to it, not only to
@@ -1347,7 +1426,57 @@ class SEO_Manager {
             }
         }
 
+        // Alternatives, after the primary and everything belonging to it.
+        // Order is the whole point: a consumer reads og:image tags in document
+        // order and treats the first as primary, and a structured property
+        // attaches to the most recently declared image — so each alternative's
+        // companions have to follow its own URL, not be grouped at the end.
+        self::output_extra_og_images($extra_images);
+
         echo "<!-- /ThinkRank SEO Open Graph Tags -->\n";
+    }
+
+    /**
+     * Emit the secondary og:image tags a page offers.
+     *
+     * Shared by the enhanced and basic emitters so both describe an
+     * alternative image the same way (#636).
+     *
+     * @since 2.7.0
+     *
+     * @param array $images Each with url, and width/height/type/alt where known.
+     * @return void
+     */
+    private static function output_extra_og_images(array $images): void {
+        foreach ($images as $image) {
+            $url = isset($image['url']) ? (string) $image['url'] : '';
+
+            if ('' === $url) {
+                continue;
+            }
+
+            echo '<meta property="og:image" content="' . esc_url($url) . '" />' . "\n";
+
+            if (strpos($url, 'https://') === 0) {
+                echo '<meta property="og:image:secure_url" content="' . esc_url($url) . '" />' . "\n";
+            }
+
+            // Only what is actually known: a dimension guessed for a remote
+            // image is a number a consumer lays a card out with before it has
+            // fetched the file.
+            if (!empty($image['width']) && !empty($image['height'])) {
+                echo '<meta property="og:image:width" content="' . esc_attr((string) $image['width']) . '" />' . "\n";
+                echo '<meta property="og:image:height" content="' . esc_attr((string) $image['height']) . '" />' . "\n";
+            }
+
+            if (!empty($image['type'])) {
+                echo '<meta property="og:image:type" content="' . esc_attr((string) $image['type']) . '" />' . "\n";
+            }
+
+            if (!empty($image['alt'])) {
+                echo '<meta property="og:image:alt" content="' . esc_attr((string) $image['alt']) . '" />' . "\n";
+            }
+        }
     }
 
     /**
@@ -1515,7 +1644,10 @@ class SEO_Manager {
             // toggled off, emit nothing — do NOT fall through to the basic
             // emitter (which would re-add a full OG block despite the toggle).
             if (!empty($social_data['og_enabled'])) {
-                $this->output_social_og_tags($social_data['og_tags']);
+                $this->output_social_og_tags(
+                    $social_data['og_tags'],
+                    $social_data['og_extra_images'] ?? []
+                );
             }
             return;
         }
@@ -1585,7 +1717,7 @@ class SEO_Manager {
         // so this is not a leak — but publishing that sentence as the social
         // description is worse than publishing none (#363).
         if (!$description && !$this->is_content_password_protected()) {
-            $description = is_singular() ? wp_trim_words(get_the_excerpt(), 30) : get_bloginfo('description');
+            $description = is_singular() ? \ThinkRank\Core\Seo_Text::trim_words(get_the_excerpt(), 30) : get_bloginfo('description');
         }
 
         $url = is_singular() ? get_permalink() : home_url();
@@ -1615,9 +1747,9 @@ class SEO_Manager {
 
         echo "<!-- ThinkRank SEO Open Graph Meta Tags -->\n";
         echo "<meta property=\"og:type\" content=\"" . esc_attr($og_type) . "\" />\n";
-        echo "<meta property=\"og:title\" content=\"" . esc_attr($title) . "\" />\n";
+        echo "<meta property=\"og:title\" content=\"" . esc_attr(self::strip_title_tags($title)) . "\" />\n";
         echo "<meta property=\"og:description\" content=\"" . esc_attr($description) . "\" />\n";
-        echo "<meta property=\"og:url\" content=\"" . esc_url($url) . "\" />\n";
+        echo "<meta property=\"og:url\" content=\"" . esc_url(\ThinkRank\SEO\Url_Scheme::apply($url)) . "\" />\n";
         echo "<meta property=\"og:site_name\" content=\"" . esc_attr($site_name) . "\" />\n";
         /**
          * Filter the og:locale value.
@@ -1636,12 +1768,15 @@ class SEO_Manager {
         echo "<meta property=\"og:locale\" content=\"" . esc_attr($og_locale) . "\" />\n";
 
         // Add OG image — per-post override > featured image
+        $primary_og_image = '';
         if (is_singular() && $this->current_post_id) {
             if (!empty($og_image_override)) {
+                $primary_og_image = (string) $og_image_override;
                 echo "<meta property=\"og:image\" content=\"" . esc_url($og_image_override) . "\" />\n";
                 echo "<meta property=\"og:image:secure_url\" content=\"" . esc_url($og_image_override) . "\" />\n";
             } elseif (has_post_thumbnail($this->current_post_id)) {
                 $image_url = get_the_post_thumbnail_url($this->current_post_id, 'large');
+                $primary_og_image = (string) $image_url;
                 echo "<meta property=\"og:image\" content=\"" . esc_url($image_url) . "\" />\n";
                 echo "<meta property=\"og:image:secure_url\" content=\"" . esc_url($image_url) . "\" />\n";
 
@@ -1669,6 +1804,28 @@ class SEO_Manager {
                 $image_alt = get_post_meta($image_id, '_wp_attachment_image_alt', true);
                 if ($image_alt) {
                     echo "<meta property=\"og:image:alt\" content=\"" . esc_attr($image_alt) . "\" />\n";
+                }
+            }
+
+            // Alternatives, same as the enhanced emitter above. This path only
+            // runs when the Social Meta Manager is unavailable, but the issue
+            // reported against it (#636) and a site that lands here should not
+            // silently lose a feature it switched on.
+            if (!empty($primary_og_image)) {
+                $social_settings = $this->social_manager
+                    ? $this->social_manager->get_settings(
+                        $this->current_context === 'homepage' ? 'site' : $this->current_context,
+                        $this->current_post_id
+                    )
+                    : [];
+
+                if (!empty($social_settings['og_multiple_images'])) {
+                    self::output_extra_og_images(
+                        \ThinkRank\SEO\Social_Images::additional(
+                            (int) $this->current_post_id,
+                            $primary_og_image
+                        )
+                    );
                 }
             }
 
@@ -1799,7 +1956,7 @@ class SEO_Manager {
         // so this is not a leak — but publishing that sentence as the social
         // description is worse than publishing none (#363).
         if (!$description && !$this->is_content_password_protected()) {
-            $description = is_singular() ? wp_trim_words(get_the_excerpt(), 30) : get_bloginfo('description');
+            $description = is_singular() ? \ThinkRank\Core\Seo_Text::trim_words(get_the_excerpt(), 30) : get_bloginfo('description');
         }
 
         // Determine card type based on image availability
@@ -1810,7 +1967,7 @@ class SEO_Manager {
 
         echo "<!-- ThinkRank SEO Twitter Card Meta Tags -->\n";
         echo '<meta name="twitter:card" content="' . esc_attr($card_type) . '" />' . "\n";
-        echo "<meta name=\"twitter:title\" content=\"" . esc_attr($title) . "\" />\n";
+        echo "<meta name=\"twitter:title\" content=\"" . esc_attr(self::strip_title_tags($title)) . "\" />\n";
         echo "<meta name=\"twitter:description\" content=\"" . esc_attr($description) . "\" />\n";
 
         // Add Twitter image with proper fallback priority
@@ -1887,6 +2044,11 @@ class SEO_Manager {
             return;
         }
 
+        // After the filter, so a canonical an add-on supplied is normalized
+        // too — and a cross-domain one is left alone, since Url_Scheme only
+        // touches URLs on this site's own host.
+        $canonical_url = \ThinkRank\SEO\Url_Scheme::apply($canonical_url);
+
         echo "<!-- ThinkRank SEO Canonical URL -->\n";
         echo "<link rel=\"canonical\" href=\"" . esc_url($canonical_url) . "\" />\n";
         echo "<!-- /ThinkRank SEO Canonical URL -->\n";
@@ -1935,14 +2097,14 @@ class SEO_Manager {
         if ($current > 1) {
             printf(
                 "<link rel=\"prev\" href=\"%s\" />\n",
-                esc_url(self::with_pagination($base, $current - 1))
+                esc_url(\ThinkRank\SEO\Url_Scheme::apply(self::with_pagination($base, $current - 1)))
             );
         }
 
         if ($current < $total) {
             printf(
                 "<link rel=\"next\" href=\"%s\" />\n",
-                esc_url(self::with_pagination($base, $current + 1))
+                esc_url(\ThinkRank\SEO\Url_Scheme::apply(self::with_pagination($base, $current + 1)))
             );
         }
     }
@@ -2444,7 +2606,7 @@ class SEO_Manager {
                 // <span>, and this placeholder feeds the document <title> as
                 // well as og:title and twitter:title — a date archive rendered
                 // as "Month: <span>August 2026</span> | Site".
-                $placeholders['%archive_title%'] = wp_strip_all_tags((string) get_the_archive_title());
+                $placeholders['%archive_title%'] = self::archive_subject();
                 break;
 
             case 'homepage':
@@ -2641,9 +2803,11 @@ class SEO_Manager {
             return null;
         }
 
-        if (strlen($description) > 160) {
-            $description = wp_trim_words($description, 25, '...');
-        }
+        // Measure and cut in CHARACTERS. strlen() counts bytes, so a Thai or
+        // CJK description tripped this limit at a third of its length, and
+        // wp_trim_words() then cut by a unit the locale chooses — 25 words in
+        // English, 25 characters in Thai (#687).
+        $description = \ThinkRank\Core\Seo_Text::trim_to_length($description);
 
         return $description;
     }
@@ -2692,9 +2856,11 @@ class SEO_Manager {
         $description = trim($description);
 
         // Ensure description doesn't exceed recommended length (160 characters)
-        if (strlen($description) > 160) {
-            $description = wp_trim_words($description, 25, '...');
-        }
+        // Measure and cut in CHARACTERS. strlen() counts bytes, so a Thai or
+        // CJK description tripped this limit at a third of its length, and
+        // wp_trim_words() then cut by a unit the locale chooses — 25 words in
+        // English, 25 characters in Thai (#687).
+        $description = \ThinkRank\Core\Seo_Text::trim_to_length($description);
 
         return $description;
     }
@@ -2846,14 +3012,38 @@ class SEO_Manager {
             $schema['description'] = $description;
         }
 
-        $schema['potentialAction'] = [
-            '@type'       => 'SearchAction',
-            'target'      => [
-                '@type'       => 'EntryPoint',
-                'urlTemplate' => home_url('/?s={search_term_string}'),
-            ],
-            'query-input' => 'required name=search_term_string',
-        ];
+        // Site Identity has accepted an alternate name since the setup wizard
+        // shipped, and the MCP ability describes it as "published as schema
+        // alternateName" — but no producer ever read it, so the promise was
+        // false and every imported Yoast/Rank Math value sat unused (#692).
+        $alternate_name = \ThinkRank\SEO\Site_Identity_Manager::alternate_name_for_schema($settings['alternate_name'] ?? null);
+        if (null !== $alternate_name) {
+            $schema['alternateName'] = $alternate_name;
+        }
+
+        // The sitelinks searchbox switch was honoured only for a deployed
+        // WebSite row; this live fallback added potentialAction unconditionally,
+        // so website_enable_search = 0 still shipped the SearchAction (#688).
+        // Absent means not configured, which stays enabled.
+        $search_enabled = true;
+        if ($this->schema_manager) {
+            $schema_settings = $this->schema_manager->get_settings('site', null);
+
+            if (array_key_exists('website_enable_search', $schema_settings)) {
+                $search_enabled = !empty($schema_settings['website_enable_search']);
+            }
+        }
+
+        if ($search_enabled) {
+            $schema['potentialAction'] = [
+                '@type'       => 'SearchAction',
+                'target'      => [
+                    '@type'       => 'EntryPoint',
+                    'urlTemplate' => home_url('/?s={search_term_string}'),
+                ],
+                'query-input' => 'required name=search_term_string',
+            ];
+        }
 
         return $schema;
     }
@@ -3065,6 +3255,20 @@ class SEO_Manager {
         // Only output if breadcrumbs are enabled
         if (empty($settings['breadcrumbs_enabled'])) {
             return;
+        }
+
+        // Schema Manager's own breadcrumb switch. Only Site Identity's
+        // breadcrumbs_enabled was consulted here, so enable_breadcrumbs_schema
+        // = 0 removed a deployed BreadcrumbList row and left this live one
+        // emitting the node anyway (#688). Absent means not configured, which
+        // stays enabled.
+        if ($this->schema_manager) {
+            $schema_settings = $this->schema_manager->get_settings('site', null);
+
+            if (array_key_exists('enable_breadcrumbs_schema', $schema_settings)
+                && empty($schema_settings['enable_breadcrumbs_schema'])) {
+                return;
+            }
         }
 
         $breadcrumbs = $this->generate_breadcrumbs($settings);

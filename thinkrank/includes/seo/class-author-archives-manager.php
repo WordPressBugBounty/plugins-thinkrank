@@ -140,22 +140,10 @@ class Author_Archives_Manager {
      * @return string
      */
     private function trim_to_length(string $description, int $limit): string {
-        if (mb_strlen($description) <= $limit) {
-            return $description;
-        }
-
-        // Reserve one character for the ellipsis.
-        $budget  = $limit - 1;
-        $cut     = mb_substr($description, 0, $budget);
-        $last_gap = mb_strrpos($cut, ' ');
-
-        // Only honour a word boundary that is not absurdly early — otherwise a
-        // long unbroken token would collapse the description to a few chars.
-        if (false !== $last_gap && $last_gap > (int) ($budget * 0.6)) {
-            $cut = mb_substr($cut, 0, $last_gap);
-        }
-
-        return rtrim($cut) . '…';
+        // The implementation moved to Seo_Text so the four other
+        // description paths could stop carrying the broken version of it
+        // (#687). This stays as the local name the author-archive code reads.
+        return \ThinkRank\Core\Seo_Text::trim_to_length($description, $limit);
     }
 
     /**

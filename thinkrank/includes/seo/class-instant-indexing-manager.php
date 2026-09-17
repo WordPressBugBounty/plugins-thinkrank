@@ -151,7 +151,9 @@ class Instant_Indexing_Manager {
      * @return string Absolute key file URL.
      */
     public static function key_location(string $api_key): string {
-        return home_url('/' . $api_key . '.txt');
+        // Matches the scheme the submitted URLs go out with, so IndexNow is
+        // never told to verify ownership at an address on the other scheme.
+        return Url_Scheme::apply(home_url('/' . $api_key . '.txt'));
     }
 
     /**
@@ -523,6 +525,18 @@ class Instant_Indexing_Manager {
         if (empty($urls)) {
             return ['success' => false, 'message' => 'No URLs matched this site host', 'submitted_count' => 0];
         }
+
+        // Every submission path lands here, so this is where the site's scheme
+        // preference is applied (#638). Submitting http URLs for a site served
+        // over https asks search engines to index an address that redirects,
+        // and it is the canonical mismatch all over again in the one place a
+        // site owner cannot see it happening.
+        $urls = array_values(array_unique(array_map(
+            static function ($u): string {
+                return Url_Scheme::apply((string) $u);
+            },
+            $urls
+        )));
 
         // Enforce the shared per-submission cap so every path (manual, bulk, MCP)
         // behaves consistently.

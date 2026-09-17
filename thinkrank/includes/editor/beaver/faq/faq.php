@@ -246,6 +246,15 @@ class ThinkRank_Beaver_FAQ_Module extends FLBuilderModule {
      * @return void
      */
     private function maybe_render_schema(array $settings): void {
+
+        // The Schema master switch and the matrix's per-content-type switch.
+        // This widget echoes its own <script> rather than registering with
+        // Schema_Graph, so gating the graph never reached it and it kept
+        // publishing with Schema switched off (#688).
+        if (class_exists('ThinkRank\\Frontend\\Schema_Graph')
+            && !\ThinkRank\Frontend\Schema_Graph::output_allowed()) {
+            return;
+        }
         if (!self::schema_enabled($settings)) {
             return;
         }

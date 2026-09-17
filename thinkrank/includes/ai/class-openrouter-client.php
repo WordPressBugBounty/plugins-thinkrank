@@ -197,6 +197,17 @@ class OpenRouter_Client {
      * models, so we apply a single conservative ceiling rather than per-model
      * limits.
      *
+     * Deliberately NOT given the per-model table Claude_Client gained in #665,
+     * and still subject to the same truncation symptom as a result.
+     *
+     * That table is only safe for Claude because its model list is short, known
+     * and verifiable. OpenRouter routes to arbitrary models from many providers
+     * with no curated list here, and a ceiling guessed too high returns a
+     * provider 400 rather than a smaller answer — a worse failure than the one
+     * it would be fixing. Raising this needs either a per-model table sourced
+     * from OpenRouter's own model metadata endpoint, or streaming so a large
+     * budget cannot time out. Tracked separately; see #665.
+     *
      * @param string $model Model name
      * @return int Maximum completion tokens
      */

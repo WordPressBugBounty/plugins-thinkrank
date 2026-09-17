@@ -42,7 +42,11 @@ class Publish_Llms_Txt extends Ability_Base {
 	public function get_annotations() {
 		return [
 			'readonly'      => false,
-			'destructive'   => true,
+			// Republishing overwrites a file this ability generates from the
+			// saved settings, so the previous state is reproducible rather than
+			// lost — generate-llms-txt previews it and get-llms-txt-status
+			// reports it (#675).
+			'destructive'   => false,
 			'idempotent'    => true,
 			'priority'      => 2.0,
 			'openWorldHint' => false,

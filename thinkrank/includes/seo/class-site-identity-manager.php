@@ -304,6 +304,89 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * Save settings, then refresh what a new canonical scheme invalidates.
+     *
+     * The static sitemap files are written with the scheme in force when they
+     * were built, and nothing else rebuilds them until a post or term changes.
+     * So a change of scheme left every `<loc>` on the old one while canonical
+     * and og:url had already moved (#736). Every writer (the settings route,
+     * the robots route, the MCP abilities, an import) lands here.
+     *
+     * @since 2.7.0
+     *
+     * @param string   $context_type Context type.
+     * @param int|null $context_id   Context ID.
+     * @param array    $settings     Settings to save.
+     * @return bool
+     */
+    public function save_settings(string $context_type, ?int $context_id, array $settings): bool {
+        if (!self::touches_canonical_scheme($context_type, $context_id, $settings)) {
+            return parent::save_settings($context_type, $context_id, $settings);
+        }
+
+        $before = Url_Scheme::preference();
+        $saved  = parent::save_settings($context_type, $context_id, $settings);
+
+        if ($saved) {
+            $this->on_canonical_scheme_saved($before);
+        }
+
+        return $saved;
+    }
+
+    /**
+     * Whether a save can change the site-wide canonical scheme.
+     *
+     * @since 2.7.0
+     *
+     * @param string   $context_type Context type.
+     * @param int|null $context_id   Context ID.
+     * @param array    $settings     Settings being saved.
+     * @return bool
+     */
+    public static function touches_canonical_scheme(string $context_type, ?int $context_id, array $settings): bool {
+        return 'site' === sanitize_key($context_type)
+            && empty($context_id)
+            && array_key_exists('canonical_scheme', $settings);
+    }
+
+    /**
+     * Rebuild the static sitemaps when the effective scheme changed.
+     *
+     * Compares the effective preference, filter included, so a site whose
+     * scheme is pinned by `thinkrank_canonical_scheme` does not rebuild on a
+     * stored value that changes nothing it publishes.
+     *
+     * @since 2.7.0
+     *
+     * @param string $before Effective scheme before the save.
+     * @return void
+     */
+    protected function on_canonical_scheme_saved(string $before): void {
+        // The preference is cached for the request; the save just changed it.
+        Url_Scheme::reset();
+
+        if (Url_Scheme::preference() === $before) {
+            return;
+        }
+
+        $this->schedule_sitemap_rebuild();
+    }
+
+    /**
+     * Queue a settings-driven sitemap rebuild.
+     *
+     * Debounced and run after the response, like any other settings change
+     * that alters what the sitemap publishes.
+     *
+     * @since 2.7.0
+     * @return void
+     */
+    protected function schedule_sitemap_rebuild(): void {
+        (new Sitemap_Generator(false))->schedule_regeneration();
+    }
+
+    /**
      * Build the icon derivatives for a newly chosen favicon.
      *
      * Runs on save, which is the only moment the choice changes and the only
@@ -1179,15 +1262,17 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         if (empty($home_text)) {
             $optimization['warnings'][] = 'Empty home text reduces accessibility for screen readers';
             $optimization['score'] -= 15;
-        } elseif (strlen($home_text) > 20) {
-            $optimization['suggestions'][] = 'Keep home text concise (current: ' . strlen($home_text) . ' chars)';
+        } elseif (mb_strlen($home_text) > 20) {
+            // mb_strlen: this number is shown to the user as "chars" (#687).
+            $optimization['suggestions'][] = 'Keep home text concise (current: ' . mb_strlen($home_text) . ' chars)';
             $optimization['score'] -= 5;
         }
 
         // Check prefix usage
         $prefix = $settings['breadcrumb_prefix'] ?? '';
-        if (!empty($prefix) && strlen($prefix) > 50) {
-            $optimization['suggestions'][] = 'Breadcrumb prefix is quite long (' . strlen($prefix) . ' chars) - consider shortening';
+        if (!empty($prefix) && mb_strlen($prefix) > 50) {
+            // mb_strlen: this number is shown to the user as "chars" (#687).
+            $optimization['suggestions'][] = 'Breadcrumb prefix is quite long (' . mb_strlen($prefix) . ' chars) - consider shortening';
             $optimization['score'] -= 5;
         }
 
@@ -2760,6 +2845,45 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      *
      * @return string[]
      */
+    /**
+     * The stored alternate name(s), shaped for schema output.
+     *
+     * schema.org and Google both allow `alternateName` to carry one value or
+     * several, and the store already round-trips either shape, so this accepts
+     * both and normalises: null when there is nothing to publish, a bare string
+     * for one name, a list for more. Emitting a one-element array would be
+     * valid but noisier than it needs to be.
+     *
+     * Shared because both WebSite producers need it and must agree — a property
+     * added to one and not the other is how #688 happened.
+     *
+     * @since 2.7.0
+     *
+     * @param mixed $value Stored alternate_name value.
+     * @return string|string[]|null
+     */
+    public static function alternate_name_for_schema($value) {
+        $names = [];
+
+        foreach ((array) $value as $name) {
+            if (!is_scalar($name)) {
+                continue;
+            }
+
+            $name = trim((string) $name);
+
+            if ('' !== $name && !in_array($name, $names, true)) {
+                $names[] = $name;
+            }
+        }
+
+        if (empty($names)) {
+            return null;
+        }
+
+        return 1 === count($names) ? $names[0] : $names;
+    }
+
     protected function additional_setting_keys(): array {
         return [
             // Title formats, one per context.
@@ -2812,6 +2936,16 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             $sanitized['ai_crawler_rules'] = AI_Crawlers::normalize_rules($sanitized['ai_crawler_rules']);
         }
 
+        // Same reasoning one key up, for the scheme override (#638). Anything
+        // that is not one of the three modes means "follow WordPress", and is
+        // stored as that rather than kept verbatim — otherwise get-site-identity
+        // -settings would report a scheme the site does not actually publish.
+        if (array_key_exists('canonical_scheme', $sanitized)) {
+            $sanitized['canonical_scheme'] = in_array($sanitized['canonical_scheme'], Url_Scheme::MODES, true)
+                ? $sanitized['canonical_scheme']
+                : Url_Scheme::AUTOMATIC;
+        }
+
         return $sanitized;
     }
 
@@ -2837,6 +2971,25 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             'breadcrumb_separator' => '>',
             'robots_txt_enabled' => true,
             'allow_search_engines' => true,
+            // Answer 404 when a content selector in the URL resolved to
+            // nothing (#634). On by default, unlike the other new settings
+            // here: it changes no URL a visitor or a correct crawler uses, only
+            // ones where WordPress resolved nothing and served the blog listing
+            // at 200 anyway.
+            'query_protection' => true,
+
+            // Feed controls (#635). All three off, so an upgrade changes
+            // nothing about what an existing site already sends its
+            // subscribers; a brand-new install is seeded with the signature and
+            // the noindex on, in Activator::seed_feed_defaults().
+            'feed_excerpt_only' => false,
+            'feed_source_link' => false,
+            'feed_noindex' => false,
+
+            // The scheme self-referential URLs go out with (#638). 'automatic'
+            // means substitute nothing and follow WordPress, which is what
+            // every site did before the setting existed.
+            'canonical_scheme' => Url_Scheme::AUTOMATIC,
             'robots_txt_content' => '',
             // Empty map = every AI crawler allowed. Defaults must stay
             // permissive so an upgrade never starts blocking a crawler a site
@@ -3052,14 +3205,15 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         $title = preg_replace('/\s+/', ' ', $title);
         $title = trim($title);
 
-        // Ensure title is not too long (60 characters max for SEO)
-        if (strlen($title) > 60) {
-            // Try to truncate at word boundary
-            $title = wp_trim_words($title, 8, '...');
-            if (strlen($title) > 60) {
-                $title = substr($title, 0, 57) . '...';
-            }
-        }
+        // Ensure title is not too long (60 characters max for SEO).
+        // All three units here were wrong for non-Latin text: strlen() counts
+        // BYTES so the gate fired at 20 Thai characters, wp_trim_words() counts
+        // CHARACTERS on th/ja/zh_* so `8` cut the title to 8 of them, and
+        // substr() cuts bytes so it split a character mid-sequence (#687).
+        $title = \ThinkRank\Core\Seo_Text::trim_to_length(
+            $title,
+            \ThinkRank\Core\Seo_Text::TITLE_MAX_LENGTH
+        );
 
         // Ensure title is not empty
         if (empty($title)) {
@@ -3451,6 +3605,27 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      * @return array Array of sitemap URLs
      */
     private function get_sitemap_urls_for_robots(): array {
+        // One wrapper over every return path below, including the #104 extras.
+        // The Sitemap: line is the only absolute URL of ours in robots.txt and
+        // the one a crawler follows to find everything else, so it has to carry
+        // the site's scheme preference (#638). Applied here rather than where
+        // the body is assembled, because that path also renders a robots.txt a
+        // site owner typed themselves, and their text is not ours to rewrite.
+        return array_map(
+            static function (string $url): string {
+                return Url_Scheme::apply($url);
+            },
+            $this->collect_sitemap_urls_for_robots()
+        );
+    }
+
+    /**
+     * The sitemap URLs robots.txt advertises, before the scheme preference.
+     *
+     * @since 1.0.0
+     * @return array Array of sitemap URLs
+     */
+    private function collect_sitemap_urls_for_robots(): array {
         try {
             // Get sitemap settings
             $sitemap_generator = new \ThinkRank\SEO\Sitemap_Generator();
@@ -3928,9 +4103,12 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         }
 
         if (!empty($value) && isset($config['max_length'])) {
-            if (strlen($value) > $config['max_length']) {
+            // The warning says "characters", so measure and cut in characters:
+            // strlen()/substr() fired early on non-Latin values and the
+            // suggested replacement was cut mid-character (#687).
+            if (mb_strlen($value) > $config['max_length']) {
                 $optimization['validation']['warnings'][] = "{$element} exceeds maximum length of {$config['max_length']} characters";
-                $optimization['optimized_value'] = substr($value, 0, $config['max_length']);
+                $optimization['optimized_value'] = \ThinkRank\Core\Seo_Text::trim_to_length($value, (int) $config['max_length']);
             }
         }
 

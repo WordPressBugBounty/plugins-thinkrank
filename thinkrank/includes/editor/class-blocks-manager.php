@@ -163,6 +163,16 @@ class Blocks_Manager {
             return $block_content;
         }
 
+        // The Schema master switch and the matrix's per-content-type switch.
+        // This producer writes its own <script> into the block's markup rather
+        // than registering with Schema_Graph, so gating the graph does not
+        // reach it — a block kept publishing FAQPage/HowTo/ItemList with Schema
+        // switched off (#688).
+        if (class_exists('ThinkRank\\Frontend\\Schema_Graph')
+            && !\ThinkRank\Frontend\Schema_Graph::output_allowed()) {
+            return $block_content;
+        }
+
         if (self::FAQ_BLOCK === $name) {
             // Saved markup carries a bare <img src>, because save.js output is
             // what the block validates against and cannot be changed without

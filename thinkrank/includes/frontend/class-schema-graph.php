@@ -88,6 +88,24 @@ class Schema_Graph {
     ];
 
     /**
+     * Types that may carry a `breadcrumb` property.
+     *
+     * Schema.org limits `breadcrumb` to WebPage and its subtypes. Attaching it
+     * to a BlogPosting, Product or Recipe primary fails validation with
+     * "Unexpected property" on every URL; the standalone BreadcrumbList node is
+     * emitted either way (#693).
+     *
+     * @since 2.7.0
+     * @var array<int,string>
+     */
+    private const BREADCRUMB_TYPES = [
+        'WebPage', 'AboutPage', 'CheckoutPage', 'CollectionPage', 'ContactPage',
+        'FAQPage', 'ItemPage', 'MedicalWebPage', 'ProfilePage', 'QAPage',
+        'RealEstateListing', 'SearchResultsPage', 'MediaGallery', 'ImageGallery',
+        'VideoGallery',
+    ];
+
+    /**
      * Gutenberg FAQ block name.
      */
     private const FAQ_BLOCK = 'thinkrank/faq';
@@ -148,6 +166,14 @@ class Schema_Graph {
      * @var self|null
      */
     private static ?self $instance = null;
+
+    /**
+     * Memoised master switch, or null when it has not been read this request.
+     *
+     * @since 2.7.0
+     * @var bool|null
+     */
+    private static ?bool $master_switch_on = null;
 
     /**
      * Competing page-level entities: ['rank' => int, 'schema' => array, 'type' => string].
@@ -233,6 +259,8 @@ class Schema_Graph {
      */
     public static function reset(): void {
         self::$instance = null;
+        // Or a test that seeds the switch inherits the previous test's answer.
+        self::$master_switch_on = null;
     }
 
     /**
@@ -300,6 +328,59 @@ class Schema_Graph {
         $actual = $schema['@type'] ?? '';
 
         return (is_string($actual) && $actual !== '') ? $actual : $declared;
+    }
+
+    /**
+     * Whether a page entity may carry a `breadcrumb` property.
+     *
+     * Reading the node's own `@type` key is not enough, and every case it
+     * misses ends with a real WebPage losing a valid property:
+     *
+     * - A deployed schema whose stored JSON omits `@type` carries the type in
+     *   the `schema_type` column instead. `effective_type()` already resolves
+     *   that, which is why the node's `@id` reads `#webpage` even though the
+     *   node itself has no `@type` — so the resolved value is what has to be
+     *   consulted here too.
+     * - JSON-LD permits several types on one node. `["WebPage", "FAQPage"]` is
+     *   a WebPage, but a strict in_array() against the array as a whole is
+     *   false, so the trail would be dropped from a page that may carry it.
+     * - A list naming nothing usable (`[]`, `[null]`) is the first case wearing
+     *   the second's clothes, and resolves the same way.
+     *
+     * @since 2.7.0
+     * @param array  $node          The page entity.
+     * @param string $resolved_type Type the graph resolved for it.
+     * @return bool
+     */
+    private function allows_breadcrumb(array $node, string $resolved_type): bool {
+        $declared = $node['@type'] ?? '';
+
+        // One path for both shapes. Splitting them invites the list branch to
+        // grow its own idea of what an absent type means, which is the mistake
+        // being corrected here in the first place.
+        $named = false;
+
+        foreach (is_array($declared) ? $declared : [$declared] as $type) {
+            if (!is_string($type) || '' === $type) {
+                continue;
+            }
+
+            $named = true;
+
+            if (in_array($type, self::BREADCRUMB_TYPES, true)) {
+                return true;
+            }
+        }
+
+        // The node named a type, and none of them may carry a breadcrumb.
+        if ($named) {
+            return false;
+        }
+
+        // It named none, so it is whatever the graph resolved for it — the same
+        // value its @id was minted from. An empty list is no more informative
+        // than a missing key and must not read as "definitely not a WebPage".
+        return in_array($resolved_type, self::BREADCRUMB_TYPES, true);
     }
 
     /**
@@ -789,6 +870,57 @@ class Schema_Graph {
     }
 
     /**
+     * Whether ThinkRank may emit structured data for this request at all.
+     *
+     * The master switch and the matrix's per-content-type Schema switch, asked
+     * once. #461 put the master switch inside output_site_schema_markup(),
+     * which is one of four producers; the other three never learned about it,
+     * so turning Schema off removed the deployed rows and left the live
+     * generator running — the page emitted *more* types with the switch off
+     * than with it on (#688).
+     *
+     * Static because the producers that need it do not share a base class: the
+     * three graph producers converge on render(), but Blocks_Manager emits its
+     * own script tag from a content filter and never touches the graph, so it
+     * has to ask the same question independently.
+     *
+     * @since 2.7.0
+     * @return bool True when structured data may be emitted.
+     */
+    public static function output_allowed(): bool {
+        // Memoised because inject_block_schema() asks once per matching block,
+        // and Schema_Management_System's constructor builds a schema builder and
+        // a cache manager and registers listeners — it is not something to spin
+        // up per block. The switch is site-wide, so it cannot change within a
+        // request; the per-content-type check below is query-dependent and stays
+        // live.
+        if (null === self::$master_switch_on) {
+            self::$master_switch_on = true;
+
+            if (class_exists('ThinkRank\\SEO\\Schema_Management_System')) {
+                $settings = (new \ThinkRank\SEO\Schema_Management_System())->get_settings('site', null);
+
+                // Absent means "not configured", which every other reader treats
+                // as enabled; only a value that is present and off disables.
+                self::$master_switch_on = !(array_key_exists('enabled', $settings) && empty($settings['enabled']));
+            }
+        }
+
+        if (!self::$master_switch_on) {
+            return false;
+        }
+
+        if (class_exists('ThinkRank\\SEO\\Content_Type_Settings')) {
+            return \ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
+                \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
+                true
+            );
+        }
+
+        return true;
+    }
+
+    /**
      * Assemble and emit the graph. Safe to call more than once.
      *
      * @since 1.32.0
@@ -796,6 +928,12 @@ class Schema_Graph {
      */
     public function render(): void {
         if ($this->rendered || !$this->has_nodes()) {
+            return;
+        }
+
+        // Every graph producer converges here, so this is the one place the
+        // master switch has to hold for all of them (#688).
+        if (!self::output_allowed()) {
             return;
         }
 
@@ -834,6 +972,16 @@ class Schema_Graph {
         if (empty($graph)) {
             return;
         }
+
+        // One pass over the assembled graph, rather than at each producer.
+        // @id and url values arrive from a dozen of them — some derived from
+        // WordPress, some read straight out of stored settings — and on a
+        // misconfigured site that produced a single graph carrying both
+        // schemes at once, with @ids that no longer matched the canonical they
+        // are supposed to identify (#638). Normalizing where the graph is
+        // serialized is the only place that catches all of them, including
+        // nodes an add-on added through the filter above.
+        $graph = \ThinkRank\SEO\Url_Scheme::apply_deep($graph);
 
         $json = wp_json_encode(
             ['@context' => self::SCHEMA_CONTEXT, '@graph' => array_values($graph)],
@@ -959,9 +1107,10 @@ class Schema_Graph {
             $faq     = null;
         }
 
-        $nodes       = [];
-        $primary_id  = '';
-        $used_ids    = [];
+        $nodes         = [];
+        $primary_id    = '';
+        $primary_type  = '';
+        $used_ids      = [];
 
         if (null !== $primary) {
             $node = $primary['schema'];
@@ -971,7 +1120,8 @@ class Schema_Graph {
             $resolved_type = $this->effective_type($node, $primary['type']);
 
             $node = $this->assign_id($node, $base . '#' . strtolower($resolved_type), $used_ids);
-            $primary_id  = $node['@id'];
+            $primary_id   = $node['@id'];
+            $primary_type = $resolved_type;
             $nodes['primary'] = $node;
         }
 
@@ -1060,7 +1210,11 @@ class Schema_Graph {
             if ($website_id !== '' && !isset($nodes['primary']['isPartOf'])) {
                 $nodes['primary']['isPartOf'] = ['@id' => $website_id];
             }
-            if ($breadcrumb_id !== '' && !isset($nodes['primary']['breadcrumb'])) {
+            if (
+                $breadcrumb_id !== ''
+                && !isset($nodes['primary']['breadcrumb'])
+                && $this->allows_breadcrumb($nodes['primary'], $primary_type)
+            ) {
                 $nodes['primary']['breadcrumb'] = ['@id' => $breadcrumb_id];
             }
 

@@ -398,7 +398,23 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             'business_latitude', 'business_longitude', 'business_price_range',
         ];
 
-        if (empty(array_intersect_key($settings, array_flip($business_keys)))) {
+        // Which deployed types a Site Identity key can invalidate. The business
+        // block feeds LocalBusiness and Organization; alternate_name feeds the
+        // WebSite node, which had no entry here at all — so editing it left the
+        // deployed schema showing the previous value until something else
+        // happened to redeploy (#692).
+        $refresh_types = [];
+
+        if (!empty(array_intersect_key($settings, array_flip($business_keys)))) {
+            $refresh_types[] = 'LocalBusiness';
+            $refresh_types[] = 'Organization';
+        }
+
+        if (array_key_exists('alternate_name', $settings)) {
+            $refresh_types[] = 'WebSite';
+        }
+
+        if (empty($refresh_types)) {
             return;
         }
 
@@ -410,7 +426,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         // Only refresh types that are actually deployed, so this never adds a
         // type the admin did not enable.
         $deployed = array_keys((array) $this->get_deployed_schemas($context_type, $context_id));
-        $affected = array_values(array_intersect($deployed, ['LocalBusiness', 'Organization']));
+        $affected = array_values(array_intersect($deployed, $refresh_types));
 
         if (empty($affected)) {
             return;
@@ -1587,7 +1603,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
                 $content_data = [
                     'title' => $post->post_title,
                     'url' => get_permalink($post->ID),
-                    'excerpt' => $post->post_excerpt ?: wp_trim_words($post->post_content, 30),
+                    'excerpt' => $post->post_excerpt ?: \ThinkRank\Core\Seo_Text::trim_words($post->post_content, 30),
                     'content' => $post->post_content,
                     'author' => [
                         'name' => get_the_author_meta('display_name', $post->post_author),
@@ -2599,6 +2615,9 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             'admin_email' => get_option('admin_email'),
             'language' => get_locale(),
             'timezone' => get_option('timezone_string'),
+            // Read by populate_website_schema(), so the deployed WebSite node
+            // carries the same alternateName as the default one (#692).
+            'alternate_name' => $site_identity_settings['alternate_name'] ?? '',
             'founded_date' => $site_identity_settings['founded_date'] ?? '',
             'founder_name' => $site_identity_settings['founder_name'] ?? '',
             'company_type' => $site_identity_settings['company_type'] ?? 'Organization',

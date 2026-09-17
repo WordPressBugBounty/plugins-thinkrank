@@ -149,12 +149,21 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         // cap in optimize_title_for_platform() is an SEO-title recommendation for
         // search results and does not apply to the og:title social tag, so use the
         // resolved title verbatim (falling back to the site name when empty).
-        $og_tags['og:title'] = ($data['title'] ?? '') !== '' ? $data['title'] : get_bloginfo('name');
+        // Stripped: a title carrying markup is attribute-escaped into this tag,
+        // so the reader sees a literal `&lt;em&gt;` rather than emphasis (#640).
+        $og_tags['og:title'] = \ThinkRank\Frontend\SEO_Manager::strip_title_tags(
+            ($data['title'] ?? '') !== '' ? (string) $data['title'] : (string) get_bloginfo('name')
+        );
         // `?:` rather than `??`: the key is always present, seeded as '', so the
         // null-coalesce could never reach the fallback. og:url was emitted empty
         // and then dropped by the !empty() guard in output_social_og_tags(),
         // which is why archives carried no og:url at all (#388).
-        $og_tags['og:url'] = ($data['url'] ?? '') !== '' ? $data['url'] : $this->get_current_url();
+        // Normalized for the site's scheme preference, so og:url and the
+        // canonical can never disagree about http vs https (#638); the same
+        // consistency #182 was about.
+        $og_tags['og:url'] = \ThinkRank\SEO\Url_Scheme::apply(
+            ($data['url'] ?? '') !== '' ? $data['url'] : $this->get_current_url()
+        );
         
         // Image handling with optimization
         if (!empty($data['image'])) {
@@ -223,7 +232,9 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         // in optimize_title_for_platform() is an SEO-title recommendation for
         // search results, not a rule for the twitter:title social tag.
         $twitter_title = ($data['twitter_title'] ?? '') !== '' ? $data['twitter_title'] : ($data['title'] ?? '');
-        $twitter_tags['twitter:title'] = $twitter_title !== '' ? $twitter_title : get_bloginfo('name');
+        $twitter_tags['twitter:title'] = \ThinkRank\Frontend\SEO_Manager::strip_title_tags(
+            $twitter_title !== '' ? (string) $twitter_title : (string) get_bloginfo('name')
+        );
 
         // Recommended tags. Prefer a per-object Twitter-specific description,
         // falling back to the resolved OG/meta description — mirroring the
@@ -958,6 +969,10 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         $settings = $this->get_settings($context_type, $context_id);
         $output = [
             'og_tags' => [],
+            // Secondary og:image entries. A separate list because $og_tags is
+            // keyed by property name and so can hold exactly one 'og:image'
+            // (#636); the emitter writes these straight after the primary.
+            'og_extra_images' => [],
             'twitter_tags' => [],
             'meta_tags' => [],
             'platform_tags' => [],
@@ -992,6 +1007,16 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             // Add custom OG tags
             if (!empty($settings['custom_og_tags'])) {
                 $output['og_tags'] = array_merge($output['og_tags'], $settings['custom_og_tags']);
+            }
+
+            // Alternatives to offer after the primary image. Collected from the
+            // resolved primary rather than re-deriving it, so the two can never
+            // disagree about which image is the main one.
+            if (!empty($settings['og_multiple_images'])) {
+                $output['og_extra_images'] = Social_Images::additional(
+                    (int) $context_id,
+                    (string) ($output['og_tags']['og:image'] ?? '')
+                );
             }
         }
 
@@ -1047,6 +1072,11 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
     private const SITE_ONLY_KEYS = [
         'enable_open_graph',
         'enable_twitter_cards',
+        // Same shape as the two above and the same trap: a site-wide switch
+        // with no per-context equivalent. Left out, it read as on while the
+        // homepage rendered and as off on every post and page — which is where
+        // the alternatives it controls actually come from (#636).
+        'og_multiple_images',
     ];
 
     /**
@@ -1131,6 +1161,10 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             'default_og_image' => '',
             'og_image_width' => 1200,
             'og_image_height' => 630,
+            // Offer alternative og:image tags after the primary one (#636).
+            // Off by default: a page that shares with one image today must
+            // keep sharing with that image after an update.
+            'og_multiple_images' => false,
 
             // Twitter Cards settings
             'enable_twitter_cards' => true,
@@ -1171,6 +1205,13 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             'fallback_to_excerpt' => true,
             'strip_html_tags' => true,
             'max_description_length' => 160,
+
+            // oEmbed card (#637). All three default off: this rewrites what
+            // other people's sites display, so an upgrade must not silently
+            // change a card an existing embed has been showing for months.
+            'oembed_use_seo_title' => false,
+            'oembed_use_social_image' => false,
+            'oembed_remove_author' => false,
 
             // Legacy format for backward compatibility (only when needed)
             'custom_og_tags' => [],
@@ -2083,14 +2124,11 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             return $title;
         }
 
-        // Truncate at word boundary
-        $truncated = wp_trim_words($title, 10, '');
-        if (mb_strlen($truncated) <= $max_length) {
-            return $truncated;
-        }
-
-        // Hard truncate if necessary
-        return mb_substr($title, 0, $max_length - 3) . '...';
+        // Truncate at a word boundary where there is one, and hard-cut where
+        // there is not. This used to try wp_trim_words() first, which counts
+        // CHARACTERS on th/ja/zh_* — so it returned ~10 characters, passed the
+        // $max_length check below, and that was accepted as the title (#687).
+        return \ThinkRank\Core\Seo_Text::trim_to_length($title, $max_length);
     }
 
     /**
@@ -2115,14 +2153,12 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             return $description;
         }
 
-        // Truncate at word boundary
-        $truncated = wp_trim_words($description, 25, '');
-        if (mb_strlen($truncated) <= $max_length) {
-            return $truncated;
-        }
-
-        // Hard truncate if necessary
-        return mb_substr($description, 0, $max_length - 3) . '...';
+        // Truncate at a word boundary where there is one, and hard-cut where
+        // there is not. This used to try wp_trim_words() first, which counts
+        // words in English but CHARACTERS in th/ja/zh_* — so on those locales
+        // it returned ~25 characters, comfortably under $max_length, and that
+        // was accepted as the answer (#687).
+        return \ThinkRank\Core\Seo_Text::trim_to_length($description, $max_length);
     }
 
     /**
@@ -2652,10 +2688,11 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         // TikTok prefers short, catchy descriptions
         $catchy_words = ['viral', 'trending', 'must-see', 'epic', 'mind-blowing'];
 
-        // Limit to 100 characters for TikTok
-        if (strlen($description) > 100) {
-            $description = substr($description, 0, 97) . '...';
-        }
+        // Limit to 100 characters for TikTok. strlen()/substr() count BYTES,
+        // so this both fired three times too early on Thai/CJK text and cut
+        // mid-character, emitting a broken UTF-8 sequence rather than a short
+        // description (#687).
+        $description = \ThinkRank\Core\Seo_Text::trim_to_length($description, 100);
 
         if (!preg_match('/\b(' . implode('|', $catchy_words) . ')\b/i', $description)) {
             $description = '🔥 ' . $description;

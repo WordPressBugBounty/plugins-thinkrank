@@ -49,6 +49,12 @@ use ThinkRank\Abilities\Links\Get_External_Links_Settings;
 use ThinkRank\Abilities\Links\Update_External_Links_Settings;
 use ThinkRank\Abilities\Matrix\Get_Content_Type_Matrix;
 use ThinkRank\Abilities\Matrix\Update_Content_Type_Matrix;
+use ThinkRank\Abilities\Media\List_Images;
+use ThinkRank\Abilities\Media\Get_Image_Alt_Text;
+use ThinkRank\Abilities\Media\Update_Image_Alt_Text;
+use ThinkRank\Abilities\Media\Fill_Missing_Alt_Text;
+use ThinkRank\Abilities\Content\Get_Post_Content;
+use ThinkRank\Abilities\Maintenance\Purge_Caches;
 use ThinkRank\Abilities\Settings\Update_Robots_Meta_Settings;
 use ThinkRank\Abilities\Settings\Get_Instant_Indexing_Settings;
 use ThinkRank\Abilities\Settings\Update_Instant_Indexing_Settings;
@@ -355,6 +361,12 @@ class Abilities_Registrar {
 			new Update_External_Links_Settings(),
 			new Get_Content_Type_Matrix(),
 			new Update_Content_Type_Matrix(),
+			new List_Images(),
+			new Get_Image_Alt_Text(),
+			new Update_Image_Alt_Text(),
+			new Fill_Missing_Alt_Text(),
+			new Get_Post_Content(),
+			new Purge_Caches(),
 			new Update_Robots_Meta_Settings(),
 			new Get_Instant_Indexing_Settings(),
 			new Update_Instant_Indexing_Settings(),

@@ -8,6 +8,38 @@
                 <title>XML Sitemap Index - ThinkRank SEO</title>
                 <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
                 <style type="text/css">
+                    /*
+                     * Brand palette.
+                     *
+                     * Every value here is the stock one, so this stylesheet is
+                     * complete on its own: opened directly it renders exactly
+                     * as it always has. Sitemap_Stylesheet overrides these
+                     * declarations when the site has set a brand colour, which
+                     * is why each brandable colour is a custom property and
+                     * nothing below repeats a literal.
+                     */
+                    :root {
+                        --tr-brand-main: #667eea;
+                        --tr-brand-accent: #764ba2;
+                        --tr-brand-on-brand: #ffffff;
+                        --tr-brand-link: #007bff;
+                        --tr-brand-link-hover: #0056b3;
+                        --tr-brand-th: #6c757d;
+                        --tr-brand-th-text: #ffffff;
+                        --tr-brand-rule: #2196f3;
+                        --tr-brand-note: #1565c0;
+                        --tr-brand-note-bg: #e3f2fd;
+                        --tr-brand-badge: #28a745;
+                        --tr-brand-badge-text: #ffffff;
+                    }
+                    .sitemap-logo {
+                        display: block;
+                        margin: 0 auto 18px;
+                        max-height: 64px;
+                        max-width: 260px;
+                        width: auto;
+                        height: auto;
+                    }
                     body {
                         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                         margin: 0;
@@ -17,8 +49,8 @@
                         line-height: 1.6;
                     }
                     .header {
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        color: white;
+                        background: linear-gradient(135deg, var(--tr-brand-main) 0%, var(--tr-brand-accent) 100%);
+                        color: var(--tr-brand-on-brand);
                         padding: 30px;
                         border-radius: 10px;
                         margin-bottom: 30px;
@@ -75,15 +107,15 @@
                         font-size: 1.5em;
                     }
                     .description {
-                        background: #e3f2fd;
+                        background: var(--tr-brand-note-bg);
                         padding: 15px 20px;
-                        border-left: 4px solid #2196f3;
+                        border-left: 4px solid var(--tr-brand-rule);
                         margin: 20px;
                         border-radius: 4px;
                     }
                     .description p {
                         margin: 0;
-                        color: #1565c0;
+                        color: var(--tr-brand-note);
                         font-size: 0.95em;
                     }
                     table {
@@ -92,8 +124,8 @@
                         font-size: 14px;
                     }
                     th {
-                        background: #6c757d;
-                        color: white;
+                        background: var(--tr-brand-th);
+                        color: var(--tr-brand-th-text);
                         padding: 15px 10px;
                         text-align: left;
                         font-weight: 600;
@@ -114,18 +146,18 @@
                         word-break: break-all;
                     }
                     .sitemap-cell a {
-                        color: #007bff;
+                        color: var(--tr-brand-link);
                         text-decoration: none;
                         font-weight: 500;
                     }
                     .sitemap-cell a:hover {
                         text-decoration: underline;
-                        color: #0056b3;
+                        color: var(--tr-brand-link-hover);
                     }
                     .sitemap-type {
                         display: inline-block;
-                        background: #28a745;
-                        color: white;
+                        background: var(--tr-brand-badge);
+                        color: var(--tr-brand-badge-text);
                         padding: 4px 8px;
                         border-radius: 12px;
                         font-size: 11px;
@@ -146,7 +178,7 @@
                         font-size: 14px;
                     }
                     .footer a {
-                        color: #007bff;
+                        color: var(--tr-brand-link);
                         text-decoration: none;
                     }
                     .footer a:hover {
@@ -168,6 +200,7 @@
             </head>
             <body>
                 <div class="header">
+                    <!-- thinkrank:logo -->
                     <h1>XML Sitemap Index</h1>
                     <p>Generated by ThinkRank SEO Plugin</p>
                     <div class="stats">

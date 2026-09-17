@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.6.0
+Stable tag: 2.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -323,107 +323,74 @@ Content brief competitor analysis and schema import fetch the URLs you type in, 
 
 == Changelog ==
 
+= 2.7.0 =
+Release Date: 2026-09-17
+
+- New: Hide a post from this site's own search results and archive listings
+- New: RSS feed controls: excerpt only, a link back to the source post, and noindex for feeds
+- New: Extra og:image tags, so a share has a fallback when the first image fails validation
+- New: Post embeds carry your SEO title, description and social image
+- New: A canonical URL scheme setting for sites behind a proxy that terminates TLS
+- New: Brand the XML sitemap stylesheet with your logo and two colours
+- New: URLs asking for content that does not exist now answer 404 instead of the page
+- Changed: Archive titles drop the "Category:" label and strip markup, and your alternate site name is published as schema
+- Fixed: Turning Schema off now stops every schema producer, including blocks and page builders
+- Fixed: Non-Latin titles and descriptions are no longer cut short, plus minor sitemap, feed and database fixes
+
 = 2.6.0 =
 Release Date: 2026-09-15
 
-- New: A page now publishes every schema you deploy to it. Free sites were limited to two, and anything past that was silently left out of the page
-- Changed: ThinkRank's admin screens and page-builder panels load their Inter font from your own site instead of from Google Fonts, so opening them no longer contacts a third party
-- Changed: The readme now lists every external service ThinkRank contacts — the AI providers, Google, IndexNow, the ThinkRank connection service and opt-in usage tracking — with what is sent, when, and each service's terms and privacy policy
-- Changed: The Email Reporting screen shows exactly what gets sent — every 30 days, to the site admin email, with every section — in place of the locked fields it used to show. Your report keeps going out as before
-- Changed: The focus keyword field says plainly that a post takes up to five keywords, instead of showing a lock and an upgrade link
-- Removed: Brand Visibility, which was already hidden, along with the Perplexity connection only it used. Nothing it stored is deleted
-- Changed: If you use ThinkRank Pro, update it to 2.7.0 together with this release: automatic AI metadata, the GA4 tag installer, SEO insights and branded email reports now run inside Pro itself
+- New: Pages publish every schema you deploy, not just the first two
+- Changed: Admin screens load the Inter font from your site instead of Google Fonts
+- Changed: Email reports go out every 30 days to the admin email; schedule, recipients and branding are in ThinkRank Pro
+- Changed: Posts take up to five focus keywords; ThinkRank Pro adds more
+- Changed: Automatic AI metadata, the GA4 tag installer and SEO insights moved to ThinkRank Pro
+- Removed: Brand Visibility
 
 = 2.5.0 =
 Release Date: 2026-09-10
 
-- New: The Site SEO Audit now scores your site for AI search. A new "AI Search (GEO)" category reports whether ChatGPT, Claude, Perplexity and Google AI Overviews can crawl you, whether llms.txt is published, whether your pages carry FAQ or How-To structured data, and whether your writing is shaped the way AI answers quote from — a direct answer up top, question headings, lists and tables, enough depth, and a recent revision date. Blocked crawlers and a missing llms.txt each come with a one-click fix. Because the new category is scored like every other one, your overall audit score will move the first time it runs after this update
-- New: Every audit finding now names the pages it is about. Instead of "7 of your 8 most recent pages do not open with a concise answer", you get the list, each title linking straight to its editor — for the AI Search checks, for missing meta descriptions, and for images without alt text
-- New: Choose which AI crawlers may read your site. Eighteen crawlers — ChatGPT, Claude, Perplexity, Gemini, Apple, Meta and more — each with its own switch and a plain description of what it does, written into your robots.txt inside a marked block that leaves everything you wrote there alone. Nothing changes until you switch something on, and the screen states plainly that blocking Google-Extended does not affect normal Google Search indexing
-- New: Automatic nofollow and "open in a new tab" for external links, with an exception list for partners and affiliates that should keep passing link equity. Applied as the page renders, so your post content is never rewritten and switching it off restores exactly what you wrote
-- New: A per-content-type matrix for your SEO automation. Turn meta tags, schema, Open Graph, Twitter cards, analytics, no-index and sitemap inclusion on or off for each post type, taxonomy, archive, search results and 404 page. Every switch starts on "Inherit", so a site that never opens the screen behaves exactly as before
-- New: Beaver Builder support. The ThinkRank panel now opens inside the Beaver builder with your current SEO score on its toolbar, and FAQ, How-To and Table of Contents modules publish the same structured data their block, Elementor and Bricks counterparts do
-- New: "Test Connection" now checks your AI model as well as your key, so a mistyped or unavailable model id is reported as exactly that instead of passing as a working connection
-- Fixed: Saving the Posts or Pages SEO screen wiped the per-content-type switches you had set for that content type in the new matrix
-- Fixed: The Site SEO Audit could quietly drop six of its AI Search checks — and report a higher overall score — on a site with content that is not valid UTF-8, usually the legacy of an old import
-- Fixed: Turning schema off for products removed WooCommerce's own product structured data too, leaving the page with none at all
-- Fixed: Turning a content type's sitemap off left its sitemap file published and still listed in your sitemap index
-- Fixed: Saving the Robots.txt screen without editing it switched your site to a manually written robots.txt for good, so later changes — a new sitemap, the AI crawler rules — stopped reaching /robots.txt
-- Fixed: If the Link Attributes screen failed to load, the next keystroke saved empty settings over your stored exception list
-- Fixed: Asking an AI assistant to change your crawler rules updated the settings but not the served robots.txt file
+- New: AI Search (GEO) category in the Site SEO Audit, with one-click fixes
+- New: Audit findings list the exact pages and images affected
+- New: Allow or block individual AI crawlers in robots.txt
+- New: Automatic nofollow and new-tab for external links, with an exception list
+- New: Per-content-type matrix to turn SEO features on or off
+- New: Beaver Builder support, with FAQ, How-To and Table of Contents modules
+- Improved: Test Connection checks your AI model as well as your key
+- Fixed: Saving the Posts or Pages SEO screen reset matrix switches
+- Fixed: Turning product schema off also removed WooCommerce's own product data
+- Fixed: Minor Site SEO Audit, sitemap and robots.txt issues
 
 = 2.4.0 =
 Release Date: 2026-09-08
 
-- New: FAQ, How-To and Table of Contents elements for Bricks Builder. A Bricks page can now publish the same FAQ, HowTo and navigation structured data a block or Elementor page already could, with the same markup and styling, so a page built either way looks identical to visitors and to search engines
-- New: Breadcrumbs can follow your SEO titles. Turn on "Use SEO Titles in Breadcrumbs" and every post and category crumb is labelled with the SEO title you set for it, so the trail under a search result matches the result itself. It is off by default, so an update never rewrites an existing trail
-- New: Your SEO score now rates Core Web Vitals and Mobile Experience from real measurements instead of awarding both in full to every site. A site measured as slow now scores lower than a fast one, the failing metric is named in the advice, and a site nothing has measured yet keeps the benefit of the doubt rather than being marked down
-- New: The XML Sitemap screen now tells you when automatic regeneration has failed, fallen behind, or cannot run because WP-Cron is disabled — instead of the sitemap silently going stale — and rebuilds an overdue sitemap on the next admin visit when the schedule never fired
-- Fixed: On a Bricks page, ThinkRank published a second FAQ block of structured data beside the one Bricks publishes itself, published questions from a FAQ block left behind in the editor that no visitor can see, and took descriptions and scores from that hidden content instead of the page Bricks actually renders. Pages that print the post body through a Bricks dynamic tag are read correctly too
-- Fixed: Your favicon was declared at every size at once, so a large upload was served as a 32-pixel tab icon. ThinkRank now creates the sizes the browser asks for and each icon is genuinely the size it claims — a 32x32 tab icon dropped from 135 KB to under 1 KB on a test site. Sites with a favicon already set get the smaller icons on update, with no re-save
-- Fixed: A page that became a 404 after WordPress had already matched a post — the ordinary way a plugin refuses a URL — kept printing that post's meta description, keywords and social descriptions on the error page
-- Fixed: A breadcrumb crumb rendered blank between its separators when the SEO title held only spaces, instead of falling back to the post or category name
-- Fixed: A video swapped in a page-builder widget — YouTube changed to a self-hosted file, or the reverse — still advertised the video you replaced, including in the video sitemap
-- Fixed: The Site SEO Audit reported "structured data is configured for your content" on a site with schema switched off and emitting none, and its one-click fix could never be reached
-- Fixed: An export file carried your IndexNow key, and restoring one deleted the receiving site's Google Search Console and Analytics connection along with its Pinterest, Instagram and TikTok verification. Secrets are stripped from every part of the file now, and the receiving site keeps its own
-- Fixed: "Generate Sitemap" reported success on a site it could not write to, and cleared the recorded failure while doing it, so a broken sitemap looked healthy
-- Fixed: A PageSpeed audit that failed to run was recorded as a score of zero, which cost every post on the site its full mobile score on the strength of a measurement that never happened
-- Fixed: Admin pages and the sitemap screen's own requests could sit waiting while a sitemap was rebuilt in the background. The page is returned first now, and only signed-in requests trigger a rebuild
+- New: FAQ, How-To and Table of Contents elements for Bricks Builder
+- New: Option to use SEO titles in breadcrumbs
+- Improved: SEO score rates Core Web Vitals and Mobile Experience from real measurements
+- Improved: XML Sitemap screen warns when automatic regeneration fails or falls behind
+- Fixed: Duplicate and hidden FAQ structured data on Bricks pages
+- Fixed: Favicons are now generated at the correct sizes
+- Fixed: 404 pages printed the matched post's meta tags
+- Fixed: A failed PageSpeed audit counted as a score of zero
+- Fixed: Minor breadcrumb, sitemap, video sitemap and audit issues
 
 = 2.3.0 =
 Release Date: 2026-09-06
 
-- New: Bricks Builder support. ThinkRank's SEO panel now opens inside the Bricks builder, the builder toolbar shows your current SEO score, and analysis reads the content you actually built — including copy stored in Bricks components, content templates and dynamic data tags — instead of scoring the page as empty
-- Fixed: Bricks, Elementor, Divi and Oxygen template post types no longer get an SEO metabox they cannot use. Global SEO already refused them, so a template offered per-post SEO fields that went nowhere
-- Fixed: The Usages page showed a cost that was cut short mid-number, so "$0.0377" read as "$0...."
-- Fixed: The Usages page invented a trend on "All time" — every record you had ever created was compared against an arbitrary month and reported as a large increase. When there is no earlier period to compare against, nothing is claimed
-- Fixed: A drop to zero AI usage was shown as no change at all, on both the AI and the SEO cards, so a month where usage collapsed looked identical to a flat one
-- Fixed: The Usages page had two reporting-period selectors, one per tab, which could disagree with each other while showing the same data. There is now one, beside the tabs, and switching tabs is remembered in the address bar so the browser Back button works
-- Fixed: "Success Rate" was not a measurement — it could only ever read 100% or 0% — and has been removed rather than left as a number that means nothing
-- Fixed: The Usages record count said "Showing 29 total records" while the table showed 20, and provider names read "Openai" and "Openrouter". It now reports the range actually displayed, with the providers named properly
-- Fixed: The provider cost breakdown listed all four AI providers at $0.0000 on a site that had never used AI
-- Fixed: AI model names and the cost per action were wrong for several models, and long KPI labels such as "AVERAGE SEO SCORE" were clipped mid-word
-- Fixed: The "AI referrals over time" chart was a bare shape — no dates, no values, no hover. It now shows the date range, states the peak and the day it fell on, and reveals the date and count for the day under your pointer
-- Fixed: The AI referrals series counted days in fixed 24-hour steps and in a different calendar than the one it stored visits in, so on sites outside UTC a day of referrals could be counted in the total and missing from the chart, and a gap of three weeks was drawn like a gap of one day
-- Fixed: The Crawlers panel reported "No llms.txt" on every site serving llms.txt without writing a file to disk — which is most of them — while the document was live
-- Fixed: Scheduled SEO email reports were sent at the wrong time on any site not set to UTC, early or late by the site's offset, and drifted further with every send
-- Fixed: A scheduled report with nothing to say was sent anyway — a page of zeroes and "data unavailable" notices, on every cycle, to sites with no Search Console connection. That period is now skipped and picked up next time
-
-= 2.2.0 =
-Release Date: 2026-09-02
-
-- New: Take your ThinkRank data with you. A new Import / Export screen downloads everything ThinkRank stores — post, category, tag and author SEO data plus your settings — as one file, and loads it back on this site or any other. Choose JSON for a complete, restorable file, or CSV for a spreadsheet view of your post SEO data. Restoring shows you what the file contains and lets you decide what happens where this site already has a value, before anything is written. API keys are never written to the file
-- New: Importing from another SEO plugin now has its own Migration screen, separate from Import / Export, so each is turned on and off on its own
-- New: Both screens are off until you switch them on, in Settings. Neither is deleted or hidden permanently — switching one on brings its screen and menu item straight back
-- Changed: A fresh install no longer arrives with an AI provider already chosen. ThinkRank asks you to pick one instead of warning that a key is missing for a provider you never selected
-- Changed: The Anthropic provider is now named after the vendor, matching the other three, and the model list adds Claude Opus 5 and drops models the providers have withdrawn. A model you have already saved keeps working
-- Fixed: Test Connection could not test the key you had already saved. Because a saved key is shown as a mask, the button stayed greyed out and the only way to verify an expired or revoked key was to paste the whole secret in again
-- Fixed: Switching to a provider whose key you had already saved showed it as unconfigured — Save was refused and Clear API key claimed there was nothing to clear
-- Fixed: Brand Visibility competitors and queries could not be saved at all. The save reported success and came back empty
-- Fixed: The Posts, Pages and Categories switches on the XML Sitemap screen did nothing — a type you switched off was put straight back on the next save, and went on being generated
-- Fixed: Changing the sitemap index mode left the previous mode's files in your site root, still served to search engines and never refreshed again
-- Fixed: Turning Instant Indexing on erased the list of post types it applies to, leaving the feature enabled with nothing to submit
-- Fixed: Unticking "Allow search engines to index this content" saved, showed as unticked, and did nothing — the page stayed indexable
-- Fixed: Changing one robots directive reset the other five, so a site set to noindex became indexable because someone toggled a different switch
-- Fixed: The Open Graph and Twitter master switches only worked on the homepage. Turning Open Graph off still emitted its tags on every post and page
-- Fixed: The Pinterest preview promised up to 500 characters of description where only 160 are ever published
-- Fixed: Image SEO printed your site name twice in alt and title text for any image outside a normal post — text widgets, page-builder blocks and site-editor templates. The format preview also disagreed with what was actually written: hyphens in filenames, separator spacing, and empty parts that are dropped
-- Fixed: Author archive descriptions were measured in bytes and trimmed by words, so a description in Cyrillic, Greek or Arabic was cut far too short while a long English one was not trimmed at all
-- Fixed: Turning author archives off issued a permanent redirect, so a visitor's browser could keep bouncing them to the home page even after you turned the archives back on. It is a temporary redirect now
-- Fixed: The Site SEO Analyzer's grade could be up to an hour out of date. De-indexing your site still showed "Site is visible to search engines" and a grade A. The audit now refreshes when the settings it reports on change, and shows when it was generated
-- Fixed: The Analyzer's "fix missing alt text" button re-walked the same first 50 images on every click, so any library over 50 images could never be finished
-- Fixed: The Analyzer's structured data check could only ever pass, so its one-click fix was unreachable, and its tagline check missed the WordPress default tagline on any non-English site
-- Fixed: Roles given access to only some ThinkRank areas hit permission errors on the areas they had been given, and could reach settings for sections they had not. The dashboard also failed to load for them
-- Fixed: A role that cannot be granted ThinkRank access — one without the ability to edit posts — is now marked as such in the Role Manager instead of appearing to be granted access that never took effect
-- Fixed: Site administrators whose role comes from a role-editor plugin or a multisite super admin account saw no ThinkRank menu at all, while still having full access over the API
-- Fixed: With ThinkRank Pro installed but not yet licensed, the Traffic Overview card, the WordPress dashboard widget, four Analytics cards and the Content Brief "Insert" button offered to sell you Pro or showed a server error, instead of saying the licence needs activating
+- New: Bricks Builder support, with the SEO panel and score inside the builder
+- Improved: AI referrals chart shows dates, values and per-day details
+- Fixed: Builder template post types showed an SEO metabox they cannot use
+- Fixed: Scheduled email reports were sent at the wrong time on sites outside UTC
+- Fixed: Empty scheduled email reports are no longer sent
+- Fixed: Crawlers panel reported "No llms.txt" on sites serving it
+- Fixed: Several Usages page display and calculation issues
 
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
-= 2.6.0 =
-Pages publish every schema you deploy, admin screens stop loading fonts from Google, and Brand Visibility is removed. ThinkRank Pro users: update Pro to 2.7.0 at the same time. Recommended for all sites.
+= 2.7.0 =
+Adds per-post search and archive visibility, RSS feed controls, alternative og:image tags, SEO metadata on post embeds, a canonical URL scheme setting and sitemap branding. Fixes the Schema master switch and non-Latin title and description truncation. Recommended for all sites.
 
-= 2.5.0 =
-Adds an AI Search (GEO) audit category, per-crawler AI controls for robots.txt, automatic nofollow for external links, a per-content-type SEO matrix, and Beaver Builder support. Fixes a Global SEO save wiping matrix switches. Recommended for all sites.
+= 2.6.0 =
+Pages publish every schema you deploy, and some features move to ThinkRank Pro. Pro users: update Pro to 2.7.0 at the same time.

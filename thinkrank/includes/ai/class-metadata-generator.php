@@ -203,9 +203,10 @@ class Metadata_Generator {
         $content = trim($content);
         $max_length = 4000; // Reasonable limit for AI processing
         
-        if (strlen($content) > $max_length) {
-            $content = substr($content, 0, $max_length) . '...';
-        }
+        // strlen()/substr() count BYTES: on Thai or CJK this handed the model a
+        // third of the intended content, and cut the last character in half so
+        // the payload carried an invalid UTF-8 sequence (#687).
+        $content = \ThinkRank\Core\Seo_Text::trim_to_length($content, $max_length);
         
         return $content;
     }

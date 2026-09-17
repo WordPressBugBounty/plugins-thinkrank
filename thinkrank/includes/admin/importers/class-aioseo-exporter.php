@@ -1245,7 +1245,10 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
             $post = get_post($post_id);
             if ($post) {
                 $replacements['#post_title']    = $post->post_title;
-                $replacements['#post_excerpt']  = wp_trim_words($post->post_excerpt ?: wp_trim_words(wp_strip_all_tags($post->post_content), 55), 55);
+                $replacements['#post_excerpt']  = \ThinkRank\Core\Seo_Text::trim_words(
+                    $post->post_excerpt ?: \ThinkRank\Core\Seo_Text::trim_words(wp_strip_all_tags($post->post_content), 55),
+                    55
+                );
                 $replacements['#post_date']     = get_the_date('', $post);
                 $replacements['#author_name']   = get_the_author_meta('display_name', (int) $post->post_author);
 

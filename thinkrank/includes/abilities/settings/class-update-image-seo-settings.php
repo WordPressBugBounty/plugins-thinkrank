@@ -59,7 +59,14 @@ class Update_Image_Seo_Settings extends Ability_Base {
 	public function get_annotations() {
 		return [
 			'readonly'      => false,
-			'destructive'   => true,
+			// Settings writes are recoverable: the matching get-* ability reads
+			// the previous value, so nothing is lost that cannot be put back.
+			// `destructive` is reserved for calls that lose data or reach
+			// outside the site, and marking routine configuration with it made
+			// MCP clients demand a human approval for every save — which users
+			// reported as a permission bug, because the client's refusal reads
+			// as "No approval received" (#675).
+			'destructive'   => false,
 			'idempotent'    => true,
 			'priority'      => 2.0,
 			'openWorldHint' => false,

@@ -130,7 +130,29 @@ abstract class Google_API_Base_Client {
 
         if ($status_code >= 400) {
             $error_data = json_decode($response_body, true);
+            $error_data = is_array($error_data) ? $error_data : [];
             $error_message = $error_data['error']['message'] ?? 'Unknown API error';
+
+            // A scope failure reads as "Request had insufficient authentication
+            // scopes." — Google-internal wording that told the user nothing and
+            // reached the MCP client verbatim (#674). Say what to do instead.
+            $actionable = self::actionable_auth_message((int) $status_code, $error_data);
+
+            if (null !== $actionable) {
+                // Google's own sentence is kept after the instruction: support
+                // needs the upstream wording to tell a scope failure from a
+                // revoked grant, and the user needs the instruction first.
+                // Built on its own line so the phpcs:ignore below sits on the
+                // `throw` itself. The annotation only suppresses the next line,
+                // and on a multi-line throw the reported violation is the
+                // argument line, not the `throw` — so the ignore missed it and
+                // Plugin Check failed on a sniff the repo standard does not run.
+                $message = sprintf('%s (Google said: %s)', $actionable, $error_message);
+
+                // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Same as above: Google's wording is data, not markup; escaping it leaks entities into the UI.
+                throw new \Exception($message, (int) $status_code);
+            }
+
             // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Same as above: Google's wording is data, not markup; escaping it leaks entities into the UI.
             throw new \Exception(sprintf('Google API error (%d): %s', (int) $status_code, $error_message), (int) $status_code);
         }
@@ -228,6 +250,81 @@ abstract class Google_API_Base_Client {
      * @return string Rate limit key
      */
     abstract protected function get_rate_limit_key(): string;
+
+    /**
+     * Turn an authorization failure into an instruction, or null to pass through.
+     *
+     * Google answers a missing scope with "Request had insufficient
+     * authentication scopes." — accurate, and useless to the person reading it.
+     * It reached the MCP client and the Performance panels verbatim, with
+     * nothing to say that reconnecting the Google account is the fix (#674).
+     *
+     * The distinction that matters is refresh versus re-consent. A 401 is a
+     * stale access token and Analytics_Manager already refreshes and retries it
+     * silently. A scope 403 is not retryable: refreshing returns a token with
+     * the same scopes, so only granting consent again can change the outcome —
+     * which is why this says "reconnect", not "try again".
+     *
+     * Returns null for every other failure, so quota, rate-limit and genuine
+     * permission errors keep Google's wording, which is informative for them.
+     *
+     * @since 2.7.0
+     *
+     * @param int   $status_code HTTP status.
+     * @param array $error_data  Decoded error body.
+     * @return string|null Instruction to lead with, or null to pass through.
+     */
+    protected static function actionable_auth_message(int $status_code, array $error_data): ?string {
+        $error   = is_array($error_data['error'] ?? null) ? $error_data['error'] : [];
+        $message = (string) ($error['message'] ?? '');
+
+        // google.rpc.ErrorInfo, which is what the newer APIs return.
+        $reasons = [];
+        foreach ((array) ($error['details'] ?? []) as $detail) {
+            if (is_array($detail) && isset($detail['reason'])) {
+                $reasons[] = (string) $detail['reason'];
+            }
+        }
+
+        // The older errors[] shape, still used by Search Console.
+        foreach ((array) ($error['errors'] ?? []) as $legacy) {
+            if (is_array($legacy) && isset($legacy['reason'])) {
+                $reasons[] = (string) $legacy['reason'];
+            }
+        }
+
+        $scope_failure = 403 === $status_code
+            && (
+                in_array('ACCESS_TOKEN_SCOPE_INSUFFICIENT', $reasons, true)
+                || in_array('insufficientPermissions', $reasons, true)
+                || 1 === preg_match('/insufficient (authentication scopes|permission)/i', $message)
+            );
+
+        if ($scope_failure) {
+            return __(
+                'The connected Google account is missing a permission this feature needs. Reconnect it under Essential SEO > Integrations and approve every permission Google asks for. Refreshing or retrying will not help, because the existing grant cannot gain a permission it was never given.',
+                'thinkrank'
+            );
+        }
+
+        // A revoked or withdrawn grant. Analytics_Manager treats invalid_grant
+        // as terminal already; this is the same condition seen from the API
+        // side, where the refresh-and-retry loop has nothing left to try.
+        $revoked = in_array($status_code, [401, 403], true)
+            && (
+                in_array('ACCESS_TOKEN_EXPIRED', $reasons, true)
+                || 1 === preg_match('/invalid[_ ]grant|token has been expired or revoked/i', $message)
+            );
+
+        if ($revoked) {
+            return __(
+                'The Google connection is no longer valid: access was revoked, or the grant expired. Reconnect the account under Essential SEO > Integrations.',
+                'thinkrank'
+            );
+        }
+
+        return null;
+    }
 
     /**
      * Get rate limit error message

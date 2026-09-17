@@ -480,7 +480,10 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
             $post = get_post($post_id);
             if ($post) {
                 $replacements['%%title%%']    = $post->post_title;
-                $replacements['%%excerpt%%']  = wp_trim_words($post->post_excerpt ?: wp_trim_words(wp_strip_all_tags($post->post_content), 55), 55);
+                $replacements['%%excerpt%%']  = \ThinkRank\Core\Seo_Text::trim_words(
+                    $post->post_excerpt ?: \ThinkRank\Core\Seo_Text::trim_words(wp_strip_all_tags($post->post_content), 55),
+                    55
+                );
                 $replacements['%%date%%']     = get_the_date('', $post);
                 $replacements['%%modified%%'] = get_the_modified_date('', $post);
                 $replacements['%%id%%']       = (string) $post_id;

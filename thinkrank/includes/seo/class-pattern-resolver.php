@@ -166,7 +166,12 @@ class Pattern_Resolver {
         $text = strip_shortcodes($text);
         $text = wp_strip_all_tags($text);
 
-        return trim(wp_trim_words($text, $words, '...'));
+        // $words is a WORD cap, but wp_trim_words() counts CHARACTERS on
+        // th/ja/zh_*, where it would cut to ~25 characters instead of ~25
+        // words — about six times too short (#687). trim_words() keeps the
+        // word cap where words are the unit and falls back to a character
+        // budget where they are not.
+        return trim(\ThinkRank\Core\Seo_Text::trim_words($text, $words));
     }
 
     /**
@@ -216,8 +221,10 @@ class Pattern_Resolver {
             '%term%'      => $name,
             '%sitename%'  => get_bloginfo('name'),
             '%sep%'       => self::separator(),
+            // Same locale trap as derive_excerpt(): a word cap here is a
+            // ~25-character cap on th/ja/zh_* (#687).
             '%excerpt%'   => $description !== ''
-                ? wp_trim_words(wp_strip_all_tags($description), 25, '...')
+                ? self::derive_excerpt($description)
                 : '',
             '%date%'      => '',
             '%modified%'  => '',
@@ -254,9 +261,11 @@ class Pattern_Resolver {
         $template = self::template_for($post_id, 'description', self::DEFAULT_DESCRIPTION);
         $description = self::resolve_value($template, $post_id);
 
-        if (strlen($description) > 160) {
-            $description = wp_trim_words($description, 25, '...');
-        }
+        // Measure and cut in CHARACTERS. strlen() counts bytes, so a Thai or
+        // CJK description tripped this limit at a third of its length, and
+        // wp_trim_words() then cut by a unit the locale chooses — 25 words in
+        // English, 25 characters in Thai (#687).
+        $description = \ThinkRank\Core\Seo_Text::trim_to_length($description);
 
         return $description;
     }

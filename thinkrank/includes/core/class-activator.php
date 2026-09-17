@@ -49,9 +49,10 @@ class Activator {
 
         $this->check_requirements();
         $this->create_database_tables();
-        // Must precede set_default_options(): it reads `thinkrank_version`,
-        // which that method creates.
+        // Both must precede set_default_options(): they read
+        // `thinkrank_version`, which that method creates.
         $this->retire_sitemap_legacy_fallback();
+        $this->seed_feed_defaults();
         $this->set_default_options();
         $this->setup_indexnow_key();
         $this->schedule_cron_jobs();
@@ -227,6 +228,51 @@ class Activator {
         require_once THINKRANK_PLUGIN_DIR . 'includes/cleanup-webroot.php';
 
         add_option(THINKRANK_SITEMAP_MARKED_WRITE_OPTION, '1', '', false);
+    }
+
+    /**
+     * Give a brand-new install the feed posture the competitors ship with.
+     *
+     * The feed controls (#635) default to off in
+     * {@see Site_Identity_Manager::get_default_settings()}, and they have to:
+     * two of the three change what a site already publishes. Signing every
+     * entry adds a line to what existing subscribers receive, and noindexing
+     * feeds withdraws URLs a site may have had indexed for years — on a podcast
+     * site, whose feed has to stay indexable, silently at that. Neither belongs
+     * in a plugin update.
+     *
+     * A first install has no subscribers and no indexed feed, so there is
+     * nothing to change and the protective defaults are simply the right
+     * starting point — which is what The SEO Framework, Yoast and Rank Math all
+     * ship. Seeding them here rather than in the defaults is what separates the
+     * two cases.
+     *
+     * Excerpt-only is left off even here: it changes what readers get rather
+     * than what scrapers can take, and that is the site owner's call.
+     *
+     * Same signal and same reasoning as {@see self::retire_sitemap_legacy_fallback()}:
+     * `thinkrank_version` is absent only on the very first activation, and an
+     * upgrade does not re-run the activation hook at all.
+     *
+     * @since 2.7.0
+     *
+     * @return void
+     */
+    private function seed_feed_defaults(): void {
+        if (get_option('thinkrank_version') !== false) {
+            return;
+        }
+
+        $manager = new \ThinkRank\SEO\Site_Identity_Manager();
+
+        $manager->save_settings(
+            'site',
+            null,
+            [
+                'feed_source_link' => true,
+                'feed_noindex'     => true,
+            ]
+        );
     }
 
     /**

@@ -160,6 +160,37 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
     }
 
     /**
+     * Read a category from whichever store actually owns it.
+     *
+     * The generic store returns `[]` for the eight SEO categories: it looks for
+     * rows whose key carries a `<category>_` prefix, and the rows carry no such
+     * prefix — `social_media` is stored as `social_meta`, `schema_management` as
+     * `schema_management_system`, and their keys are bare (`og_site_name`). So a
+     * direct `Settings_Manager::get_settings()` reports a configured site as
+     * having no settings at all.
+     *
+     * Writes never had the problem, because the write path already falls back to
+     * the owning manager. That asymmetry is what made this invisible from the UI
+     * and dangerous underneath it: the pre-reset rollback snapshotted `[]` and
+     * then defaults were written over live settings, so Reset could not be undone
+     * (#689). Every read goes through here now, so there is one place to be wrong.
+     *
+     * @since 2.7.0
+     *
+     * @param string   $category     Category key.
+     * @param string   $context_type Optional. Context type. Default 'site'.
+     * @param int|null $context_id   Optional. Context ID.
+     * @return array The category's stored settings.
+     */
+    private function read_category(string $category, string $context_type = 'site', ?int $context_id = null): array {
+        if ($this->has_seo_manager($category)) {
+            return (array) $this->get_seo_manager($category)->get_settings($context_type, $context_id);
+        }
+
+        return (array) $this->settings_manager->get_settings($category, $context_type, $context_id);
+    }
+
+    /**
      * Register API routes
      *
      * @since 1.0.0
@@ -497,8 +528,8 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                     continue;
                 }
 
-                // Get settings for each category using Settings Manager
-                $category_settings = $this->settings_manager->get_settings($category);
+                // Get settings for each category from the store that owns it.
+                $category_settings = $this->read_category($category);
                 $global_settings[$category] = $category_settings;
 
                 // Get schema if requested
@@ -636,7 +667,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             $updated_settings = [];
             foreach (array_keys($settings) as $category) {
                 if (isset($this->setting_categories[$category])) {
-                    $updated_settings[$category] = $this->settings_manager->get_settings($category);
+                    $updated_settings[$category] = $this->read_category($category);
                 }
             }
 
@@ -683,7 +714,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             }
 
             // Get category settings
-            $category_settings = $this->settings_manager->get_settings($category);
+            $category_settings = $this->read_category($category);
 
             // Get schema if requested
             $schema = [];
@@ -917,9 +948,14 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             // owns the category: the generic store returns [] for the categories it
             // does not know, which would report a successful save as zero settings
             // and hand the UI an empty form to render (#371).
-            $updated_settings = null === $generic_update && $this->has_seo_manager($category)
-                ? $this->get_seo_manager($category)->get_settings($context_type, $context_id)
-                : $this->settings_manager->get_settings($category, $context_type, $context_id);
+            //
+            // Which store *accepted the write* is the wrong question to ask here,
+            // and `sitemap` is the case that proves it: the generic store claims
+            // that write (update_settings() returns true, not null) and then reads
+            // the category back as [], so keying off $generic_update sent the one
+            // read path that had been fixed straight back into the empty store.
+            // Ownership is a property of the category, not of the last write (#689).
+            $updated_settings = $this->read_category($category, $context_type, $context_id);
 
             return new WP_REST_Response([
                 'success' => true,
@@ -1098,7 +1134,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                     continue;
                 }
 
-                $export_data[$category] = $this->settings_manager->get_settings($category);
+                $export_data[$category] = $this->read_category($category);
             }
 
             // Never let secrets (API keys, OAuth tokens) leave the site in an
@@ -1236,7 +1272,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
 
                 try {
                     // Check if settings exist and handle overwrite
-                    $existing_settings = $this->settings_manager->get_settings($category);
+                    $existing_settings = $this->read_category($category);
 
                     if (!empty($existing_settings) && !$overwrite_existing) {
                         $import_results[$category] = [
@@ -1311,7 +1347,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             $backup_data = [];
             foreach ($categories as $category) {
                 if (isset($this->setting_categories[$category])) {
-                    $backup_data[$category] = $this->settings_manager->get_settings($category);
+                    $backup_data[$category] = $this->read_category($category);
                 }
             }
 
@@ -2237,7 +2273,25 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
         $backup_data = [];
         foreach ($categories as $category) {
             if (isset($this->setting_categories[$category])) {
-                $backup_data[$category] = $this->settings_manager->get_settings($category);
+                $backup_data[$category] = $this->read_category($category);
+            }
+        }
+
+        // A snapshot that captured nothing for a category that does hold settings
+        // is worse than no snapshot: reset checks only that an id came back, so an
+        // empty one is accepted as a rollback point and the defaults go over live
+        // data that can no longer be recovered. That is exactly what #689 was.
+        //
+        // Ask the owning manager directly rather than trusting read_category(),
+        // so this stays a real check if a future edit sends a read back to the
+        // wrong store instead of quietly agreeing with it.
+        foreach ($backup_data as $category => $captured) {
+            if (!empty($captured) || !$this->has_seo_manager($category)) {
+                continue;
+            }
+
+            if (!empty((array) $this->get_seo_manager($category)->get_settings('site', null))) {
+                return '';
             }
         }
 

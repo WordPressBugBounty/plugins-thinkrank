@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace ThinkRank\Abilities\Content;
 
 use ThinkRank\Abilities\Ability_Base;
+use ThinkRank\SEO\Object_Redirect;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -104,10 +105,15 @@ class Get_Term_Seo extends Ability_Base {
 			);
 		}
 
+		$redirect = Object_Redirect::get( 'term', $term_id );
+
 		$data = [
 			'title'                => (string) get_term_meta( $term_id, '_thinkrank_seo_title', true ),
 			'description'          => (string) get_term_meta( $term_id, '_thinkrank_meta_description', true ),
 			'canonical_url'        => (string) get_term_meta( $term_id, '_thinkrank_canonical_url', true ),
+			// Not term meta: the rule in Pro's redirections table is the value.
+			'redirect_url'         => $redirect['url'],
+			'redirect_type'        => $redirect['type'],
 			'focus_keyword'        => (string) get_term_meta( $term_id, '_thinkrank_focus_keyword', true ),
 			'robots_meta_enabled'  => get_term_meta( $term_id, '_thinkrank_robots_meta_enabled', true ),
 			'robots_meta'          => $this->decode_json_field( get_term_meta( $term_id, '_thinkrank_robots_meta', true ) ),

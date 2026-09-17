@@ -58,7 +58,9 @@ final class Plan_Config {
      * content, rather than describing the content itself (#160 in Pro).
      *
      * Schema:
-     *   usage_policy  bool  May publish usage-policy directives in llms.txt.
+     *   usage_policy   bool  May publish usage-policy directives in llms.txt.
+     *   full_document  bool  May publish llms-full.txt, the full-content
+     *                        companion document (thinkrank-pro#171).
      *
      * @since 2.5.0
      *
@@ -66,7 +68,8 @@ final class Plan_Config {
      */
     public static function llms_txt(): array {
         $defaults = [
-            'usage_policy' => false,
+            'usage_policy'  => false,
+            'full_document' => false,
         ];
 
         /**

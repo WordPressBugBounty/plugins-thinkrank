@@ -63,6 +63,23 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     ];
 
     /**
+     * Child sitemap type -> the object that actually supplies its entries.
+     *
+     * A child normally carries its object's own slug, but the sitemap presets UI
+     * writes a display name for the WooCommerce taxonomy child
+     * ('product_categories', not 'product_cat'), so a saved child list can name a
+     * type no post type or taxonomy answers to. Resolving through here lets those
+     * children take the same generic path as every other custom taxonomy instead
+     * of needing a case of their own (#690).
+     *
+     * @since 2.7.0
+     * @var array<string, string>
+     */
+    private const CHILD_TYPE_ALIASES = [
+        'product_categories' => 'product_cat',
+    ];
+
+    /**
      * Supported sitemap types
      *
      * @since 1.0.0
@@ -271,7 +288,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     public function generate_sitemap(array $options = []): string {
         $settings = $this->get_settings('site');
 
-        $xml = $this->xml_prolog($settings, 'sitemap.xsl');
+        $xml = $this->xml_prolog($settings, 'sitemap');
 
         // Add image namespace if images are enabled
         if (!empty($settings['include_images'])) {
@@ -459,9 +476,51 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             'enable_styling' => true,
             'custom_url_pattern' => 'sitemap-{type}.xml',
 
+            // Stylesheet branding (#639). Both colours default to empty, not
+            // to the stock hexes: empty means the stylesheet's own value
+            // stands, so a site that never opens this screen renders exactly
+            // as it did before the setting existed.
+            'styling_logo' => false,
+            'styling_logo_url' => '',
+            'styling_color_main' => '',
+            'styling_color_accent' => '',
+
             // Generation tracking
             'last_generated' => ''
         ];
+    }
+
+    /**
+     * Normalize the stylesheet branding values on the way into the store.
+     *
+     * The generic sanitizer only runs `sanitize_text_field()` over a string,
+     * which happily keeps "red" or "rebeccapurple" as a colour. Nothing
+     * downstream can use those — {@see Sitemap_Stylesheet::render()} skips any
+     * value it cannot read as a hex colour — so storing them would report a
+     * successful save of a setting that changes nothing, and `get-sitemap-
+     * settings` would hand an agent back a colour the sitemap does not use.
+     * Reducing here instead keeps the store and the rendering in agreement.
+     *
+     * @since 2.7.0
+     *
+     * @param array  $settings     Settings to sanitize.
+     * @param string $context_type Context the save is for.
+     * @return array
+     */
+    protected function sanitize_settings(array $settings, string $context_type = 'site'): array {
+        $sanitized = parent::sanitize_settings($settings, $context_type);
+
+        foreach (['styling_color_main', 'styling_color_accent'] as $key) {
+            if (array_key_exists($key, $sanitized)) {
+                $sanitized[$key] = Sitemap_Stylesheet::hex($sanitized[$key]);
+            }
+        }
+
+        if (array_key_exists('styling_logo_url', $sanitized)) {
+            $sanitized['styling_logo_url'] = esc_url_raw((string) $sanitized['styling_logo_url']);
+        }
+
+        return $sanitized;
     }
 
     /**
@@ -522,6 +581,30 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 'title' => 'Last Generated',
                 'description' => 'Timestamp of last sitemap generation',
                 'default' => ''
+            ],
+            'styling_logo' => [
+                'type' => 'boolean',
+                'title' => 'Show Logo On Sitemap',
+                'description' => 'Show a logo above the sitemap heading',
+                'default' => false
+            ],
+            'styling_logo_url' => [
+                'type' => 'string',
+                'title' => 'Sitemap Logo',
+                'description' => 'Logo image URL. Empty falls back to the site icon',
+                'default' => ''
+            ],
+            'styling_color_main' => [
+                'type' => 'string',
+                'title' => 'Sitemap Main Color',
+                'description' => 'Hex color for the sitemap header, links and table head. Empty keeps the stock palette',
+                'default' => ''
+            ],
+            'styling_color_accent' => [
+                'type' => 'string',
+                'title' => 'Sitemap Accent Color',
+                'description' => 'Hex color for the header gradient and link hovers. Empty keeps the stock palette',
+                'default' => ''
             ]
         ];
     }
@@ -540,7 +623,12 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      */
     private function generate_url_entry(string $url, string $lastmod, float $priority, string $changefreq, array $images = []): string {
         $xml = "  <url>\n";
-        $xml .= "    <loc>" . esc_url($url) . "</loc>\n";
+        // Every <loc> in every sitemap passes through here, which is why the
+        // scheme preference is applied at this one point rather than at each
+        // of the dozen collectors that build URLs (#638). An http sitemap on
+        // an https site hands search engines the wrong address for the whole
+        // site at once.
+        $xml .= "    <loc>" . esc_url(Url_Scheme::apply($url)) . "</loc>\n";
         // Omit <lastmod> when unknown (empty) — a fabricated timestamp is worse
         // than no timestamp, and an absent lastmod is valid per the spec.
         if (!empty($lastmod)) {
@@ -552,7 +640,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // Add image entries if provided
         foreach ($images as $image) {
             $xml .= "    <image:image>\n";
-            $xml .= "      <image:loc>" . esc_url($image['url']) . "</image:loc>\n";
+            $xml .= "      <image:loc>" . esc_url(Url_Scheme::apply((string) $image['url'])) . "</image:loc>\n";
 
             if (!empty($image['title'])) {
                 $xml .= "      <image:title>" . esc_html($image['title']) . "</image:title>\n";
@@ -820,17 +908,23 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      *
      * @since 2.1.1
      *
-     * @param array  $settings   Sitemap settings (read for `enable_styling`).
-     * @param string $stylesheet Stylesheet basename in static/xsl/.
+     * The stylesheet URL is served by {@see Sitemap_Stylesheet}, not read off
+     * disk by the web server, because a static file cannot carry the site's own
+     * logo and colours (#639). It is a fixed URL: the palette is applied per
+     * request, so changing a brand colour needs no regeneration and shows up on
+     * sitemaps published long before.
+     *
+     * @param array  $settings Sitemap settings (read for `enable_styling`).
+     * @param string $variant  Stylesheet variant, `sitemap` or `index`.
      * @return string Prolog lines, newline-terminated.
      */
-    private function xml_prolog(array $settings, string $stylesheet): string {
+    private function xml_prolog(array $settings, string $variant): string {
         $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
         $xml .= THINKRANK_SITEMAP_MARKER . "\n";
 
         // The stylesheet is presentation only, so it stays opt-in.
         if (!empty($settings['enable_styling'])) {
-            $xml .= '<?xml-stylesheet type="text/xsl" href="' . home_url('/wp-content/plugins/thinkrank/static/xsl/' . $stylesheet) . '"?>' . "\n";
+            $xml .= '<?xml-stylesheet type="text/xsl" href="' . esc_url(Sitemap_Stylesheet::url($variant)) . '"?>' . "\n";
         }
 
         return $xml;
@@ -847,7 +941,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return string Full sitemap XML
      */
     private function wrap_urlset(array $entries, array $settings, bool $with_image_ns): string {
-        $xml = $this->xml_prolog($settings, 'sitemap.xsl');
+        $xml = $this->xml_prolog($settings, 'sitemap');
 
         if ($with_image_ns && !empty($settings['include_images'])) {
             $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">' . "\n";
@@ -2431,6 +2525,36 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             $urls[] = $this->build_child_sitemap_entry($cpt, $pattern);
         }
 
+        // Public custom taxonomies get the same treatment (#690). Flat mode has
+        // always walked them through get_enabled_taxonomies(); index mode built
+        // its children from the list above and never consulted a taxonomy at
+        // all, so every custom-taxonomy archive silently vanished from the
+        // sitemap the moment a site switched modes — and the per-taxonomy switch
+        // the matrix writes had nothing to act on. Same two tests the post-type
+        // walk applies, in the same order.
+        $taken = array_column($urls, 'type');
+
+        foreach (get_taxonomies(['public' => true, '_builtin' => false], 'names') as $taxonomy) {
+            if (!$this->should_include_taxonomy($taxonomy)) {
+                continue;
+            }
+
+            if (!\ThinkRank\SEO\Content_Type_Settings::is_included_in_sitemap('taxonomy', $taxonomy, $inclusions)) {
+                continue;
+            }
+
+            // Post types and taxonomies are separate registries, so a site can
+            // hold both a `foo` post type and a `foo` taxonomy. They would
+            // resolve to one filename, and stream_type_entries() answers post
+            // types first, so the second child would list the first one's file
+            // twice in the index rather than adding anything.
+            if (in_array($taxonomy, $taken, true)) {
+                continue;
+            }
+
+            $urls[] = $this->build_child_sitemap_entry($taxonomy, $pattern);
+        }
+
         return $urls;
     }
 
@@ -2586,6 +2710,20 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             // post_type_exists() keeps this to real custom post types.
             if (post_type_exists($type)
                 && !\ThinkRank\SEO\Content_Type_Settings::is_included_in_sitemap('post_type', $type, $settings)) {
+                continue;
+            }
+
+            // The taxonomy counterpart of the two guards above (#690). A child
+            // list saved while a taxonomy was still included keeps naming it, so
+            // without this, excluding one in the matrix would still rewrite and
+            // re-list the file the user asked not to have. The built-in
+            // aggregates are named 'categories'/'tags' rather than
+            // 'category'/'post_tag', so taxonomy_exists() leaves them to the
+            // inclusion-flag check below.
+            $child_taxonomy = self::CHILD_TYPE_ALIASES[$type] ?? $type;
+            if (taxonomy_exists($child_taxonomy)
+                && (!$this->should_include_taxonomy($child_taxonomy)
+                    || !\ThinkRank\SEO\Content_Type_Settings::is_included_in_sitemap('taxonomy', $child_taxonomy, $settings))) {
                 continue;
             }
 
@@ -2926,15 +3064,41 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 $entries = post_type_exists('product') ? $this->collect_post_entries_iter(['product'], $settings) : [];
                 return ['entries' => $entries, 'image_ns' => true];
 
-            case 'product_categories':
-                $entries = taxonomy_exists('product_cat') ? $this->collect_taxonomy_entries_iter('product_cat', $settings) : [];
-                return ['entries' => $entries, 'image_ns' => false];
-
             default:
+                // Resolve a preset's display name to the object it streams, so
+                // 'product_categories' is an ordinary taxonomy child rather than
+                // a case of its own (#690).
+                $alias  = self::CHILD_TYPE_ALIASES[$type] ?? null;
+                $object = $alias ?? $type;
+
                 $custom_post_types = get_post_types(['public' => true, '_builtin' => false], 'names');
-                if (in_array($type, $custom_post_types, true)) {
-                    return ['entries' => $this->collect_post_entries_iter([$type], $settings), 'image_ns' => true];
+                if (in_array($object, $custom_post_types, true)) {
+                    return ['entries' => $this->collect_post_entries_iter([$object], $settings), 'image_ns' => true];
                 }
+
+                // Custom taxonomies reach index mode here, streamed through the
+                // same iterator flat mode uses so the two modes emit identical
+                // URLs for the same settings.
+                if (taxonomy_exists($object) && $this->should_include_taxonomy($object)) {
+                    return ['entries' => $this->collect_taxonomy_entries_iter($object, $settings), 'image_ns' => false];
+                }
+
+                // An aliased child whose object is gone (WooCommerce deactivated)
+                // keeps writing the empty file it always wrote. Returning null
+                // here would hand it the whole-site fallback instead, dumping
+                // every URL on the site into a file named for products.
+                //
+                // A registered taxonomy this generator will not emit
+                // (`post_format`, `nav_menu`, a non-public one) needs the same
+                // answer for the same reason. generate_multiple_sitemaps()
+                // skips those before they reach here, so nothing takes this
+                // path today — but it is the one branch where falling through
+                // to null is silently catastrophic rather than merely wrong,
+                // and the guard keeping it unreachable lives in another method.
+                if ($alias !== null || taxonomy_exists($object)) {
+                    return ['entries' => [], 'image_ns' => false];
+                }
+
                 return null;
         }
     }
@@ -3115,7 +3279,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return string Sitemap index XML
      */
     private function generate_sitemap_index(array $children, array $settings): string {
-        $xml = $this->xml_prolog($settings, 'sitemap-index.xsl');
+        $xml = $this->xml_prolog($settings, 'index');
         $xml .= '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
 
         $site_url = home_url();
@@ -3130,7 +3294,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
 
             $xml .= "  <sitemap>\n";
-            $xml .= "    <loc>" . esc_url($sitemap_url) . "</loc>\n";
+            $xml .= "    <loc>" . esc_url(Url_Scheme::apply($sitemap_url)) . "</loc>\n";
             $xml .= "    <lastmod>" . gmdate('c') . "</lastmod>\n";
             $xml .= "  </sitemap>\n";
         }

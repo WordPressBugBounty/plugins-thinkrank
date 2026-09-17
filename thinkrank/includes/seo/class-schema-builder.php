@@ -1040,6 +1040,16 @@ class Schema_Builder {
             home_url()
         );
 
+        // Both WebSite producers have to carry this or the deployed node and the
+        // default one disagree about the same site — the shape of failure #688
+        // documents. The default node is generate_website_schema() (#692).
+        $alternate_name = \ThinkRank\SEO\Site_Identity_Manager::alternate_name_for_schema(
+            $data['site_data']['alternate_name'] ?? null
+        );
+        if (null !== $alternate_name) {
+            $schema['alternateName'] = $alternate_name;
+        }
+
         // Recommended properties - prioritize user-configured Website schema description
         if (!empty($data['site_data']['website_description'])) {
             $schema['description'] = $this->truncate_text($data['site_data']['website_description'], 160);

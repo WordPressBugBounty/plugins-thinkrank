@@ -899,6 +899,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-w-\[22px\]{
   width: 22px;
 }
+.tr-root .tr-w-\[260px\]{
+  width: 260px;
+}
 .tr-root .tr-w-full{
   width: 100%;
 }

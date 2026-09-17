@@ -24,6 +24,7 @@ namespace ThinkRank\Admin\Importers;
 
 use ThinkRank\SEO\Focus_Keywords;
 use ThinkRank\SEO\Metadata_Pending;
+use ThinkRank\SEO\Object_Redirect;
 use ThinkRank\SEO\Pattern_Resolver;
 
 if (!defined('ABSPATH')) {
@@ -286,6 +287,18 @@ class Snapshot_Migrator {
             // VideoObject schema form data (post meta only). Seeds the metabox
             // Video form so an imported video schema renders once deployed.
             if ($object_type === 'post' && $this->migrate_video_schema($object_id, $data, $record)) {
+                $record_had_writes = true;
+            }
+
+            // Per-object redirect. SEOPress is the one source that stores a
+            // redirect as object meta rather than in a rules table, so its
+            // per-post redirects were exported into extended.redirect_* and
+            // then dropped for want of anywhere to put them. They have a home
+            // now: Object_Redirect writes through to Pro's rules table, and
+            // returns a WP_Error (which we skip) when Pro is inactive, leaving
+            // the value in the snapshot for a later run.
+            if (in_array($object_type, ['post', 'term'], true)
+                && $this->migrate_object_redirect($object_type, $object_id, $record)) {
                 $record_had_writes = true;
             }
 
@@ -1236,6 +1249,51 @@ class Snapshot_Migrator {
         }
 
         return $seeded;
+    }
+
+    /**
+     * Migrate a source plugin's per-object redirect into ThinkRank.
+     *
+     * The destination is Pro's redirections table, not object meta, so this
+     * goes through Object_Redirect rather than writing a key: that keeps the
+     * imported rule subject to the same guards as one typed into the edit
+     * screen (no self-referential rule, no query-string source) and puts it in
+     * the Redirections manager where the user can see and edit it.
+     *
+     * An existing redirect on the object is left alone — the import rule is
+     * SKIP on conflict, and a redirect the user already set here outranks one
+     * carried over from the plugin being replaced.
+     *
+     * @param string $object_type 'post' or 'term'.
+     * @param int    $object_id   Object ID.
+     * @param array  $record      Full snapshot record.
+     * @return bool Whether a redirect was written.
+     */
+    private function migrate_object_redirect(string $object_type, int $object_id, array $record): bool {
+        $extended = $record['extended'] ?? [];
+
+        if (!is_array($extended) || empty($extended['redirect_url'])) {
+            return false;
+        }
+
+        // A source that models the redirect as a toggle plus a URL can carry a
+        // URL the site is not actually serving. Honour the toggle when present.
+        if (array_key_exists('redirect_enabled', $extended) && empty($extended['redirect_enabled'])) {
+            return false;
+        }
+
+        if ('' !== Object_Redirect::get($object_type, $object_id)['url']) {
+            return false;
+        }
+
+        $result = Object_Redirect::save(
+            $object_type,
+            $object_id,
+            (string) $extended['redirect_url'],
+            $extended['redirect_type'] ?? Object_Redirect::DEFAULT_TYPE
+        );
+
+        return !is_wp_error($result);
     }
 
     /**

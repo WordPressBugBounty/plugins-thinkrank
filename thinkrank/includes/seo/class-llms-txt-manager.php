@@ -1233,10 +1233,9 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
 
         if (null !== $content) {
             // Get content preview (first 200 characters) with size safety
-            $status['content_preview'] = substr($content, 0, 200);
-            if (strlen($content) > 200) {
-                $status['content_preview'] .= '...';
-            }
+            // substr()/strlen() count BYTES, so this cut a multibyte character
+            // in half and shipped an invalid UTF-8 sequence in the preview (#687).
+            $status['content_preview'] = \ThinkRank\Core\Seo_Text::trim_to_length($content, 200);
         }
 
         // Cache the result for 5 minutes to improve performance
@@ -2213,7 +2212,7 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
         }
 
         if (!empty($user_input['development_approach'])) {
-            $approach_summary = wp_trim_words($user_input['development_approach'], 10);
+            $approach_summary = \ThinkRank\Core\Seo_Text::trim_words($user_input['development_approach'], 10);
             $content .= "- [Development Guidelines]({$website_url}): {$approach_summary}\n";
         }
 

@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace ThinkRank\Abilities\Content;
 
 use ThinkRank\Abilities\Ability_Base;
+use ThinkRank\SEO\Object_Redirect;
 use ThinkRank\SEO\Pattern_Resolver;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -51,6 +52,15 @@ class Update_Term_Seo extends Ability_Base {
 						'title'                => [ 'type' => 'string' ],
 						'description'          => [ 'type' => 'string' ],
 						'canonical_url'        => [ 'type' => 'string' ],
+						'redirect_url'         => [
+							'type'        => 'string',
+							'description' => __( 'Send visitors from this term archive to this URL. Empty string removes the redirect. Requires ThinkRank Pro.', 'thinkrank' ),
+						],
+						'redirect_type'        => [
+							'type'        => 'integer',
+							'enum'        => Object_Redirect::TYPES,
+							'description' => __( 'Redirect status code. Defaults to 301.', 'thinkrank' ),
+						],
 						'focus_keyword'        => [ 'type' => 'string' ],
 						'robots_meta_enabled'  => [ 'type' => 'boolean' ],
 						'robots_meta'          => [ 'type' => 'object' ],
@@ -120,7 +130,27 @@ class Update_Term_Seo extends Ability_Base {
 
 		$touched = $this->save_term_meta( $term_id, $settings );
 
-		if ( ! $touched ) {
+		// The redirect is not term meta — Pro's rules table holds it — so it is
+		// saved separately, and unlike the meta fields it can be refused.
+		$redirect_touched = array_key_exists( 'redirect_url', $settings );
+		if ( $redirect_touched ) {
+			$redirect_result = Object_Redirect::save(
+				'term',
+				$term_id,
+				(string) $settings['redirect_url'],
+				$settings['redirect_type'] ?? Object_Redirect::DEFAULT_TYPE
+			);
+
+			if ( is_wp_error( $redirect_result ) ) {
+				return new \WP_Error(
+					$redirect_result->get_error_code(),
+					$redirect_result->get_error_message(),
+					[ 'status' => 400 ]
+				);
+			}
+		}
+
+		if ( ! $touched && ! $redirect_touched ) {
 			return new \WP_Error(
 				'thinkrank_no_valid_term_meta_keys',
 				__( 'No valid ThinkRank term SEO keys were provided.', 'thinkrank' ),

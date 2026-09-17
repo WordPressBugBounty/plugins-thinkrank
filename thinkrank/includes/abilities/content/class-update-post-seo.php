@@ -11,6 +11,7 @@ namespace ThinkRank\Abilities\Content;
 
 use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\Admin\Metabox_Manager;
+use ThinkRank\SEO\Object_Redirect;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -51,6 +52,15 @@ class Update_Post_Seo extends Ability_Base {
 						'title'                => [ 'type' => 'string' ],
 						'description'          => [ 'type' => 'string' ],
 						'canonical_url'        => [ 'type' => 'string' ],
+						'redirect_url'         => [
+							'type'        => 'string',
+							'description' => __( 'Send visitors from this post to this URL. Empty string removes the redirect. Requires ThinkRank Pro.', 'thinkrank' ),
+						],
+						'redirect_type'        => [
+							'type'        => 'integer',
+							'enum'        => Object_Redirect::TYPES,
+							'description' => __( 'Redirect status code. Defaults to 301.', 'thinkrank' ),
+						],
 						'focus_keyword'        => [ 'type' => 'string' ],
 						'focus_keywords'       => [
 							'type'  => 'array',
@@ -132,7 +142,21 @@ class Update_Post_Seo extends Ability_Base {
 			);
 		}
 
-		( new Metabox_Manager() )->save_seo_fields( $post_id, $fields );
+		$manager = new Metabox_Manager();
+		$manager->save_seo_fields( $post_id, $fields );
+
+		// Everything else is stored unconditionally; the redirect can be
+		// refused (no Pro, plain permalinks, a destination that is this post's
+		// own URL). Reporting success for a redirect that was not written would
+		// leave the caller believing the site now redirects when it does not.
+		$redirect_error = $manager->get_last_redirect_error();
+		if ( null !== $redirect_error ) {
+			return new \WP_Error(
+				$redirect_error->get_error_code(),
+				$redirect_error->get_error_message(),
+				[ 'status' => 400 ]
+			);
+		}
 
 		return [
 			'success' => true,
@@ -155,6 +179,7 @@ class Update_Post_Seo extends Ability_Base {
 			'title'               => 'thinkrank_seo_title',
 			'description'         => 'thinkrank_meta_description',
 			'canonical_url'       => 'thinkrank_canonical_url',
+			'redirect_url'        => 'thinkrank_redirect_url',
 			'focus_keyword'       => 'thinkrank_focus_keyword',
 			'og_title'            => 'thinkrank_og_title',
 			'og_description'      => 'thinkrank_og_description',
@@ -168,6 +193,13 @@ class Update_Post_Seo extends Ability_Base {
 			if ( array_key_exists( $key, $settings ) ) {
 				$fields[ $field ] = (string) $settings[ $key ];
 			}
+		}
+
+		// Only meaningful alongside a destination: sending a code on its own
+		// would be read by save_object_redirect() as "no redirect submitted"
+		// and dropped, so requiring the pair keeps the payload honest.
+		if ( array_key_exists( 'redirect_type', $settings ) && array_key_exists( 'redirect_url', $settings ) ) {
+			$fields['thinkrank_redirect_type'] = Object_Redirect::normalize_type( $settings['redirect_type'] );
 		}
 
 		if ( array_key_exists( 'focus_keywords', $settings ) && is_array( $settings['focus_keywords'] ) ) {

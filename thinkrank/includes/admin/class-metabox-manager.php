@@ -19,6 +19,7 @@ use ThinkRank\Core\Settings;
 use ThinkRank\Core\Database;
 use ThinkRank\Core\Plan_Config;
 use ThinkRank\SEO\Focus_Keywords;
+use ThinkRank\SEO\Object_Redirect;
 use ThinkRank\SEO\Pattern_Resolver;
 
 // Prevent direct access
@@ -78,6 +79,7 @@ class Metabox_Manager {
         add_action('add_meta_boxes', [$this, 'add_meta_boxes']);
         add_action('save_post', [$this, 'save_meta_boxes'], 10, 2);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_metabox_scripts']);
+        add_action('admin_notices', [$this, 'render_redirect_notice']);
         add_action('init', [$this, 'register_meta_fields']);
 
         // AJAX handlers for meta box functionality
@@ -202,6 +204,24 @@ class Metabox_Manager {
             'single' => true,
             'type' => 'string',
             'sanitize_callback' => [$this, 'sanitize_json_meta_field'],
+            'auth_callback' => function () {
+                return current_user_can('edit_posts') || current_user_can('edit_pages');
+            }
+        ]);
+
+        register_post_meta('', \ThinkRank\SEO\Content_Visibility::SEARCH_META, [
+            'show_in_rest' => true,
+            'single' => true,
+            'type' => 'integer',
+            'auth_callback' => function () {
+                return current_user_can('edit_posts') || current_user_can('edit_pages');
+            }
+        ]);
+
+        register_post_meta('', \ThinkRank\SEO\Content_Visibility::ARCHIVE_META, [
+            'show_in_rest' => true,
+            'single' => true,
+            'type' => 'integer',
             'auth_callback' => function () {
                 return current_user_can('edit_posts') || current_user_can('edit_pages');
             }
@@ -484,7 +504,20 @@ class Metabox_Manager {
             <input type="hidden" id="thinkrank_seo_score" name="thinkrank_seo_score" value="<?php echo esc_attr($existing_metadata['seo_score'] ?? '0'); ?>" />
             <input type="hidden" id="thinkrank_generated_at" name="thinkrank_generated_at" value="<?php echo esc_attr($existing_metadata['generated_at'] ?? ''); ?>" />
             <input type="hidden" id="thinkrank_pillar_content" name="thinkrank_pillar_content" value="<?php echo esc_attr($existing_metadata['pillar_content'] ?? ''); ?>" />
+            <input type="hidden" id="thinkrank_exclude_from_search" name="thinkrank_exclude_from_search" value="<?php echo esc_attr((string) ($existing_metadata['exclude_from_search'] ?? '')); ?>" />
+            <input type="hidden" id="thinkrank_exclude_from_archives" name="thinkrank_exclude_from_archives" value="<?php echo esc_attr((string) ($existing_metadata['exclude_from_archives'] ?? '')); ?>" />
             <input type="hidden" id="thinkrank_canonical_url" name="thinkrank_canonical_url" value="<?php echo esc_url($existing_metadata['canonical_url'] ?? ''); ?>" />
+            <?php
+            // The redirect lives in Pro's rules table, not post meta, so nothing
+            // else hands it to the React app. Without these the field loads
+            // empty, and its own hidden input then posts that empty value on the
+            // next save, which Object_Redirect reads as "remove the redirect".
+            // Rendered only when a provider can store it, matching MetaboxApp.
+            if (Object_Redirect::is_supported()) :
+                ?>
+            <input type="hidden" id="thinkrank_redirect_url" name="thinkrank_redirect_url" value="<?php echo esc_attr((string) ($existing_metadata['redirect_url'] ?? '')); ?>" />
+            <input type="hidden" id="thinkrank_redirect_type" name="thinkrank_redirect_type" value="<?php echo esc_attr((string) ($existing_metadata['redirect_type'] ?? Object_Redirect::DEFAULT_TYPE)); ?>" />
+            <?php endif; ?>
             <input type="hidden" id="thinkrank_robots_meta_enabled" name="thinkrank_robots_meta_enabled" value="<?php echo esc_attr((string) ($existing_metadata['robots_meta_enabled'] ?? '0')); ?>" />
             <input type="hidden" id="thinkrank_robots_meta" name="thinkrank_robots_meta" value="<?php echo esc_attr((string) ($existing_metadata['robots_meta'] ?? '')); ?>" />
             <input type="hidden" id="thinkrank_advanced_robots_meta" name="thinkrank_advanced_robots_meta" value="<?php echo esc_attr((string) ($existing_metadata['advanced_robots_meta'] ?? '')); ?>" />
@@ -533,6 +566,14 @@ class Metabox_Manager {
         // the shared persistence routine.
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above
         $this->persist_metadata($post_id, wp_unslash($_POST));
+
+        // The redirect is the one field here that can be refused outright. The
+        // response to this request is a redirect back to the editor, so the
+        // reason has to survive one page load to be seen at all.
+        $redirect_error = $this->get_last_redirect_error();
+        if (null !== $redirect_error) {
+            $this->store_redirect_error($redirect_error);
+        }
     }
 
     /**
@@ -583,6 +624,8 @@ class Metabox_Manager {
             'thinkrank_seo_score' => 'absint',
             'thinkrank_generated_at' => 'sanitize_text_field',
             'thinkrank_pillar_content' => 'sanitize_text_field',
+            'thinkrank_exclude_from_search' => 'sanitize_text_field',
+            'thinkrank_exclude_from_archives' => 'sanitize_text_field',
         ];
 
         // Focus keywords: prefer the JSON array field; fall back to the legacy
@@ -624,6 +667,8 @@ class Metabox_Manager {
             }
         }
 
+        $this->last_redirect_error = $this->save_object_redirect('post', $post_id, $src);
+
         foreach ($fields as $field => $sanitize_callback) {
             if (isset($src[$field])) {
                 $value = call_user_func($sanitize_callback, $src[$field]);
@@ -632,6 +677,7 @@ class Metabox_Manager {
         }
 
         $this->save_robots_meta($post_id, $src);
+        $this->save_visibility_meta($post_id, $src);
         $this->save_social_meta($post_id, $src);
 
         // Update last modified timestamp
@@ -808,6 +854,41 @@ class Metabox_Manager {
 
 
     /**
+     * Save the per-post listing-visibility switches.
+     *
+     * Stored as 1 or deleted rather than 1/0: the excluded set is read with a
+     * `meta_value = '1'` query, so a row holding 0 would be dead weight on every
+     * post anyone ever unticked. Deleting keeps the postmeta table proportional
+     * to the number of posts actually hidden.
+     *
+     * @since 2.7.0
+     *
+     * @param int   $post_id Post being saved.
+     * @param array $src     Submitted fields.
+     * @return void
+     */
+    private function save_visibility_meta(int $post_id, array $src): void {
+        $fields = [
+            'thinkrank_exclude_from_search'   => \ThinkRank\SEO\Content_Visibility::SEARCH_META,
+            'thinkrank_exclude_from_archives' => \ThinkRank\SEO\Content_Visibility::ARCHIVE_META,
+        ];
+
+        foreach ($fields as $field => $meta_key) {
+            if (!isset($src[$field])) {
+                continue;
+            }
+
+            if ((bool) $src[$field]) {
+                update_post_meta($post_id, $meta_key, 1);
+            } else {
+                delete_post_meta($post_id, $meta_key);
+            }
+        }
+
+        \ThinkRank\SEO\Content_Visibility::flush();
+    }
+
+    /**
      * Enqueue meta box scripts
      *
      * @param string $hook Current admin page hook
@@ -941,6 +1022,11 @@ JS;
             'linkSuggestionsEnabled' => $this->is_link_suggestions_enabled($post_type),
             'postStatus' => get_post_status($post_id),
             'isPro' => Plan_Config::is_pro(),
+            // Whether a provider (Pro's Redirections feature) can actually store
+            // a redirect. False renders the field as an upsell rather than an
+            // input that accepts text nothing will ever act on.
+            'redirectSupported' => Object_Redirect::is_supported(),
+            'redirectTypes' => Object_Redirect::TYPES,
             /**
              * Filter the editor SEO panel's post-load refresh behaviour.
              *
@@ -1135,12 +1221,137 @@ JS;
     }
 
     /**
+     * Transient holding the last redirect error for the current user.
+     */
+    private const REDIRECT_ERROR_TRANSIENT = 'thinkrank_redirect_error_';
+
+    /**
+     * Why the redirect field was refused on the most recent persist, if it was.
+     *
+     * @var \WP_Error|null
+     */
+    private ?\WP_Error $last_redirect_error = null;
+
+    /**
+     * Persist the edit-screen redirect field.
+     *
+     * Absent keys are left alone, so a caller that never rendered the field
+     * (the AJAX save from an editor that submits a subset, an import) cannot
+     * clear a redirect by omission.
+     *
+     * The destination is not post meta — Pro's rules table holds it — so unlike
+     * every other field here this save can fail for reasons the editor needs to
+     * hear about: no Pro, plain permalinks, a destination that is the page's own
+     * URL. Failing silently would be the worst of both, since the field would
+     * redisplay empty on the next load with no explanation, so the reason is
+     * stashed for the notice rendered on the next screen.
+     *
+     * @param string $object_type 'post' or 'term'.
+     * @param int    $object_id   Object ID.
+     * @param array  $src         Field name => raw value map.
+     * @return void
+     */
+    private function save_object_redirect(string $object_type, int $object_id, array $src): ?\WP_Error {
+        if (!array_key_exists('thinkrank_redirect_url', $src)) {
+            return null;
+        }
+
+        $url = (string) $src['thinkrank_redirect_url'];
+
+        // With no provider there is nothing to store and nothing to clear.
+        // Staying quiet when the field was submitted empty keeps every ordinary
+        // save on a free site from raising an error about a field the editor
+        // never touched.
+        if (!Object_Redirect::is_supported()) {
+            if ('' !== trim($url)) {
+                return new \WP_Error(
+                    'thinkrank_redirect_unsupported',
+                    __('Redirects require ThinkRank Pro with the Redirections feature active.', 'thinkrank')
+                );
+            }
+            return null;
+        }
+
+        $type = array_key_exists('thinkrank_redirect_type', $src)
+            ? $src['thinkrank_redirect_type']
+            : Object_Redirect::DEFAULT_TYPE;
+
+        $result = Object_Redirect::save($object_type, $object_id, $url, $type);
+
+        return is_wp_error($result) ? $result : null;
+    }
+
+    /**
+     * Why the last persist_metadata() call could not store the redirect.
+     *
+     * Every other metabox field either saves or is sanitized into something
+     * that does; this one can be refused, and each caller reports that
+     * differently — a notice for the form post, a JSON field for the AJAX save,
+     * an error message for the MCP ability.
+     *
+     * @return \WP_Error|null
+     */
+    public function get_last_redirect_error(): ?\WP_Error {
+        return $this->last_redirect_error;
+    }
+
+    /**
+     * Remember why a redirect could not be saved, for the next admin screen.
+     *
+     * @param \WP_Error $error Failure.
+     * @return void
+     */
+    private function store_redirect_error(\WP_Error $error): void {
+        $user_id = get_current_user_id();
+        if ($user_id <= 0) {
+            return;
+        }
+
+        set_transient(self::REDIRECT_ERROR_TRANSIENT . $user_id, $error->get_error_message(), MINUTE_IN_SECONDS);
+    }
+
+    /**
+     * Show, once, why the last redirect save failed.
+     *
+     * @return void
+     */
+    public function render_redirect_notice(): void {
+        $user_id = get_current_user_id();
+        if ($user_id <= 0) {
+            return;
+        }
+
+        $key     = self::REDIRECT_ERROR_TRANSIENT . $user_id;
+        $message = get_transient($key);
+
+        if (!is_string($message) || '' === $message) {
+            return;
+        }
+
+        delete_transient($key);
+
+        printf(
+            '<div class="notice notice-error is-dismissible"><p>%s</p></div>',
+            esc_html(
+                sprintf(
+                    /* translators: %s: reason the redirect was not saved. */
+                    __('ThinkRank could not save the redirect: %s', 'thinkrank'),
+                    $message
+                )
+            )
+        );
+    }
+
+    /**
      * Get existing post metadata
      *
      * @param int $post_id Post ID
      * @return array Existing metadata
      */
     public function get_post_metadata(int $post_id): array {
+        // One lookup: get() goes through a filter Pro answers from the database.
+        $redirect = Object_Redirect::get('post', $post_id);
+
         return [
             'title' => get_post_meta($post_id, '_thinkrank_seo_title', true),
             'description' => get_post_meta($post_id, '_thinkrank_meta_description', true),
@@ -1149,7 +1360,13 @@ JS;
             'seo_score' => get_post_meta($post_id, '_thinkrank_seo_score', true),
             'generated_at' => get_post_meta($post_id, '_thinkrank_generated_at', true),
             'pillar_content' => get_post_meta($post_id, '_thinkrank_pillar_content', true),
+            'exclude_from_search' => get_post_meta($post_id, \ThinkRank\SEO\Content_Visibility::SEARCH_META, true),
+            'exclude_from_archives' => get_post_meta($post_id, \ThinkRank\SEO\Content_Visibility::ARCHIVE_META, true),
             'canonical_url' => get_post_meta($post_id, '_thinkrank_canonical_url', true),
+            // Not post meta: the rule in Pro's redirections table is the value.
+            // See ThinkRank\SEO\Object_Redirect.
+            'redirect_url' => $redirect['url'],
+            'redirect_type' => $redirect['type'],
             'robots_meta_enabled' => get_post_meta($post_id, '_thinkrank_robots_meta_enabled', true),
             'robots_meta' => get_post_meta($post_id, '_thinkrank_robots_meta', true),
             'advanced_robots_meta' => get_post_meta($post_id, '_thinkrank_advanced_robots_meta', true),
@@ -1255,7 +1472,9 @@ JS;
         $content = wp_strip_all_tags($content);
         $content = preg_replace('/\s+/', ' ', $content);
 
-        return trim(substr($content, 0, 4000));
+        // substr() counts BYTES: on Thai or CJK this handed the model a third
+        // of the intended content and cut the last character in half (#687).
+        return trim(\ThinkRank\Core\Seo_Text::trim_to_length($content, 4000));
     }
 
     /**
@@ -1318,6 +1537,20 @@ JS;
 
         // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; each field sanitized inside persist_metadata()
         $this->persist_metadata($post_id, wp_unslash($_POST));
+
+        // Everything else saved; only the redirect can have been refused. Report
+        // it in this response rather than as a notice on some later screen —
+        // this caller never reloads the page.
+        $redirect_error = $this->get_last_redirect_error();
+        if (null !== $redirect_error) {
+            wp_send_json_error([
+                'message' => sprintf(
+                    /* translators: %s: reason the redirect was not saved. */
+                    __('Saved, except the redirect: %s', 'thinkrank'),
+                    $redirect_error->get_error_message()
+                ),
+            ], 400);
+        }
 
         wp_send_json_success([
             'message' => __('SEO settings saved successfully!', 'thinkrank'),

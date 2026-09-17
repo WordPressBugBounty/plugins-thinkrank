@@ -418,6 +418,21 @@ class Builder_Content {
      * @param int $post_id Post being resolved.
      * @return array<int,mixed> Elements, or [] when Bricks renders nothing here.
      */
+    /**
+     * The builder meta keys, for callers that need to inspect the raw storage
+     * rather than the text extracted from it.
+     *
+     * The SEO Analyzer reads these to answer "is there a ThinkRank FAQ element
+     * on this post?", which is a question about the stored tree, not about the
+     * words in it (#686).
+     *
+     * @since 2.7.0
+     * @return string[]
+     */
+    public static function builder_meta_keys(): array {
+        return self::BUILDER_META_KEYS;
+    }
+
     public static function bricks_tree(int $post_id): array {
         if (array_key_exists($post_id, self::$bricks_trees)) {
             return self::$bricks_trees[$post_id];

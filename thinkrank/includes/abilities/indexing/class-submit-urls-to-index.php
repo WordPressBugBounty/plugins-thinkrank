@@ -41,6 +41,10 @@ class Submit_Urls_To_Index extends Ability_Base {
 	public function get_annotations() {
 		return [
 			'readonly'      => false,
+			// Deliberately kept. This calls the external IndexNow API, and a URL
+			// announced to a search engine cannot be un-announced — the one
+			// thing on the free surface that genuinely cannot be undone from
+			// inside ThinkRank, which is what `destructive` is for (#675).
 			'destructive'   => true,
 			'idempotent'    => false,
 			'priority'      => 2.0,

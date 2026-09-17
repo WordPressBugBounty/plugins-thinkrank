@@ -945,7 +945,7 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
                     $recent_posts = get_posts(['numberposts' => 3]);
                     $content_parts = [];
                     foreach ($recent_posts as $post) {
-                        $content_parts[] = $post->post_title . ' ' . wp_trim_words($post->post_content, 100);
+                        $content_parts[] = $post->post_title . ' ' . \ThinkRank\Core\Seo_Text::trim_words($post->post_content, 100, '...', 1000);
                     }
                     $content = implode(' ', $content_parts);
                 }

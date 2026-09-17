@@ -75,7 +75,7 @@ final class Settings_Key_Map {
 			'site_name'                => self::string( __( 'Official name of the site, used in titles and schema.', 'thinkrank' ) ),
 			'site_description'         => self::string( __( 'Short description of the site.', 'thinkrank' ) ),
 			'tagline'                  => self::string( __( 'Site tagline.', 'thinkrank' ) ),
-			'alternate_name'           => self::string( __( 'Alternate or former name of the site, published as schema alternateName.', 'thinkrank' ) ),
+			'alternate_name'           => self::alternate_name(),
 			'identity_type'            => self::string( __( 'What the site is, e.g. "blog", "business", "portfolio".', 'thinkrank' ) ),
 			'represents'               => self::string( __( 'Whether the site represents a "person" or an "organization".', 'thinkrank' ) ),
 			'default_meta_description' => self::string( __( 'Meta description used where no more specific one is set.', 'thinkrank' ) ),
@@ -136,7 +136,18 @@ final class Settings_Key_Map {
 
 			// Indexing.
 			'allow_search_engines'     => self::boolean( __( 'Whether search engines are allowed to index the site.', 'thinkrank' ) ),
+			'query_protection'         => self::boolean( __( 'Whether a URL whose content selector resolved to nothing (for example ?post_type=nosuchtype) answers 404 instead of serving the blog listing at 200.', 'thinkrank' ) ),
+			'canonical_scheme'         => [
+				'type'        => 'string',
+				'description' => __( 'Scheme for canonical URLs, og:url, schema @ids and sitemap entries. "automatic" follows WordPress; the other two override it, for a site behind a proxy that terminates TLS and leaves WordPress reporting the wrong scheme.', 'thinkrank' ),
+				'enum'        => \ThinkRank\SEO\Url_Scheme::MODES,
+			],
 			'robots_txt_enabled'       => self::boolean( __( 'Whether ThinkRank manages robots.txt. Its contents are set with thinkrank/update-robots-txt.', 'thinkrank' ) ),
+
+			// RSS feeds.
+			'feed_excerpt_only'        => self::boolean( __( 'Whether feed entries are shortened to an excerpt instead of carrying the full post.', 'thinkrank' ) ),
+			'feed_source_link'         => self::boolean( __( 'Whether each feed entry is signed with a link back to the original post and the site.', 'thinkrank' ) ),
+			'feed_noindex'             => self::boolean( __( 'Whether feeds are served with X-Robots-Tag: noindex. Leave off for a podcast feed, which needs to be indexable.', 'thinkrank' ) ),
 			'ai_crawler_rules'         => self::ai_crawler_rules(),
 		];
 	}
@@ -160,6 +171,12 @@ final class Settings_Key_Map {
 			'custom_url_pattern'         => self::string( __( 'Filename pattern for generated sitemaps, e.g. "sitemap-{type}.xml".', 'thinkrank' ) ),
 			'enable_styling'             => self::boolean( __( 'Whether an XSL stylesheet is attached so the sitemap is readable in a browser.', 'thinkrank' ) ),
 			'ping_search_engines'        => self::boolean( __( 'Whether search engines are notified after the sitemap is regenerated.', 'thinkrank' ) ),
+
+			// How the styled sitemap looks. All four need enable_styling on.
+			'styling_logo'               => self::boolean( __( 'Whether a logo is shown above the sitemap heading. Requires enable_styling.', 'thinkrank' ) ),
+			'styling_logo_url'           => self::string( __( 'URL of the sitemap logo image. Empty falls back to the site icon.', 'thinkrank' ) ),
+			'styling_color_main'         => self::string( __( 'Hex colour ("#rrggbb") for the sitemap header, links and table head. Empty keeps the stock palette.', 'thinkrank' ) ),
+			'styling_color_accent'       => self::string( __( 'Hex colour ("#rrggbb") for the header gradient end and link hovers. Empty keeps the stock palette.', 'thinkrank' ) ),
 
 			// What goes in.
 			'include_posts'              => self::boolean( __( 'Whether posts are included.', 'thinkrank' ) ),
@@ -193,7 +210,19 @@ final class Settings_Key_Map {
 		foreach ( $properties as $key => $property ) {
 			$value = $stored[ $key ] ?? null;
 
-			switch ( $property['type'] ) {
+			$type = $property['type'] ?? 'string';
+
+			// A union type ('string' or a list of them) keeps whichever shape
+			// it arrived in: casting to string would flatten a list, and
+			// casting to array would replace a name with [] (#692).
+			if ( is_array( $type ) ) {
+				$out[ $key ] = is_array( $value )
+					? array_values( array_map( 'strval', $value ) )
+					: (string) ( $value ?? '' );
+				continue;
+			}
+
+			switch ( $type ) {
 				case 'boolean':
 					$out[ $key ] = (bool) $value;
 					break;
@@ -234,7 +263,19 @@ final class Settings_Key_Map {
 
 			$value = $incoming[ $key ];
 
-			switch ( $property['type'] ) {
+			$type = $property['type'] ?? 'string';
+
+			// A union type ('string' or a list of them) keeps whichever shape
+			// it arrived in: casting to string would flatten a list, and
+			// casting to array would replace a name with [] (#692).
+			if ( is_array( $type ) ) {
+				$out[ $key ] = is_array( $value )
+					? array_values( array_map( 'strval', $value ) )
+					: (string) ( $value ?? '' );
+				continue;
+			}
+
+			switch ( $type ) {
 				case 'boolean':
 					$out[ $key ] = (bool) $value;
 					break;
@@ -347,6 +388,28 @@ final class Settings_Key_Map {
 	 * @param string $description Translated text describing what the toggle does.
 	 * @return array<string, mixed>
 	 */
+	/**
+	 * The site's alternate name, as one value or several.
+	 *
+	 * schema.org and Google both allow `alternateName` to carry a list, and the
+	 * store already round-trips either shape, so the schema says so rather than
+	 * forcing a caller to pick one name and drop the rest (#692).
+	 *
+	 * @since 2.7.0
+	 * @return array<string, mixed>
+	 */
+	private static function alternate_name(): array {
+		return [
+			// A union rather than anyOf: read() and coerce() switch on `type`,
+			// and an entry without one is dropped as unrecognised. WordPress's
+			// schema validator accepts a type list, so this is both valid JSON
+			// Schema and legible to this file's own consumers.
+			'type'        => [ 'string', 'array' ],
+			'items'       => [ 'type' => 'string' ],
+			'description' => __( 'Alternate or former name of the site, published as schema alternateName on the homepage WebSite node. Send a string for one name, or an array for several. Blank entries and duplicates are dropped, and a single surviving name is published as a string.', 'thinkrank' ),
+		];
+	}
+
 	private static function boolean( string $description ): array {
 		return [
 			'type'        => 'boolean',

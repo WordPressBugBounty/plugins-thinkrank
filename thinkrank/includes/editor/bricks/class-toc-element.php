@@ -188,7 +188,13 @@ class TOC_Element extends \Bricks\Element {
 
         echo $output; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 
-        $this->render_builder_script($uid, $max_level, !empty($settings['outputSchema']));
+        // Built client-side, so it bypasses Schema_Graph and the block filter
+        // and kept publishing an ItemList with Schema switched off (#688).
+        $schema = !empty($settings['outputSchema'])
+            && (!class_exists('ThinkRank\\Frontend\\Schema_Graph')
+                || \ThinkRank\Frontend\Schema_Graph::output_allowed());
+
+        $this->render_builder_script($uid, $max_level, $schema);
     }
 
     /**
