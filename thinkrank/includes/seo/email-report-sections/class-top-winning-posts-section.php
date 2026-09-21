@@ -1,6 +1,6 @@
 <?php
 /**
- * Top Winning Posts Section
+ * Top Winning Posts Section — "Top growing pages".
  *
  * Pages with the largest click gain vs the previous period, computed from
  * the shared current-vs-previous comparison the Data Provider builds from
@@ -28,7 +28,7 @@ final class Top_Winning_Posts_Section implements Email_Report_Section_Interface 
     }
 
     public function label(): string {
-        return __('Top Winning Posts', 'thinkrank');
+        return __('Top growing pages', 'thinkrank');
     }
 
     public function default_enabled(): bool {
@@ -37,6 +37,10 @@ final class Top_Winning_Posts_Section implements Email_Report_Section_Interface 
 
     public function requires_capability(): ?string {
         return null;
+    }
+
+    public function renders_own_heading(): bool {
+        return true;
     }
 
     public function collect(array $context): array {
@@ -67,13 +71,24 @@ final class Top_Winning_Posts_Section implements Email_Report_Section_Interface 
         ];
     }
 
+    public function has_data(array $payload): bool {
+        return !empty($payload['rows']);
+    }
+
     public function render(array $payload): string {
-        return Top_Posts_Renderer::render($payload['rows'] ?? [], 'gain');
+        $rows = Top_Posts_Renderer::page_rows($payload['rows'] ?? []);
+        if ($rows === []) {
+            return '';
+        }
+        return Email_Report_Html::heading(
+            $this->label(),
+            __('Pages that gained the most clicks vs the previous period', 'thinkrank')
+        )
+            . Email_Report_Html::list_rows($rows, 'up')
+            . Email_Report_Html::link(__('See all pages', 'thinkrank'), Email_Report_Html::admin_link('analytics', 'dashboard'));
     }
 
     public function fallback_html(): string {
-        return '<p style="color:#6b7280;font-style:italic;">'
-            . esc_html__('Search Console data unavailable. Connect Search Console to see your winning posts.', 'thinkrank')
-            . '</p>';
+        return '';
     }
 }

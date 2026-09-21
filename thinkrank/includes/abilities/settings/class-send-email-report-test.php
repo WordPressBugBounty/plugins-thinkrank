@@ -76,7 +76,7 @@ class Send_Email_Report_Test extends Ability_Base {
 				'message' => [ 'type' => 'string' ],
 				'result'  => [
 					'type'                 => 'object',
-					'description'          => __( 'Raw generator result (send status, error, or skip reason).', 'thinkrank' ),
+					'description'          => __( 'Raw generator result: send status, error or skip reason, and not_connected (true when the test went out as the "connect Search Console" email because Google Search Console is not connected).', 'thinkrank' ),
 					'additionalProperties' => true,
 				],
 			],
@@ -120,7 +120,9 @@ class Send_Email_Report_Test extends Ability_Base {
 
 		return [
 			'success' => true,
-			'message' => __( 'Test email report sent.', 'thinkrank' ),
+			'message' => ! empty( $result['not_connected'] )
+				? __( 'Test email sent. Google Search Console is not connected, so it explains how to connect rather than showing a report; scheduled reports are paused until then.', 'thinkrank' )
+				: __( 'Test email report sent.', 'thinkrank' ),
 			'result'  => $result,
 		];
 	}

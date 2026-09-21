@@ -27,6 +27,8 @@ use ThinkRank\SEO\Email_Report_Sections\Top_Winning_Posts_Section;
 use ThinkRank\SEO\Email_Report_Sections\Top_Losing_Posts_Section;
 use ThinkRank\SEO\Email_Report_Sections\Top_Winning_Keywords_Section;
 use ThinkRank\SEO\Email_Report_Sections\Top_Losing_Keywords_Section;
+use ThinkRank\SEO\Email_Report_Sections\Site_Traffic_Section;
+use ThinkRank\SEO\Email_Report_Sections\Ai_Search_Section;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -69,6 +71,7 @@ final class Email_Report_Manager {
     private function require_files(): void {
         $base = THINKRANK_PLUGIN_DIR . 'includes/seo/email-report-sections/';
         require_once $base . 'interface-email-report-section.php';
+        require_once $base . 'class-email-report-html.php';
         require_once $base . 'class-top-posts-renderer.php';
         require_once $base . 'class-key-metrics-section.php';
         require_once $base . 'class-position-summary-section.php';
@@ -76,6 +79,8 @@ final class Email_Report_Manager {
         require_once $base . 'class-top-losing-posts-section.php';
         require_once $base . 'class-top-winning-keywords-section.php';
         require_once $base . 'class-top-losing-keywords-section.php';
+        require_once $base . 'class-site-traffic-section.php';
+        require_once $base . 'class-ai-search-section.php';
 
         // Defaults config is procedural — load eagerly.
         require_once THINKRANK_PLUGIN_DIR . 'includes/config/email-report-settings-config.php';
@@ -97,12 +102,16 @@ final class Email_Report_Manager {
     }
 
     private function register_default_sections(): void {
+        // Registration order is render order: the hero, what grew, what
+        // fell, where things rank, then the optional GA4 and AI cards.
         $this->registry->register(new Key_Metrics_Section());
-        $this->registry->register(new Position_Summary_Section());
         $this->registry->register(new Top_Winning_Posts_Section());
-        $this->registry->register(new Top_Losing_Posts_Section());
         $this->registry->register(new Top_Winning_Keywords_Section());
+        $this->registry->register(new Top_Losing_Posts_Section());
         $this->registry->register(new Top_Losing_Keywords_Section());
+        $this->registry->register(new Position_Summary_Section());
+        $this->registry->register(new Site_Traffic_Section());
+        $this->registry->register(new Ai_Search_Section());
     }
 
     private function register_extension_sections(): void {
@@ -134,5 +143,9 @@ final class Email_Report_Manager {
 
     public function scheduler(): Email_Report_Scheduler {
         return $this->scheduler;
+    }
+
+    public function data_provider(): Email_Report_Data_Provider {
+        return $this->data_provider;
     }
 }

@@ -38,8 +38,12 @@ final class Email_Report_Mailer {
 
     /**
      * Subject line when nothing filters it.
+     *
+     * `%headline%` is the report's own summary — "12,480 Google clicks
+     * (+12.4%) in the last 30 days" — supplied by the generator (#742). A
+     * subject that carries the number gets opened; a label does not.
      */
-    public const DEFAULT_SUBJECT = '%site_title% SEO performance report';
+    public const DEFAULT_SUBJECT = '%site_title%: %headline%';
 
     /**
      * Send a rendered email report.
@@ -122,10 +126,15 @@ final class Email_Report_Mailer {
         }
 
         $defaults = [
-            '%site_title%' => (string) get_bloginfo('name'),
-            '%site_url%'   => (string) home_url(),
-            '%date%'       => wp_date(get_option('date_format', 'Y-m-d')),
-            '%period%'     => (string) ($tokens['%period%'] ?? ''),
+            '%site_title%'    => (string) get_bloginfo('name'),
+            '%site_url%'      => (string) home_url(),
+            '%date%'          => wp_date(get_option('date_format', 'Y-m-d')),
+            '%period%'        => (string) ($tokens['%period%'] ?? ''),
+            '%headline%'      => __('SEO performance report', 'thinkrank'),
+            '%clicks%'        => '',
+            '%clicks_change%' => '',
+            '%impressions%'   => '',
+            '%period_days%'   => '',
         ];
 
         $merged = array_merge($defaults, $tokens);

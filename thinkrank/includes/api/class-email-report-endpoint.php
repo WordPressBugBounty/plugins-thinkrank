@@ -84,8 +84,11 @@ final class Email_Report_Endpoint extends WP_REST_Controller {
     /**
      * GET /email-report/config
      *
-     * Returns the resolved config (on/off, frequency, recipients, sections)
-     * along with the section catalog and the next scheduled run.
+     * Returns the resolved config (on/off, frequency, recipients, sections,
+     * last skip reason) along with the section catalog, the next scheduled
+     * run and the readiness of the data sources — whether Search Console is
+     * connected, so the panel can say a report is paused rather than let it
+     * look healthy (#742).
      */
     public function get_config(WP_REST_Request $request): WP_REST_Response {
         $manager = $this->resolve_manager();
@@ -96,9 +99,10 @@ final class Email_Report_Endpoint extends WP_REST_Controller {
         }
 
         return new WP_REST_Response([
-            'config'   => $manager->config()->get(),
-            'sections' => $manager->registry()->describe_for_ui(),
-            'next_run' => $manager->scheduler()->next_run_iso(),
+            'config'    => $manager->config()->get(),
+            'sections'  => $manager->registry()->describe_for_ui(),
+            'next_run'  => $manager->scheduler()->next_run_iso(),
+            'readiness' => $manager->data_provider()->readiness(),
         ]);
     }
 
@@ -122,9 +126,10 @@ final class Email_Report_Endpoint extends WP_REST_Controller {
         $saved = $manager->config()->save($input);
 
         return new WP_REST_Response([
-            'success'  => true,
-            'config'   => $saved,
-            'next_run' => $manager->scheduler()->next_run_iso(),
+            'success'   => true,
+            'config'    => $saved,
+            'next_run'  => $manager->scheduler()->next_run_iso(),
+            'readiness' => $manager->data_provider()->readiness(),
         ]);
     }
 
@@ -144,8 +149,11 @@ final class Email_Report_Endpoint extends WP_REST_Controller {
 
         $status = !empty($result['success']) ? 200 : 400;
         return new WP_REST_Response([
-            'success' => (bool) ($result['success'] ?? false),
-            'result'  => $result,
+            'success'       => (bool) ($result['success'] ?? false),
+            // True when the test went out as the "connect Search Console"
+            // email rather than a report, so the panel can say so.
+            'not_connected' => !empty($result['not_connected']),
+            'result'        => $result,
         ], $status);
     }
 

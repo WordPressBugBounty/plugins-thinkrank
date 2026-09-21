@@ -37,7 +37,7 @@ class Preview_Seo_Import extends Ability_Base {
 	 *
 	 * @var string[]
 	 */
-	private const ALLOWED_PLUGINS = [ 'yoast', 'rankmath', 'seopress', 'aioseo' ];
+	private const ALLOWED_PLUGINS = [ 'yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly' ];
 
 	/**
 	 * Data types exported before previewing, in pipeline order.
@@ -146,7 +146,7 @@ class Preview_Seo_Import extends Ability_Base {
 		if ( ! in_array( $plugin, self::ALLOWED_PLUGINS, true ) ) {
 			return new \WP_Error(
 				'thinkrank_invalid_import_plugin',
-				__( 'A supported source plugin is required (yoast, rankmath, seopress, aioseo).', 'thinkrank' ),
+				__( 'A supported source plugin is required (yoast, rankmath, seopress, aioseo, squirrly).', 'thinkrank' ),
 				[ 'status' => 400 ]
 			);
 		}
@@ -280,6 +280,8 @@ class Preview_Seo_Import extends Ability_Base {
 				return new SEOPress_Exporter();
 			case 'aioseo':
 				return new AIOSEO_Exporter();
+			case 'squirrly':
+				return new Squirrly_Exporter();
 			default:
 				return null;
 		}

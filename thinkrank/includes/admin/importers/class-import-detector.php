@@ -69,6 +69,14 @@ class Import_Detector {
             'option_keys'  => ['aioseo_options'],
             'plugin_files' => ['all-in-one-seo-pack/all_in_one_seo_pack.php', 'all-in-one-seo-pack-pro/all_in_one_seo_pack.php'],
         ],
+        'squirrly' => [
+            'name'         => 'Squirrly SEO',
+            // Squirrly keeps SEO in its own `qss` table, not postmeta (#740);
+            // `_sq_` only covers its few fallback meta keys.
+            'meta_prefix'  => '_sq_',
+            'option_keys'  => ['sq_options'],
+            'plugin_files' => ['squirrly-seo/squirrly.php'],
+        ],
     ];
 
     /**
@@ -169,6 +177,9 @@ class Import_Detector {
         if ($slug === 'aioseo') {
             // AIOSEO uses a custom table
             $counts = $this->detect_aioseo();
+        } elseif ($slug === 'squirrly') {
+            // Squirrly uses a custom table too; the exporter classifies rows.
+            $counts = $this->detect_squirrly();
         } else {
             // Standard postmeta-based plugins
             $prefix = $config['meta_prefix'];
@@ -304,6 +315,26 @@ class Import_Detector {
                 $counts['redirections'] = $redirects;
             }
         }
+        // Squirrly's Advanced Pack redirects are counted by the exporter in
+        // detect_squirrly(), since only its `url` actions are redirects.
+
+        return $counts;
+    }
+
+    /**
+     * Detect Squirrly SEO data (custom `qss` table + Advanced Pack redirects).
+     *
+     * Delegated to the exporter: the table mixes posts, terms, author
+     * profiles and the homepage, and only the exporter knows how to tell
+     * them apart from the serialized `post` column.
+     *
+     * @return array Counts array
+     */
+    private function detect_squirrly(): array {
+        $exporter = new Squirrly_Exporter();
+        $counts = $exporter->get_available_types();
+        // Settings are added by the caller from option_keys.
+        unset($counts['settings']);
 
         return $counts;
     }

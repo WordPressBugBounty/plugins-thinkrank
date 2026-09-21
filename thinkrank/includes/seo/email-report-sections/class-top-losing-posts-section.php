@@ -1,10 +1,11 @@
 <?php
 /**
- * Top Losing Posts Section
+ * Top Losing Posts Section — "Pages losing ground".
  *
  * Pages with the largest click loss vs the previous period, computed from
  * the shared current-vs-previous comparison the Data Provider builds from
- * Search Console (page dimension).
+ * Search Console (page dimension). A page that dropped out of the current
+ * window entirely still appears — the comparison keys off both windows.
  *
  * @package ThinkRank
  * @subpackage SEO\Email_Report_Sections
@@ -28,7 +29,7 @@ final class Top_Losing_Posts_Section implements Email_Report_Section_Interface {
     }
 
     public function label(): string {
-        return __('Top Losing Posts', 'thinkrank');
+        return __('Pages losing ground', 'thinkrank');
     }
 
     public function default_enabled(): bool {
@@ -37,6 +38,10 @@ final class Top_Losing_Posts_Section implements Email_Report_Section_Interface {
 
     public function requires_capability(): ?string {
         return null;
+    }
+
+    public function renders_own_heading(): bool {
+        return true;
     }
 
     public function collect(array $context): array {
@@ -60,6 +65,7 @@ final class Top_Losing_Posts_Section implements Email_Report_Section_Interface {
             ];
         }
 
+        // Biggest click loss first (most negative).
         usort($rows, static fn($a, $b) => $a['change'] <=> $b['change']);
 
         return [
@@ -67,13 +73,24 @@ final class Top_Losing_Posts_Section implements Email_Report_Section_Interface {
         ];
     }
 
+    public function has_data(array $payload): bool {
+        return !empty($payload['rows']);
+    }
+
     public function render(array $payload): string {
-        return Top_Posts_Renderer::render($payload['rows'] ?? [], 'loss');
+        $rows = Top_Posts_Renderer::page_rows($payload['rows'] ?? []);
+        if ($rows === []) {
+            return '';
+        }
+        return Email_Report_Html::heading(
+            $this->label(),
+            __('Worth a look: these pages lost the most clicks vs the previous period', 'thinkrank')
+        )
+            . Email_Report_Html::list_rows($rows, 'down')
+            . Email_Report_Html::link(__('See all pages', 'thinkrank'), Email_Report_Html::admin_link('analytics', 'dashboard'));
     }
 
     public function fallback_html(): string {
-        return '<p style="color:#6b7280;font-style:italic;">'
-            . esc_html__('Search Console data unavailable. Connect Search Console to see your losing posts.', 'thinkrank')
-            . '</p>';
+        return '';
     }
 }

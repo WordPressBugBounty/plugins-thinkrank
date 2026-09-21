@@ -100,6 +100,14 @@ final class Email_Report_Generator {
         $frequency = (int) ($config['frequency_days'] ?? 30);
 
         try {
+            // Is there a report to build? Asked before anything is fetched
+            // (#742). A site without Search Console used to be fetched,
+            // rendered and — before #611 — sent as a column of blanks.
+            $readiness = $this->data_provider->readiness();
+            if (empty($readiness['ready'])) {
+                return $this->handle_not_ready($config, $readiness, $is_test);
+            }
+
             $shared = $this->data_provider->fetch($frequency);
 
             $context = [
@@ -176,11 +184,12 @@ final class Email_Report_Generator {
                     $config['last_sent_at'] ?? null,
                     $this->compute_next_run($frequency)
                 );
+                $this->config->record_skip('no_data');
 
                 return ['success' => false, 'skipped' => 'no_data'];
             }
 
-            $tokens = ['%period%' => $context['period_label']];
+            $tokens = Email_Report_Data_Provider::subject_tokens($shared, $frequency);
             $result = $this->mailer->send($config, $html, $tokens);
 
             if (!$is_test) {
@@ -191,6 +200,7 @@ final class Email_Report_Generator {
                         current_time('mysql'),
                         $this->compute_next_run($frequency)
                     );
+                    $this->config->clear_skip();
                 } else {
                     // A transient mail failure must not cost the user a whole
                     // period, and it must not stamp last_sent_at with a send
@@ -223,6 +233,56 @@ final class Email_Report_Generator {
         } catch (Throwable $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
+    }
+
+    /**
+     * The report cannot be built — Search Console is not connected.
+     *
+     * A scheduled run records the reason for the panel and leaves the
+     * schedule exactly where it is: `next_scheduled_at` stays in the past,
+     * so the hourly tick keeps asking and the first tick after the
+     * connection is made sends the report. No log row is written — there
+     * was no attempt.
+     *
+     * A test send still goes out, as the one-card "connect Search Console"
+     * email, so "Send Test Email" proves delivery and shows the recipient
+     * what to do next instead of a report full of blanks.
+     *
+     * @return array{success:bool,skipped?:string,reason?:string,result?:array,not_connected?:bool}
+     */
+    private function handle_not_ready(array $config, array $readiness, bool $is_test): array {
+        $reason = (string) ($readiness['reason'] ?? 'not_ready');
+
+        if (!$is_test) {
+            $this->config->record_skip($reason);
+            return ['success' => false, 'skipped' => 'not_ready', 'reason' => $reason];
+        }
+
+        $context = [
+            'period_start'  => '',
+            'period_end'    => '',
+            'period_label'  => '',
+            'is_test'       => true,
+            'not_connected' => true,
+            'readiness'     => $readiness,
+            'shared'        => [],
+        ];
+
+        $html   = $this->renderer->render($config, $context);
+        $tokens = [
+            '%period%'   => '',
+            '%headline%' => __('Connect Google Search Console to start your SEO reports', 'thinkrank'),
+        ];
+        $result = $this->mailer->send($config, $html, $tokens);
+
+        do_action('thinkrank_email_report_after_send', $config, $result, true);
+
+        return [
+            'success'       => (bool) ($result['success'] ?? false),
+            'result'        => $result,
+            'not_connected' => true,
+            'reason'        => $reason,
+        ];
     }
 
     /**

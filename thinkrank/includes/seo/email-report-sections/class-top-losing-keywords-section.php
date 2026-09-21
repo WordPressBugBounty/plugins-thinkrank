@@ -1,6 +1,6 @@
 <?php
 /**
- * Top Losing Keywords Section
+ * Top Losing Keywords Section — "Queries losing ground".
  *
  * Queries with the largest click loss vs the previous period, computed from
  * the shared current-vs-previous comparison the Data Provider builds from
@@ -30,7 +30,7 @@ final class Top_Losing_Keywords_Section implements Email_Report_Section_Interfac
     }
 
     public function label(): string {
-        return __('Top Losing Keywords', 'thinkrank');
+        return __('Queries losing ground', 'thinkrank');
     }
 
     public function default_enabled(): bool {
@@ -39,6 +39,10 @@ final class Top_Losing_Keywords_Section implements Email_Report_Section_Interfac
 
     public function requires_capability(): ?string {
         return null;
+    }
+
+    public function renders_own_heading(): bool {
+        return true;
     }
 
     public function collect(array $context): array {
@@ -56,12 +60,13 @@ final class Top_Losing_Keywords_Section implements Email_Report_Section_Interfac
                 continue;
             }
             $rows[] = [
-                'query'    => $entry['query'] ?? '',
+                'query'         => $entry['query'] ?? '',
                 // A keyword that dropped out entirely has no current position.
-                // Keep it null so the renderer shows a dash instead of "0.0".
-                'position' => isset($entry['cur_pos']) ? (float) $entry['cur_pos'] : null,
-                'clicks'   => (int) $entry['cur_clicks'],
-                'change'   => $delta,
+                // Keep it null so the row says so instead of "0.0".
+                'position'      => isset($entry['cur_pos']) ? (float) $entry['cur_pos'] : null,
+                'prev_position' => isset($entry['prev_pos']) ? (float) $entry['prev_pos'] : null,
+                'clicks'        => (int) $entry['cur_clicks'],
+                'change'        => $delta,
             ];
         }
 
@@ -73,13 +78,24 @@ final class Top_Losing_Keywords_Section implements Email_Report_Section_Interfac
         ];
     }
 
+    public function has_data(array $payload): bool {
+        return !empty($payload['rows']);
+    }
+
     public function render(array $payload): string {
-        return Top_Posts_Renderer::render_keywords($payload['rows'] ?? [], 'loss');
+        $rows = Top_Posts_Renderer::keyword_rows($payload['rows'] ?? []);
+        if ($rows === []) {
+            return '';
+        }
+        return Email_Report_Html::heading(
+            $this->label(),
+            __('Worth a look: these search terms lost the most clicks vs the previous period', 'thinkrank')
+        )
+            . Email_Report_Html::list_rows($rows, 'down')
+            . Email_Report_Html::link(__('See all queries', 'thinkrank'), Email_Report_Html::admin_link('analytics', 'keywords'));
     }
 
     public function fallback_html(): string {
-        return '<p style="color:#6b7280;font-style:italic;">'
-            . esc_html__('Search Console data unavailable. Connect Search Console to see top losing keywords.', 'thinkrank')
-            . '</p>';
+        return '';
     }
 }

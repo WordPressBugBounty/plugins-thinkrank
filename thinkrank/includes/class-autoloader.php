@@ -142,6 +142,7 @@ class Autoloader {
             'Content_Brief_Prompts' => 'content-brief-prompts',
             'SEOPress_Exporter' => 'seopress-exporter',
             'AIOSEO_Exporter' => 'aioseo-exporter',
+            'Squirrly_Exporter' => 'squirrly-exporter',
             'Mcp_OAuth' => 'mcp-oauth',
             'Google_OAuth_Proxy' => 'google-oauth-proxy',
         ];

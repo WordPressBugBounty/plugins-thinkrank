@@ -61,7 +61,7 @@ final class Email_Report_Config {
     /**
      * The resolved config every consumer reads.
      *
-     * @return array{enabled: bool, frequency_days: int, recipients: string[], sections_enabled: string[], next_scheduled_at: ?string, last_sent_at: ?string}
+     * @return array{enabled: bool, frequency_days: int, recipients: string[], sections_enabled: string[], next_scheduled_at: ?string, last_sent_at: ?string, last_skip: ?array}
      */
     public function get(): array {
         $this->load_defaults_file();
@@ -71,6 +71,9 @@ final class Email_Report_Config {
             'enabled'           => !empty($stored['enabled']),
             'next_scheduled_at' => $stored['next_scheduled_at'] ?? null,
             'last_sent_at'      => $stored['last_sent_at'] ?? null,
+            // Why the last scheduled run sent nothing, or null. Read by the
+            // panel so a paused report is never mistaken for a healthy one.
+            'last_skip'         => is_array($stored['last_skip'] ?? null) ? $stored['last_skip'] : null,
         ];
 
         $report = [
@@ -183,6 +186,37 @@ final class Email_Report_Config {
             $config['last_sent_at'],
             wp_date('Y-m-d H:i:s', max($next ?: time(), time()))
         );
+    }
+
+    /**
+     * Note why a scheduled run sent nothing (#742).
+     *
+     * `search_console_not_connected` leaves the schedule alone so the next
+     * hourly tick tries again; `no_data` is recorded by the generator after
+     * it has already pushed the schedule out a period. Either way the panel
+     * shows the reason and when it was last seen.
+     *
+     * @param string $reason Machine-readable reason.
+     */
+    public function record_skip(string $reason): void {
+        $stored = $this->stored();
+        $stored['last_skip'] = [
+            'reason' => sanitize_key($reason),
+            'at'     => current_time('mysql'),
+        ];
+        update_option(self::OPTION_KEY, $stored, false);
+    }
+
+    /**
+     * A report went out — whatever paused it earlier no longer applies.
+     */
+    public function clear_skip(): void {
+        $stored = $this->stored();
+        if (!array_key_exists('last_skip', $stored)) {
+            return;
+        }
+        unset($stored['last_skip']);
+        update_option(self::OPTION_KEY, $stored, false);
     }
 
     /**

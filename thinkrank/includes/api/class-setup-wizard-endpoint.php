@@ -82,7 +82,7 @@ class Setup_Wizard_Endpoint extends WP_REST_Controller {
      *
      * @var string[]
      */
-    const MIGRATABLE_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo'];
+    const MIGRATABLE_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly'];
 
     /**
      * Register API routes.

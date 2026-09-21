@@ -1,10 +1,11 @@
 <?php
 /**
- * Top Winning Keywords Section
+ * Top Winning Keywords Section — "Top growing queries".
  *
- * Keywords with the largest click gain vs the previous period, computed
- * from the shared current-vs-previous comparison the Data Provider builds
- * from Search Console.
+ * Queries with the largest click gain vs the previous period, computed from
+ * the shared current-vs-previous comparison the Data Provider builds from
+ * Search Console (query dimension). Ranking is on the click delta; average
+ * position rides along as context.
  *
  * @package ThinkRank
  * @subpackage SEO\Email_Report_Sections
@@ -28,7 +29,7 @@ final class Top_Winning_Keywords_Section implements Email_Report_Section_Interfa
     }
 
     public function label(): string {
-        return __('Top Winning Keywords', 'thinkrank');
+        return __('Top growing queries', 'thinkrank');
     }
 
     public function default_enabled(): bool {
@@ -37,6 +38,10 @@ final class Top_Winning_Keywords_Section implements Email_Report_Section_Interfa
 
     public function requires_capability(): ?string {
         return null;
+    }
+
+    public function renders_own_heading(): bool {
+        return true;
     }
 
     public function collect(array $context): array {
@@ -54,14 +59,14 @@ final class Top_Winning_Keywords_Section implements Email_Report_Section_Interfa
                 continue;
             }
             $rows[] = [
-                'query'    => $entry['query'] ?? '',
-                'position' => isset($entry['cur_pos']) ? (float) $entry['cur_pos'] : null,
-                'clicks'   => (int) $entry['cur_clicks'],
-                'change'   => $delta,
+                'query'         => $entry['query'] ?? '',
+                'position'      => isset($entry['cur_pos']) ? (float) $entry['cur_pos'] : null,
+                'prev_position' => isset($entry['prev_pos']) ? (float) $entry['prev_pos'] : null,
+                'clicks'        => (int) $entry['cur_clicks'],
+                'change'        => $delta,
             ];
         }
 
-        // Biggest click gain first.
         usort($rows, static fn($a, $b) => $b['change'] <=> $a['change']);
 
         return [
@@ -69,13 +74,24 @@ final class Top_Winning_Keywords_Section implements Email_Report_Section_Interfa
         ];
     }
 
+    public function has_data(array $payload): bool {
+        return !empty($payload['rows']);
+    }
+
     public function render(array $payload): string {
-        return Top_Posts_Renderer::render_keywords($payload['rows'] ?? [], 'gain');
+        $rows = Top_Posts_Renderer::keyword_rows($payload['rows'] ?? []);
+        if ($rows === []) {
+            return '';
+        }
+        return Email_Report_Html::heading(
+            $this->label(),
+            __('Search terms that sent more clicks than last period', 'thinkrank')
+        )
+            . Email_Report_Html::list_rows($rows, 'up')
+            . Email_Report_Html::link(__('See all queries', 'thinkrank'), Email_Report_Html::admin_link('analytics', 'keywords'));
     }
 
     public function fallback_html(): string {
-        return '<p style="color:#6b7280;font-style:italic;">'
-            . esc_html__('Search Console data unavailable. Connect Search Console to see top winning keywords.', 'thinkrank')
-            . '</p>';
+        return '';
     }
 }

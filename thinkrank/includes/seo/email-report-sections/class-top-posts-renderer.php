@@ -2,9 +2,9 @@
 /**
  * Top Posts Renderer
  *
- * Shared HTML helper used by Top Winning Posts and Top Losing Posts so
- * both render identically. Not a section itself — purely a stateless
- * presentation helper.
+ * Shared row-shaping helper used by the four growing / losing sections so
+ * pages and queries read the same way in every card. Not a section itself
+ * — purely a stateless presentation helper on top of Email_Report_Html.
  *
  * @package ThinkRank
  * @subpackage SEO\Email_Report_Sections
@@ -22,112 +22,89 @@ if (!defined('ABSPATH')) {
 final class Top_Posts_Renderer {
 
     /**
-     * Render a page table (page, clicks, click change vs previous period).
+     * Shape page entries into list rows: title (resolved from the URL when
+     * it is one of this site's posts), the path underneath, a ±N clicks pill.
      *
-     * @param array  $rows    Each row: ['url'|'page' => string, 'clicks' => int, 'change' => ?int, 'title' => ?string]
-     * @param string $variant 'gain' | 'loss' — controls accent color only.
+     * @param array $rows Each row: ['url' => string, 'clicks' => int, 'change' => int]
+     * @return array<int,array{title:string,subtitle:string,pill:string,href:string}>
      */
-    public static function render(array $rows, string $variant = 'gain'): string {
-        if (empty($rows)) {
-            return '';
-        }
-
-        $accent = $variant === 'loss' ? '#dc2626' : '#16a34a';
-
-        $html = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">';
-        $html .= '<tr>'
-            . self::th(__('Page', 'thinkrank'), 'left')
-            . self::th(__('Clicks', 'thinkrank'), 'right')
-            . self::th(__('Change', 'thinkrank'), 'right')
-            . '</tr>';
-
+    public static function page_rows(array $rows): array {
+        $out = [];
         foreach ($rows as $row) {
             $url = (string) ($row['url'] ?? $row['page'] ?? '');
+            if ($url === '') {
+                continue;
+            }
             $title = (string) ($row['title'] ?? '');
-            $clicks = (int) ($row['clicks'] ?? 0);
-            $display = $title !== '' ? $title : $url;
-
-            $html .= '<tr>'
-                . '<td style="padding:10px;border-bottom:1px solid #f3f4f6;">'
-                . ($url !== ''
-                        ? '<a href="' . esc_url($url) . '" style="color:#111827;text-decoration:none;">' . esc_html($display) . '</a>'
-                        : '<span style="color:#111827;">' . esc_html($display) . '</span>')
-                . '</td>'
-                . '<td style="padding:10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#374151;font:600 13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;">'
-                . esc_html(number_format_i18n($clicks))
-                . '</td>'
-                . self::change_cell($row['change'] ?? null, $accent)
-                . '</tr>';
+            if ($title === '') {
+                $title = Email_Report_Html::page_title($url);
+            }
+            $path = Email_Report_Html::display_path($url);
+            $out[] = [
+                'title'    => $title,
+                'subtitle' => $path !== $title ? $path : '',
+                'pill'     => self::clicks_pill((int) ($row['change'] ?? 0)),
+                'href'     => $url,
+            ];
         }
-
-        $html .= '</table>';
-        return $html;
+        return $out;
     }
 
     /**
-     * Render a keyword table (query, position, clicks, click change).
+     * Shape query entries into list rows: the query, its average position
+     * (and the previous one when it moved), a ±N clicks pill.
      *
-     * @param array  $rows    Each row: ['query' => string, 'position' => ?float, 'clicks' => int, 'change' => ?int]
-     * @param string $variant 'gain' | 'loss'
+     * @param array $rows Each row: ['query' => string, 'position' => ?float, 'prev_position' => ?float, 'change' => int]
+     * @return array<int,array{title:string,subtitle:string,pill:string}>
      */
-    public static function render_keywords(array $rows, string $variant = 'gain'): string {
-        if (empty($rows)) {
-            return '';
-        }
-
-        $accent = $variant === 'loss' ? '#dc2626' : '#16a34a';
-
-        $html = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">';
-        $html .= '<tr>'
-            . self::th(__('Keyword', 'thinkrank'), 'left')
-            . self::th(__('Position', 'thinkrank'), 'right')
-            . self::th(__('Clicks', 'thinkrank'), 'right')
-            . self::th(__('Change', 'thinkrank'), 'right')
-            . '</tr>';
-
+    public static function keyword_rows(array $rows): array {
+        $out = [];
         foreach ($rows as $row) {
             $query = (string) ($row['query'] ?? ($row['keys'][0] ?? ''));
-            // Null position means "no data this period" (e.g. a keyword that
-            // dropped out entirely) — a literal 0.0 would read as rank #1.
-            $position = isset($row['position'])
-                ? number_format_i18n((float) $row['position'], 1)
-                : '—';
-            $clicks = (int) ($row['clicks'] ?? 0);
             if ($query === '') {
                 continue;
             }
-            $html .= '<tr>'
-                . '<td style="padding:10px;border-bottom:1px solid #f3f4f6;color:#111827;">' . esc_html($query) . '</td>'
-                . '<td style="padding:10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#374151;font:600 13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;">' . esc_html($position) . '</td>'
-                . '<td style="padding:10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#374151;">' . esc_html(number_format_i18n($clicks)) . '</td>'
-                . self::change_cell($row['change'] ?? null, $accent)
-                . '</tr>';
+            $out[] = [
+                'title'    => $query,
+                'subtitle' => self::position_line($row['position'] ?? null, $row['prev_position'] ?? null),
+                'pill'     => self::clicks_pill((int) ($row['change'] ?? 0)),
+            ];
         }
-
-        $html .= '</table>';
-        return $html;
+        return $out;
     }
 
     /**
-     * Table header cell.
+     * "Avg. position 9.4 (was 5.1)". A null current position means the query
+     * had no impressions this period — say so rather than print 0.0.
      */
-    private static function th(string $label, string $align): string {
-        return '<th style="text-align:' . esc_attr($align) . ';padding:8px 10px;border-bottom:1px solid #e5e7eb;font:600 12px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">'
-            . esc_html($label) . '</th>';
+    private static function position_line($position, $previous): string {
+        if ($position === null) {
+            return __('No impressions this period', 'thinkrank');
+        }
+        $line = sprintf(
+            /* translators: %s: average position, one decimal. */
+            __('Avg. position %s', 'thinkrank'),
+            number_format_i18n((float) $position, 1)
+        );
+        if ($previous !== null && abs((float) $previous - (float) $position) >= 0.1) {
+            $line .= ' ' . sprintf(
+                /* translators: %s: previous average position, one decimal. */
+                __('(was %s)', 'thinkrank'),
+                number_format_i18n((float) $previous, 1)
+            );
+        }
+        return $line;
     }
 
     /**
-     * Signed click-change cell. Positive renders green with ▲, negative red
-     * with ▼. A null/zero change renders a neutral dash.
+     * "+412 clicks" / "−188 clicks".
      */
-    private static function change_cell($change, string $accent): string {
-        $td = '<td style="padding:10px;border-bottom:1px solid #f3f4f6;text-align:right;font:600 13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;color:%s;">%s</td>';
-
-        if ($change === null || (int) $change === 0) {
-            return sprintf($td, '#9ca3af', '—');
-        }
-        $change = (int) $change;
-        $arrow = $change > 0 ? '▲' : '▼';
-        return sprintf($td, esc_attr($accent), esc_html($arrow . ' ' . number_format_i18n(abs($change))));
+    private static function clicks_pill(int $change): string {
+        $sign = $change < 0 ? '−' : '+';
+        return $sign . sprintf(
+            /* translators: %s: number of clicks. */
+            _n('%s click', '%s clicks', abs($change), 'thinkrank'),
+            number_format_i18n(abs($change))
+        );
     }
 }

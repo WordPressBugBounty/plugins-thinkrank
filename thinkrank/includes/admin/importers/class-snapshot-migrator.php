@@ -96,6 +96,7 @@ class Snapshot_Migrator {
         'image_seo',
         'sitemap_settings',
         'analytics_connected',
+        'focus_pages',
         // Capture-all raw buckets (whole source option sets stored verbatim).
         // They live in the SNAPSHOT — cleanup never touches the snapshot — and
         // a re-export recreates them, so they never block cleanup.
@@ -161,12 +162,34 @@ class Snapshot_Migrator {
 
         $chunk = Snapshot_Store::read_chunk($plugin, $type, $page);
         if ($chunk === null || empty($chunk)) {
+            // An empty chunk is not the end of the type. An exporter that pages
+            // one shared table and then splits the rows by kind writes nothing
+            // for a page whose rows all belonged to another kind — Squirrly
+            // reads the whole `qss` table that way, so a site whose terms and
+            // authors sit past the first page of posts has an empty chunk 1 and
+            // its real records in chunk 2. Ending the loop here dropped them
+            // silently, under a `complete` status, and cleanup then removed the
+            // source copy. Keep asking while the manifest says there are more
+            // chunks, exactly as the non-empty path below does.
+            $total_chunks = (int) ($manifest['types'][$type]['total_chunks'] ?? 0);
+            $has_more = $page < $total_chunks;
+
+            // The last chunk of a sparse export can legitimately be the empty
+            // one — Squirrly's tail page holds only term rows — and it still
+            // ends the migration, so release the editors that mark_bulk() set
+            // polling. Without this they poll until the marker's own expiry.
+            if ($type === 'postmeta' && !$has_more) {
+                Metadata_Pending::clear_bulk();
+            }
+
             return [
-                'status'   => 'complete',
-                'message'  => 'No data in chunk',
-                'has_more' => false,
-                'processed' => 0,
-                'skipped'  => 0,
+                'status'       => $has_more ? 'processing' : 'complete',
+                'message'      => sprintf('No data in chunk %d', $page),
+                'has_more'     => $has_more,
+                'page'         => $page,
+                'total_chunks' => $total_chunks,
+                'processed'    => 0,
+                'skipped'      => 0,
             ];
         }
 
@@ -198,6 +221,16 @@ class Snapshot_Migrator {
                 continue;
             }
 
+            // The object has to still exist. A source that keys its SEO by URL
+            // rather than by a foreign key keeps rows for content that was
+            // deleted years ago — Squirrly's `qss` table is keyed on a URL hash
+            // — and writing their meta creates orphan rows no screen can reach
+            // and no uninstall sweeps, while reporting them as migrated.
+            if (!$this->object_exists($object_type, $object_id)) {
+                $skipped++;
+                continue;
+            }
+
             // Track migrated posts so their SEO score can be computed once the
             // chunk's meta has landed (terms are not scored).
             if ($object_type === 'post') {
@@ -210,6 +243,23 @@ class Snapshot_Migrator {
             // Rank Tracker watch-list once the chunk is processed.
             $this->collect_keywords($record, $data, $keywords);
 
+            // Term social fields travel in `extended`, not `data`: only the
+            // AIOSEO exporter puts them in the canonical bucket, the other four
+            // put the identical values one level out. The loop below walks
+            // `data`, so every term OG image and Twitter title/description was
+            // exported and then dropped. Fold them in for terms, without
+            // letting them win over a value the record already carries.
+            if ($object_type === 'term') {
+                $extended = is_array($record['extended'] ?? null) ? $record['extended'] : [];
+                foreach (['og_title', 'og_description', 'og_image', 'twitter_title', 'twitter_description', 'twitter_image'] as $social_key) {
+                    if (!isset($data[$social_key]) || $data[$social_key] === '') {
+                        if (isset($extended[$social_key]) && $extended[$social_key] !== '') {
+                            $data[$social_key] = $extended[$social_key];
+                        }
+                    }
+                }
+            }
+
             foreach ($data as $canonical_key => $value) {
                 if (!isset(self::META_MAP[$canonical_key])) {
                     continue;
@@ -217,8 +267,11 @@ class Snapshot_Migrator {
 
                 // Focus keywords are migrated as an array via the dedicated
                 // migrate_focus_keywords() below (which also keeps the legacy
-                // single-value meta in sync), so skip the scalar write here.
-                if ($canonical_key === 'focus_keyword') {
+                // single-value meta in sync), so skip the scalar write here —
+                // but that writer only runs for posts, so skipping it for a
+                // term meant nobody wrote the term's focus keyword at all,
+                // even though get-term-seo reads `_thinkrank_focus_keyword`.
+                if ($canonical_key === 'focus_keyword' && $object_type === 'post') {
                     continue;
                 }
 
@@ -273,6 +326,15 @@ class Snapshot_Migrator {
                 $record_had_writes = true;
             }
 
+            // The same directives for a term. Every exporter emits term
+            // noindex/nofollow and ThinkRank stores them, but nothing wrote
+            // them — so a category the owner had deliberately kept out of the
+            // index came back indexable after the switch, which is the worst
+            // way for an import to be wrong.
+            if ($object_type === 'term' && $this->migrate_term_robots_payload($object_id, $data)) {
+                $record_had_writes = true;
+            }
+
             // Pillar / cornerstone content flag (post meta only).
             if ($object_type === 'post' && $this->migrate_pillar_content($object_id, $data)) {
                 $record_had_writes = true;
@@ -306,7 +368,16 @@ class Snapshot_Migrator {
             // exclusion as one comma-separated ID list on the sitemap settings
             // rather than per-post meta, so collect the IDs and apply them once
             // after the chunk (a settings write per post would be wasteful).
-            if ($object_type === 'post' && !empty($record['extended']['exclude_sitemap'])) {
+            // Two spellings reach here: Rank Math's exporter emits
+            // `exclude_sitemap`, Squirrly's `exclude_from_sitemap`. Only the
+            // first was read, so every Squirrly `nositemap` flag was dropped
+            // and posts the owner had hidden reappeared in the sitemap. Accept
+            // both rather than renaming one, because snapshots already exported
+            // carry whichever spelling their exporter used at the time.
+            $excluded_from_sitemap = !empty($record['extended']['exclude_sitemap'])
+                || !empty($record['extended']['exclude_from_sitemap']);
+
+            if ($object_type === 'post' && $excluded_from_sitemap) {
                 $sitemap_excluded[] = $object_id;
             }
 
@@ -1297,6 +1368,113 @@ class Snapshot_Migrator {
     }
 
     /**
+     * The robots directives for a term.
+     *
+     * Deliberately narrower than migrate_robots_payload(): update-term-seo
+     * writes `_thinkrank_robots_meta` and `_thinkrank_robots_meta_enabled` and
+     * nothing else for a term, so the advanced directives a post supports have
+     * nowhere to go here and are left in the snapshot rather than written to a
+     * key no reader looks at.
+     *
+     * Same two rules as the post path — never overwrite an existing payload,
+     * and never turn the override on for an all-false set, which is just
+     * ThinkRank's default index/follow spelled out.
+     *
+     * @param int   $term_id Target term ID.
+     * @param array $data    Canonical record data.
+     * @return bool True when a payload was written.
+     */
+    private function migrate_term_robots_payload(int $term_id, array $data): bool {
+        $existing = get_term_meta($term_id, '_thinkrank_robots_meta', true);
+        if (is_string($existing) && $existing !== '') {
+            return false;
+        }
+
+        $robots = [];
+        $has_active_directive = false;
+
+        foreach (self::ROBOTS_FIELDS as $field) {
+            if (!array_key_exists($field, $data)) {
+                continue;
+            }
+
+            $value = $data[$field];
+            if ($value === '' || $value === null) {
+                continue;
+            }
+
+            $robots[$field] = (bool) (int) $value;
+            if ($robots[$field]) {
+                $has_active_directive = true;
+            }
+        }
+
+        if (!$has_active_directive) {
+            return false;
+        }
+
+        $robots['index'] = empty($robots['noindex']);
+
+        update_term_meta($term_id, '_thinkrank_robots_meta', wp_json_encode($robots));
+        update_term_meta($term_id, '_thinkrank_robots_meta_enabled', 1);
+
+        return true;
+    }
+
+    /**
+     * Carry the source's watched pages into ThinkRank Pro's Focus Pages.
+     *
+     * Squirrly keeps this list on its own servers, so the exporter reads it
+     * live while the source plugin is still installed and connected — after
+     * the switch there is nowhere left to read it from. See
+     * Squirrly_Exporter::fetch_focus_pages().
+     *
+     * Focus Pages is a Pro feature and a deliberately small, hand-picked list
+     * (Settings::MAX_PAGES). Two rules follow from that: never touch a
+     * selection the user has already made here, and never import more than
+     * the cap. Without Pro the ids stay in the snapshot for a later run, the
+     * same way per-object redirects wait for Pro's rules table.
+     *
+     * @param array $extended Extended settings payload.
+     * @return bool True when at least one page was added.
+     */
+    private function migrate_focus_pages(array $extended): bool {
+        $ids = $extended['focus_pages'] ?? [];
+        if (!is_array($ids) || $ids === []) {
+            return false;
+        }
+
+        if (!class_exists('ThinkRank\\Pro\\Focus_Pages\\Settings')) {
+            return false;
+        }
+
+        $settings = new \ThinkRank\Pro\Focus_Pages\Settings();
+
+        // A choice already made here outranks one carried over, exactly as
+        // every other field in this class treats an existing value.
+        if ($settings->get() !== []) {
+            return false;
+        }
+
+        $added = false;
+        foreach ($ids as $id) {
+            $post_id = (int) $id;
+            if ($post_id <= 0 || get_post($post_id) === null) {
+                continue;
+            }
+
+            if (method_exists($settings, 'is_full') && $settings->is_full()) {
+                break;
+            }
+
+            $settings->add($post_id);
+            $added = true;
+        }
+
+        return $added;
+    }
+
+    /**
      * Migrate the pillar / cornerstone content flag to ThinkRank post meta.
      *
      * ThinkRank stores an enabled flag as the string '1'; the reader
@@ -1672,6 +1850,11 @@ class Snapshot_Migrator {
             $processed++;
         }
 
+        // The pages the source had under active watch.
+        if ($this->migrate_focus_pages($extended)) {
+            $processed++;
+        }
+
         // Sitemap inclusion settings.
         if ($this->migrate_sitemap($extended)) {
             $processed++;
@@ -1741,16 +1924,31 @@ class Snapshot_Migrator {
         $current = $manager->get_settings('site');
 
         // ThinkRank default seeds — only overwrite a value the user has not changed.
-        $seeds = [
-            'homepage_title'       => '%site_title% | %site_description%',
-            'site_name'            => get_bloginfo('name'),
-            'logo_url'             => '',
-            'breadcrumb_home_text' => 'Home',
-            'breadcrumb_separator' => '>',
-            'business_type'        => '',
-            'business_name'        => '',
-            'business_phone'       => '',
-        ];
+        //
+        // The title formats come from Site_Identity_Manager rather than being
+        // restated here. They were restated once, drifted (the homepage seed
+        // still used a literal '|' after the shipped default moved to %sep%),
+        // and the six per-context formats below were never listed at all — so
+        // every shipped default read as "the user chose this" and no imported
+        // title format was ever written.
+        $seeds = array_merge(
+            \ThinkRank\SEO\Site_Identity_Manager::TITLE_FORMAT_DEFAULTS,
+            [
+                'site_name'            => get_bloginfo('name'),
+                'logo_url'             => '',
+                'breadcrumb_home_text' => 'Home',
+                // Two shipped values, both untouched. get_default_settings()
+                // says '>' and the admin screen seeds '›' (as does the
+                // breadcrumb renderer's own fallback), so which one a site
+                // holds depends only on whether that screen has ever been
+                // saved. Recognising one and not the other would skip the
+                // imported separator on half of all installs.
+                'breadcrumb_separator' => ['>', '›'],
+                'business_type'        => '',
+                'business_name'        => '',
+                'business_phone'       => '',
+            ]
+        );
 
         $updates = [];
         $set = static function (string $key, $value) use (&$updates, $current, $seeds): void {
@@ -1758,7 +1956,12 @@ class Snapshot_Migrator {
                 return;
             }
             $cur = $current[$key] ?? null;
-            $is_default = !array_key_exists($key, $current) || $cur === '' || $cur === ($seeds[$key] ?? null);
+            // A seed may list several values when more than one shipped default
+            // is in circulation for the same field.
+            $shipped = array_key_exists($key, $seeds) ? (array) $seeds[$key] : [];
+            $is_default = !array_key_exists($key, $current)
+                || $cur === ''
+                || in_array($cur, $shipped, true);
             if ($is_default) {
                 $updates[$key] = $value;
             }
@@ -1973,8 +2176,12 @@ class Snapshot_Migrator {
         if ($app_id !== '' && empty($current['facebook_app_id'])) {
             $updates['facebook_app_id'] = $app_id;
         }
-        if ($og_image !== '' && empty($current['default_image'])) {
-            $updates['default_image'] = $og_image;
+        // `default_og_image` is the key Social_Meta_Manager declares for the
+        // site context. `default_image` is only a legacy alias the front-end
+        // readers still honour — saving under it is discarded, because a key
+        // outside the allow-list never reaches the database.
+        if ($og_image !== '' && empty($current['default_og_image'])) {
+            $updates['default_og_image'] = $og_image;
         }
 
         if (empty($updates)) {
@@ -2227,13 +2434,35 @@ class Snapshot_Migrator {
             }
         }
 
+        // Report the same has_more every other type does. Hardcoding false
+        // here was invisible in the admin, which iterates 1..total_chunks, and
+        // silently truncated the MCP/ability import, which loops on has_more
+        // alone: a site with more than one chunk of rules got its first
+        // hundred and a clean `complete`.
+        $has_more = $page < (int) ($this->chunk_total($plugin, 'redirections'));
+
         return [
-            'status'    => 'complete',
-            'message'   => sprintf('Migrated %d redirections, skipped %d (page %d)', $processed, $skipped, $page),
-            'has_more'  => false,
-            'processed' => $processed,
-            'skipped'   => $skipped,
+            'status'       => $has_more ? 'processing' : 'complete',
+            'message'      => sprintf('Migrated %d redirections, skipped %d (page %d)', $processed, $skipped, $page),
+            'has_more'     => $has_more,
+            'page'         => $page,
+            'total_chunks' => $this->chunk_total($plugin, 'redirections'),
+            'processed'    => $processed,
+            'skipped'      => $skipped,
         ];
+    }
+
+    /**
+     * How many chunks the manifest declares for a type, or 0 when unknown.
+     *
+     * @param string $plugin Source slug.
+     * @param string $type   Snapshot type.
+     * @return int
+     */
+    private function chunk_total(string $plugin, string $type): int {
+        $manifest = Snapshot_Store::get_manifest($plugin);
+
+        return (int) ($manifest['types'][$type]['total_chunks'] ?? 0);
     }
 
     /**
@@ -2288,12 +2517,16 @@ class Snapshot_Migrator {
             }
         }
 
+        $has_more = $page < $this->chunk_total($plugin, '404_logs');
+
         return [
-            'status'    => 'complete',
-            'message'   => sprintf('Migrated %d 404 logs, skipped %d (page %d)', $processed, $skipped, $page),
-            'has_more'  => false,
-            'processed' => $processed,
-            'skipped'   => $skipped,
+            'status'       => $has_more ? 'processing' : 'complete',
+            'message'      => sprintf('Migrated %d 404 logs, skipped %d (page %d)', $processed, $skipped, $page),
+            'has_more'     => $has_more,
+            'page'         => $page,
+            'total_chunks' => $this->chunk_total($plugin, '404_logs'),
+            'processed'    => $processed,
+            'skipped'      => $skipped,
         ];
     }
 

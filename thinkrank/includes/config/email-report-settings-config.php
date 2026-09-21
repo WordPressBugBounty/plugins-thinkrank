@@ -40,29 +40,36 @@ function thinkrank_get_default_email_report_config(): array {
  *
  * Keys here are the section identifiers used everywhere — in the
  * sections_enabled list of the resolved config, in the Section_Registry, and
- * in template paths.
+ * in template paths. `site_traffic` and `ai_search` render only when their
+ * source (a GA4 property, the AI traffic tracker) has something to show.
  *
  * @return array<string,array{label:string}>
  */
 function thinkrank_get_email_report_default_sections(): array {
     return [
         'key_metrics' => [
-            'label' => __('Key Metrics', 'thinkrank'),
-        ],
-        'position_summary' => [
-            'label' => __('Position Summary', 'thinkrank'),
+            'label' => __('Search performance', 'thinkrank'),
         ],
         'top_winning_posts' => [
-            'label' => __('Top Winning Posts', 'thinkrank'),
-        ],
-        'top_losing_posts' => [
-            'label' => __('Top Losing Posts', 'thinkrank'),
+            'label' => __('Top growing pages', 'thinkrank'),
         ],
         'top_winning_keywords' => [
-            'label' => __('Top Winning Keywords', 'thinkrank'),
+            'label' => __('Top growing queries', 'thinkrank'),
+        ],
+        'top_losing_posts' => [
+            'label' => __('Pages losing ground', 'thinkrank'),
         ],
         'top_losing_keywords' => [
-            'label' => __('Top Losing Keywords', 'thinkrank'),
+            'label' => __('Queries losing ground', 'thinkrank'),
+        ],
+        'position_summary' => [
+            'label' => __('Where your keywords rank', 'thinkrank'),
+        ],
+        'site_traffic' => [
+            'label' => __('Site traffic (Google Analytics 4)', 'thinkrank'),
+        ],
+        'ai_search' => [
+            'label' => __('Traffic from AI assistants', 'thinkrank'),
         ],
     ];
 }

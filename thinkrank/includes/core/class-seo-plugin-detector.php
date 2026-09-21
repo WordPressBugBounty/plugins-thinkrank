@@ -64,6 +64,14 @@ class SEO_Plugin_Detector {
             'extra_files' => ['all-in-one-seo-pack-pro/all_in_one_seo_pack.php'],
             'importable' => true,
         ],
+        'squirrly' => [
+            'name' => 'Squirrly SEO',
+            'class' => 'SQ_Classes_ObjController',
+            'function' => 'sq_wpcall',
+            'file' => 'squirrly-seo/squirrly.php',
+            'extra_files' => ['squirrly-seo-pack/index.php'],
+            'importable' => true,
+        ],
         'theseoframework' => [
             'name' => 'The SEO Framework',
             'class' => 'The_SEO_Framework\\Load',

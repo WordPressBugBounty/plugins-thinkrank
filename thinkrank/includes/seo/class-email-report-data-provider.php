@@ -7,9 +7,14 @@
  * can diff and rank. Sections never call Analytics_Manager directly —
  * one fetch per period, shared across the report.
  *
- * If Analytics_Manager isn't available (no Google connection, etc.) the
- * provider returns an `available => false` result; sections then render
- * their fallback HTML per PRD's graceful-degradation requirement.
+ * readiness() answers, before any data is pulled, whether there is a report
+ * to build: Search Console is required, Google Analytics 4 and the AI
+ * traffic tracker each add a card when present (#742). The generator asks
+ * this first so a disconnected site is paused with a reason rather than
+ * fetched, rendered and sent as a column of blanks.
+ *
+ * If Analytics_Manager isn't available the provider returns an
+ * `available => false` result and sections collect nothing.
  *
  * @package ThinkRank
  * @subpackage SEO
@@ -32,6 +37,127 @@ if (!defined('ABSPATH')) {
  * @since 1.9.0
  */
 final class Email_Report_Data_Provider {
+
+    /**
+     * Which data sources the report can draw on right now.
+     *
+     * Cheap on purpose — no dashboard fetch, no Search Console query. It
+     * runs on every hourly tick while a site is paused and on every load of
+     * the Email Reporting panel.
+     *
+     * @return array{
+     *     ready:bool,
+     *     search_console:bool,
+     *     analytics:bool,
+     *     ai_traffic:bool,
+     *     reason:?string
+     * }
+     */
+    public function readiness(): array {
+        // Credentials, not client objects. Analytics_Manager constructs a
+        // Search Console client whether or not a token exists, so "is there
+        // a client?" is always yes. The predicates below are the ones
+        // get-integrations-status reports, so the panel, the ability and
+        // the report can never disagree about the same site.
+        $settings = $this->settings();
+
+        $oauth_present  = '' !== (string) $settings->get('google_access_token', '');
+        $search_console = $oauth_present
+            || '' !== (string) $settings->get('google_search_console_api_key', '');
+
+        // GA4: the Data API client is built only when a token AND a selected
+        // property both exist — mirror that exactly.
+        $ga_property = (string) $settings->get('seo_analytics_google_analytics_property_id', '');
+        $analytics   = ($oauth_present && '' !== $ga_property)
+            || '' !== (string) $settings->get('google_analytics_api_key', '');
+
+        $readiness = [
+            'ready'          => $search_console,
+            'search_console' => $search_console,
+            'analytics'      => $analytics,
+            'ai_traffic'     => $this->ai_tracker_has_data(),
+            'reason'         => $search_console ? null : 'search_console_not_connected',
+        ];
+
+        /**
+         * Filter the report's readiness.
+         *
+         * Lets a host that feeds the report from somewhere other than the
+         * Google integrations declare itself ready, and lets tests force
+         * either state.
+         *
+         * @since 2.8.0
+         *
+         * @param array $readiness See readiness().
+         */
+        $filtered = apply_filters('thinkrank_email_report_readiness', $readiness);
+
+        return is_array($filtered) ? array_merge($readiness, $filtered) : $readiness;
+    }
+
+    /**
+     * Subject-line tokens for a fetched report (#742).
+     *
+     * `%headline%` is the sentence the default subject is built from:
+     * "12,480 Google clicks (+12.4%) in the last 30 days" when both windows
+     * have totals, "Your SEO report for Aug 19 – Sep 17" when there is
+     * nothing to compare. The parts are exposed as their own tokens so a
+     * custom subject template can rebuild it differently.
+     *
+     * @param array $shared         Output of fetch().
+     * @param int   $frequency_days Report window in days.
+     * @return array<string,string> Token => value.
+     */
+    public static function subject_tokens(array $shared, int $frequency_days): array {
+        $days     = max(1, $frequency_days);
+        $label    = (string) ($shared['period_label'] ?? '');
+        $totals   = $shared['comparison']['totals'] ?? [];
+        $current  = is_array($totals['current'] ?? null) ? $totals['current'] : [];
+        $previous = is_array($totals['previous'] ?? null) ? $totals['previous'] : [];
+
+        $clicks      = (int) ($current['clicks'] ?? 0);
+        $impressions = (int) ($current['impressions'] ?? 0);
+        if ($clicks === 0 && $impressions === 0) {
+            $dash        = $shared['current']['search_performance']['totals'] ?? [];
+            $clicks      = (int) ($dash['clicks'] ?? 0);
+            $impressions = (int) ($dash['impressions'] ?? 0);
+        }
+
+        $change = null;
+        if ((int) ($previous['clicks'] ?? 0) > 0 && class_exists(Email_Report_Sections\Email_Report_Html::class)) {
+            $change = Email_Report_Sections\Email_Report_Html::pct_change((float) $clicks, (float) ($previous['clicks'] ?? 0));
+        }
+        $signed = $change !== null && $change['direction'] !== 'flat'
+            ? ($change['direction'] === 'up' ? '+' : '−') . $change['text']
+            : '';
+
+        if ($clicks > 0 || $impressions > 0) {
+            $headline = sprintf(
+                /* translators: 1: number of clicks, 2: change in parentheses or empty, 3: number of days. */
+                _n('%1$s Google clicks%2$s in the last %3$d day', '%1$s Google clicks%2$s in the last %3$d days', $days, 'thinkrank'),
+                number_format_i18n($clicks),
+                $signed !== '' ? ' (' . $signed . ')' : '',
+                $days
+            );
+        } else {
+            $headline = $label !== ''
+                ? sprintf(
+                    /* translators: %s: period label, e.g. "Aug 19 – Sep 17, 2026". */
+                    __('Your SEO report for %s', 'thinkrank'),
+                    $label
+                )
+                : __('Your SEO report', 'thinkrank');
+        }
+
+        return [
+            '%period%'        => $label,
+            '%period_days%'   => (string) $days,
+            '%clicks%'        => number_format_i18n($clicks),
+            '%clicks_change%' => $signed,
+            '%impressions%'   => number_format_i18n($impressions),
+            '%headline%'      => $headline,
+        ];
+    }
 
     /**
      * Pull current + prior period dashboard data.
@@ -88,8 +214,10 @@ final class Email_Report_Data_Provider {
 
             return [
                 'available' => true,
+                'readiness' => $this->readiness(),
                 'current' => is_array($current) ? $current : [],
                 'comparison' => $comparison,
+                'ai' => $this->ai_summary($frequency_days),
                 'period_start' => $period_start,
                 'period_end' => $period_end,
                 'period_label' => $period_label,
@@ -127,7 +255,7 @@ final class Email_Report_Data_Provider {
      * @return array{available:bool,queries:array,pages:array}
      */
     private function build_comparison($manager, int $frequency_days, string $cur_start, string $cur_end): array {
-        $empty = ['available' => false, 'queries' => [], 'pages' => []];
+        $empty = ['available' => false, 'queries' => [], 'pages' => [], 'totals' => []];
 
         if (!method_exists($manager, 'get_search_console_client')) {
             return $empty;
@@ -151,11 +279,96 @@ final class Email_Report_Data_Provider {
         $cur_p  = $sc->get_search_performance_by_dates($site_url, $cur_start, $cur_end, 1000, ['page']);
         $prev_p = $sc->get_search_performance_by_dates($site_url, $prev_start, $prev_end, 1000, ['page']);
 
+        // Whole-property totals for both windows. A query with no
+        // dimensions returns one aggregated row, so the hero's clicks,
+        // impressions, CTR and position — and their change — are exact
+        // rather than summed from the 1,000-row query lists above.
+        $cur_t  = $sc->get_search_performance_by_dates($site_url, $cur_start, $cur_end, 1, []);
+        $prev_t = $sc->get_search_performance_by_dates($site_url, $prev_start, $prev_end, 1, []);
+
         return [
             'available' => true,
             'queries'   => $this->merge_periods($cur_q, $prev_q, true),
             'pages'     => $this->merge_periods($cur_p, $prev_p, false),
+            'totals'    => [
+                'current'  => $this->totals_row($cur_t),
+                'previous' => $this->totals_row($prev_t),
+            ],
         ];
+    }
+
+    /**
+     * Normalise the single aggregate row Search Console returns for a
+     * dimensionless query. An empty result (a property with no traffic in
+     * the window) yields zeroes, which the hero treats as "no comparison".
+     *
+     * @param array $rows API rows.
+     * @return array{clicks:int,impressions:int,ctr:float,position:float}
+     */
+    private function totals_row(array $rows): array {
+        $row = is_array($rows[0] ?? null) ? $rows[0] : [];
+        return [
+            'clicks'      => (int) ($row['clicks'] ?? 0),
+            'impressions' => (int) ($row['impressions'] ?? 0),
+            'ctr'         => (float) ($row['ctr'] ?? 0.0),
+            'position'    => (float) ($row['position'] ?? 0.0),
+        ];
+    }
+
+    /**
+     * AI-assistant traffic for the current window and the one before it,
+     * from the first-party tracker AI Insights already runs. Null when the
+     * tracker is absent or has recorded nothing.
+     *
+     * The tracker summarises a trailing window, so the previous period is
+     * the double window minus the current one.
+     *
+     * @return array{current:array,previous:array}|null
+     */
+    private function ai_summary(int $frequency_days): ?array {
+        $tracker = $this->get_ai_tracker();
+        if ($tracker === null) {
+            return null;
+        }
+        try {
+            $current = (array) $tracker->summary($frequency_days);
+            if ((int) ($current['ai_sessions'] ?? 0) === 0 && (int) ($current['baseline'] ?? 0) === 0) {
+                return null;
+            }
+            $double   = (array) $tracker->summary($frequency_days * 2);
+            $previous = [
+                'ai_sessions' => max(0, (int) ($double['ai_sessions'] ?? 0) - (int) ($current['ai_sessions'] ?? 0)),
+                'baseline'    => max(0, (int) ($double['baseline'] ?? 0) - (int) ($current['baseline'] ?? 0)),
+            ];
+            return ['current' => $current, 'previous' => $previous];
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+
+    private function ai_tracker_has_data(): bool {
+        $tracker = $this->get_ai_tracker();
+        if ($tracker === null) {
+            return false;
+        }
+        try {
+            $summary = (array) $tracker->summary(30);
+            return (int) ($summary['ai_sessions'] ?? 0) > 0 || (int) ($summary['baseline'] ?? 0) > 0;
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
+    private function get_ai_tracker() {
+        $cls = '\\ThinkRank\\SEO\\Ai_Traffic_Tracker';
+        if (!class_exists($cls) || !method_exists($cls, 'summary')) {
+            return null;
+        }
+        try {
+            return new $cls();
+        } catch (Throwable $e) {
+            return null;
+        }
     }
 
     /**
@@ -237,6 +450,27 @@ final class Email_Report_Data_Provider {
 
     private function normalize_key(string $key, bool $is_query): string {
         return $is_query ? trim(strtolower($key)) : $key;
+    }
+
+    /**
+     * The plugin settings store, or a null-object when it is not loaded
+     * (unit tests without the core classes), which reads as "nothing
+     * configured".
+     */
+    private function settings() {
+        $cls = '\\ThinkRank\\Core\\Settings';
+        if (class_exists($cls) && method_exists($cls, 'instance')) {
+            try {
+                return $cls::instance();
+            } catch (Throwable $e) {
+                // Fall through to the null object.
+            }
+        }
+        return new class() {
+            public function get(string $key, $fallback = null) {
+                return $fallback;
+            }
+        };
     }
 
     private function get_analytics_manager() {

@@ -3,11 +3,14 @@
  * Email Report Renderer
  *
  * Walks the registered sections, calls collect() then render() on each,
- * and assembles the final HTML using templates/email-report/email.html.php.
+ * wraps each result in a card and assembles the final HTML using
+ * templates/email-report/email.html.php.
  *
- * Failure model: any single section that throws or returns empty drops to
- * its fallback_html() — the whole report keeps rendering. Per PRD's
- * "graceful degradation" acceptance criterion.
+ * Failure model: a section that throws, collects nothing or renders to
+ * nothing is dropped — the card is simply absent — and the rest of the
+ * report keeps rendering. A section may still supply fallback_html(); when
+ * it is non-empty it is shown in the section's card, which keeps sections
+ * written against 1.9 working unchanged (#742).
  *
  * @package ThinkRank
  * @subpackage SEO
@@ -18,6 +21,7 @@ declare(strict_types=1);
 
 namespace ThinkRank\SEO;
 
+use ThinkRank\SEO\Email_Report_Sections\Email_Report_Html;
 use Throwable;
 
 if (!defined('ABSPATH')) {
@@ -36,10 +40,10 @@ final class Email_Report_Renderer {
     /**
      * How many sections produced real data during the last render().
      *
-     * A section that returns an empty payload (or renders to nothing) drops
-     * to its fallback_html() notice. That outcome is only known *inside*
-     * render_one_section(), so it is counted here for the caller to read
-     * back after rendering — see sections_with_data().
+     * A section that returns an empty payload (or renders to nothing) is
+     * dropped. That outcome is only known *inside* render_one_section(),
+     * so it is counted here for the caller to read back after rendering —
+     * see sections_with_data().
      */
     private int $sections_with_data = 0;
 
@@ -52,10 +56,13 @@ final class Email_Report_Renderer {
      *
      * @param array $config  Per-site config.
      * @param array $context {
-     *     @type string $period_start  ISO datetime.
-     *     @type string $period_end    ISO datetime.
-     *     @type string $period_label  Human-readable, e.g. "May 1 – May 30, 2026".
-     *     @type bool   $is_test       True when called from "Send Test Email".
+     *     @type string $period_start   ISO datetime.
+     *     @type string $period_end     ISO datetime.
+     *     @type string $period_label   Human-readable, e.g. "May 1 – May 30, 2026".
+     *     @type bool   $is_test        True when called from "Send Test Email".
+     *     @type bool   $not_connected  True to render the "connect Search Console"
+     *                                  state instead of the sections.
+     *     @type array  $readiness      Data_Provider::readiness() result.
      * }
      */
     public function render(array $config, array $context): string {
@@ -70,23 +77,33 @@ final class Email_Report_Renderer {
             'period_end' => '',
             'period_label' => '',
             'is_test' => false,
+            'not_connected' => false,
+            'readiness' => [],
             'shared' => [],
         ], $context);
 
-        $sections_html = $this->render_sections($config, $shared_context);
+        $sections_html = !empty($shared_context['not_connected'])
+            ? $this->render_not_connected($shared_context)
+            : $this->render_sections($config, $shared_context);
+
+        $frequency_days = (int) $shared_context['frequency_days'];
 
         $payload = [
-            'config'         => $config,
-            'context'        => $shared_context,
-            'sections_html'  => $sections_html,
-            'header_logo'    => $this->default_logo(),
-            'header_bg'      => '',
-            'logo_link'      => '',
-            'intro_text'     => '',
-            'footer_text'    => $this->default_footer(),
-            'additional_css' => '',
-            'cta_url'        => $this->dashboard_url(),
-            'site_title'     => (string) get_bloginfo('name'),
+            'config'          => $config,
+            'context'         => $shared_context,
+            'sections_html'   => $sections_html,
+            'header_logo'     => $this->default_logo(),
+            'header_bg'       => '',
+            'logo_link'       => '',
+            'intro_text'      => '',
+            'footer_text'     => $this->default_footer($config),
+            'additional_css'  => '',
+            'cta_url'         => $this->dashboard_url(),
+            'settings_url'    => Email_Report_Html::admin_link('analytics', 'email-reporting'),
+            'site_title'      => (string) get_bloginfo('name'),
+            'site_url'        => (string) home_url(),
+            'frequency_days'  => $frequency_days,
+            'frequency_label' => $this->frequency_label($frequency_days),
         ];
 
         /**
@@ -146,6 +163,9 @@ final class Email_Report_Renderer {
 
         foreach ($sections as $section) {
             $section_html = $this->render_one_section($section, $context);
+            if ($section_html === '') {
+                continue;
+            }
             $html .= $this->wrap_section($section, $section_html);
         }
 
@@ -156,11 +176,11 @@ final class Email_Report_Renderer {
         try {
             $payload = $section->collect($context);
             if (empty($payload)) {
-                return $section->fallback_html();
+                return $this->fallback_for($section);
             }
             $rendered = $section->render($payload);
             if ($rendered === '') {
-                return $section->fallback_html();
+                return $this->fallback_for($section);
             }
 
             // A non-empty payload is not the same as data. Key Metrics
@@ -168,14 +188,29 @@ final class Email_Report_Renderer {
             // which it does even with no Search Console connection — and
             // then renders a row of zeroes. That is a placeholder, not a
             // report, so it must not make an empty send look non-empty.
-            if ($this->payload_has_data($section, $payload)) {
-                $this->sections_with_data++;
+            if (!$this->payload_has_data($section, $payload)) {
+                return $this->fallback_for($section);
             }
+
+            $this->sections_with_data++;
 
             return $rendered;
         } catch (Throwable $e) {
             // Don't let one section break the report.
-            return $section->fallback_html();
+            return $this->fallback_for($section);
+        }
+    }
+
+    /**
+     * What a section shows when it has nothing: its fallback_html(), which
+     * the built-in sections leave empty so their card is dropped, and a
+     * section written for 1.9 may still fill with a notice.
+     */
+    private function fallback_for($section): string {
+        try {
+            return (string) $section->fallback_html();
+        } catch (Throwable $e) {
+            return '';
         }
     }
 
@@ -239,41 +274,126 @@ final class Email_Report_Renderer {
     /**
      * How many sections produced real data in the most recent render().
      *
-     * Zero means every section fell back to its "no data" notice, so the
-     * report is a header, a footer and a column of placeholders. Callers
-     * use this to decide whether that is worth sending.
+     * Zero means every section was dropped, so the report is a header and a
+     * footer with nothing between. Callers use this to decide whether that
+     * is worth sending.
      */
     public function sections_with_data(): int {
         return $this->sections_with_data;
     }
 
+    /**
+     * One white card. A section that draws its own heading (the built-in
+     * ones, via renders_own_heading()) gets the bare shell; any other gets
+     * its label as the card title, so a section written for 1.9 still reads
+     * as one card among the rest.
+     */
     private function wrap_section($section, string $body_html): string {
-        $heading = esc_html($section->label());
-        return '<section class="tr-email-section" style="margin:0 0 24px 0;">'
-            . '<h2 style="font:600 18px/1.3 -apple-system,Segoe UI,Roboto,sans-serif;margin:0 0 12px 0;color:#111827;">'
-            . $heading
-            . '</h2>'
-            . $body_html
-            . '</section>';
+        $heading = '';
+        $own = method_exists($section, 'renders_own_heading') && $section->renders_own_heading();
+        if (!$own) {
+            $heading = Email_Report_Html::heading((string) $section->label()) . '<div style="height:14px;line-height:14px;font-size:0;">&nbsp;</div>';
+        }
+
+        return self::card($heading . $body_html, 'tr-email-section tr-email-section-' . sanitize_html_class((string) $section->key()));
+    }
+
+    /**
+     * The card shell used by sections, the connect state and the layout.
+     */
+    public static function card(string $inner_html, string $css_class = 'tr-email-section', string $padding = '24px 28px'): string {
+        return '<tr><td class="' . esc_attr($css_class) . '" style="padding:0 0 16px 0;">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid ' . Email_Report_Html::LINE . ';border-radius:14px;">'
+            . '<tr><td style="padding:' . esc_attr($padding) . ';">' . $inner_html . '</td></tr>'
+            . '</table></td></tr>';
+    }
+
+    /**
+     * The one-card email a test send delivers while Search Console is not
+     * connected: what the report will contain, how to connect, and that
+     * scheduled reports are paused until then (#742).
+     */
+    private function render_not_connected(array $context): string {
+        $font       = Email_Report_Html::FONT;
+        $site_title = (string) get_bloginfo('name');
+        $connect    = Email_Report_Html::admin_link('integrations', 'google-services');
+        $settings   = Email_Report_Html::admin_link('analytics', 'email-reporting');
+
+        $intro = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+            . '<td width="56" valign="top"><img src="' . esc_url(Email_Report_Html::asset('icon-connect.png')) . '" width="52" height="52" alt="" style="display:block;border:0;border-radius:26px;" /></td>'
+            . '<td style="padding-left:16px;' . $font . '">'
+            . '<div style="font-size:20px;font-weight:800;color:' . Email_Report_Html::INK . ';letter-spacing:-0.01em;line-height:1.3;">'
+            . esc_html__('Connect Google Search Console to get your first report', 'thinkrank') . '</div>'
+            . '<div style="font-size:14px;color:' . Email_Report_Html::MUTED . ';line-height:1.6;margin-top:8px;">'
+            . esc_html(sprintf(
+                /* translators: %s: site title. */
+                __('This report is built from Search Console data: clicks, impressions, growing pages and queries, and where your keywords rank. %s isn’t connected yet, so there is nothing to report.', 'thinkrank'),
+                $site_title
+            )) . '</div>'
+            . '<div style="font-size:14px;color:' . Email_Report_Html::MUTED . ';line-height:1.6;margin-top:8px;">'
+            . '<strong style="color:' . Email_Report_Html::INK . ';">' . esc_html__('Scheduled reports are paused', 'thinkrank') . '</strong> '
+            . esc_html__('until Search Console is connected. Nothing will be sent to your recipients in the meantime.', 'thinkrank') . '</div>'
+            . '<div style="margin-top:18px;">'
+            . '<a href="' . esc_url($connect) . '" style="display:inline-block;background:' . Email_Report_Html::PRIMARY . ';color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:10px;">'
+            . esc_html__('Connect Search Console', 'thinkrank') . '</a>'
+            . '&nbsp;&nbsp;<a href="' . esc_url($settings) . '" style="font-size:14px;font-weight:600;color:' . Email_Report_Html::PRIMARY . ';text-decoration:none;">'
+            . esc_html__('Report settings', 'thinkrank') . ' ›</a></div>'
+            . '</td></tr></table>';
+
+        $items = [
+            __('Clicks, impressions, CTR and average position, with the change vs the previous period', 'thinkrank'),
+            __('Top growing pages and queries, and the ones losing ground', 'thinkrank'),
+            __('Where your keywords rank: top 3, page one, page two and beyond', 'thinkrank'),
+            __('Site traffic from Google Analytics 4 and visits from AI assistants, when those are connected', 'thinkrank'),
+        ];
+        $list = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;' . $font . 'font-size:14px;color:' . Email_Report_Html::INK . ';line-height:1.6;">';
+        foreach ($items as $item) {
+            $list .= '<tr><td width="22" valign="top" style="padding:6px 0;color:' . Email_Report_Html::UP . ';font-weight:700;">✓</td>'
+                . '<td style="padding:6px 0;">' . esc_html($item) . '</td></tr>';
+        }
+        $list .= '</table>';
+
+        return self::card($intro, 'tr-email-section tr-email-connect', '28px')
+            . self::card(Email_Report_Html::heading(__('What you’ll get once connected', 'thinkrank')) . $list, 'tr-email-section tr-email-connect-list');
     }
 
     private function default_logo(): string {
-        // No bundled default logo asset — empty makes the layout fall back to
-        // a text-rendered site title in the header.
         /**
          * Filter the default email logo URL.
          *
+         * The bundled ThinkRank lockup by default (#742). Pro's branding
+         * logo replaces it through the payload filter, not here.
+         *
          * @since 1.9.0
          *
-         * @param string $default Default logo URL — empty by default.
+         * @param string $default Default logo URL.
          */
-        return (string) apply_filters('thinkrank_email_report_default_logo', '');
+        return (string) apply_filters('thinkrank_email_report_default_logo', Email_Report_Html::asset('thinkrank-logo.png'));
     }
 
     private function dashboard_url(): string {
-        // The dashboard analytics view URL — admin-side. The recipient must
-        // be logged in to see it, but the link still gives them a clear path.
-        return (string) admin_url('admin.php?page=thinkrank-essential-seo#analytics');
+        return Email_Report_Html::admin_link('analytics', 'dashboard');
+    }
+
+    /**
+     * "Monthly SEO report" / "Weekly SEO report" / "SEO report every N days"
+     * for the header's right-hand label.
+     */
+    private function frequency_label(int $days): string {
+        if ($days === 1) {
+            return __('Daily SEO report', 'thinkrank');
+        }
+        if ($days === 7) {
+            return __('Weekly SEO report', 'thinkrank');
+        }
+        if ($days >= 28 && $days <= 31) {
+            return __('Monthly SEO report', 'thinkrank');
+        }
+        return sprintf(
+            /* translators: %d: number of days between reports. */
+            _n('SEO report every %d day', 'SEO report every %d days', $days, 'thinkrank'),
+            $days
+        );
     }
 
     /**
@@ -313,12 +433,38 @@ final class Email_Report_Renderer {
         return strtr($text, $tokens);
     }
 
-    private function default_footer(): string {
-        return sprintf(
-            /* translators: %s: site title */
-            esc_html__('This report was generated by ThinkRank for %s.', 'thinkrank'),
-            esc_html((string) get_bloginfo('name'))
+    /**
+     * "Sent by ThinkRank for example.com · every 30 days to a@x.com, b@x.com"
+     */
+    private function default_footer(array $config): string {
+        $days       = max(1, (int) ($config['frequency_days'] ?? 30));
+        $recipients = array_values(array_filter((array) ($config['recipients'] ?? []), 'is_string'));
+        $host       = (string) wp_parse_url((string) home_url(), PHP_URL_HOST);
+
+        $line = sprintf(
+            /* translators: %s: site host name. */
+            __('Sent by ThinkRank for %s', 'thinkrank'),
+            $host !== '' ? $host : (string) get_bloginfo('name')
         );
+        $cadence = $days === 1
+            ? __('every day', 'thinkrank')
+            : sprintf(
+                /* translators: %d: number of days between reports. */
+                _n('every %d day', 'every %d days', $days, 'thinkrank'),
+                $days
+            );
+        if ($recipients !== []) {
+            $line .= ' · ' . sprintf(
+                /* translators: 1: cadence ("every 30 days"), 2: recipient list. */
+                __('%1$s to %2$s', 'thinkrank'),
+                $cadence,
+                implode(', ', array_slice($recipients, 0, 3)) . (count($recipients) > 3 ? '…' : '')
+            );
+        } else {
+            $line .= ' · ' . $cadence;
+        }
+
+        return esc_html($line);
     }
 
     private function locate_layout(): string {
@@ -333,10 +479,10 @@ final class Email_Report_Renderer {
     private function emergency_fallback_html(array $payload): string {
         $title = esc_html($payload['site_title'] ?? '');
         $sections = $payload['sections_html'] ?? '';
-        return '<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f4f5;padding:24px;">'
-            . '<div style="max-width:640px;margin:0 auto;background:#fff;padding:24px;border-radius:8px;">'
-            . '<h1 style="margin:0 0 16px 0;font-size:22px;color:#111827;">' . $title . '</h1>'
+        return '<!doctype html><html><body style="' . Email_Report_Html::FONT . 'background:' . Email_Report_Html::CANVAS . ';padding:24px;">'
+            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;">'
+            . '<tr><td style="padding:0 0 16px 0;"><h1 style="margin:0;font-size:22px;color:' . Email_Report_Html::INK . ';">' . $title . '</h1></td></tr>'
             . $sections
-            . '</div></body></html>';
+            . '</table></body></html>';
     }
 }

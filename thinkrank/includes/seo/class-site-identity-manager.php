@@ -41,6 +41,34 @@ if (!interface_exists('ThinkRank\\SEO\\Interfaces\\SEO_Manager_Interface')) {
 class Site_Identity_Manager extends Abstract_SEO_Manager {
 
     /**
+     * The per-context title formats as ThinkRank ships them.
+     *
+     * These are not in get_default_settings(): the admin screen seeds them on
+     * first save, so on a real install they are stored values, indistinguishable
+     * from a template the user typed. The migration needs to tell those two
+     * apart — it may overwrite a shipped default with an imported template, and
+     * must never overwrite a choice the user made — so this is the record of
+     * what "untouched" looks like.
+     *
+     * Keep in step with getDefaultSettings() in
+     * src/admin/components/essential-seo/SiteIdentityTab.js. SiteIdentityTitleFormatDefaultsTest
+     * fails when the two drift.
+     *
+     * @since 2.8.0
+     * @var array<string, string>
+     */
+    public const TITLE_FORMAT_DEFAULTS = [
+        'homepage_title' => '%site_title% %sep% %site_description%',
+        'post_title'     => '%post_title% %sep% %site_title%',
+        'page_title'     => '%page_title% %sep% %site_title%',
+        'category_title' => '%category_title% %sep% %site_title%',
+        'tag_title'      => '%tag_title% %sep% %site_title%',
+        'author_title'   => '%author_name% %sep% %site_title%',
+        'search_title'   => 'Search Results for "%search_term%" %sep% %site_title%',
+        'archive_title'  => '%archive_title% %sep% %site_title%',
+    ];
+
+    /**
      * WordPress filesystem instance
      *
      * @since 1.0.0

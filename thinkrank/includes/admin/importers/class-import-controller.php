@@ -42,7 +42,7 @@ class Import_Controller extends \WP_REST_Controller {
      * plugin's live data: the native ThinkRank slug must never reach it, or the
      * endpoint gains a path that wipes our own meta and options.
      */
-    private const SOURCE_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo'];
+    private const SOURCE_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly'];
 
     /**
      * Snapshot slug for ThinkRank's own data (export / backup / restore).
@@ -53,7 +53,7 @@ class Import_Controller extends \WP_REST_Controller {
      * Allowed plugin slugs for the snapshot endpoints (export, migrate,
      * snapshot delete). Includes the native slug; cleanup uses SOURCE_PLUGINS.
      */
-    private const ALLOWED_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'thinkrank'];
+    private const ALLOWED_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly', 'thinkrank'];
 
     /**
      * Allowed export/migrate types. Must cover every type the exporters and
@@ -90,6 +90,14 @@ class Import_Controller extends \WP_REST_Controller {
                 'methods'             => \WP_REST_Server::READABLE,
                 'callback'            => [$this, 'detect'],
                 'permission_callback' => [$this, 'check_permissions'],
+                'args'                => [
+                    'refresh' => [
+                        'type'              => 'boolean',
+                        'default'           => false,
+                        'sanitize_callback' => 'rest_sanitize_boolean',
+                        'description'       => __('Discard the cached scan and re-read the database. Set by the Re-scan button; the screen\'s own load leaves it off so repeat navigation stays instant.', 'thinkrank'),
+                    ],
+                ],
             ],
         ]);
 
@@ -173,11 +181,20 @@ class Import_Controller extends \WP_REST_Controller {
      * GET /import/detect — Detect source plugins, ThinkRank's own exportable
      * data, and existing snapshots
      *
+     * `refresh` drops the hour-long detection transient before scanning. Without
+     * it the Re-scan button could not do the one thing it exists for: pick up a
+     * source plugin the user just installed, activated or added data to.
+     *
      * @param \WP_REST_Request $request Request object
      * @return \WP_REST_Response
      */
     public function detect(\WP_REST_Request $request): \WP_REST_Response {
         $detector = new Import_Detector();
+
+        if ($request->get_param('refresh')) {
+            $detector->clear_cache();
+        }
+
         $detected = $detector->detect();
         $snapshots = Snapshot_Store::get_available_snapshots();
 
@@ -327,6 +344,7 @@ class Import_Controller extends \WP_REST_Controller {
             'rankmath' => 'rank_math_',
             'seopress' => '_seopress_',
             'aioseo'   => null, // Custom table
+            'squirrly' => '_sq_', // Fallback meta only; the SEO is in the qss table below
         ];
 
         $prefix = $prefix_map[$plugin] ?? null;
@@ -355,6 +373,7 @@ class Import_Controller extends \WP_REST_Controller {
                 'yoast'    => 'wpseo_',
                 'rankmath' => 'rank_math_',
                 'seopress' => '_seopress_',
+                'squirrly' => '_sq_',
             ];
             $usermeta_prefix = $usermeta_prefix_map[$plugin] ?? $prefix;
             $deleted += (int) $wpdb->query(
@@ -371,10 +390,29 @@ class Import_Controller extends \WP_REST_Controller {
                 'yoast'    => ['wpseo', 'wpseo_titles', 'wpseo_social', 'wpseo_taxonomy_meta'],
                 'rankmath' => ['rank-math-options-general', 'rank-math-options-titles', 'rank-math-options-sitemap', 'rank-math-options-instant-indexing'],
                 'seopress' => ['seopress_titles_option_name', 'seopress_social_option_name', 'seopress_advanced_option_name', 'seopress_xml_sitemap_option_name', 'seopress_instant_indexing_option_name'],
+                'squirrly' => ['sq_options'],
             ];
             foreach ($option_keys_map[$plugin] ?? [] as $option_name) {
                 if (delete_option($option_name)) {
                     $deleted++;
+                }
+            }
+        }
+
+        if ($plugin === 'squirrly') {
+            // Drop Squirrly's custom tables: per-URL SEO, Advanced Pack
+            // redirects and their logs, reusable JSON-LD templates.
+            foreach (['qss', 'qss_redirects', 'qss_redirects_logs', 'qss_jsonld'] as $suffix) {
+                $table = $wpdb->prefix . $suffix;
+                $table_exists = $wpdb->get_var(
+                    $wpdb->prepare("SHOW TABLES LIKE %s", $table)
+                );
+                if ($table_exists) {
+                    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
+                    $count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+                    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
+                    $wpdb->query("DROP TABLE {$table}");
+                    $deleted += $count;
                 }
             }
         }
@@ -456,6 +494,8 @@ class Import_Controller extends \WP_REST_Controller {
                 return new SEOPress_Exporter();
             case 'aioseo':
                 return new AIOSEO_Exporter();
+            case Squirrly_Exporter::SLUG:
+                return new Squirrly_Exporter();
             case Thinkrank_Exporter::SLUG:
                 return new Thinkrank_Exporter();
             default:

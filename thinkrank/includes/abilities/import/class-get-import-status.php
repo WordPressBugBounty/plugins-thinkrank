@@ -30,7 +30,7 @@ class Get_Import_Status extends Ability_Base {
 	 *
 	 * @var string[]
 	 */
-	private const ALLOWED_PLUGINS = [ 'yoast', 'rankmath', 'seopress', 'aioseo' ];
+	private const ALLOWED_PLUGINS = [ 'yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly' ];
 
 	/**
 	 * Constructor.
