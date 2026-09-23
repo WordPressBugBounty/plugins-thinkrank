@@ -34,17 +34,26 @@ class Content_Optimization_Manager extends Abstract_SEO_Manager {
     /**
      * Content optimization scoring weights (2025 SEO standards)
      *
+     * Semantic relevance used to sit here at 5%, fed by a block that returned
+     * the same numbers for every input (#538). Removing a factor would have
+     * capped the score at 95, so the remaining six were rescaled by 100/95 and
+     * rounded to whole numbers, which preserves their former ratio
+     * (25:20:15:15:10:10) and keeps the array at 100.
+     *
+     * Rounding left technical_seo and user_experience, which were equal at 10,
+     * one point apart at 11 and 10. That is an artefact of landing the spare
+     * point somewhere, not a judgement that technical SEO matters more.
+     *
      * @since 1.0.0
      * @var array
      */
     private array $optimization_weights = [
-        'content_quality' => 25,      // Content depth, uniqueness, value
-        'keyword_optimization' => 20, // Keyword usage and distribution
-        'readability' => 15,          // Reading ease and comprehension
-        'structure' => 15,            // Headings, paragraphs, formatting
-        'technical_seo' => 10,        // Meta tags, URLs, schema
-        'user_experience' => 10,      // Engagement signals, CTR optimization
-        'semantic_relevance' => 5     // Topic relevance and entity coverage
+        'content_quality' => 26,      // Content depth, uniqueness, value
+        'keyword_optimization' => 21, // Keyword usage and distribution
+        'readability' => 16,          // Reading ease and comprehension
+        'structure' => 16,            // Headings, paragraphs, formatting
+        'technical_seo' => 11,        // Meta tags, URLs, schema
+        'user_experience' => 10       // Engagement signals, CTR optimization
     ];
 
     /**
@@ -712,11 +721,6 @@ class Content_Optimization_Manager extends Abstract_SEO_Manager {
         // User experience score (10% weight)
         $ux_score = $this->calculate_user_experience_score($content_analysis, $template_compliance);
         $scores['user_experience'] = $ux_score * ($this->optimization_weights['user_experience'] / 100);
-
-        // Semantic relevance score (5% weight)
-        if (!empty($content_analysis['semantic_analysis']['relevance_score'])) {
-            $scores['semantic_relevance'] = $content_analysis['semantic_analysis']['relevance_score'] * ($this->optimization_weights['semantic_relevance'] / 100);
-        }
 
         return (int) round(array_sum($scores));
     }
@@ -1447,9 +1451,12 @@ class Content_Optimization_Manager extends Abstract_SEO_Manager {
         return max(0, $score);
     }
 
-    // Placeholder implementations for methods referenced but not yet implemented
+    // Placeholder implementations for methods referenced but not yet implemented.
+    // Anything here that cannot measure its subject returns null or an empty
+    // set, never a plausible-looking number: a consumer can branch on "not
+    // measured", but not on an 80 that was typed rather than computed (#538).
     private function calculate_performance_metrics(array $content_analysis, array $template_compliance): array {
-        return ['performance_score' => 80, 'metrics' => []];
+        return ['performance_score' => null, 'metrics' => []];
     }
 
     private function generate_optimization_recommendations(array $content_analysis, array $template_compliance, string $content_type): array {
@@ -1468,7 +1475,10 @@ class Content_Optimization_Manager extends Abstract_SEO_Manager {
     }
 
     private function identify_optimization_opportunities(array $content_analysis, array $template_compliance, string $content_type): array {
-        return ['opportunities' => [], 'potential_impact' => 'medium'];
+        // No potential_impact: with no opportunities found there is nothing to
+        // rate, and 'medium' was a verdict on an empty list. The sibling in
+        // Performance_Monitoring_Manager already returns just this shape.
+        return ['opportunities' => []];
     }
 
     private function generate_content_suggestions(array $content_analysis, string $content_type, array $keywords): array {
@@ -1499,8 +1509,11 @@ class Content_Optimization_Manager extends Abstract_SEO_Manager {
         return 0.0;
     }
 
-    private function calculate_performance_score(array $metrics): int {
-        return 80;
+    private function calculate_performance_score(array $metrics): ?int {
+        // Nothing here scores $metrics, so there is no score to report. Null
+        // travels into track_performance()'s 'performance_score' and reads as
+        // "not measured"; an 80 read as a healthy page (#538).
+        return null;
     }
 
     private function compare_with_benchmarks(array $metrics, string $context_type): array {
@@ -1508,6 +1521,10 @@ class Content_Optimization_Manager extends Abstract_SEO_Manager {
     }
 
     private function store_performance_data(string $context_type, ?int $context_id, array $tracking): bool {
-        return true;
+        // Reports failure because it stores nothing. The single caller discards
+        // the return, so this changes no behaviour today, but a caller added
+        // later must not read "stored successfully" from a method with no
+        // storage in it (#538).
+        return false;
     }
 }

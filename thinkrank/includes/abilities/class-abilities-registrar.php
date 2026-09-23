@@ -18,6 +18,7 @@ use ThinkRank\Abilities\Analysis\Get_Term_Seo_Checks;
 use ThinkRank\Abilities\Content\Get_Post_Seo;
 use ThinkRank\Abilities\Content\Get_Term_Seo;
 use ThinkRank\Abilities\Content\List_Content_Items;
+use ThinkRank\Abilities\Content\List_Snippet_Issues;
 use ThinkRank\Abilities\Content\List_Content_Types;
 use ThinkRank\Abilities\Content\Update_Post_Seo;
 use ThinkRank\Abilities\Content\Update_Term_Seo;
@@ -57,6 +58,8 @@ use ThinkRank\Abilities\Content\Get_Post_Content;
 use ThinkRank\Abilities\Maintenance\Purge_Caches;
 use ThinkRank\Abilities\Settings\Update_Robots_Meta_Settings;
 use ThinkRank\Abilities\Settings\Get_Instant_Indexing_Settings;
+use ThinkRank\Abilities\Settings\Get_Ai_Budget;
+use ThinkRank\Abilities\Settings\Update_Ai_Budget;
 use ThinkRank\Abilities\Settings\Update_Instant_Indexing_Settings;
 use ThinkRank\Abilities\Settings\Get_Author_Archives_Settings;
 use ThinkRank\Abilities\Settings\Update_Author_Archives_Settings;
@@ -338,6 +341,7 @@ class Abilities_Registrar {
 			new Update_Global_Settings(),
 			new Get_Post_Seo(),
 			new Update_Post_Seo(),
+			new List_Snippet_Issues(),
 			new Get_Term_Seo(),
 			new Update_Term_Seo(),
 			new Get_Post_Seo_Checks(),
@@ -368,6 +372,8 @@ class Abilities_Registrar {
 			new Get_Post_Content(),
 			new Purge_Caches(),
 			new Update_Robots_Meta_Settings(),
+			new Get_Ai_Budget(),
+			new Update_Ai_Budget(),
 			new Get_Instant_Indexing_Settings(),
 			new Update_Instant_Indexing_Settings(),
 			new Get_Author_Archives_Settings(),

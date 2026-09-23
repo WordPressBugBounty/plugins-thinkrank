@@ -97,28 +97,45 @@ class Metadata_Generator {
      * @throws \Exception If generation fails
      */
     public function generate_for_post(int $post_id, array $options = []): array {
+        $metadata = $this->suggest_for_post($post_id, $options);
+
+        // Save metadata to post meta
+        $this->save_post_metadata($post_id, $metadata);
+
+        return $metadata;
+    }
+
+    /**
+     * Generate metadata for a post without writing anything.
+     *
+     * The same generation as {@see self::generate_for_post()}, minus the save.
+     * Bulk Snippets shows the result for review and writes only when the user
+     * clicks Save, so it must never persist as a side effect (#727).
+     *
+     * @since 2.8.0
+     *
+     * @param int   $post_id Post ID.
+     * @param array $options Generation options.
+     * @return array Generated metadata.
+     * @throws \Exception If the post is missing or generation fails.
+     */
+    public function suggest_for_post(int $post_id, array $options = []): array {
         $post = get_post($post_id);
-        
+
         if (!$post) {
             throw new \Exception('Post not found');
         }
-        
+
         // Extract content from post
         $content = $this->extract_post_content($post);
-        
+
         // Add post-specific options
         $options = array_merge($options, [
             'content_type' => $this->determine_content_type($post),
             'post_id' => $post_id,
         ]);
-        
-        // Generate metadata
-        $metadata = $this->generate_for_content($content, $options);
-        
-        // Save metadata to post meta
-        $this->save_post_metadata($post_id, $metadata);
-        
-        return $metadata;
+
+        return $this->generate_for_content($content, $options);
     }
     
     /**

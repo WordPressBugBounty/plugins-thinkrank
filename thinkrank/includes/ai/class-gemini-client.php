@@ -417,6 +417,12 @@ class Gemini_Client {
      * @throws \Exception If request fails
      */
     private function make_request(string $endpoint, array $data): array {
+        // The user's daily ceiling and kill switch are enforced here, at the
+        // one place every outbound Gemini call passes through, so no feature
+        // path can bypass them by forgetting to ask first (#448).
+        Spend_Guard::guard();
+        Spend_Guard::record();
+
         // Send the API key in the x-goog-api-key header rather than the URL
         // query string, which is logged by servers, proxies and referrers.
         $url = "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:{$endpoint}";

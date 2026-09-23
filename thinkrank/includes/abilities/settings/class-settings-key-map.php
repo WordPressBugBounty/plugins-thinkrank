@@ -160,6 +160,11 @@ final class Settings_Key_Map {
 	public static function sitemap(): array {
 		return [
 			'enabled'                    => self::boolean( __( 'Whether XML sitemap generation is active.', 'thinkrank' ) ),
+			'delivery_mode'              => [
+				'type'        => 'string',
+				'enum'        => \ThinkRank\SEO\Sitemap_Generator::DELIVERY_MODES,
+				'description' => __( 'How the sitemap reaches crawlers. "auto" writes files when the WordPress root is writable and serves the sitemap from WordPress when it is not. "static" always writes files, and fails where that is not possible. "dynamic" always serves from WordPress and writes nothing.', 'thinkrank' ),
+			],
 			'auto_generate'              => self::boolean( __( 'Whether the sitemap regenerates automatically when content changes.', 'thinkrank' ) ),
 			'use_sitemap_index'          => self::boolean( __( 'Whether to publish a sitemap index that links per-type sitemaps, rather than one flat file.', 'thinkrank' ) ),
 			'links_per_sitemap'          => [

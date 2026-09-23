@@ -404,6 +404,12 @@ class Claude_Client {
      * @throws \Exception If request fails
      */
     private function make_request(string $endpoint, array $body = []): array {
+        // The user's daily ceiling and kill switch are enforced here, at the
+        // one place every outbound Claude call passes through, so no feature
+        // path can bypass them by forgetting to ask first (#448).
+        Spend_Guard::guard();
+        Spend_Guard::record();
+
         $url = self::API_BASE_URL . '/' . ltrim($endpoint, '/');
         
         $args = [

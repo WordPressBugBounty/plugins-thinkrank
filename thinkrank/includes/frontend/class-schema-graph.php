@@ -994,7 +994,7 @@ class Schema_Graph {
         }
 
         echo "<!-- ThinkRank Schema Graph -->\n";
-        echo '<script type="application/ld+json">' . "\n";
+        echo '<script type="application/ld+json" data-thinkrank="schema-graph">' . "\n";
         echo $json . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_json_encode with JSON_HEX_* cannot break out of the script block.
         echo '</script>' . "\n";
         echo "<!-- /ThinkRank Schema Graph -->\n";

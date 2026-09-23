@@ -49,6 +49,17 @@ class Settings {
     const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-4o-mini';
 
     /**
+     * Default request timeout for the OpenAI-compatible provider, in seconds.
+     *
+     * Deliberately higher than the 120s the hosted providers get: a local model
+     * on CPU routinely takes minutes for a content brief, and a timeout there
+     * is never retried (see OpenAI_Client::request_with_retry()).
+     *
+     * @since 2.8.0
+     */
+    const DEFAULT_OPENAI_COMPATIBLE_TIMEOUT = 120;
+
+    /**
      * Canonical default author-archive templates.
      *
      * Same single-source-of-truth rule as the model constants above: the
@@ -68,7 +79,7 @@ class Settings {
      * @since 2.2.0
      * @var string[]
      */
-    public const SUPPORTED_AI_PROVIDERS = ['openai', 'claude', 'gemini', 'openrouter'];
+    public const SUPPORTED_AI_PROVIDERS = ['openai', 'claude', 'gemini', 'openrouter', 'openai_compatible'];
 
     /**
      * The stored value meaning "the user has not chosen a provider yet".
@@ -96,6 +107,38 @@ class Settings {
      */
     public static function selectable_ai_providers(): array {
         return array_merge([self::AI_PROVIDER_NONE], self::SUPPORTED_AI_PROVIDERS);
+    }
+
+    /**
+     * Is the selected AI provider configured well enough to run a request?
+     *
+     * One answer for the whole plugin. The admin menu notice, the metabox
+     * "Generate with AI" button and every generator used to ask their own
+     * version of this as an inline OR over the API key settings, which the
+     * OpenAI-compatible provider invalidates: a local Ollama or LM Studio
+     * server has no key and is configured by base URL + model id (#721).
+     *
+     * Provider-aware on purpose. A stored key for a provider the site did not
+     * select never made AI features work, so counting it only produced enabled
+     * buttons that fail on click.
+     *
+     * @since 2.8.0
+     *
+     * @return bool
+     */
+    public function has_ai_provider_configured(): bool {
+        $provider = (string) $this->get('ai_provider', self::AI_PROVIDER_NONE);
+
+        if (self::AI_PROVIDER_NONE === $provider) {
+            return false;
+        }
+
+        if ('openai_compatible' === $provider) {
+            return '' !== trim((string) $this->get('openai_compatible_base_url', ''))
+                && '' !== trim((string) $this->get('openai_compatible_model', ''));
+        }
+
+        return !empty($this->get($provider . '_api_key'));
     }
 
     const DEFAULT_AUTHOR_ARCHIVES_TITLE     = '%author_name% %separator% %site_title% %page%';
@@ -183,6 +226,16 @@ class Settings {
         'gemini_model' => self::DEFAULT_GEMINI_MODEL,
         'openrouter_api_key' => '',
         'openrouter_model' => self::DEFAULT_OPENROUTER_MODEL,
+        // OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, Azure OpenAI,
+        // Groq, a company gateway…). No default URL or model: this provider
+        // does nothing until the administrator names a server (#721).
+        'openai_compatible_base_url' => '',
+        'openai_compatible_api_key' => '',
+        'openai_compatible_model' => '',
+        'openai_compatible_timeout' => self::DEFAULT_OPENAI_COMPATIBLE_TIMEOUT,
+        'openai_compatible_supports_images' => false,
+        'openai_compatible_json_mode' => false,
+        'openai_compatible_price_per_million' => 0.0,
         'max_tokens' => 1000,
         'temperature' => 0.7,
 
@@ -206,8 +259,14 @@ class Settings {
 
         // Performance Settings
         'cache_duration' => 3600,
-        'max_requests_per_minute' => 10,
+        'max_requests_per_minute' => 0,
         'enable_logging' => true,
+
+        // AI spend controls (#448). Both are neutral by default so an upgrade
+        // changes nothing: 0 means no daily ceiling, and AI is not paused.
+        // Enforced by ThinkRank\AI\Spend_Guard at the provider HTTP boundary.
+        'ai_daily_request_limit' => 0,
+        'ai_paused' => false,
 
         // Integration Settings
         'api_timeout' => 30,
@@ -299,6 +358,7 @@ class Settings {
         'claude_api_key',
         'gemini_api_key',
         'openrouter_api_key',
+        'openai_compatible_api_key',
         // Google API Keys
         'google_analytics_api_key',
         'google_search_console_api_key',
@@ -318,6 +378,22 @@ class Settings {
      */
     public function init(): void {
         add_action('admin_init', [$this, 'register_settings']);
+        // Every value below is read from THIS site's options, and the cache is
+        // keyed by setting name alone. On multisite a switch_to_blog() leaves
+        // the previous site's values sitting in it, so anything that switches
+        // reads the wrong site's configuration (#516). Nothing in the plugin
+        // switched blogs before the OAuth discovery resolver did, which is why
+        // this had never bitten.
+        //
+        // Registered against the CLASS, not $this. init() runs on the object in
+        // the component container, while every consumer reads through
+        // Settings::instance() — and those are not always the same object: a
+        // caller that resolves the singleton while load_components() is still
+        // building the array gets a standalone instance, which is then memoized
+        // for the rest of the request. Hooking $this there registers the flush
+        // on an object nobody reads through, which is exactly the shape of bug
+        // a source-scanning test cannot see.
+        add_action('switch_blog', [self::class, 'flush_instance_cache']);
         // Admin-only: a front-end pageview can never need this migration, and
         // the marker is a non-autoloaded option, so hooking it unconditionally
         // bought one dedicated query on every request for the life of the
@@ -325,6 +401,33 @@ class Settings {
         if (is_admin()) {
             add_action('init', [self::class, 'retire_seeded_ai_provider']);
         }
+    }
+
+    /**
+     * Drop every memoized setting value.
+     *
+     * Called on `switch_blog` so a blog switch cannot serve the previous
+     * site's configuration, and available to any caller that switches
+     * explicitly. Cheap: the next read repopulates from the options cache.
+     *
+     * @since 2.9.0
+     * @return void
+     */
+    public function flush_cache(): void {
+        $this->cache = [];
+    }
+
+    /**
+     * Drop the memo on the instance consumers actually read through.
+     *
+     * Resolved at fire time rather than registration time, so it always acts on
+     * whatever Settings::instance() currently returns.
+     *
+     * @since 2.9.0
+     * @return void
+     */
+    public static function flush_instance_cache(): void {
+        self::instance()->flush_cache();
     }
 
     /**
@@ -772,7 +875,43 @@ class Settings {
             case 'claude_api_key':
             case 'gemini_api_key':
             case 'openrouter_api_key':
+            case 'openai_compatible_api_key':
                 return sanitize_text_field($value);
+
+            case 'openai_compatible_base_url':
+                // Validation (scheme, SSRF guard) belongs to the write path that
+                // can report a reason to the user; a value that never went
+                // through it must not become a URL we fetch, so an invalid one
+                // is stored as empty — which disables the provider — rather
+                // than silently kept.
+                $url = esc_url_raw(trim((string) $value));
+                if ('' === $url) {
+                    return '';
+                }
+                $validated = \ThinkRank\AI\Endpoint_URL_Validator::validate($url);
+
+                return is_wp_error($validated) ? '' : $validated;
+
+            case 'openai_compatible_timeout':
+                // Below 10s nothing local ever finishes; above 600s PHP-FPM
+                // kills the request first.
+                return max(10, min(600, absint($value)));
+
+            case 'openai_compatible_price_per_million':
+                return max(0.0, (float) $value);
+
+            case 'openai_compatible_supports_images':
+            case 'openai_compatible_json_mode':
+                // Each toggle decides whether we send a field (a vision
+                // payload, response_format) a server may reject, so coerce the '0'/'false' a form
+                // post can send rather than storing a truthy string (the
+                // default: arm keeps strings as strings, and '0' is truthy to
+                // nobody but PHP's loose rules).
+                if (is_string($value)) {
+                    return !in_array(strtolower(trim($value)), ['', '0', 'false', 'no', 'off'], true);
+                }
+
+                return (bool) $value;
 
             case 'ai_provider':
                 // sanitize_key() maps '' to '', which is AI_PROVIDER_NONE — the
@@ -788,6 +927,7 @@ class Settings {
             case 'claude_model':
             case 'gemini_model':
             case 'openrouter_model':
+            case 'openai_compatible_model':
                 // Model ids may contain dots and slashes (e.g. "gpt-4.1" or
                 // "openai/gpt-4o-mini") and users can enter custom models, so
                 // sanitize_key() would corrupt them — use text-field sanitizing.
@@ -796,12 +936,20 @@ class Settings {
             case 'max_tokens':
             case 'cache_duration':
             case 'max_requests_per_minute':
+            case 'ai_daily_request_limit':
             case 'seo_score_threshold':
             case 'api_timeout':
             case 'retry_attempts':
             case 'data_retention_days':
             case 'monitoring_frequency':
                 return absint($value);
+
+            case 'ai_paused':
+                // The kill switch arrives from REST as a real boolean, from a
+                // form post as "1"/"0", and from WP-CLI as "true"/"false". The
+                // default arm's sanitize_text_field() would turn "false" into a
+                // truthy string and silently pause a site that asked to resume.
+                return rest_sanitize_boolean($value);
 
             case 'temperature':
                 return (float) $value;

@@ -89,8 +89,32 @@ class Vision_Client {
     public function is_available(): bool {
         $provider = (string) $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
 
+        if ('openai_compatible' === $provider) {
+            return $this->compatible_vision_ready();
+        }
+
         return isset(self::capable_providers()[$provider])
             && '' !== $this->api_key_for($provider);
+    }
+
+    /**
+     * Can the user's own OpenAI-compatible endpoint describe an image?
+     *
+     * Only the administrator knows: an Ollama box running llama3.1 cannot,
+     * the same box running llava can, and there is no reliable way to ask the
+     * server. So it is a declared capability (`openai_compatible_supports_images`,
+     * default off) rather than a guess — sending a vision payload to a
+     * text-only model returns a confusing 400, and AI alt text stays hidden
+     * until the user says the model handles images (#721).
+     *
+     * @since 2.8.0
+     *
+     * @return bool
+     */
+    private function compatible_vision_ready(): bool {
+        return (bool) $this->settings->get('openai_compatible_supports_images', false)
+            && '' !== (string) $this->settings->get('openai_compatible_base_url', '')
+            && '' !== trim((string) $this->settings->get('openai_compatible_model', ''));
     }
 
     /**
@@ -127,6 +151,28 @@ class Vision_Client {
             throw new \Exception(esc_html__(
                 'No AI provider is selected. Choose OpenAI, Anthropic or Gemini in Settings → AI Provider.',
                 'thinkrank'
+            ));
+        }
+
+        if ('openai_compatible' === $provider) {
+            if (!$this->compatible_vision_ready()) {
+                throw new \Exception(esc_html__(
+                    'Your OpenAI-compatible endpoint is not set up for images. Set a base URL and model id, and turn on "This model can describe images" in Settings → AI Provider.',
+                    'thinkrank'
+                ));
+            }
+
+            $image = $this->read_image($attachment_id);
+            if (null === $image) {
+                throw new \Exception(esc_html__('The image file could not be read, or is larger than the provider allows.', 'thinkrank'));
+            }
+
+            return $this->clean($this->call_openai(
+                (string) $this->settings->get('openai_compatible_api_key', ''),
+                trim((string) $this->settings->get('openai_compatible_model', '')),
+                $this->build_prompt($context),
+                $image,
+                (string) $this->settings->get('openai_compatible_base_url', '')
             ));
         }
 
@@ -258,11 +304,12 @@ class Vision_Client {
      * @param string $api_key API key.
      * @param string $model   Model id.
      * @param string $prompt  Instruction.
-     * @param array  $image   ['data' => base64, 'mime' => string].
+     * @param array  $image    ['data' => base64, 'mime' => string].
+     * @param string $base_url Base URL, for an OpenAI-compatible endpoint that is not OpenAI's.
      * @return string
      * @throws \Exception On API failure.
      */
-    private function call_openai(string $api_key, string $model, string $prompt, array $image): string {
+    private function call_openai(string $api_key, string $model, string $prompt, array $image, string $base_url = OpenAI_Client::API_BASE_URL): string {
         $body = [
             'model'    => $model,
             'messages' => [[
@@ -284,10 +331,33 @@ class Vision_Client {
             $body['reasoning_effort'] = 'minimal';
         }
 
-        $response = $this->post('https://api.openai.com/v1/chat/completions', [
-            'Authorization' => 'Bearer ' . $api_key,
-            'Content-Type'  => 'application/json',
-        ], $body);
+        $base_url = rtrim(trim($base_url), '/');
+        if ('' === $base_url) {
+            $base_url = OpenAI_Client::API_BASE_URL;
+        }
+
+        // Ollama, LM Studio and vLLM reject max_completion_tokens — it is a
+        // parameter OpenAI added for its reasoning models, not part of the
+        // Chat Completions shape they implement — so a custom endpoint gets
+        // plain max_tokens.
+        if (OpenAI_Client::API_BASE_URL !== $base_url) {
+            unset($body['max_completion_tokens'], $body['reasoning_effort']);
+            $body['max_tokens'] = 300;
+        }
+
+        $headers = ['Content-Type' => 'application/json'];
+        // A local server usually wants no key at all.
+        if ('' !== $api_key) {
+            $headers['Authorization'] = 'Bearer ' . $api_key;
+            $headers['api-key']       = $api_key;
+        }
+
+        $response = $this->post(
+            Endpoint_URL_Validator::route($base_url, 'chat/completions'),
+            $headers,
+            $body,
+            OpenAI_Client::API_BASE_URL !== $base_url
+        );
 
         return (string) ($response['choices'][0]['message']['content'] ?? '');
     }
@@ -367,17 +437,34 @@ class Vision_Client {
      * @param string $url     Endpoint.
      * @param array  $headers Headers.
      * @param array  $body    Payload.
+     * @param bool   $guarded Whether this is a user-named endpoint, which has its
+     *                        destination resolved, pinned and its body capped.
      * @return array Decoded response.
      * @throws \Exception On transport or API error.
      */
-    private function post(string $url, array $headers, array $body): array {
-        $response = wp_remote_post($url, [
+    private function post(string $url, array $headers, array $body, bool $guarded = false): array {
+        // The user's daily ceiling and kill switch are enforced here, at the
+        // one place every outbound vision call passes through, so no feature
+        // path can bypass them by forgetting to ask first (#448).
+        Spend_Guard::guard();
+        Spend_Guard::record();
+
+        $args = [
             // Vision calls carry a payload and think for a moment; the 30s
-            // default is too tight for a large image on a slow link.
-            'timeout' => 60,
+            // default is too tight for a large image on a slow link. A local
+            // vision model is slower still, so honour the user's own timeout
+            // when they configured one (#721).
+            'timeout' => $this->request_timeout(),
             'headers' => $headers,
             'body'    => wp_json_encode($body),
-        ]);
+            // The key rides in a header; never let a redirect hand it to
+            // another host.
+            'redirection' => 0,
+        ];
+
+        $response = $guarded
+            ? Endpoint_URL_Validator::guarded_request($url, $args + ['method' => 'POST'])
+            : wp_remote_post($url, $args);
 
         if (is_wp_error($response)) {
             throw new \Exception(esc_html($response->get_error_message()));
@@ -393,6 +480,25 @@ class Vision_Client {
         }
 
         return is_array($data) ? $data : [];
+    }
+
+    /**
+     * Timeout for a vision request.
+     *
+     * 60s for the hosted providers. A local vision model on CPU is slower than
+     * anything hosted, so an OpenAI-compatible endpoint gets the timeout the
+     * administrator configured for it, floored at 60 (#721).
+     *
+     * @since 2.8.0
+     *
+     * @return int Seconds.
+     */
+    private function request_timeout(): int {
+        if ('openai_compatible' !== (string) $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE)) {
+            return 60;
+        }
+
+        return max(60, (int) $this->settings->get('openai_compatible_timeout', Settings::DEFAULT_OPENAI_COMPATIBLE_TIMEOUT));
     }
 
     /**

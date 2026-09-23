@@ -69,6 +69,17 @@ class Manager {
     private const AI_CONTENT_MAX_LENGTH = 5000;
 
     /**
+     * Ceilings for the OpenAI-compatible endpoint's model listing (#721).
+     *
+     * The endpoint is a host the site owner named, not one we trust: a
+     * misconfigured or hostile server can answer `GET /models` with an
+     * unbounded body or a catalogue of thousands. Both are bounded here — the
+     * field this feeds is a suggestion list, and the UI shows the first few.
+     */
+    private const MAX_MODELS_RESPONSE_BYTES = 262144; // 256 KB.
+    private const MAX_ENDPOINT_MODELS = 200;
+
+    /**
      * Sanitize and hard-cap an AI `content` request parameter.
      *
      * Used as the `sanitize_callback` for every AI endpoint's `content` arg so
@@ -194,6 +205,39 @@ class Manager {
                     'type' => 'string',
                     'sanitize_callback' => 'sanitize_text_field',
                 ],
+                // OpenAI-compatible endpoint (#721). The URL is not run through
+                // esc_url_raw here: Settings::sanitize_setting() validates it
+                // (scheme, SSRF guard) and save_settings() reports the reason
+                // when it refuses, which a sanitize callback cannot do.
+                'openai_compatible_base_url' => [
+                    'type' => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'openai_compatible_api_key' => [
+                    'type' => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'openai_compatible_model' => [
+                    'type' => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'openai_compatible_timeout' => [
+                    'type' => 'integer',
+                    'minimum' => 10,
+                    'maximum' => 600,
+                    'sanitize_callback' => 'absint',
+                    'validate_callback' => 'rest_validate_request_arg',
+                ],
+                'openai_compatible_supports_images' => [
+                    'type' => 'boolean',
+                ],
+                'openai_compatible_json_mode' => [
+                    'type' => 'boolean',
+                ],
+                'openai_compatible_price_per_million' => [
+                    'type' => 'number',
+                    'minimum' => 0,
+                ],
                 'max_tokens' => [
                     'type' => 'integer',
                     'minimum' => 1,
@@ -226,6 +270,26 @@ class Manager {
                     'sanitize_callback' => 'rest_sanitize_boolean',
                 ],
                 'enable_import_export' => [
+                    'type' => 'boolean',
+                    'sanitize_callback' => 'rest_sanitize_boolean',
+                ],
+                // AI spend controls (#448). `max_requests_per_minute` is not
+                // new, but it was never reachable: registered since 1.0 and
+                // rendered nowhere, so no user could see the throttle that was
+                // limiting them.
+                'max_requests_per_minute' => [
+                    'type' => 'integer',
+                    'minimum' => 0,
+                    'sanitize_callback' => 'absint',
+                    'validate_callback' => 'rest_validate_request_arg',
+                ],
+                'ai_daily_request_limit' => [
+                    'type' => 'integer',
+                    'minimum' => 0,
+                    'sanitize_callback' => 'absint',
+                    'validate_callback' => 'rest_validate_request_arg',
+                ],
+                'ai_paused' => [
                     'type' => 'boolean',
                     'sanitize_callback' => 'rest_sanitize_boolean',
                 ],
@@ -488,6 +552,40 @@ class Manager {
                     'required' => false,
                     'sanitize_callback' => 'sanitize_text_field',
                 ],
+                // Only used by the openai_compatible provider: the URL on
+                // screen, so an unsaved endpoint can be tested before saving.
+                'base_url' => [
+                    'type' => 'string',
+                    'required' => false,
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                // Only used by the openai_compatible provider: the JSON mode
+                // toggle on screen. Omitted, the saved setting decides.
+                'json_mode' => [
+                    'type' => 'boolean',
+                    'required' => false,
+                ],
+            ],
+        ]);
+
+        // Ask an OpenAI-compatible endpoint what models it serves. Ollama, LM
+        // Studio and vLLM all answer GET {base}/models; a gateway that does not
+        // simply leaves the user typing the id by hand (#721).
+        register_rest_route(self::NAMESPACE, '/ai/models', [
+            'methods' => 'POST',
+            'callback' => [$this, 'list_endpoint_models'],
+            'permission_callback' => [$this, 'check_admin_permissions'],
+            'args' => [
+                'base_url' => [
+                    'type' => 'string',
+                    'required' => false,
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'api_key' => [
+                    'type' => 'string',
+                    'required' => false,
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
             ],
         ]);
 
@@ -662,6 +760,15 @@ class Manager {
         if (!$enabled) {
             return true;
         }
+        // A non-positive limit means unlimited, matching AI\Manager and the
+        // label on the control (#448). This used to fall through to
+        // max(1, $limit) below, which turned a 0 into the most restrictive
+        // setting available rather than the least: the first request of each
+        // minute was allowed and every other one got a 429. Harmless while the
+        // field was rendered nowhere, user-facing the moment it was surfaced.
+        if ($limit <= 0) {
+            return true;
+        }
         $now = time();
         $window = 60;
         $key = 'thinkrank_rl_' . md5($bucket_id);
@@ -672,7 +779,7 @@ class Manager {
         if ($now - ($bucket['start'] ?? 0) >= $window) {
             $bucket = ['start' => $now, 'count' => 0];
         }
-        if (($bucket['count'] ?? 0) >= max(1, $limit)) {
+        if (($bucket['count'] ?? 0) >= $limit) {
             return new \WP_Error('rate_limited', __('Rate limit exceeded. Please wait a moment and try again.', 'thinkrank'), ['status' => 429]);
         }
         $bucket['count']++;
@@ -816,6 +923,13 @@ class Manager {
             'gemini_model' => $settings_instance->get('gemini_model', \ThinkRank\Core\Settings::DEFAULT_GEMINI_MODEL),
             'openrouter_api_key' => $settings_instance->get('openrouter_api_key', ''),
             'openrouter_model' => $settings_instance->get('openrouter_model', \ThinkRank\Core\Settings::DEFAULT_OPENROUTER_MODEL),
+            'openai_compatible_base_url' => $settings_instance->get('openai_compatible_base_url', ''),
+            'openai_compatible_api_key' => $settings_instance->get('openai_compatible_api_key', ''),
+            'openai_compatible_model' => $settings_instance->get('openai_compatible_model', ''),
+            'openai_compatible_timeout' => (int) $settings_instance->get('openai_compatible_timeout', \ThinkRank\Core\Settings::DEFAULT_OPENAI_COMPATIBLE_TIMEOUT),
+            'openai_compatible_supports_images' => (bool) $settings_instance->get('openai_compatible_supports_images', false),
+            'openai_compatible_json_mode' => (bool) $settings_instance->get('openai_compatible_json_mode', false),
+            'openai_compatible_price_per_million' => (float) $settings_instance->get('openai_compatible_price_per_million', 0),
             'max_tokens' => $settings_instance->get('max_tokens', 1000),
             'temperature' => $settings_instance->get('temperature', 0.7),
             'cache_duration' => $settings_instance->get('cache_duration', 3600),
@@ -824,6 +938,9 @@ class Manager {
             'enable_import_export' => (bool) $settings_instance->get('enable_import_export', false),
             'google_account_connected' => (bool) $settings_instance->get('google_account_connected', false),
             'enable_mcp' => (bool) $settings_instance->get('enable_mcp', false),
+            'max_requests_per_minute' => (int) $settings_instance->get('max_requests_per_minute', 0),
+            'ai_daily_request_limit' => (int) $settings_instance->get('ai_daily_request_limit', 0),
+            'ai_paused' => (bool) $settings_instance->get('ai_paused', false),
         ];
 
 
@@ -841,6 +958,9 @@ class Manager {
         }
         if (!empty($settings['openrouter_api_key'])) {
             $settings['openrouter_api_key'] = $this->mask_ai_api_key($settings['openrouter_api_key']);
+        }
+        if (!empty($settings['openai_compatible_api_key'])) {
+            $settings['openai_compatible_api_key'] = $this->mask_ai_api_key($settings['openai_compatible_api_key']);
         }
 
         return new \WP_REST_Response($settings);
@@ -881,6 +1001,103 @@ class Manager {
         // below and mint/revoke the connection token to match (see #244).
         $mcp_was_enabled = (bool) $settings->get('enable_mcp', false);
 
+        // Pointing the site's AI at an arbitrary host — including loopback and
+        // LAN addresses, which this provider deliberately allows — is an
+        // administrator's decision, not a delegated one. The settings route
+        // itself is delegable through the Role Manager's `thinkrank_settings`
+        // capability, so an editor granted "manage ThinkRank settings" could
+        // otherwise aim server-side requests (with an Authorization header of
+        // their choosing) at internal services. Every other field on this route
+        // stays delegable; only these are held back (#721).
+        $endpoint_fields = [
+            'openai_compatible_base_url',
+            'openai_compatible_api_key',
+            'openai_compatible_model',
+            'openai_compatible_timeout',
+            'openai_compatible_supports_images',
+            'openai_compatible_json_mode',
+            'openai_compatible_price_per_million',
+        ];
+
+        foreach ($endpoint_fields as $endpoint_field) {
+            if (!isset($params[$endpoint_field])) {
+                continue;
+            }
+
+            // Only an actual change needs the capability: a client that echoes
+            // the whole settings payload back unchanged is not reconfiguring
+            // anything, and failing that save would break the Settings screen
+            // for delegated users editing an unrelated field.
+            //
+            // The key needs the mask rule the persistence loop below already
+            // uses. GET /settings returns it masked ("sk-pr••••••••abc"), so
+            // comparing that against the stored plaintext always differs, and
+            // every echoed payload would read as "an administrator changed the
+            // key" — locking delegated users out of saving anything at all.
+            $submitted = $params[$endpoint_field];
+            if (is_string($submitted) && false !== strpos($submitted, '••••••••')) {
+                continue;
+            }
+
+            $stored = $settings->get($endpoint_field);
+
+            // Booleans and numbers arrive typed from the REST layer but are
+            // stored as '1'/'' and '120'; compare them as the values they are.
+            if (is_bool($submitted) || is_bool($stored)) {
+                if ((bool) $stored === (bool) $submitted) {
+                    continue;
+                }
+            } elseif (is_numeric($submitted) && is_numeric($stored)) {
+                if ((float) $stored === (float) $submitted) {
+                    continue;
+                }
+            } elseif ((string) $stored === (string) $submitted) {
+                continue;
+            }
+
+            if (!current_user_can('manage_options')) {
+                return new \WP_REST_Response([
+                    'success' => false,
+                    'message' => __('Only an administrator can configure a custom AI endpoint.', 'thinkrank'),
+                    'field' => $endpoint_field,
+                ], 403);
+            }
+
+            break;
+        }
+
+        // Selecting the provider is the same decision by another name.
+        if (isset($params['ai_provider'])
+            && 'openai_compatible' === $params['ai_provider']
+            && 'openai_compatible' !== (string) $settings->get('ai_provider', \ThinkRank\Core\Settings::AI_PROVIDER_NONE)
+            && !current_user_can('manage_options')
+        ) {
+            return new \WP_REST_Response([
+                'success' => false,
+                'message' => __('Only an administrator can configure a custom AI endpoint.', 'thinkrank'),
+                'field' => 'ai_provider',
+            ], 403);
+        }
+
+        // A refused endpoint URL has to say why. Settings::sanitize_setting()
+        // stores '' for one that fails validation — right, since an unvalidated
+        // URL must never become a URL we fetch — but silent, so the user would
+        // see "Settings saved" and an endpoint that vanished. Validate here,
+        // where the reason can be returned, and reject the whole save: a
+        // half-applied AI provider is worse than none (#721).
+        if (!empty($params['openai_compatible_base_url'])) {
+            $validated_base_url = \ThinkRank\AI\Endpoint_URL_Validator::validate((string) $params['openai_compatible_base_url']);
+            if (is_wp_error($validated_base_url)) {
+                return new \WP_REST_Response([
+                    'success' => false,
+                    'message' => $validated_base_url->get_error_message(),
+                    'field' => 'openai_compatible_base_url',
+                ], 400);
+            }
+
+            $params['openai_compatible_base_url'] = $validated_base_url;
+        }
+
         // Map frontend parameter names to setting keys
         $settings_map = [
             'ai_provider' => 'ai_provider',
@@ -892,6 +1109,13 @@ class Manager {
             'gemini_model' => 'gemini_model',
             'openrouter_api_key' => 'openrouter_api_key',
             'openrouter_model' => 'openrouter_model',
+            'openai_compatible_base_url' => 'openai_compatible_base_url',
+            'openai_compatible_api_key' => 'openai_compatible_api_key',
+            'openai_compatible_model' => 'openai_compatible_model',
+            'openai_compatible_timeout' => 'openai_compatible_timeout',
+            'openai_compatible_supports_images' => 'openai_compatible_supports_images',
+            'openai_compatible_json_mode' => 'openai_compatible_json_mode',
+            'openai_compatible_price_per_million' => 'openai_compatible_price_per_million',
             'max_tokens' => 'max_tokens',
             'temperature' => 'temperature',
             'cache_duration' => 'cache_duration',
@@ -899,6 +1123,9 @@ class Manager {
             'enable_mcp' => 'enable_mcp',
             'enable_migration_tools' => 'enable_migration_tools',
             'enable_import_export' => 'enable_import_export',
+            'max_requests_per_minute' => 'max_requests_per_minute',
+            'ai_daily_request_limit' => 'ai_daily_request_limit',
+            'ai_paused' => 'ai_paused',
         ];
 
         // Processing settings save request
@@ -908,7 +1135,7 @@ class Manager {
                 $value = $params[$param_key];
 
                 // Handle API keys specially - check for masked values
-                if (in_array($param_key, ['openai_api_key', 'claude_api_key', 'gemini_api_key', 'openrouter_api_key'], true)) {
+                if (in_array($param_key, ['openai_api_key', 'claude_api_key', 'gemini_api_key', 'openrouter_api_key', 'openai_compatible_api_key'], true)) {
                     // Don't update if the value carries the mask sentinel (the
                     // preview now keeps real head/tail chars around it, so match
                     // anywhere rather than only at the start). Empty still clears.
@@ -947,7 +1174,7 @@ class Manager {
         $this->maybe_dismiss_welcome_notice($params);
 
         // Force AI Manager to re-initialize client with new settings
-        if (isset($params['ai_provider']) || isset($params['openai_api_key']) || isset($params['claude_api_key']) || isset($params['gemini_api_key']) || isset($params['openrouter_api_key'])) {
+        if (isset($params['ai_provider']) || isset($params['openai_api_key']) || isset($params['claude_api_key']) || isset($params['gemini_api_key']) || isset($params['openrouter_api_key']) || isset($params['openai_compatible_base_url']) || isset($params['openai_compatible_api_key']) || isset($params['openai_compatible_model'])) {
             // Clear any cached AI Manager instances to force re-initialization
             wp_cache_delete('thinkrank_ai_manager', 'thinkrank');
 
@@ -1057,7 +1284,7 @@ class Manager {
         $user_id = get_current_user_id();
         $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
         $bucket_id = 'ai_generate|' . ($user_id ?: $ip);
-        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 10);
+        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 0);
         $allowed = $this->enforce_rate_limit($bucket_id, $limit);
         if (is_wp_error($allowed)) {
             return new \WP_REST_Response([
@@ -1111,7 +1338,7 @@ class Manager {
         $user_id = get_current_user_id();
         $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
         $bucket_id = 'ai_generate|' . ($user_id ?: $ip);
-        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 10);
+        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 0);
         $allowed = $this->enforce_rate_limit($bucket_id, $limit);
         if (is_wp_error($allowed)) {
             return new \WP_REST_Response([
@@ -1161,7 +1388,7 @@ class Manager {
         $user_id = get_current_user_id();
         $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
         $bucket_id = 'ai_generate|' . ($user_id ?: $ip);
-        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 10);
+        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 0);
         $allowed = $this->enforce_rate_limit($bucket_id, $limit);
         if (is_wp_error($allowed)) {
             return new \WP_REST_Response([
@@ -1213,7 +1440,7 @@ class Manager {
         $user_id = get_current_user_id();
         $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
         $bucket_id = 'ai_generate|' . ($user_id ?: $ip);
-        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 10);
+        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 0);
         $allowed = $this->enforce_rate_limit($bucket_id, $limit);
         if (is_wp_error($allowed)) {
             return new \WP_REST_Response([
@@ -1259,7 +1486,7 @@ class Manager {
         $user_id = get_current_user_id();
         $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
         $bucket_id = 'ai_generate|' . ($user_id ?: $ip);
-        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 10);
+        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 0);
         $allowed = $this->enforce_rate_limit($bucket_id, $limit);
         if (is_wp_error($allowed)) {
             return new \WP_REST_Response([
@@ -1308,7 +1535,7 @@ class Manager {
         $user_id = get_current_user_id();
         $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
         $bucket_id = 'ai_generate|' . ($user_id ?: $ip);
-        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 10);
+        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 0);
         $allowed = $this->enforce_rate_limit($bucket_id, $limit);
         if (is_wp_error($allowed)) {
             return new \WP_REST_Response([
@@ -1407,7 +1634,7 @@ class Manager {
         $user_id = get_current_user_id();
         $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
         $bucket_id = 'ai_test|' . ($user_id ?: $ip);
-        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 10);
+        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 0);
         $allowed = $this->enforce_rate_limit($bucket_id, $limit);
         if (is_wp_error($allowed)) {
             return new \WP_REST_Response([
@@ -1433,6 +1660,32 @@ class Manager {
                     /* translators: %s: the unrecognised provider value. */
                     'message' => sprintf(__('Unknown AI provider: %s', 'thinkrank'), $provider),
                 ], 400);
+            }
+
+            // The OpenAI-compatible endpoint is tested by URL, not by key: a
+            // local Ollama or LM Studio server wants no key, so the key checks
+            // below would refuse to test a perfectly good endpoint (#721).
+            if ('openai_compatible' === $provider) {
+                $base_url = trim((string) $request->get_param('base_url'));
+                if ('' === $base_url) {
+                    $base_url = (string) \ThinkRank\Core\Settings::instance()->get('openai_compatible_base_url', '');
+                }
+
+                if (empty($api_key)) {
+                    $api_key = (string) \ThinkRank\Core\Settings::instance()->get('openai_compatible_api_key', '');
+                }
+
+                if ('' === $model) {
+                    $model = trim((string) \ThinkRank\Core\Settings::instance()->get('openai_compatible_model', ''));
+                }
+
+                $json_mode = $request->has_param('json_mode')
+                    ? (bool) $request->get_param('json_mode')
+                    : (bool) \ThinkRank\Core\Settings::instance()->get('openai_compatible_json_mode', false);
+
+                $result = $this->test_openai_compatible_connection($base_url, $api_key, $model, $json_mode);
+
+                return new \WP_REST_Response($result, $result['success'] ? 200 : 400);
             }
 
             // If no API key provided in request, try to get from saved settings
@@ -1474,6 +1727,361 @@ class Manager {
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Test an OpenAI-compatible endpoint with a real (tiny) completion.
+     *
+     * Deliberately not a GET /models probe: a server can list models and still
+     * fail to complete (wrong model id, model not pulled, gateway that only
+     * proxies /models). The one-token chat completion answers the question the
+     * user is actually asking — "can ThinkRank generate with this?" — and its
+     * reply plus latency is what the settings screen shows (#721).
+     *
+     * @since 2.8.0
+     *
+     * @param string $base_url Base URL as typed (validated here).
+     * @param string $api_key  Optional API key.
+     * @param string $model     Model id to complete with.
+     * @param bool   $json_mode Also check the server accepts response_format json_object.
+     * @return array Test result.
+     */
+    private function test_openai_compatible_connection(string $base_url, string $api_key, string $model, bool $json_mode = false): array {
+        $validated = \ThinkRank\AI\Endpoint_URL_Validator::validate($base_url);
+        if (is_wp_error($validated)) {
+            return [
+                'success' => false,
+                'message' => $validated->get_error_message(),
+            ];
+        }
+
+        if ('' === trim($model)) {
+            return [
+                'success' => false,
+                'message' => __('Enter the model id your endpoint should use, for example llama3.1 or gpt-4o.', 'thinkrank'),
+            ];
+        }
+
+        $headers = ['Content-Type' => 'application/json'];
+        if ('' !== $api_key) {
+            $headers['Authorization'] = 'Bearer ' . $api_key;
+            $headers['api-key'] = $api_key;
+        }
+
+        // A "Reply with OK" answer is tiny; anything approaching this is a
+        // server misbehaving, and the guard caps it before it is buffered.
+        $max_bytes = 131072;
+
+        $started = microtime(true);
+
+        $response = \ThinkRank\AI\Endpoint_URL_Validator::guarded_request(\ThinkRank\AI\Endpoint_URL_Validator::route($validated, 'chat/completions'), [
+            'method' => 'POST',
+            // Long enough for a cold local model to load its weights, short
+            // enough that a wrong URL does not hang the settings screen.
+            'timeout' => 30,
+            'headers' => $headers,
+            'limit_response_size' => $max_bytes,
+            'body' => wp_json_encode([
+                'model' => trim($model),
+                'messages' => [['role' => 'user', 'content' => 'Reply with OK']],
+                // Not 16: a local reasoning model (deepseek-r1, a qwen3
+                // thinking build) spends its first tokens on hidden reasoning
+                // and returns empty content if the budget runs out there, which
+                // would report a working endpoint as broken.
+                'max_tokens' => 128,
+            ]),
+        ]);
+
+        $latency_ms = (int) round((microtime(true) - $started) * 1000);
+
+        if (is_wp_error($response)) {
+            return [
+                'success' => false,
+                /* translators: %s: transport error, e.g. "cURL error 7: Connection refused". */
+                'message' => sprintf(__('Could not reach the endpoint: %s', 'thinkrank'), $response->get_error_message()),
+            ];
+        }
+
+        $status = (int) wp_remote_retrieve_response_code($response);
+        $raw_body = wp_remote_retrieve_body($response);
+
+        // Redirects are never followed (the key would go wherever the endpoint
+        // points). Say so, rather than letting the empty 3xx body read as a
+        // wrong model id: an http-to-https upgrade is the usual cause.
+        if ($status >= 300 && $status < 400) {
+            $location = (string) wp_remote_retrieve_header($response, 'location');
+
+            return [
+                'success' => false,
+                'status' => $status,
+                'message' => '' !== $location
+                    ? sprintf(
+                        /* translators: 1: HTTP status code, 2: the URL the endpoint redirected to. */
+                        __('The endpoint redirected (%1$d) to %2$s. Redirects are refused so your API key cannot follow them. Enter the final URL instead, for example https:// in place of http://.', 'thinkrank'),
+                        $status,
+                        esc_url_raw($location)
+                    )
+                    : sprintf(
+                        /* translators: %d: HTTP status code. */
+                        __('The endpoint redirected (%d). Redirects are refused so your API key cannot follow them. Enter the final URL instead, for example https:// in place of http://.', 'thinkrank'),
+                        $status
+                    ),
+            ];
+        }
+
+        // A body that reached the cap was cut mid-JSON. Report that, not a
+        // missing completion: the model id was never the problem.
+        if (strlen($raw_body) >= $max_bytes) {
+            return [
+                'success' => false,
+                'status' => $status,
+                'message' => __('The endpoint sent more than ThinkRank will read for a connection test (128 KB). It is misconfigured or is not answering with a chat completion.', 'thinkrank'),
+            ];
+        }
+
+        $body = json_decode($raw_body, true);
+
+        if ($status >= 400) {
+            $error = '';
+            if (is_array($body)) {
+                $error = (string) ($body['error']['message'] ?? ($body['error'] ?? ($body['message'] ?? '')));
+            }
+            if ('' === $error) {
+                $error = wp_remote_retrieve_response_message($response);
+            }
+
+            return [
+                'success' => false,
+                'status' => $status,
+                /* translators: 1: HTTP status code, 2: error message from the server. */
+                'message' => sprintf(__('The endpoint answered %1$d: %2$s', 'thinkrank'), $status, $error),
+            ];
+        }
+
+        $reply = '';
+        $reasoning_only = false;
+        if (is_array($body)) {
+            $message = is_array($body['choices'][0]['message'] ?? null) ? $body['choices'][0]['message'] : [];
+            $reply = trim((string) ($message['content'] ?? ''));
+
+            // Ollama and vLLM expose a thinking model's hidden reasoning
+            // separately. Reasoning with no content still proves the endpoint
+            // and the model work — it means the model thinks before answering,
+            // which is worth saying out loud because it makes every generation
+            // slower.
+            if ('' === $reply) {
+                $reasoning = trim((string) ($message['reasoning'] ?? ($message['reasoning_content'] ?? '')));
+                if ('' !== $reasoning) {
+                    $reply = $reasoning;
+                    $reasoning_only = true;
+                }
+            }
+        }
+
+        if ('' === $reply) {
+            return [
+                'success' => false,
+                'status' => $status,
+                'message' => __('The endpoint replied, but with no completion text. Check that the model id is one this server serves.', 'thinkrank'),
+            ];
+        }
+
+        $result = [
+            'success' => true,
+            'model' => trim($model),
+            'model_available' => true,
+            'latency_ms' => $latency_ms,
+            'reply' => mb_substr($reply, 0, 200),
+            'reasoning_only' => $reasoning_only,
+            'message' => $reasoning_only
+                ? sprintf(
+                    /* translators: 1: model id, 2: latency in milliseconds. */
+                    __('Connected: "%1$s" answered in %2$d ms. It is a reasoning model: it thinks before replying, so generation will be slower and may need a higher timeout.', 'thinkrank'),
+                    trim($model),
+                    $latency_ms
+                )
+                : sprintf(
+                    /* translators: 1: model id, 2: latency in milliseconds, 3: the model's reply. */
+                    __('Connected: "%1$s" replied in %2$d ms: %3$s', 'thinkrank'),
+                    trim($model),
+                    $latency_ms,
+                    mb_substr($reply, 0, 80)
+                ),
+        ];
+
+        return $json_mode
+            ? $this->probe_openai_compatible_json_mode($validated, $headers, trim($model), $result)
+            : $result;
+    }
+
+    /**
+     * Check that an endpoint takes response_format json_object.
+     *
+     * Runs only after the plain completion worked, so a failure here can mean
+     * one thing: the endpoint works, but not with "Force valid JSON answers"
+     * on. Generation still works then, because OpenAI_Client falls back to a
+     * plain request, but every JSON call pays a failed round trip first. The
+     * connection stays a success; the result carries json_mode_supported so
+     * the screen can warn instead of reporting a broken endpoint.
+     *
+     * @since 2.8.0
+     *
+     * @param string $base_url Validated base URL.
+     * @param array  $headers  Request headers, key included.
+     * @param string $model    Model id.
+     * @param array  $result   Successful connection result to extend.
+     * @return array The result, with json_mode_supported and, when false, a warning message.
+     */
+    private function probe_openai_compatible_json_mode(string $base_url, array $headers, string $model, array $result): array {
+        $response = \ThinkRank\AI\Endpoint_URL_Validator::guarded_request(\ThinkRank\AI\Endpoint_URL_Validator::route($base_url, 'chat/completions'), [
+            'method' => 'POST',
+            'timeout' => 30,
+            'headers' => $headers,
+            'limit_response_size' => 131072,
+            'body' => wp_json_encode([
+                'model' => $model,
+                // OpenAI refuses json_object unless the messages mention JSON.
+                'messages' => [['role' => 'user', 'content' => 'Reply with the JSON object {"ok": true}']],
+                'max_tokens' => 128,
+                'response_format' => ['type' => 'json_object'],
+            ]),
+        ]);
+
+        // A timeout or dropped connection says nothing about JSON mode. Leave
+        // the result alone rather than warn about a field that was never judged.
+        if (is_wp_error($response)) {
+            return $result;
+        }
+
+        $status = (int) wp_remote_retrieve_response_code($response);
+        if ($status < 400) {
+            $result['json_mode_supported'] = true;
+            return $result;
+        }
+
+        $body = json_decode((string) wp_remote_retrieve_body($response), true);
+        $error = '';
+        if (is_array($body)) {
+            // OpenAI and vLLM nest the text under error.message; Ollama sends a bare error string.
+            $error = is_string($body['error'] ?? null)
+                ? $body['error']
+                : (string) ($body['error']['message'] ?? ($body['message'] ?? ''));
+        }
+        if ('' === $error) {
+            $error = (string) wp_remote_retrieve_response_message($response);
+        }
+
+        $result['json_mode_supported'] = false;
+        $result['message'] = sprintf(
+            /* translators: 1: model id, 2: HTTP status code, 3: error message from the server. */
+            __('Connected to "%1$s", but the endpoint rejected JSON mode (%2$d: %3$s). Turn off "Force valid JSON answers": generation still works, but each request is sent twice.', 'thinkrank'),
+            $model,
+            $status,
+            $error
+        );
+
+        return $result;
+    }
+
+    /**
+     * List the models an OpenAI-compatible endpoint serves.
+     *
+     * @since 2.8.0
+     *
+     * @param \WP_REST_Request $request Request object.
+     * @return \WP_REST_Response Response object.
+     */
+    public function list_endpoint_models(\WP_REST_Request $request): \WP_REST_Response {
+        $settings = \ThinkRank\Core\Settings::instance();
+
+        $base_url = trim((string) $request->get_param('base_url'));
+        if ('' === $base_url) {
+            $base_url = (string) $settings->get('openai_compatible_base_url', '');
+        }
+
+        $validated = \ThinkRank\AI\Endpoint_URL_Validator::validate($base_url);
+        if (is_wp_error($validated)) {
+            return new \WP_REST_Response([
+                'success' => false,
+                'message' => $validated->get_error_message(),
+            ], 400);
+        }
+
+        $api_key = trim((string) $request->get_param('api_key'));
+        if ('' === $api_key || false !== strpos($api_key, '••••••••')) {
+            $api_key = (string) $settings->get('openai_compatible_api_key', '');
+        }
+
+        $headers = ['Content-Type' => 'application/json'];
+        if ('' !== $api_key) {
+            $headers['Authorization'] = 'Bearer ' . $api_key;
+            $headers['api-key'] = $api_key;
+        }
+
+        $response = \ThinkRank\AI\Endpoint_URL_Validator::guarded_request(\ThinkRank\AI\Endpoint_URL_Validator::route($validated, 'models'), [
+            'method' => 'GET',
+            'timeout' => 15,
+            'headers' => $headers,
+            // A hostile or misconfigured endpoint can answer with an unbounded
+            // body; buffering it whole would spend the worker's memory on a
+            // list we cap at MAX_ENDPOINT_MODELS anyway.
+            'limit_response_size' => self::MAX_MODELS_RESPONSE_BYTES,
+        ]);
+
+        if (is_wp_error($response)) {
+            return new \WP_REST_Response([
+                'success' => false,
+                /* translators: %s: transport error. */
+                'message' => sprintf(__('Could not reach the endpoint: %s', 'thinkrank'), $response->get_error_message()),
+            ], 400);
+        }
+
+        $status = (int) wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($status >= 400 || !is_array($body)) {
+            return new \WP_REST_Response([
+                'success' => false,
+                /* translators: %d: HTTP status code. */
+                'message' => sprintf(__('This endpoint does not list its models (HTTP %d). Type the model id by hand instead.', 'thinkrank'), $status),
+            ], 400);
+        }
+
+        // OpenAI's shape is {data: [{id: …}]}; some gateways answer a bare list.
+        $entries = isset($body['data']) && is_array($body['data']) ? $body['data'] : $body;
+        $models = [];
+        $truncated = false;
+        foreach ($entries as $entry) {
+            if (count($models) >= self::MAX_ENDPOINT_MODELS) {
+                // A gateway fronting a public catalogue can list thousands of
+                // models. Sanitising and sorting all of them is work nobody
+                // asked for — the field is a suggestion list, not a registry.
+                $truncated = true;
+                break;
+            }
+
+            if (is_array($entry) && !empty($entry['id'])) {
+                $models[] = sanitize_text_field((string) $entry['id']);
+            } elseif (is_string($entry) && '' !== $entry) {
+                $models[] = sanitize_text_field($entry);
+            }
+        }
+
+        $models = array_values(array_unique($models));
+        sort($models);
+
+        if (empty($models)) {
+            return new \WP_REST_Response([
+                'success' => false,
+                'message' => __('The endpoint answered, but listed no models. Type the model id by hand instead.', 'thinkrank'),
+            ], 400);
+        }
+
+        return new \WP_REST_Response([
+            'success' => true,
+            'models' => $models,
+            'truncated' => $truncated,
+        ]);
     }
 
     /**
@@ -1874,6 +2482,12 @@ class Manager {
         $ai_manager = new \ThinkRank\AI\Manager();
         $status = $ai_manager->get_provider_status();
 
+        // The spend ceiling and kill switch ride on the status the AI screen
+        // already polls, rather than a route of their own: a counter the user
+        // has to refresh separately to trust is a counter they will not trust
+        // (#448).
+        $status['budget'] = \ThinkRank\AI\Spend_Guard::status();
+
         return new \WP_REST_Response($status);
     }
 
@@ -1893,7 +2507,7 @@ class Manager {
         $user_id = get_current_user_id();
         $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
         $bucket_id = 'ai_analyze|' . ($user_id ?: $ip);
-        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 10);
+        $limit = (int) \ThinkRank\Core\Settings::instance()->get('max_requests_per_minute', 0);
         $allowed = $this->enforce_rate_limit($bucket_id, $limit);
         if (is_wp_error($allowed)) {
             return new \WP_REST_Response([
@@ -2050,6 +2664,15 @@ class Manager {
             $content_type_matrix_endpoint->register_routes();
         } catch (\Exception $e) {
             // Failed to register Content Type Matrix endpoint
+        }
+
+        try {
+            // Bulk Snippets (#727): lives under global-seo/, so the Role
+            // Manager's Bulk SEO Optimization capability covers it.
+            $snippets_endpoint = new \ThinkRank\API\Snippets_Endpoint();
+            $snippets_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register Bulk Snippets endpoint
         }
 
         try {

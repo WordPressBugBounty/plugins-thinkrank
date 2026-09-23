@@ -1583,7 +1583,11 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
     }
 
     private function store_report_data(array $report): bool {
-        return true;
+        // Reports failure because it stores nothing. The single caller discards
+        // the return, so this changes no behaviour today, but a caller added
+        // later must not read "stored successfully" from a method with no
+        // storage in it (#538).
+        return false;
     }
 
     // Alert system helper methods

@@ -363,6 +363,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
         'claude_api_key',
         'gemini_api_key',
         'openrouter_api_key',
+        'openai_compatible_api_key',
         'google_analytics_api_key',
         'google_search_console_api_key',
         'google_pagespeed_api_key',

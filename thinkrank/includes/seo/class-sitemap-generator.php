@@ -145,6 +145,96 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     public const REGENERATION_ERROR_OPTION = 'thinkrank_sitemap_regeneration_error';
 
     /**
+     * Delivery modes accepted by the `delivery_mode` setting.
+     *
+     * Mirrors LLMs_Txt_Manager::DELIVERY_MODES, which solved the same problem
+     * for llms.txt. `auto` is the only value a site should normally need.
+     *
+     * @since 2.9.0
+     * @var string[]
+     */
+    public const DELIVERY_MODES = ['auto', 'static', 'dynamic'];
+
+    /**
+     * Cache group for documents rendered on the dynamic path.
+     *
+     * @since 2.9.0
+     * @var string
+     */
+    private const DYNAMIC_CACHE_PREFIX = 'thinkrank_sitemap_doc_';
+
+    /**
+     * How long a dynamically rendered document is cached.
+     *
+     * Invalidated by content and settings changes through
+     * {@see self::flush_dynamic_cache()}, so this is only the backstop for a
+     * change nothing hooked.
+     *
+     * @since 2.9.0
+     * @var int
+     */
+    private const DYNAMIC_CACHE_TTL = 12 * HOUR_IN_SECONDS;
+
+    /**
+     * How long the render lock is held before it is assumed abandoned.
+     *
+     * Long enough for a large site's full build, short enough that a request
+     * killed mid-build does not lock the endpoint out for meaningfully long.
+     *
+     * @since 2.9.0
+     * @var int
+     */
+    private const RENDER_LOCK_TTL = 60;
+
+    /**
+     * Cached stand-in for "this site does not publish that name".
+     *
+     * published_document_names() lists what the configuration *could* produce,
+     * but a child whose type is excluded produces nothing. Without a negative
+     * entry those names miss the cache forever, so every request for one
+     * rebuilt the entire sitemap — the same cost the positive cache exists to
+     * avoid, on a public endpoint (#754 review).
+     *
+     * @since 2.9.0
+     * @var string
+     */
+    private const ABSENT_MARKER = "\0thinkrank-absent";
+
+    /**
+     * How many times, and how long, a losing request waits for the winner.
+     *
+     * Bounded at roughly a second in total: past that, building a second copy
+     * costs less than making a crawler wait.
+     *
+     * @since 2.9.0
+     * @var int
+     */
+    private const RENDER_LOCK_WAIT_ATTEMPTS = 4;
+
+    /**
+     * @since 2.9.0
+     * @var int
+     */
+    private const RENDER_LOCK_WAIT_MICROSECONDS = 250000;
+
+    /**
+     * Where generated documents go instead of disk, when set.
+     *
+     * Every sitemap document this class produces — segments, the index, the
+     * single flat file and local-sitemap.xml — is published through the one
+     * writer, {@see self::save_sitemap_to_file()}. Swapping that writer for a
+     * collector is therefore all it takes to render the same bytes without a
+     * filesystem, which is what dynamic delivery needs (#752). Doing it here
+     * rather than duplicating the build pipeline is deliberate: a second
+     * pipeline would drift from this one, and the index in particular is
+     * assembled from whatever the children actually produced.
+     *
+     * @since 2.9.0
+     * @var callable|null
+     */
+    private $document_sink = null;
+
+    /**
      * Transient guarding against two generations running at once. Shared with
      * Sitemap_Endpoint's manual generate route so an automatic rebuild and a
      * manual one cannot write the same files concurrently.
@@ -453,6 +543,13 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             ],
             'use_sitemap_index' => false,
 
+            // How the sitemap reaches crawlers. 'auto' keeps the historical
+            // behaviour wherever the web root is writable, and only falls back
+            // to serving the sitemap from PHP where writing a file is
+            // impossible — previously a hard failure with nothing served
+            // (#752).
+            'delivery_mode' => 'auto',
+
             // General Settings
             'links_per_sitemap' => 1000,
             'include_images' => true,
@@ -520,6 +617,14 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             $sanitized['styling_logo_url'] = esc_url_raw((string) $sanitized['styling_logo_url']);
         }
 
+        // A mode this build cannot act on has to be stored as the fallback
+        // rather than kept verbatim, or get-sitemap-settings reports a delivery
+        // mode the site does not actually apply.
+        if (array_key_exists('delivery_mode', $sanitized)) {
+            $mode = sanitize_key((string) $sanitized['delivery_mode']);
+            $sanitized['delivery_mode'] = in_array($mode, self::DELIVERY_MODES, true) ? $mode : 'auto';
+        }
+
         return $sanitized;
     }
 
@@ -538,6 +643,13 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 'title' => 'Enable Sitemap',
                 'description' => 'Generate XML sitemap for search engines',
                 'default' => true
+            ],
+            'delivery_mode' => [
+                'type' => 'string',
+                'title' => 'Sitemap Delivery',
+                'description' => 'How the sitemap is served: auto picks static when the WordPress root is writable and dynamic when it is not, static writes files to the web root, dynamic serves the sitemap from WordPress with no files written',
+                'enum' => self::DELIVERY_MODES,
+                'default' => 'auto'
             ],
             'include_posts' => [
                 'type' => 'boolean',
@@ -1730,6 +1842,12 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return void
      */
     private function mark_regeneration_pending(string $source): void {
+        // Whatever made the static files stale made the rendered ones stale
+        // too. Invalidating here rather than only on the rebuild keeps the two
+        // delivery modes reacting to exactly the same triggers, which is the
+        // only way a dynamic site stays as fresh as a static one (#752).
+        $this->flush_dynamic_cache();
+
         $pending = get_option(self::REGENERATION_PENDING_OPTION, []);
         $pending = is_array($pending) ? $pending : [];
 
@@ -2068,11 +2186,16 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
 
             $revision = $this->current_regeneration_revision();
 
+            if ('dynamic' === $this->resolve_delivery_mode($settings)) {
+                $this->switch_to_dynamic_delivery($settings, $revision, 'settings');
+                return;
+            }
+
             if ($this->generate_and_save($settings)) {
                 $this->mark_regeneration_complete($revision);
             } else {
                 $this->record_regeneration_failure(
-                    __('The sitemap files could not be written to the site root.', 'thinkrank'),
+                    $this->write_failure_message(),
                     'settings'
                 );
             }
@@ -2184,15 +2307,22 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
 
             $revision = $this->current_regeneration_revision();
+            $settings = $this->get_settings('site');
 
-            if ($this->generate_and_save($this->get_settings('site'))) {
+            // See regenerate_sitemap_from_settings(): nothing to write.
+            if ('dynamic' === $this->resolve_delivery_mode($settings)) {
+                $this->switch_to_dynamic_delivery($settings, $revision, 'content');
+                return;
+            }
+
+            if ($this->generate_and_save($settings)) {
                 $this->mark_regeneration_complete($revision);
             } else {
                 // Previously this returned quietly and last_generated simply
                 // stopped advancing, leaving the site owner with no way to learn
                 // the sitemap had stopped updating (#629).
                 $this->record_regeneration_failure(
-                    __('The sitemap files could not be written to the site root.', 'thinkrank'),
+                    $this->write_failure_message(),
                     'content'
                 );
             }
@@ -2216,6 +2346,24 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return bool True when the sitemap files were written.
      */
     public function generate_and_save(array $settings): bool {
+        // Dynamic delivery publishes no files, so writing them here would put a
+        // static copy back in the web root for the server to serve in place of
+        // the dynamic route. Guarding at each call site left gaps — the
+        // snapshot migrator's post-import regeneration had none — so the rule
+        // lives with the writing instead.
+        //
+        // `is_collecting()` is the exception that makes dynamic delivery work
+        // at all: render_document() and collect_documents() reach this same
+        // method with the writer swapped for a collector, and that is precisely
+        // the dynamic build. Only a real write is skipped.
+        if (!$this->is_collecting() && 'dynamic' === $this->resolve_delivery_mode($settings)) {
+            // Whatever prompted this call changed the sitemap's content, so the
+            // rendered copies must not outlive it.
+            $this->flush_dynamic_cache();
+
+            return true;
+        }
+
         // Index mode is driven by the use_sitemap_index toggle (not merely by how
         // many sitemap_urls happen to be configured). When the toggle is on but
         // no child sitemaps are set up yet, synthesize the per-type segmented set
@@ -2244,12 +2392,406 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             $this->prune_orphaned_segments($settings, [['filename' => basename($primary)]]);
         }
 
-        if ($written) {
+        // last_generated describes what is on disk. A dynamic render publishes
+        // nothing, so advancing it would report a static publication that never
+        // happened and would let primary_sitemap_file_exists() callers believe
+        // there is a file to serve.
+        if ($written && !$this->is_collecting()) {
             $settings['last_generated'] = gmdate('c');
             $this->save_settings('site', null, $settings);
         }
 
         return $written;
+    }
+
+    /**
+     * Whether this instance is rendering documents rather than publishing them.
+     *
+     * @since 2.9.0
+     *
+     * @return bool
+     */
+    private function is_collecting(): bool {
+        return $this->document_sink !== null;
+    }
+
+    /**
+     * Complete a regeneration that delivers dynamically, retiring stale files.
+     *
+     * Dynamic delivery renders nothing to disk, but that is only half the job.
+     * A web server hands back an existing `/sitemap.xml` without ever loading
+     * WordPress, so any file left over from a previous static generation goes on
+     * being served forever and {@see \ThinkRank\Frontend\SEO_Manager
+     * ::maybe_serve_sitemap()} is never reached. Switching to dynamic while
+     * leaving those files in place would therefore appear to do nothing at all.
+     *
+     * Both transitions matter and they differ:
+     *
+     * - An explicit switch to `dynamic` happens on a site whose root is usually
+     *   still writable, so the files can simply be removed.
+     * - An `auto` site that becomes read-only cannot remove them, because
+     *   deleting an entry needs write permission on the directory that holds
+     *   it. There the stale sitemap really is stuck in front of us, and the
+     *   honest outcome is a recorded failure naming it rather than a rebuild
+     *   reported as complete (#754 review).
+     *
+     * Ownership is tested per file by the shared helper, so another plugin's
+     * sitemap at one of our names is never deleted (#515).
+     *
+     * @since 2.9.0
+     *
+     * @param array  $settings Sitemap settings.
+     * @param int    $revision Revision this rebuild is completing.
+     * @param string $source   'settings' or 'content', for the failure record.
+     * @return void
+     */
+    private function switch_to_dynamic_delivery(array $settings, int $revision, string $source): void {
+        $this->flush_dynamic_cache();
+
+        $removal = $this->delete_published_sitemaps($settings);
+        $stuck = is_array($removal['failed'] ?? null) ? $removal['failed'] : [];
+
+        if (!empty($stuck)) {
+            $this->record_regeneration_failure(
+                sprintf(
+                    /* translators: 1: comma-separated file names, 2: absolute path to the WordPress root. */
+                    __('The sitemap is being served from WordPress, but these files are still in the site root and your web server will keep serving them instead: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable.', 'thinkrank'),
+                    implode(', ', $stuck),
+                    untrailingslashit(ABSPATH)
+                ),
+                $source
+            );
+
+            return;
+        }
+
+        $this->mark_regeneration_complete($revision);
+    }
+
+    /**
+     * What to tell the site owner when publishing the files failed.
+     *
+     * The old wording stated the symptom and stopped there, so the reported
+     * cause was a guess and this reached support as a plugin fault rather than
+     * a folder permission (#752, #753). When the root is demonstrably
+     * unwritable, say that, and say what to do about it.
+     *
+     * @since 2.9.0
+     *
+     * @return string
+     */
+    private function write_failure_message(): string {
+        if (!wp_is_writable(ABSPATH)) {
+            return sprintf(
+                /* translators: %s: absolute path to the WordPress root. */
+                __('The sitemap could not be written because the folder %s is not writable by PHP. Ask your host to make the WordPress root writable, or set Sitemap Delivery to Dynamic to serve the sitemap without writing files.', 'thinkrank'),
+                untrailingslashit(ABSPATH)
+            );
+        }
+
+        return __('The sitemap files could not be written to the site root.', 'thinkrank');
+    }
+
+    /**
+     * How this site delivers its sitemap.
+     *
+     * `auto` is resolved on whether the web root can be written. That is the
+     * right signal here (unlike llms.txt, where the question is whether the
+     * server applies the .htaccess charset block): a site whose root is
+     * read-only cannot publish a sitemap file at all, and before this existed
+     * the feature simply failed with "The sitemap files could not be written to
+     * the site root." and served nothing (#752).
+     *
+     * @since 2.9.0
+     *
+     * @param array|null $settings Sitemap settings (falls back to saved ones).
+     * @return string One of 'static' or 'dynamic'. Never 'auto'.
+     */
+    public function resolve_delivery_mode(?array $settings = null): string {
+        $settings = $settings ?? $this->get_settings('site');
+        $mode = (string) ($settings['delivery_mode'] ?? 'auto');
+
+        if ('static' === $mode || 'dynamic' === $mode) {
+            return $mode;
+        }
+
+        return wp_is_writable(ABSPATH) ? 'static' : 'dynamic';
+    }
+
+    /**
+     * Render one published sitemap document without touching the filesystem.
+     *
+     * Runs the ordinary build pipeline with the writer swapped for a collector,
+     * so the bytes returned here are the bytes the static path would have
+     * written. `SitemapDeliveryParityTest` asserts that equivalence rather than
+     * trusting it.
+     *
+     * The whole set is built to answer for one file, because the index can only
+     * be assembled from the children that were actually produced. The result is
+     * cached per document, so that cost is paid once per change and not once
+     * per crawler request.
+     *
+     * @since 2.9.0
+     *
+     * @param string     $filename Published file name, e.g. 'sitemap.xml'.
+     * @param array|null $settings Sitemap settings (falls back to saved ones).
+     * @return string|null XML, or null when this site does not publish that name.
+     */
+    public function render_document(string $filename, ?array $settings = null): ?string {
+        $filename = basename($filename);
+        $settings = $settings ?? $this->get_settings('site');
+
+        if (empty($settings['enabled'])) {
+            return null;
+        }
+
+        $cached = get_transient($this->dynamic_cache_key($filename));
+        if (self::ABSENT_MARKER === $cached) {
+            return null;
+        }
+        if (is_string($cached) && '' !== $cached) {
+            return $cached;
+        }
+
+        // A miss builds the whole set, because the index can only be assembled
+        // from the children that were actually produced. Caching only the
+        // requested document therefore made a crawler walking the index and its
+        // children rebuild the entire site's sitemap once per file — every post
+        // and taxonomy query repeated N times on a public endpoint (#754
+        // review). The set is built once and stored in full.
+        return $this->stream_documents($settings, $filename);
+    }
+
+    /**
+     * Build every document, caching each as it is produced, keeping one.
+     *
+     * A miss has to build the whole set, because the index can only be
+     * assembled from the children that were actually produced. It does not have
+     * to *hold* the whole set: the static path never keeps more than one page
+     * in memory, writing each to disk as it goes, and buffering every
+     * document's XML to return one of them undid that on the request path,
+     * where a large site's entire sitemap corpus would sit in a single PHP
+     * process (#754 review).
+     *
+     * So the sink writes each document straight to its cache entry and lets it
+     * go, retaining only the one this request is answering. Peak retention is
+     * one document, whatever the site's size.
+     *
+     * Concurrency: the first request through takes a short lock and does the
+     * work. One that finds the lock held waits a bounded moment for the winner
+     * to publish, then builds anyway, because serving a correct sitemap late
+     * beats serving none.
+     *
+     * @since 2.9.0
+     *
+     * @param array  $settings Sitemap settings.
+     * @param string $wanted   Document this request is answering.
+     * @return string|null XML for $wanted, or null when the site does not publish it.
+     */
+    private function stream_documents(array $settings, string $wanted): ?string {
+        $lock = self::DYNAMIC_CACHE_PREFIX . 'lock';
+
+        if (!$this->acquire_render_lock($lock)) {
+            for ($attempt = 0; $attempt < self::RENDER_LOCK_WAIT_ATTEMPTS; $attempt++) {
+                usleep(self::RENDER_LOCK_WAIT_MICROSECONDS);
+
+                $cached = get_transient($this->dynamic_cache_key($wanted));
+                if (self::ABSENT_MARKER === $cached) {
+                    return null;
+                }
+                if (is_string($cached) && '' !== $cached) {
+                    return $cached;
+                }
+            }
+        }
+
+        $kept = null;
+        // Names only. Keeping the bodies here would be the very retention this
+        // method exists to avoid.
+        $produced = [];
+
+        $previous = $this->document_sink;
+        $this->document_sink = function (string $name, string $xml) use (&$kept, &$produced, $wanted): void {
+            $produced[$name] = true;
+            set_transient($this->dynamic_cache_key($name), $xml, self::DYNAMIC_CACHE_TTL);
+
+            if ($name === $wanted) {
+                $kept = $xml;
+            }
+        };
+
+        try {
+            $this->generate_and_save($settings);
+
+            // Names the configuration lists but this build did not produce get
+            // a negative entry, so asking for one again is a cache hit rather
+            // than another full rebuild.
+            $absent = $this->published_document_names($settings);
+
+            // Also the exact name this request asked for: a paginated page past
+            // the end of a stem is a legitimate request shape that the base
+            // list cannot enumerate, and without an entry it would rebuild on
+            // every hit.
+            $absent[] = $wanted;
+
+            foreach (array_unique($absent) as $name) {
+                if (!isset($produced[$name])) {
+                    set_transient($this->dynamic_cache_key($name), self::ABSENT_MARKER, self::DYNAMIC_CACHE_TTL);
+                }
+            }
+        } finally {
+            $this->document_sink = $previous;
+            delete_transient($lock);
+        }
+
+        return $kept;
+    }
+
+    /**
+     * Take the render lock, if it is free.
+     *
+     * Not atomic across processes, and deliberately so: the fallback for losing
+     * a race is duplicated work, never a wrong or missing sitemap, so a
+     * heavier primitive would buy nothing here.
+     *
+     * @since 2.9.0
+     *
+     * @param string $lock Lock transient name.
+     * @return bool True when this request holds the lock.
+     */
+    private function acquire_render_lock(string $lock): bool {
+        if (false !== get_transient($lock)) {
+            return false;
+        }
+
+        set_transient($lock, time(), self::RENDER_LOCK_TTL);
+
+        return true;
+    }
+
+    /**
+     * Build every document this site publishes and return them all.
+     *
+     * Verification and tooling only. This retains the whole set in memory, so
+     * it must never be used to answer a request: {@see self::stream_documents()}
+     * is the serving path and keeps one document at a time regardless of site
+     * size (#754 review). `SitemapDeliveryParityTest` enforces that separation
+     * by failing if the request path routes back through here.
+     *
+     * @since 2.9.0
+     *
+     * @param array $settings Sitemap settings.
+     * @return array<string,string> Filename => XML.
+     */
+    public function collect_documents(array $settings): array {
+        $documents = [];
+
+        $previous = $this->document_sink;
+        $this->document_sink = static function (string $name, string $xml) use (&$documents): void {
+            $documents[$name] = $xml;
+        };
+
+        try {
+            $this->generate_and_save($settings);
+        } finally {
+            $this->document_sink = $previous;
+        }
+
+        return $documents;
+    }
+
+    /**
+     * The file names this site publishes, without building their contents.
+     *
+     * Used by the request router to decide whether a URL is ours before doing
+     * any work. Cheap: it reads the configured child list rather than querying
+     * for entries.
+     *
+     * @since 2.9.0
+     *
+     * @param array|null $settings Sitemap settings (falls back to saved ones).
+     * @return string[] File names, including paginated pages that may exist.
+     */
+    public function published_document_names(?array $settings = null): array {
+        $settings = $settings ?? $this->get_settings('site');
+        $resolved = $this->maybe_promote_to_index($settings);
+
+        $names = [$this->get_primary_sitemap_filename($settings), 'local-sitemap.xml'];
+
+        foreach ((array) ($resolved['sitemap_urls'] ?? []) as $child) {
+            if (!is_array($child) || empty($child['enabled'])) {
+                continue;
+            }
+
+            $path = (string) wp_parse_url((string) ($child['url'] ?? ''), PHP_URL_PATH);
+            if ('' !== $path) {
+                $names[] = basename($path);
+            }
+        }
+
+        return array_values(array_unique(array_filter($names)));
+    }
+
+    /**
+     * Does this site publish a document under that name?
+     *
+     * Not a plain membership test against {@see self::published_document_names()}:
+     * that lists the configured children, and a child over the per-file URL cap
+     * is split into `<stem>-2.xml`, `<stem>-3.xml` and so on, with every page
+     * listed in the index. Gating the request router on the base list alone
+     * therefore 404'd exactly the pages the index points at, which is worse than
+     * not serving them at all.
+     *
+     * Page counts are not knowable without building, so the stem is what is
+     * matched; a page that does not exist is answered by the build finding
+     * nothing for it, and is then cached as absent.
+     *
+     * @since 2.9.0
+     *
+     * @param string     $name     Requested file name.
+     * @param array|null $settings Sitemap settings (falls back to saved ones).
+     * @return bool
+     */
+    public function publishes_document_name(string $name, ?array $settings = null): bool {
+        $names = $this->published_document_names($settings);
+
+        if (in_array($name, $names, true)) {
+            return true;
+        }
+
+        if (!preg_match('/^(.*)-\d+\.xml$/i', $name, $m)) {
+            return false;
+        }
+
+        return in_array($m[1] . '.xml', $names, true);
+    }
+
+    /**
+     * Transient key for a rendered document.
+     *
+     * @since 2.9.0
+     *
+     * @param string $filename Published file name.
+     * @return string
+     */
+    private function dynamic_cache_key(string $filename): string {
+        return self::DYNAMIC_CACHE_PREFIX . md5($filename);
+    }
+
+    /**
+     * Drop every cached dynamic document.
+     *
+     * Called from the same places that mark the static files stale, so the two
+     * delivery modes invalidate on identical triggers.
+     *
+     * @since 2.9.0
+     *
+     * @return void
+     */
+    public function flush_dynamic_cache(): void {
+        foreach ($this->published_document_names() as $name) {
+            delete_transient($this->dynamic_cache_key($name));
+        }
     }
 
     /**
@@ -2447,6 +2989,16 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         } catch (InvalidArgumentException $e) {
             // File validation failed - error details available in exception
             return false;
+        }
+
+        // Dynamic delivery: hand the document to the collector instead of the
+        // filesystem. Reported as published, because for this run it is — the
+        // caller's success/failure bookkeeping and the index assembly both key
+        // off this return value.
+        if ($this->document_sink !== null) {
+            ($this->document_sink)($filename, $sitemap_xml);
+
+            return true;
         }
 
         $sitemap_path = ABSPATH . $filename;
@@ -2864,6 +3416,13 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return string[] Basenames removed.
      */
     private function prune_orphaned_segments(array $settings, array $generated): array {
+        // Rendering for a request, not publishing: there is nothing on disk
+        // this run owns, and a dynamic render must never delete the files a
+        // site's previous static mode left behind.
+        if ($this->is_collecting()) {
+            return [];
+        }
+
         $kept = [];
         foreach ($generated as $entry) {
             if (!empty($entry['filename'])) {
@@ -2967,7 +3526,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             // a migrated site the file at that path may never have been ours
             // to delete (#515).
             $path = ABSPATH . 'local-sitemap.xml';
-            if (file_exists($path) && $this->webroot_sitemap_is_ours($path, $settings)) {
+            if (!$this->is_collecting() && file_exists($path) && $this->webroot_sitemap_is_ours($path, $settings)) {
                 wp_delete_file($path);
             }
             return false;
@@ -2991,6 +3550,23 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @since 1.15.x
      * @return array Zero or one URL entry
      */
+    /**
+     * Does this site publish a local business sitemap right now?
+     *
+     * The same gate {@see self::regenerate_local_sitemap()} applies, asked
+     * without writing anything. Callers that need to know whether the document
+     * exists must not test the filesystem: under dynamic delivery it is served
+     * from PHP and there is no file, which is how `local-sitemap.xml` came to be
+     * dropped from robots.txt on exactly those sites (#752).
+     *
+     * @since 2.9.0
+     *
+     * @return bool True when the local sitemap has content to publish.
+     */
+    public function publishes_local_sitemap(): bool {
+        return !empty($this->collect_local_entries());
+    }
+
     private function collect_local_entries(): array {
         if (!class_exists('ThinkRank\\SEO\\Site_Identity_Manager')) {
             require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-site-identity-manager.php';
@@ -3153,6 +3729,11 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return void
      */
     private function cleanup_stale_pages(string $base_url, int $current_pages, array $settings): void {
+        // See prune_orphaned_segments(): a dynamic render deletes nothing.
+        if ($this->is_collecting()) {
+            return;
+        }
+
         $filename = basename(wp_parse_url($base_url, PHP_URL_PATH));
         if (!preg_match('/^(.*)\.xml$/i', $filename, $m)) {
             return;

@@ -292,6 +292,7 @@ class TOC_Element extends \Bricks\Element {
                 } );
                 var tag = document.createElement( 'script' );
                 tag.type = 'application/ld+json';
+                tag.setAttribute( 'data-thinkrank', 'toc' );
                 tag.textContent = JSON.stringify( {
                     '@context': 'https://schema.org',
                     '@graph': graph

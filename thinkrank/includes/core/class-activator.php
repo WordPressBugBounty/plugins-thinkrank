@@ -137,13 +137,32 @@ class Activator {
             }
         }
 
-        // Check if we can write to WordPress root directory (for robots.txt, llms.txt, sitemaps)
-        if (!wp_is_writable(ABSPATH)) {
-            // Log warning but don't block activation — some hosts restrict ABSPATH writes
-            // and file-writing features will gracefully degrade via WP_Filesystem checks
+        // Check if we can write to WordPress root directory (for robots.txt, llms.txt,
+        // the Instant Indexing key file). Never blocks activation — some hosts restrict
+        // ABSPATH writes by design.
+        //
+        // The result is recorded rather than only logged. It used to reach error_log()
+        // and only under WP_DEBUG, so on a production site nobody was ever told, and the
+        // features that need it failed later with messages describing the symptom rather
+        // than the cause (#753). Webroot_Writable_Notice re-evaluates the condition live —
+        // permissions change without a reactivation — and this value only distinguishes
+        // "never worked here" from "worked until the host changed something".
+        $writable = wp_is_writable(ABSPATH);
+
+        update_option(
+            \ThinkRank\Admin\Webroot_Writable_Notice::OPT_ACTIVATION_STATE,
+            $writable ? 'writable' : 'not-writable',
+            false
+        );
+
+        if (!$writable) {
+            // A fresh activation on a broken root should warn even if a previous
+            // install's dismissal is still on record.
+            delete_option(\ThinkRank\Admin\Webroot_Writable_Notice::OPT_DISMISSED);
+
             if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
                 // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                error_log('ThinkRank: WordPress root directory is not writable. Some features (robots.txt, llms.txt, sitemaps) may not work.');
+                error_log('ThinkRank: WordPress root directory is not writable. robots.txt, llms.txt and the Instant Indexing key file cannot be published; the sitemap falls back to dynamic delivery.');
             }
         }
     }
@@ -286,7 +305,7 @@ class Activator {
 
             'thinkrank_ai_provider' => \ThinkRank\Core\Settings::AI_PROVIDER_NONE,
             'thinkrank_cache_duration' => 3600, // 1 hour
-            'thinkrank_max_requests_per_minute' => 10,
+            'thinkrank_max_requests_per_minute' => 0,
             'thinkrank_enable_logging' => true,
             'thinkrank_auto_optimize' => false,
             'thinkrank_seo_score_threshold' => 70,

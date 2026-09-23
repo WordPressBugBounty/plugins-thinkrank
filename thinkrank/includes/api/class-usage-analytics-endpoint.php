@@ -330,7 +330,7 @@ class Usage_Analytics_Endpoint {
                 'provider' => [
                     'default' => 'all',
                     'type' => 'string',
-                    'enum' => ['all', 'openai', 'claude', 'gemini', 'openrouter'],
+                    'enum' => ['all', 'openai', 'claude', 'gemini', 'openrouter', 'openai_compatible'],
                     'sanitize_callback' => 'sanitize_key'
                 ],
                 'user_id' => [
@@ -590,6 +590,10 @@ class Usage_Analytics_Endpoint {
             'claude' => 0,
             'gemini' => 0,
             'openrouter' => 0,
+            // Costed only when the user told us what their endpoint charges;
+            // otherwise it stays 0 and the UI shows "—" rather than implying
+            // that a local model was free of charge or that we know the price.
+            'openai_compatible' => 0,
             'total' => 0,
             'by_provider' => []
         ];
@@ -618,7 +622,7 @@ class Usage_Analytics_Endpoint {
             $costs[$provider] += $this->calculate_record_cost($provider, $tokens, $model);
         }
         
-        $costs['total'] = $costs['openai'] + $costs['claude'] + $costs['gemini'] + $costs['openrouter'];
+        $costs['total'] = $costs['openai'] + $costs['claude'] + $costs['gemini'] + $costs['openrouter'] + $costs['openai_compatible'];
 
         // Report only providers that actually incurred cost. Emitting all four
         // unconditionally meant a site with no AI usage rendered four ranked
@@ -626,7 +630,7 @@ class Usage_Analytics_Endpoint {
         // each was free" — and made the panel's own "No provider cost data"
         // empty state unreachable.
         $costs['by_provider'] = [];
-        foreach (['openai', 'claude', 'gemini', 'openrouter'] as $provider) {
+        foreach (['openai', 'claude', 'gemini', 'openrouter', 'openai_compatible'] as $provider) {
             if ($costs[$provider] <= 0) {
                 continue;
             }
@@ -1224,6 +1228,20 @@ class Usage_Analytics_Endpoint {
                 }
                 return self::OPENROUTER_PRICING['openai/gpt-4o-mini'] ?? null;
 
+            case 'openai_compatible':
+                // There is no price table for someone else's server: it may be
+                // a free local model, an Azure contract or a hosted open model.
+                // The only honest number is the one the administrator entered,
+                // as a flat per-1M-token rate applied to both directions.
+                //
+                // Read at report time, so changing the rate (or repointing the
+                // provider at another server) re-costs past rows too. Accepted:
+                // storing a price per row would mean a schema change for an
+                // estimate the administrator typed in the first place.
+                $price = (float) \ThinkRank\Core\Settings::instance()->get('openai_compatible_price_per_million', 0);
+
+                return $price > 0 ? ['input' => $price, 'output' => $price] : null;
+
             default:
                 return null;
         }
@@ -1245,6 +1263,9 @@ class Usage_Analytics_Endpoint {
                 return \ThinkRank\Core\Settings::DEFAULT_GEMINI_MODEL;
             case 'openrouter':
                 return \ThinkRank\Core\Settings::DEFAULT_OPENROUTER_MODEL;
+            case 'openai_compatible':
+                // Whatever the user pointed us at; there is no default.
+                return (string) \ThinkRank\Core\Settings::instance()->get('openai_compatible_model', '');
             default:
                 return 'unknown';
         }

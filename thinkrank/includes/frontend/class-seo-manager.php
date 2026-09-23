@@ -267,6 +267,14 @@ class SEO_Manager {
         // charset. Priority 8 keeps it ahead of redirect_canonical().
         add_action('template_redirect', [$this, 'maybe_serve_llms_txt'], 8);
 
+        // Serve the sitemap from PHP on sites whose web root cannot be written.
+        // ThinkRank publishes sitemaps as real files, so where that is possible
+        // the web server answers first and this never runs; where it is not,
+        // this is the only thing that answers at all, and without it the
+        // feature was simply unavailable (#752). Same priority 8, and for the
+        // same reason: ahead of redirect_canonical().
+        add_action('template_redirect', [$this, 'maybe_serve_sitemap'], 8);
+
         // Take WordPress core's own sitemap offline while ThinkRank's is active.
         // Two sitemap indexes on one site is a crawl conflict: core keeps
         // /wp-sitemap.xml served and injects its own "Sitemap:" line into
@@ -3527,6 +3535,100 @@ class SEO_Manager {
      *
      * @return void
      */
+    /**
+     * Serve a ThinkRank sitemap document for this request, when it is one.
+     *
+     * Only acts in dynamic delivery mode. In static mode a real file exists and
+     * the web server returns it without WordPress ever loading, so answering
+     * here as well would mean two sources for the same bytes.
+     *
+     * @since 2.9.0
+     *
+     * @return void
+     */
+    public function maybe_serve_sitemap(): void {
+        $filename = $this->requested_sitemap_filename();
+        if ('' === $filename) {
+            return;
+        }
+
+        try {
+            // Read-only instance: passing false keeps it from registering a
+            // second copy of the auto-generation hooks.
+            $generator = new \ThinkRank\SEO\Sitemap_Generator(false);
+            $settings  = $generator->get_settings('site');
+
+            if (empty($settings['enabled'])) {
+                return;
+            }
+
+            if ('dynamic' !== $generator->resolve_delivery_mode($settings)) {
+                return;
+            }
+
+            if (!$generator->publishes_document_name($filename, $settings)) {
+                return;
+            }
+
+            $xml = $generator->render_document($filename, $settings);
+        } catch (\Throwable $e) {
+            // A failed render must not replace the sitemap with a fatal. Leave
+            // the request alone so WordPress answers as it otherwise would.
+            return;
+        }
+
+        if (!is_string($xml) || '' === trim($xml)) {
+            return;
+        }
+
+        status_header(200);
+        header('Content-Type: application/xml; charset=UTF-8');
+        header('X-Robots-Tag: noindex, follow', true);
+
+        // Built XML, escaped by the builders as they assemble it; escaping the
+        // document here would corrupt it.
+        echo $xml; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+        exit;
+    }
+
+    /**
+     * The sitemap file name this request is asking for, if it looks like one.
+     *
+     * Deliberately a cheap shape test. Whether the site actually publishes the
+     * name is settled by the caller against the generator, so that a request
+     * for someone else's sitemap is never answered here.
+     *
+     * @since 2.9.0
+     *
+     * @return string File name, or '' when this is not a sitemap request.
+     */
+    private function requested_sitemap_filename(): string {
+        if (empty($_SERVER['REQUEST_URI'])) {
+            return '';
+        }
+
+        $path = wp_parse_url(sanitize_text_field(wp_unslash($_SERVER['REQUEST_URI'])), PHP_URL_PATH);
+        if (!is_string($path) || '' === $path) {
+            return '';
+        }
+
+        // Strip the install's home path so subdirectory installs match too.
+        $home_path = (string) wp_parse_url(home_url('/'), PHP_URL_PATH);
+        if ('' !== $home_path && '/' !== $home_path && 0 === strpos($path, $home_path)) {
+            $path = substr($path, strlen($home_path));
+        }
+
+        $candidate = strtolower(trim($path, '/'));
+
+        // One path segment ending in .xml. Anything nested is not a file we
+        // publish to the web root.
+        if ('' === $candidate || strpos($candidate, '/') !== false) {
+            return '';
+        }
+
+        return substr($candidate, -4) === '.xml' ? $candidate : '';
+    }
+
     public function maybe_serve_llms_txt(): void {
         if (!$this->is_llms_txt_request()) {
             return;
@@ -3729,9 +3831,20 @@ class SEO_Manager {
                 $generator = new \ThinkRank\SEO\Sitemap_Generator(false);
                 $settings = $generator->get_settings('site');
 
+                // "Can ThinkRank actually answer its sitemap URL right now?" In
+                // static mode that means the file is on disk; in dynamic mode
+                // maybe_serve_sitemap() answers it, so there is nothing to look
+                // for. Keeping the file test as the only answer would have left
+                // core's sitemap in place on every dynamic site, which is the
+                // crawl conflict this suppression exists to prevent (#752).
+                // The #346 behaviour is unchanged: a static site with nothing
+                // published still falls through to core rather than 404ing.
+                $can_serve = 'dynamic' === $generator->resolve_delivery_mode($settings)
+                    || $generator->primary_sitemap_file_exists($settings);
+
                 $this->thinkrank_sitemap_enabled = !empty($settings['enabled'])
                     && !$this->publishes_at_core_sitemap_url($settings)
-                    && $generator->primary_sitemap_file_exists($settings);
+                    && $can_serve;
 
                 if ($this->thinkrank_sitemap_enabled) {
                     $this->thinkrank_sitemap_url = $generator->get_primary_sitemap_url($settings);

@@ -41,6 +41,25 @@ class Usage_Tracker_Manager {
     private const ITEM_ID = '08649e95a94ecddfd027';
 
     /**
+     * Days after install before the opt-in notice may be shown.
+     *
+     * Activation redirects into the Setup Wizard, which asks for consent
+     * itself. Asking again on the user's first admin page load is noise, so
+     * the card is held back for users who skipped the wizard and only appears
+     * once they have had a chance to use the plugin.
+     *
+     * @var int
+     */
+    private const NOTICE_DELAY_DAYS = 7;
+
+    /**
+     * Option holding the install timestamp the delay is measured from.
+     *
+     * @var string
+     */
+    private const INSTALL_TIME_OPTION = 'thinkrank_usage_notice_since';
+
+    /**
      * Tracker instance.
      *
      * @var Plugin_Usage_Tracker|null
@@ -75,6 +94,14 @@ class Usage_Tracker_Manager {
             'item_id'      => $item_id,
         ]);
 
+        // Only the admin ever renders the notice, and resolving the baseline
+        // can write an option — neither belongs on a front-end request.
+        if (is_admin()) {
+            $this->tracker->set_notice_after(
+                $this->get_notice_baseline() + (self::NOTICE_DELAY_DAYS * DAY_IN_SECONDS)
+            );
+        }
+
         $this->tracker->set_notice_options([
             'notice_title' => __('Want to help make ThinkRank even better?', 'thinkrank'),
             'notice'       => __('Allow us to collect non-sensitive diagnostic data and usage information.', 'thinkrank'),
@@ -82,6 +109,44 @@ class Usage_Tracker_Manager {
         ]);
 
         $this->tracker->init();
+    }
+
+    /**
+     * Timestamp the opt-in delay is measured from.
+     *
+     * Deliberately not `thinkrank_activation_time`: the activator rewrites
+     * that on every activation, so deactivating and reactivating would restart
+     * the grace period and a user who toggles the plugin could never be asked.
+     * This option is written once and then left alone.
+     *
+     * On upgrade the baseline is seeded from `thinkrank_activation_time`, so a
+     * site that has had ThinkRank for months is not made to wait another week
+     * before it can be asked — it has been seeing this card on every admin
+     * screen already, and the screen scoping is the change it needs. Only an
+     * install with no activation timestamp at all starts its week now.
+     *
+     * Autoloaded: it is read on every admin request, so the alternative is an
+     * extra query per page load.
+     *
+     * @since 2.8.1
+     * @return int Unix timestamp.
+     */
+    private function get_notice_baseline(): int {
+        $since = (int) get_option(self::INSTALL_TIME_OPTION, 0);
+
+        if ($since > 0) {
+            return $since;
+        }
+
+        $since = (int) get_option('thinkrank_activation_time', 0);
+        if ($since <= 0) {
+            $since = time();
+        }
+
+        // add_option() so a concurrent request cannot move a recorded baseline.
+        add_option(self::INSTALL_TIME_OPTION, $since);
+
+        return $since;
     }
 
     /**

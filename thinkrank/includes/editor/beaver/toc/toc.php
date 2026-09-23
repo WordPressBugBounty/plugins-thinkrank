@@ -198,6 +198,7 @@ class ThinkRank_Beaver_TOC_Module extends FLBuilderModule {
                 } );
                 var tag = document.createElement( 'script' );
                 tag.type = 'application/ld+json';
+                tag.setAttribute( 'data-thinkrank', 'toc' );
                 tag.textContent = JSON.stringify( {
                     '@context': 'https://schema.org',
                     '@graph': graph

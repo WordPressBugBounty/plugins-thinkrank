@@ -95,47 +95,22 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
     ];
 
     /**
-     * Semantic analysis capabilities
-     *
-     * @since 1.0.0
-     * @var array
-     */
-    private array $semantic_capabilities = [
-        'topic_modeling' => [
-            'enabled' => true,
-            'min_topics' => 3,
-            'max_topics' => 10,
-            'coherence_threshold' => 0.7
-        ],
-        'entity_recognition' => [
-            'enabled' => true,
-            'entity_types' => ['PERSON', 'ORGANIZATION', 'LOCATION', 'PRODUCT', 'EVENT'],
-            'confidence_threshold' => 0.8
-        ],
-        'sentiment_analysis' => [
-            'enabled' => true,
-            'scale' => [-1.0, 1.0], // Negative to positive
-            'neutral_range' => [-0.1, 0.1]
-        ],
-        'content_classification' => [
-            'enabled' => true,
-            'categories' => ['informational', 'commercial', 'transactional', 'navigational'],
-            'confidence_threshold' => 0.6
-        ]
-    ];
-
-    /**
      * Content optimization scoring weights
+     *
+     * Semantic relevance used to sit here at 15%, fed by a block that returned
+     * the same numbers for every input (#538). Removing a factor would have
+     * capped the score at 85, so the remaining four were rescaled by 100/85 and
+     * rounded to whole numbers, which preserves their former ratio (25:30:20:10)
+     * and keeps the array at 100.
      *
      * @since 1.0.0
      * @var array
      */
     private array $scoring_weights = [
-        'readability' => 25,
-        'keyword_optimization' => 30,
-        'content_structure' => 20,
-        'semantic_relevance' => 15,
-        'technical_seo' => 10
+        'readability' => 29,
+        'keyword_optimization' => 35,
+        'content_structure' => 24,
+        'technical_seo' => 12
     ];
 
     /**
@@ -162,7 +137,6 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
             'content_stats' => [],
             'readability' => [],
             'keyword_analysis' => [],
-            'semantic_analysis' => [],
             'structure_analysis' => [],
             'optimization_score' => 0,
             'recommendations' => [],
@@ -180,9 +154,6 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
         if (!empty($keywords)) {
             $analysis['keyword_analysis'] = $this->analyze_keywords($content, $keywords, $analysis['content_stats']);
         }
-
-        // Semantic content analysis
-        $analysis['semantic_analysis'] = $this->analyze_semantic_content($content, $options);
 
         // Content structure analysis
         $analysis['structure_analysis'] = $this->analyze_content_structure($content, $options);
@@ -331,58 +302,6 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
     }
 
     /**
-     * Analyze semantic content with topic modeling and entity recognition
-     *
-     * @since 1.0.0
-     *
-     * @param string $content Content to analyze
-     * @param array  $options Analysis options
-     * @return array Semantic analysis results
-     */
-    public function analyze_semantic_content(string $content, array $options = []): array {
-        $semantic_analysis = [
-            'topic_clusters' => [],
-            'entities' => [],
-            'sentiment' => [],
-            'content_classification' => [],
-            'semantic_keywords' => [],
-            'coherence_score' => 0,
-            'relevance_score' => 0
-        ];
-
-        // Topic modeling and clustering
-        if ($this->semantic_capabilities['topic_modeling']['enabled']) {
-            $semantic_analysis['topic_clusters'] = $this->extract_topic_clusters($content);
-        }
-
-        // Named entity recognition
-        if ($this->semantic_capabilities['entity_recognition']['enabled']) {
-            $semantic_analysis['entities'] = $this->recognize_entities($content);
-        }
-
-        // Sentiment analysis
-        if ($this->semantic_capabilities['sentiment_analysis']['enabled']) {
-            $semantic_analysis['sentiment'] = $this->analyze_sentiment($content);
-        }
-
-        // Content classification
-        if ($this->semantic_capabilities['content_classification']['enabled']) {
-            $semantic_analysis['content_classification'] = $this->classify_content($content);
-        }
-
-        // Extract semantic keywords
-        $semantic_analysis['semantic_keywords'] = $this->extract_semantic_keywords($content);
-
-        // Calculate coherence score
-        $semantic_analysis['coherence_score'] = $this->calculate_content_coherence($semantic_analysis);
-
-        // Calculate relevance score
-        $semantic_analysis['relevance_score'] = $this->calculate_semantic_relevance($semantic_analysis);
-
-        return $semantic_analysis;
-    }
-
-    /**
      * Analyze content structure and organization
      *
      * @since 1.0.0
@@ -524,10 +443,12 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
 
         if (!empty($content)) {
             // Perform comprehensive analysis
+            // semantic_analysis_enabled is deliberately not passed: the block it
+            // gated was removed in #538 and nothing downstream reads the option.
+            // The setting itself stays, so stored rows are not purged (#452).
             $analysis_options = [
                 'readability_enabled' => $settings['readability_enabled'] ?? true,
                 'keyword_analysis_enabled' => $settings['keyword_analysis_enabled'] ?? true,
-                'semantic_analysis_enabled' => $settings['semantic_analysis_enabled'] ?? true,
                 'structure_analysis_enabled' => $settings['structure_analysis_enabled'] ?? true
             ];
 
@@ -555,6 +476,9 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
             'enabled' => true,
             'readability_enabled' => true,
             'keyword_analysis_enabled' => true,
+            // Inert since #538; see get_settings_schema(). The default stays
+            // true so the value this endpoint reports for a site that never
+            // saved the key does not change, and nothing reads it either way.
             'semantic_analysis_enabled' => true,
             'structure_analysis_enabled' => true,
             'auto_analyze' => true,
@@ -612,10 +536,15 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
                 'description' => 'Analyze keyword density and optimization',
                 'default' => true
             ],
+            // Retired in #538, but still published so a client that stored the
+            // key sees it described rather than missing. The title and
+            // description say plainly that it does nothing: the topic modeling
+            // and entity recognition they used to promise were a block that
+            // returned the same answer for every input.
             'semantic_analysis_enabled' => [
                 'type' => 'boolean',
-                'title' => 'Enable Semantic Analysis',
-                'description' => 'Perform topic modeling and entity recognition',
+                'title' => 'Semantic Analysis (retired)',
+                'description' => 'Has no effect. The topic modeling and entity recognition this gated returned fixed values for every input and were removed. The key is still accepted so existing stored settings are not purged.',
                 'default' => true
             ],
             'structure_analysis_enabled' => [
@@ -1032,27 +961,22 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
     private function calculate_optimization_score(array $analysis): int {
         $scores = [];
 
-        // Readability score (25% weight)
+        // Readability score (29% weight)
         if (!empty($analysis['readability']['readability_score'])) {
             $scores['readability'] = $analysis['readability']['readability_score'] * ($this->scoring_weights['readability'] / 100);
         }
 
-        // Keyword optimization score (30% weight)
+        // Keyword optimization score (35% weight)
         if (!empty($analysis['keyword_analysis']['optimization_score'])) {
             $scores['keyword_optimization'] = $analysis['keyword_analysis']['optimization_score'] * ($this->scoring_weights['keyword_optimization'] / 100);
         }
 
-        // Content structure score (20% weight)
+        // Content structure score (24% weight)
         if (!empty($analysis['structure_analysis']['structure_score'])) {
             $scores['content_structure'] = $analysis['structure_analysis']['structure_score'] * ($this->scoring_weights['content_structure'] / 100);
         }
 
-        // Semantic relevance score (15% weight)
-        if (!empty($analysis['semantic_analysis']['relevance_score'])) {
-            $scores['semantic_relevance'] = $analysis['semantic_analysis']['relevance_score'] * ($this->scoring_weights['semantic_relevance'] / 100);
-        }
-
-        // Technical SEO score (10% weight)
+        // Technical SEO score (12% weight)
         $technical_score = $this->calculate_technical_seo_score($analysis);
         $scores['technical_seo'] = $technical_score * ($this->scoring_weights['technical_seo'] / 100);
 
@@ -1124,15 +1048,12 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
 
         // Analysis completeness confidence
         $completed_analyses = 0;
-        $total_analyses = 4; // readability, keyword, semantic, structure
+        $total_analyses = 3; // readability, keyword, structure
 
         if (!empty($analysis['readability'])) {
             $completed_analyses++;
         }
         if (!empty($analysis['keyword_analysis'])) {
-            $completed_analyses++;
-        }
-        if (!empty($analysis['semantic_analysis'])) {
             $completed_analyses++;
         }
         if (!empty($analysis['structure_analysis'])) {
@@ -1186,44 +1107,6 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
         }
 
         return max(0, $score);
-    }
-
-    /**
-     * Simple implementations for semantic analysis methods
-     * These would be enhanced with actual AI/ML libraries in production
-     */
-
-    private function extract_topic_clusters(string $content): array {
-        // Simplified topic extraction
-        return ['topics' => ['general content'], 'confidence' => 0.7];
-    }
-
-    private function recognize_entities(string $content): array {
-        // Simplified entity recognition
-        return ['entities' => [], 'confidence' => 0.6];
-    }
-
-    private function analyze_sentiment(string $content): array {
-        // Simplified sentiment analysis
-        return ['sentiment' => 'neutral', 'score' => 0.0, 'confidence' => 0.7];
-    }
-
-    private function classify_content(string $content): array {
-        // Simplified content classification
-        return ['category' => 'informational', 'confidence' => 0.8];
-    }
-
-    private function extract_semantic_keywords(string $content): array {
-        // Simplified semantic keyword extraction
-        return [];
-    }
-
-    private function calculate_content_coherence(array $semantic_analysis): float {
-        return 0.8; // Simplified coherence score
-    }
-
-    private function calculate_semantic_relevance(array $semantic_analysis): float {
-        return 75.0; // Simplified relevance score
     }
 
     private function analyze_heading_structure(string $content): array {

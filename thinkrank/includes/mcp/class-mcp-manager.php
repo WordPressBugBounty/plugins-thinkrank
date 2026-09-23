@@ -64,6 +64,12 @@ final class Mcp_Manager {
 	private const WELLKNOWN_QUERY_VAR = 'thinkrank_mcp_wellknown';
 
 	/**
+	 * Query var carrying the resource path a root-form discovery request asked
+	 * about, so the handler can tell whether that resource is ours (#516).
+	 */
+	private const WELLKNOWN_RESOURCE_QUERY_VAR = 'thinkrank_mcp_wellknown_resource';
+
+	/**
 	 * Query var flagging the browser-facing OAuth authorize page. This is
 	 * served OUTSIDE the REST API on purpose: a REST route only honors cookie
 	 * auth when a REST nonce accompanies it, but a browser arriving from
@@ -177,9 +183,18 @@ final class Mcp_Manager {
 		// Root-form fallback for clients that only try the bare well-known
 		// URL. Harmless when another plugin also registers this exact regex —
 		// last registrant wins, and our clients use the path-suffixed form.
+		//
+		// The trailing path is CAPTURED rather than discarded (#516). It names
+		// the resource the client is asking about, and answering for a resource
+		// that is not ours is how this rule broke subdirectory multisite: the
+		// network root belongs to the main site, so a client discovering
+		// /ca/thinkrank/mcp was served the MAIN site's document, with every
+		// endpoint missing the /ca/ prefix. The same rule also answered for
+		// another plugin's resource path on a plain single site. The handler
+		// below compares the capture with our own path and declines the rest.
 		add_rewrite_rule(
-			'^\.well-known/oauth-(protected-resource|authorization-server)(?:/.*)?/?$',
-			'index.php?' . self::WELLKNOWN_QUERY_VAR . '=$matches[1]',
+			'^\.well-known/oauth-(protected-resource|authorization-server)(/.*)?/?$',
+			'index.php?' . self::WELLKNOWN_QUERY_VAR . '=$matches[1]&' . self::WELLKNOWN_RESOURCE_QUERY_VAR . '=$matches[2]',
 			'top'
 		);
 		// Suffix form: <issuer>/.well-known/... . RFC 8414 specifies the
@@ -210,6 +225,11 @@ final class Mcp_Manager {
 			'^thinkrank/mcp/([a-f0-9]{64})/?$',
 			'^thinkrank/mcp/?$',
 			'^\.well-known/oauth-(protected-resource|authorization-server)/thinkrank/mcp/?$',
+			// Listed so an upgrade re-flushes and the pre-#516 rule, which
+			// discarded the resource path, leaves the stored rewrite table.
+			// Without this the old regex keeps matching until someone re-saves
+			// permalinks by hand.
+			'^\.well-known/oauth-(protected-resource|authorization-server)(/.*)?/?$',
 			'^thinkrank/mcp/\.well-known/oauth-(protected-resource|authorization-server)/?$',
 			'^thinkrank/mcp/\.well-known/openid-configuration/?$',
 			'^thinkrank/authorize/?$',
@@ -235,8 +255,169 @@ final class Mcp_Manager {
 		$vars[] = self::QUERY_VAR;
 		$vars[] = self::TOKEN_QUERY_VAR;
 		$vars[] = self::WELLKNOWN_QUERY_VAR;
+		$vars[] = self::WELLKNOWN_RESOURCE_QUERY_VAR;
 		$vars[] = self::AUTHORIZE_QUERY_VAR;
 		return $vars;
+	}
+
+	/**
+	 * Resolve a root-form discovery request to the site that owns the resource.
+	 *
+	 * The path-suffixed and issuer-suffixed rules are already pinned to
+	 * `thinkrank/mcp`, so only the broad root-form rule can arrive here naming
+	 * something else. Three outcomes:
+	 *
+	 *  - `0` — serve from the current site. That covers the bare form
+	 *    (`/.well-known/oauth-authorization-server`, the whole reason the
+	 *    fallback rule exists) and this site's own endpoint path.
+	 *  - a blog id — a subdirectory multisite request for another site's
+	 *    resource. On subdirectory multisite everything under the network root
+	 *    is served by the MAIN site, so a client discovering
+	 *    `/ca/thinkrank/mcp` lands here; the document has to be built from the
+	 *    `/ca/` site or every endpoint in it loses the prefix.
+	 *  - `null` — not ours. Another plugin's resource, an unknown site path, or
+	 *    a path that merely contains ours.
+	 *
+	 * @since 2.9.0
+	 *
+	 * @param \WP $wp The WP request object.
+	 * @return int|null Blog id to serve from, 0 for the current site, null to decline.
+	 */
+	private static function resolve_wellknown_target( $wp ): ?int {
+		$requested = isset( $wp->query_vars[ self::WELLKNOWN_RESOURCE_QUERY_VAR ] )
+			? trim( (string) $wp->query_vars[ self::WELLKNOWN_RESOURCE_QUERY_VAR ], '/' )
+			: '';
+
+		$ours = trim( Mcp_Pairing::SITE_ENDPOINT_PATH, '/' );
+
+		if ( '' === $requested || $requested === $ours ) {
+			return 0;
+		}
+
+		if ( ! is_multisite() || ! function_exists( 'get_site_by_path' ) ) {
+			return null;
+		}
+
+		// Whatever precedes our endpoint path is the candidate site path:
+		// `ca/thinkrank/mcp` -> `/ca/`. Matching the tail as a whole path
+		// segment, not a substring, so `thinkrank/mcp-other` cannot qualify.
+		$candidate = '/' . $requested;
+		$suffix    = '/' . $ours;
+
+		if ( substr( $candidate, - strlen( $suffix ) ) !== $suffix ) {
+			return null;
+		}
+
+		$site_path = substr( $candidate, 0, - strlen( $ours ) );
+		$domain    = self::request_domain();
+
+		if ( '' === $domain || '' === $site_path ) {
+			return null;
+		}
+
+		$site = get_site_by_path( $domain, $site_path );
+
+		if ( ! $site ) {
+			return null;
+		}
+
+		// get_site_by_path() walks the path segments and falls back to the
+		// network's root site when none match, so an unknown prefix comes back
+		// as the MAIN site rather than as nothing. Taking that at face value
+		// reinstates the exact bug for every path that is not a real subsite:
+		// /nope/thinkrank/mcp would be answered with the main site's document.
+		// Require the match to be the path that was actually asked for.
+		if ( untrailingslashit( (string) $site->path ) !== untrailingslashit( $site_path ) ) {
+			return null;
+		}
+
+		// get_sites() applies no status filter, so a site the network has taken
+		// out of service resolves like any other. Advertising an authorization
+		// server for one would point a client at an endpoint that cannot serve
+		// it. `public` is deliberately NOT checked: on multisite that flag is
+		// search-engine visibility, not availability, and a site can reasonably
+		// be hidden from search while still running MCP.
+		if ( ! empty( $site->archived ) || ! empty( $site->deleted ) || ! empty( $site->spam ) ) {
+			return null;
+		}
+
+		return (int) $site->blog_id === get_current_blog_id() ? 0 : (int) $site->blog_id;
+	}
+
+	/**
+	 * Host for a `get_site_by_path()` lookup.
+	 *
+	 * Mirrors what WordPress itself stores in `wp_blogs`: core strips only the
+	 * default ports when it resolves the current site, so a development network
+	 * running on a non-default port keeps it, and stripping every port here
+	 * would fail to match those rows.
+	 *
+	 * @since 2.9.0
+	 *
+	 * @return string Host, or an empty string when the request carries none.
+	 */
+	private static function request_domain(): string {
+		if ( empty( $_SERVER['HTTP_HOST'] ) ) {
+			return '';
+		}
+
+		$host = strtolower( sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) ) );
+
+		if ( ':80' === substr( $host, -3 ) ) {
+			return substr( $host, 0, -3 );
+		}
+
+		if ( ':443' === substr( $host, -4 ) ) {
+			return substr( $host, 0, -4 );
+		}
+
+		return $host;
+	}
+
+	/**
+	 * Build a discovery document from the site that owns the resource.
+	 *
+	 * The switch is what makes the returned endpoints carry the subsite prefix,
+	 * since every URL in the document comes from `home_url()` / `rest_url()`.
+	 * Settings memoizes per setting name with no notion of which site it read
+	 * from; it clears itself on `switch_blog` (see Settings::init), which is
+	 * what stops the MCP-enabled check below answering for the previous site.
+	 *
+	 * Returns null when the owning site has MCP turned off: a site that is not
+	 * serving MCP must not advertise an authorization server for it.
+	 *
+	 * @since 2.9.0
+	 *
+	 * @param int    $blog_id Blog to build from, 0 for the current site.
+	 * @param string $doc     Document type from the rewrite.
+	 * @return array<string,mixed>|null
+	 */
+	private static function discovery_document_for( int $blog_id, string $doc ): ?array {
+		$switched = false;
+
+		if ( $blog_id > 0 ) {
+			switch_to_blog( $blog_id );
+			$switched = true;
+		}
+
+		$data = null;
+
+		try {
+			if ( self::is_enabled() ) {
+				$data = 'authorization-server' === $doc
+					? Mcp_OAuth::authorization_server_metadata()
+					: Mcp_OAuth::protected_resource_metadata();
+			}
+		} finally {
+			// A throw between the switch and the restore would leave the rest
+			// of the request, including shutdown hooks, running against the
+			// wrong site. Cheap to make impossible.
+			if ( $switched ) {
+				restore_current_blog();
+			}
+		}
+
+		return $data;
 	}
 
 	/**
@@ -249,14 +430,28 @@ final class Mcp_Manager {
 	public function maybe_handle_pretty_endpoint( $wp ): void {
 		// OAuth discovery documents (served at the site root).
 		if ( ! empty( $wp->query_vars[ self::WELLKNOWN_QUERY_VAR ] ) ) {
-			if ( ! self::is_enabled() ) {
+			// The path after the document type names the RESOURCE being
+			// discovered, and it used to be discarded (#516). Resolve it to
+			// the site that actually owns it, which on subdirectory multisite
+			// is how /ca/thinkrank/mcp stops being answered by the main site
+			// with endpoints that have no /ca/ in them.
+			$target = self::resolve_wellknown_target( $wp );
+
+			if ( null === $target ) {
 				status_header( 404 );
 				exit;
 			}
-			$doc  = (string) $wp->query_vars[ self::WELLKNOWN_QUERY_VAR ];
-			$data = 'authorization-server' === $doc
-				? Mcp_OAuth::authorization_server_metadata()
-				: Mcp_OAuth::protected_resource_metadata();
+
+			$data = self::discovery_document_for(
+				$target,
+				(string) $wp->query_vars[ self::WELLKNOWN_QUERY_VAR ]
+			);
+
+			if ( null === $data ) {
+				status_header( 404 );
+				exit;
+			}
+
 			status_header( 200 );
 			header( 'Content-Type: application/json; charset=utf-8' );
 			// Discovery metadata is public + cacheable.

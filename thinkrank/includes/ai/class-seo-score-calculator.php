@@ -60,6 +60,21 @@ class SEOScoreCalculator {
     private bool $measured_performance_resolved = false;
 
     /**
+     * Length bands the editor scores against, in characters.
+     *
+     * Public so every surface that judges a title or description — the editor
+     * score and the Bulk Snippets problem filter — reads one set of numbers.
+     * Before these existed the bands were literals inside the scoring methods,
+     * and a second screen would have had to copy them and drift (#727).
+     *
+     * @since 2.8.0
+     */
+    public const TITLE_OPTIMAL_MIN       = 35;
+    public const TITLE_OPTIMAL_MAX       = 60;
+    public const DESCRIPTION_OPTIMAL_MIN = 120;
+    public const DESCRIPTION_OPTIMAL_MAX = 160;
+
+    /**
      * 2025 SEO scoring factors (Q1 2025 Google Algorithm)
      * Based on First Page Sage research and Google's latest updates
      *
@@ -648,7 +663,7 @@ class SEOScoreCalculator {
 
         // 2025 length optimization (6 points). 60 characters is the recommended
         // maximum for best SERP visibility before Google truncates the title.
-        if ($title_length >= 35 && $title_length <= 60) {
+        if ($title_length >= self::TITLE_OPTIMAL_MIN && $title_length <= self::TITLE_OPTIMAL_MAX) {
             $score += 6;
         } elseif ($title_length >= 25 && $title_length <= 75) {
             $score += 4;
@@ -2167,7 +2182,7 @@ class SEOScoreCalculator {
 
         // Meta description check
         $meta_desc = $metadata['description'] ?? '';
-        if (!empty($meta_desc) && mb_strlen($meta_desc) >= 120 && mb_strlen($meta_desc) <= 160) {
+        if (!empty($meta_desc) && mb_strlen($meta_desc) >= self::DESCRIPTION_OPTIMAL_MIN && mb_strlen($meta_desc) <= self::DESCRIPTION_OPTIMAL_MAX) {
             $score += 0.5;
         } else {
             $suggestions[] = 'Add a compelling meta description (120-160 characters)';

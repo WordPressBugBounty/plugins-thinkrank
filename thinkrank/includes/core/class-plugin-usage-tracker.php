@@ -80,6 +80,17 @@ class Plugin_Usage_Tracker {
     private $notice_options;
 
     /**
+     * Unix timestamp before which the opt-in notice stays hidden.
+     *
+     * 0 keeps the SDK's original behaviour (ask on the first admin page load).
+     * ThinkRank sets it to install time + a grace period via
+     * {@see Usage_Tracker_Manager::start_tracking()}.
+     *
+     * @var int
+     */
+    private $notice_after = 0;
+
+    /**
      * Get Instance of Plugin_Usage_Tracker
      *
      * @return Plugin_Usage_Tracker
@@ -193,7 +204,14 @@ class Plugin_Usage_Tracker {
     public function init() {
         add_action('admin_init', array($this, 'clicked'));
         add_action($this->event_hook, array($this, 'do_tracking'));
+
+        // Both hooks, deliberately: Admin\Manager::remove_admin_notice() strips
+        // every `admin_notices` callback on ThinkRank's own screens and re-fires
+        // `thinkrank_admin_notices` in their place. Since notice() now renders
+        // only on those screens, registering on `admin_notices` alone would mean
+        // it never renders anywhere. The two never both run on one request.
         add_action('admin_notices', array($this, 'notice'));
+        add_action('thinkrank_admin_notices', array($this, 'notice'));
         /**
          * Deactivation Reason Form and Submit Data to Insights.
          */
@@ -664,6 +682,22 @@ class Plugin_Usage_Tracker {
         if (!current_user_can('manage_options')) {
             return;
         }
+        /**
+         * Too soon after install to ask. A consent request on the user's very
+         * first admin page load is the loudest possible first impression, and
+         * it competes with the Setup Wizard the activation redirect just put
+         * them in.
+         */
+        if ($this->notice_after > 0 && time() < $this->notice_after) {
+            return;
+        }
+        /**
+         * Ask on ThinkRank's own screens only. The card used to render on every
+         * admin screen in the site, including other plugins' settings pages.
+         */
+        if (!$this->is_own_screen()) {
+            return;
+        }
 
         $url_yes = add_query_arg([
             'plugin'        => $this->plugin_name,
@@ -712,6 +746,55 @@ class Plugin_Usage_Tracker {
 
         // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
         echo $output;
+    }
+
+    /**
+     * Hold the opt-in notice back until the given time.
+     *
+     * @since 2.8.1
+     * @param int $timestamp Unix timestamp; 0 restores "ask immediately".
+     * @return void
+     */
+    public function set_notice_after($timestamp) {
+        $this->notice_after = max(0, (int) $timestamp);
+    }
+
+    /**
+     * Whether the current admin screen belongs to ThinkRank.
+     *
+     * Matched on the screen id rather than against a list of page slugs:
+     * Admin\Manager already keeps such a list and it has drifted from the
+     * pages actually registered, and Pro adds screens of its own that a list
+     * living in free could not know about.
+     *
+     * The Setup Wizard screen is excluded — it suppresses admin notices
+     * wholesale and collects consent itself, so a card there would be both
+     * invisible and redundant.
+     *
+     * @since 2.8.1
+     * @return bool
+     */
+    private function is_own_screen() {
+        if (!function_exists('get_current_screen')) {
+            return false;
+        }
+
+        $screen = get_current_screen();
+        if (!$screen instanceof \WP_Screen || empty($screen->id)) {
+            return false;
+        }
+
+        $is_own = strpos($screen->id, 'thinkrank') !== false
+            && strpos($screen->id, 'thinkrank_setup_wizard') === false;
+
+        /**
+         * Filter whether the usage-tracking opt-in notice may render here.
+         *
+         * @since 2.8.1
+         * @param bool      $is_own Whether this is a ThinkRank screen.
+         * @param \WP_Screen $screen Current screen.
+         */
+        return (bool) apply_filters('thinkrank_usage_notice_is_own_screen', $is_own, $screen);
     }
 
     /**

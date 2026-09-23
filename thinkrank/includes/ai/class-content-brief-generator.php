@@ -154,9 +154,29 @@ class Content_Brief_Generator {
                 $model = $this->settings->get('openrouter_model', Settings::DEFAULT_OPENROUTER_MODEL);
                 $this->ai_client = new OpenRouter_Client($api_key, $model, self::AI_REQUEST_TIMEOUT);
             }
+        } elseif ($provider === 'openai_compatible') {
+            // Same client as OpenAI, different host — and the key is optional,
+            // so the URL and model id are what gate it (#721). The user's own
+            // timeout applies: a local model writing a brief on CPU is slow,
+            // and the setting exists for exactly that.
+            $base_url = (string) $this->settings->get('openai_compatible_base_url', '');
+            $model    = trim((string) $this->settings->get('openai_compatible_model', ''));
+            if ('' !== $base_url && '' !== $model) {
+                $this->ai_client = new OpenAI_Client(
+                    (string) $this->settings->get('openai_compatible_api_key', ''),
+                    $model,
+                    (int) $this->settings->get('openai_compatible_timeout', Settings::DEFAULT_OPENAI_COMPATIBLE_TIMEOUT),
+                    $base_url
+                );
+                $this->ai_client->set_json_mode((bool) $this->settings->get('openai_compatible_json_mode', false));
+            }
         }
 
         if (!$this->ai_client) {
+            if ('openai_compatible' === $provider) {
+                throw new \Exception('Please set the base URL and model id for your OpenAI-compatible endpoint in ThinkRank settings.');
+            }
+
             throw new \Exception('Please configure your AI provider API key in ThinkRank settings.');
         }
     }
@@ -186,6 +206,8 @@ class Content_Brief_Generator {
             return $this->settings->get('gemini_model', Settings::DEFAULT_GEMINI_MODEL);
         } elseif ($provider === 'openrouter') {
             return $this->settings->get('openrouter_model', Settings::DEFAULT_OPENROUTER_MODEL);
+        } elseif ($provider === 'openai_compatible') {
+            return (string) $this->settings->get('openai_compatible_model', '');
         } else {
             return $this->settings->get('openai_model', Settings::DEFAULT_OPENAI_MODEL);
         }
@@ -246,7 +268,7 @@ class Content_Brief_Generator {
     private function extract_token_usage(array $ai_response): int {
         $provider = $this->get_current_provider();
 
-        if ($provider === 'openai' || $provider === 'openrouter') {
+        if ($provider === 'openai' || $provider === 'openrouter' || $provider === 'openai_compatible') {
             // OpenAI-compatible format: response['usage']['total_tokens']
             return (int) ($ai_response['usage']['total_tokens'] ?? 0);
         } elseif ($provider === 'claude') {
@@ -348,6 +370,9 @@ class Content_Brief_Generator {
                 // omitted: every client defaults it to 0.7, and reasoning models
                 // reject it outright, so passing it here was misleading no-op.
                 'max_tokens' => $max_tokens,
+                // The brief is one JSON object. Only a compatible endpoint
+                // with JSON mode on reads this; every other client ignores it.
+                'json_object' => true,
             ];
             if ('' !== $reasoning_effort) {
                 $completion_options['reasoning_effort'] = $reasoning_effort;
@@ -361,7 +386,7 @@ class Content_Brief_Generator {
             // refusal — which OpenAI returns as HTTP 200 with content=null —
             // slips past every isset() branch and gets serialized into the
             // brief body instead of being reported to the user.
-            $this->guard_against_non_answer($ai_response);
+            $this->guard_against_non_answer($ai_response, $max_tokens);
 
             // Extract text content from AI response
             $ai_text = '';
@@ -511,10 +536,11 @@ class Content_Brief_Generator {
      * (or, historically, were serialized into the brief body). All messages
      * start with "The AI " so the outer catch passes them through unchanged.
      *
-     * @param mixed $ai_response Raw response from the AI client.
+     * @param mixed $ai_response      Raw response from the AI client.
+     * @param int   $requested_tokens The max_tokens this request asked for; 0 when unknown.
      * @throws \Exception If the response is a refusal, policy block, or truncation.
      */
-    private function guard_against_non_answer($ai_response): void {
+    private function guard_against_non_answer($ai_response, int $requested_tokens = 0): void {
         if (!is_array($ai_response)) {
             return;
         }
@@ -535,6 +561,18 @@ class Content_Brief_Generator {
             }
             if ('content_filter' === $finish) {
                 throw new \Exception('The AI blocked this request under its content policy. Try a different topic or less sensitive keywords.');
+            }
+            // A self-hosted server can stop short of max_tokens because the
+            // prompt and the answer together filled its context window
+            // (Ollama loads models at 4096 by default). A bigger output budget
+            // cannot fix that, so say what can.
+            $completion_tokens = (int) ($ai_response['usage']['completion_tokens'] ?? 0);
+            if ('length' === $finish && $requested_tokens > 0 && $completion_tokens > 0 && $completion_tokens < $requested_tokens) {
+                throw new \Exception(esc_html(sprintf(
+                    'The AI stopped after %1$d tokens, short of the %2$d allowed, because the server ran out of context window before finishing the brief. Raise the context length on your AI server (for Ollama, set OLLAMA_CONTEXT_LENGTH to 16384 or more) and try again.',
+                    $completion_tokens,
+                    $requested_tokens
+                )));
             }
             if ('length' === $finish) {
                 throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try fewer competitor URLs, or a model with a larger output limit. A shorter content length will not help: it asks for a smaller budget, not a smaller answer.');

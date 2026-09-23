@@ -295,6 +295,22 @@ class Sitemap_Endpoint extends WP_REST_Controller {
     }
 
     /**
+     * Stored sitemap settings with this request's options laid over them.
+     *
+     * The generate payload is partial — the admin screen posts the sitemap
+     * shape, not the whole settings record — so reading `delivery_mode` straight
+     * off it would resolve to `auto` on every ordinary request and defeat an
+     * explicit choice. Merging keeps a mode sent in the payload authoritative
+     * while falling back to what is saved.
+     *
+     * @param array $options Request options.
+     * @return array Effective settings for this generation.
+     */
+    private function effective_settings(array $options): array {
+        return array_merge($this->sitemap_generator->get_settings('site'), $options);
+    }
+
+    /**
      * Persist a manual-generation auto-promotion into the stored settings.
      *
      * maybe_promote_to_index() may flip use_sitemap_index on and synthesize the
@@ -368,6 +384,15 @@ class Sitemap_Endpoint extends WP_REST_Controller {
 
         $sitemap_url = $this->sitemap_generator->get_primary_sitemap_url($settings);
 
+        // Dynamic delivery publishes no file, so there is nothing to ensure and
+        // nothing to look for on disk. Dropping the rendered documents is what
+        // makes the saved settings take effect on the next request (#752).
+        if ('dynamic' === $this->sitemap_generator->resolve_delivery_mode($settings)) {
+            $this->sitemap_generator->flush_dynamic_cache();
+
+            return $sitemap_url;
+        }
+
         if ($this->sitemap_generator->primary_sitemap_file_exists($settings)) {
             return $sitemap_url;
         }
@@ -437,6 +462,60 @@ class Sitemap_Endpoint extends WP_REST_Controller {
             // generate_and_save() already does this on the automatic path; the
             // manual generate route must match it.
             $this->persist_promoted_mode($options);
+
+            // Dynamic delivery answers the sitemap URLs from PHP, so there is
+            // nothing to write. Every other sitemap write path already returns
+            // early here (class-sitemap-generator.php:2189 and :2313); this one
+            // did not, which broke the feature from both directions: on a
+            // read-only root — the case dynamic delivery exists for — the button
+            // reported 500 "Failed to save sitemap: sitemap.xml" while the URL
+            // was serving correctly, and on a writable root with dynamic chosen
+            // explicitly it wrote files the web server then served in place of
+            // the dynamic route.
+            //
+            // Regenerating here means dropping the rendered documents so the
+            // next request rebuilds them, and clearing any file left behind by
+            // an earlier static generation for the same reason.
+            if ('dynamic' === $this->sitemap_generator->resolve_delivery_mode($this->effective_settings($options))) {
+                $this->sitemap_generator->flush_dynamic_cache();
+
+                $removal = $this->sitemap_generator->delete_published_sitemaps();
+                $stuck   = is_array($removal['failed'] ?? null) ? $removal['failed'] : [];
+
+                // A stale file shadows the dynamic route, so this is a real
+                // failure rather than a tidy-up that did not matter.
+                if (!empty($stuck)) {
+                    return new WP_Error(
+                        'sitemap_stale_files',
+                        sprintf(
+                            /* translators: 1: comma-separated file names, 2: absolute path to the WordPress root. */
+                            __('The sitemap is served by WordPress, but these files are still in the site root and your web server will keep serving them instead: %1$s. They could not be removed because %2$s is not writable.', 'thinkrank'),
+                            implode(', ', $stuck),
+                            untrailingslashit(ABSPATH)
+                        ),
+                        ['status' => 500]
+                    );
+                }
+
+                // last_generated deliberately stays untouched: it means "these
+                // files are on disk", and primary_sitemap_file_exists() callers
+                // rely on that. clear_generation_record() drops a value left
+                // over from a previous static generation, so the admin stops
+                // linking to files that no longer exist.
+                $this->clear_generation_record();
+                $this->sitemap_generator->mark_regeneration_complete();
+
+                return new WP_REST_Response([
+                    'success' => true,
+                    'data' => [
+                        'delivery_mode' => 'dynamic',
+                        'sitemap_url'   => $this->sitemap_generator->get_primary_sitemap_url(),
+                        'generated_at'  => gmdate('c'),
+                        'last_generated' => '',
+                    ],
+                    'message' => __('Sitemap refreshed. WordPress serves it directly, so no files were written.', 'thinkrank'),
+                ]);
+            }
 
             // Check if an index (multiple sitemaps) is configured
             if (!empty($options['use_sitemap_index']) || (!empty($options['sitemap_urls']) && count($options['sitemap_urls']) > 1)) {
@@ -936,6 +1015,16 @@ class Sitemap_Endpoint extends WP_REST_Controller {
                     // not something the settings POST round-trips.
                     'health' => $context_type === 'site'
                         ? $this->sitemap_generator->get_regeneration_health()
+                        : null,
+                    // `delivery_mode` in `settings` may still be 'auto', which
+                    // only the server can resolve (it depends on whether the web
+                    // root is writable). The admin screen needs the answer, not
+                    // the question: a dynamic site publishes no file, so gating
+                    // its sitemap links on `last_generated` — which dynamic
+                    // delivery deliberately never sets — left every link
+                    // permanently disabled.
+                    'resolved_delivery_mode' => $context_type === 'site'
+                        ? $this->sitemap_generator->resolve_delivery_mode($settings)
                         : null
                 ],
                 'message' => 'Sitemap settings retrieved successfully'

@@ -803,17 +803,12 @@ class Manager {
     }
 
     /**
-     * Check if API key is configured
+     * Check if the selected AI provider is configured
      *
-     * @return bool True if at least one API key is configured
+     * @return bool True when the chosen provider has what it needs to run
      */
     private function has_api_key_configured(): bool {
-        $settings = \ThinkRank\Core\Settings::instance();
-
-        return !empty($settings->get('openai_api_key'))
-            || !empty($settings->get('claude_api_key'))
-            || !empty($settings->get('gemini_api_key'))
-            || !empty($settings->get('openrouter_api_key'));
+        return \ThinkRank\Core\Settings::instance()->has_ai_provider_configured();
     }
 
     /**
@@ -878,20 +873,15 @@ class Manager {
     }
 
     /**
-     * Whether any AI provider API key is configured
+     * Whether the selected AI provider is configured
      *
-     * Mirrors the check used by ThinkRank\AI\Manager.
+     * Same answer as ThinkRank\AI\Manager — both read
+     * Settings::has_ai_provider_configured().
      *
      * @return bool
      */
     private function is_ai_configured(): bool {
-        foreach (['openai_api_key', 'claude_api_key', 'gemini_api_key', 'openrouter_api_key'] as $key) {
-            if (!empty($this->settings->get($key, ''))) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->settings->has_ai_provider_configured();
     }
 
     /**

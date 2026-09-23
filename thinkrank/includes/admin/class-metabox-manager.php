@@ -1053,12 +1053,11 @@ JS;
                 ],
                 $post_id
             ),
-            // Whether any AI provider API key is configured — gates the
-            // "Generate with AI" button in the metabox
-            'aiConfigured' => !empty($this->settings->get('openai_api_key', ''))
-                || !empty($this->settings->get('claude_api_key', ''))
-                || !empty($this->settings->get('gemini_api_key', ''))
-                || !empty($this->settings->get('openrouter_api_key', '')),
+            // Whether the selected AI provider is configured — gates the
+            // "Generate with AI" button in the metabox. An OpenAI-compatible
+            // endpoint counts once it has a base URL and a model id, with or
+            // without a key (#721).
+            'aiConfigured' => $this->settings->has_ai_provider_configured(),
             // Resolved Global/Bulk SEO variable-tag patterns for this post, shown
             // as placeholder previews when a field is empty (the frontend applies
             // these same patterns on output). Typing a value overrides them.

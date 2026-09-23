@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 2.8.0
+ * Version: 2.9.0
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Requires PHP: 7.4
  * 
  * @package ThinkRank
- * @version 2.8.0
+ * @version 2.9.0
  * @since 1.0.0
  */
 
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '2.8.0');
+define('THINKRANK_VERSION', '2.9.0');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -334,7 +334,15 @@ final class ThinkRank {
     private function load_components(): void {
         $this->components = [
             'database' => new ThinkRank\Core\Database(),
-            'settings' => new ThinkRank\Core\Settings(),
+            // Settings::instance() rather than a fresh object: the container
+            // and the singleton were otherwise two different Settings, each
+            // with its own memo, because instance() resolves the container and
+            // this array is assigned only after every constructor above has
+            // run. Anything resolving the singleton during that window got a
+            // standalone instance that outlived the request, so a hook
+            // registered from the component's init() ran against an object no
+            // consumer read through (#516).
+            'settings' => ThinkRank\Core\Settings::instance(),
             'role_manager' => new ThinkRank\Core\Role_Manager(),
             'security_headers' => new ThinkRank\Core\Security_Headers(),
             'asset_optimizer' => new ThinkRank\Core\Asset_Optimizer(),
@@ -349,6 +357,7 @@ final class ThinkRank {
             'frontend_seo' => new ThinkRank\Frontend\SEO_Manager(),
             'seo_notice' => new ThinkRank\Admin\SEO_Notice(),
             'search_visibility_notice' => new ThinkRank\Admin\Search_Visibility_Notice(),
+            'webroot_writable_notice' => new ThinkRank\Admin\Webroot_Writable_Notice(),
             'performance_collector' => new ThinkRank\SEO\Performance_Data_Collector(),
             'query_guard' => new ThinkRank\SEO\Query_Guard(),
             'feeds' => new ThinkRank\SEO\Feed_Manager(),
@@ -359,11 +368,15 @@ final class ThinkRank {
             'instant_indexing_reconciler' => new ThinkRank\SEO\Instant_Indexing_Reconciler(),
             'author_archives' => new ThinkRank\SEO\Author_Archives_Manager(),
             'seo_analyzer' => new ThinkRank\SEO\SEO_Analyzer(),
+            // Bulk Snippets' persisted issue index: invalidation hooks must run
+            // on every request, since posts are edited everywhere but there.
+            'snippet_index' => new ThinkRank\SEO\Snippet_Index(),
             'email_report' => new ThinkRank\SEO\Email_Report_Manager(),
             'google_oauth' => new ThinkRank\Integrations\Google_OAuth_Proxy(),
             'multilingual' => new ThinkRank\Integrations\Multilingual_Manager(),
             'ai_traffic' => new ThinkRank\SEO\Ai_Traffic_Tracker(),
             'analytics' => new ThinkRank\SEO\Analytics_Manager(),
+            'schema_conflict_health_check' => new ThinkRank\Diagnostics\Schema_Conflict_Health_Check(),
             'abilities' => new ThinkRank\Abilities\Abilities_Registrar(),
             'mcp' => new ThinkRank\Mcp\Mcp_Manager(),
         ];

@@ -84,10 +84,19 @@ class Settings_Manager {
                 'gemini_model',
                 'openrouter_api_key',
                 'openrouter_model',
+                'openai_compatible_base_url',
+                'openai_compatible_api_key',
+                'openai_compatible_model',
+                'openai_compatible_timeout',
+                'openai_compatible_supports_images',
+                'openai_compatible_json_mode',
+                'openai_compatible_price_per_million',
                 'max_tokens',
                 'temperature',
                 'cache_duration',
                 'max_requests_per_minute',
+                'ai_daily_request_limit',
+                'ai_paused',
                 'enable_logging',
                 'debug_mode',
                 'api_timeout',
@@ -806,19 +815,35 @@ class Settings_Manager {
             case 'openai_api_key':
             case 'claude_api_key':
             case 'openrouter_api_key':
+            case 'openai_compatible_api_key':
+            case 'openai_compatible_model':
                 if (!empty($value) && !is_string($value)) {
                     $validation['valid'] = false;
                     $validation['errors'][] = "{$key} must be a string";
                 }
                 break;
 
+            case 'openai_compatible_base_url':
+                // An unreachable or dangerous URL is refused with a reason
+                // rather than quietly stored (see Endpoint_URL_Validator).
+                if (!empty($value)) {
+                    $validated = \ThinkRank\AI\Endpoint_URL_Validator::validate((string) $value);
+                    if (is_wp_error($validated)) {
+                        $validation['valid'] = false;
+                        $validation['errors'][] = $validated->get_error_message();
+                    }
+                }
+                break;
+
             case 'max_tokens':
             case 'cache_duration':
             case 'max_requests_per_minute':
+            case 'ai_daily_request_limit':
             case 'seo_score_threshold':
             case 'api_timeout':
             case 'retry_attempts':
             case 'data_retention_days':
+            case 'openai_compatible_timeout':
                 if (!is_numeric($value) || $value < 0) {
                     $validation['valid'] = false;
                     $validation['errors'][] = "{$key} must be a positive number";

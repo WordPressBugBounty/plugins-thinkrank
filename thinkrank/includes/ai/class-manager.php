@@ -166,6 +166,26 @@ class Manager {
                     }
                     break;
 
+                case 'openai_compatible':
+                    // Any server speaking the OpenAI Chat Completions API:
+                    // Ollama, LM Studio, vLLM, Azure OpenAI, Groq, a company
+                    // gateway (#721). The key is optional — a local server
+                    // usually wants none — so the URL and the model id are what
+                    // decide whether this provider is configured.
+                    $base_url = (string) $this->settings->get('openai_compatible_base_url', '');
+                    $model    = trim((string) $this->settings->get('openai_compatible_model', ''));
+                    if ('' !== $base_url && '' !== $model) {
+                        $compatible_client = new OpenAI_Client(
+                            (string) $this->settings->get('openai_compatible_api_key', ''),
+                            $model,
+                            (int) $this->settings->get('openai_compatible_timeout', Settings::DEFAULT_OPENAI_COMPATIBLE_TIMEOUT),
+                            $base_url
+                        );
+                        $compatible_client->set_json_mode((bool) $this->settings->get('openai_compatible_json_mode', false));
+                        $this->client = $compatible_client;
+                    }
+                    break;
+
                 default:
                     throw new \Exception("Unsupported AI provider: {$provider}");
             }
@@ -181,6 +201,26 @@ class Manager {
     }
 
     /**
+     * Has the user configured enough for the selected provider to run?
+     *
+     * Every generator re-checks this before spending a request, because an
+     * initialised client is not proof of configuration — the client is built
+     * from whatever was stored. It used to be an inline OR over the four API
+     * key settings, repeated at nine call sites; the OpenAI-compatible
+     * provider broke that shape, since a local Ollama or LM Studio server
+     * legitimately has no key and is configured by URL + model instead (#721).
+     * Settings::has_ai_provider_configured() is now the single answer, shared
+     * with the admin menu notice and the metabox.
+     *
+     * @since 2.8.0
+     *
+     * @return bool True when the selected provider has what it needs.
+     */
+    private function has_provider_credentials(): bool {
+        return $this->settings->has_ai_provider_configured();
+    }
+
+    /**
      * Get the display name of the currently selected AI provider
      *
      * @return string Provider display name (e.g. "OpenAI")
@@ -192,6 +232,8 @@ class Manager {
             'claude'     => 'Anthropic',
             'gemini'     => 'Gemini',
             'openrouter' => 'OpenRouter',
+            // Named by what it is, not by OpenAI — the host is the customer's.
+            'openai_compatible' => 'OpenAI-compatible endpoint',
         ];
 
         $provider = (string) $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
@@ -223,6 +265,33 @@ class Manager {
             return sprintf(
                 /* translators: %s: link to the ThinkRank settings page. */
                 __('AI features are not set up yet. Choose an AI provider and add its API key under %s.', 'thinkrank'),
+                $settings_link
+            );
+        }
+
+        // The OpenAI-compatible provider has no key requirement — a local
+        // server usually wants none — so the generic "add your API key" copy
+        // below would send the user looking for the wrong field (#721).
+        if ('openai_compatible' === $provider) {
+            if (empty($this->settings->get('openai_compatible_base_url'))) {
+                return sprintf(
+                    /* translators: %s: link to the ThinkRank settings page. */
+                    __('AI features are not set up yet. Add the base URL of your OpenAI-compatible endpoint under %s.', 'thinkrank'),
+                    $settings_link
+                );
+            }
+
+            if (empty(trim((string) $this->settings->get('openai_compatible_model', '')))) {
+                return sprintf(
+                    /* translators: %s: link to the ThinkRank settings page. */
+                    __('AI features are not set up yet. Enter the model id your endpoint should use under %s.', 'thinkrank'),
+                    $settings_link
+                );
+            }
+
+            return sprintf(
+                /* translators: %s: link to the ThinkRank settings page. */
+                __('ThinkRank could not reach your OpenAI-compatible endpoint. Check the base URL, model id and that the server is running under %s, then try again.', 'thinkrank'),
                 $settings_link
             );
         }
@@ -315,7 +384,7 @@ class Manager {
             $metadata = $this->client->generate_seo_metadata($content, $options);
 
             // Ensure user has configured their API key
-            $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
+            $user_has_api_key = $this->has_provider_credentials();
 
             if (!$user_has_api_key) {
                 throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
@@ -369,7 +438,7 @@ class Manager {
         }
 
         // Ensure user has configured their API key.
-        $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
+        $user_has_api_key = $this->has_provider_credentials();
         if (!$user_has_api_key) {
             throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
@@ -539,7 +608,7 @@ class Manager {
             }
         }
 
-        $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
+        $user_has_api_key = $this->has_provider_credentials();
         if (!$user_has_api_key) {
             throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
@@ -931,7 +1000,7 @@ class Manager {
                 throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
             }
         }
-        $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
+        $user_has_api_key = $this->has_provider_credentials();
         if (!$user_has_api_key) {
             throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
         }
@@ -1154,7 +1223,7 @@ class Manager {
         $user_id = get_current_user_id();
 
         // Ensure user has configured their API key
-        $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
+        $user_has_api_key = $this->has_provider_credentials();
 
         if (!$user_has_api_key) {
             throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
@@ -1244,7 +1313,7 @@ class Manager {
         $user_id = get_current_user_id();
 
         // Ensure user has configured their API key
-        $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
+        $user_has_api_key = $this->has_provider_credentials();
 
         if (!$user_has_api_key) {
             throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
@@ -1322,7 +1391,7 @@ class Manager {
         $user_id = get_current_user_id();
 
         // Ensure user has configured their API key
-        $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
+        $user_has_api_key = $this->has_provider_credentials();
 
         if (!$user_has_api_key) {
             throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
@@ -1420,6 +1489,15 @@ class Manager {
                 'models' => ['openai/gpt-4o-mini', 'anthropic/claude-sonnet-5', 'google/gemini-3.5-flash', 'meta-llama/llama-3.3-70b-instruct', 'deepseek/deepseek-chat'],
                 'requires_key' => true,
             ],
+            'openai_compatible' => [
+                'name' => 'OpenAI-compatible endpoint',
+                'description' => 'Any server speaking the OpenAI Chat Completions API: Ollama, LM Studio, vLLM, Azure OpenAI, Groq, Together, DeepSeek or your own gateway',
+                // Deliberately empty: the model list belongs to the server the
+                // user names, and is read from GET {base}/models at runtime.
+                'models' => [],
+                'requires_key' => false,
+                'requires_base_url' => true,
+            ],
         ];
     }
 
@@ -1430,15 +1508,17 @@ class Manager {
      */
     public function get_provider_status(): array {
         $provider = $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
-        // With no provider chosen there is no "<provider>_api_key" to read;
-        // asking for '_api_key' would be a nonsense lookup.
-        $api_key = Settings::AI_PROVIDER_NONE === $provider
-            ? ''
-            : $this->settings->get($provider . '_api_key');
+
+        // "Configured" is per-provider: a key for the hosted three, a base URL
+        // plus a model id for an OpenAI-compatible endpoint, whose key is
+        // optional (#721).
+        $configured = Settings::AI_PROVIDER_NONE === $provider
+            ? false
+            : $this->has_provider_credentials();
 
         return [
             'provider' => $provider,
-            'configured' => !empty($api_key),
+            'configured' => $configured,
             'connected' => $this->client !== null,
         ];
     }
@@ -1523,7 +1603,7 @@ class Manager {
      */
     private function check_rate_limit(?int $user_id = null, string $context = 'ai'): bool {
         $user_id = $user_id ?? get_current_user_id();
-        $max_requests = (int) $this->settings->get('max_requests_per_minute', 10);
+        $max_requests = (int) $this->settings->get('max_requests_per_minute', 0);
 
         // A non-positive limit means "unlimited".
         if ($max_requests <= 0) {
@@ -1625,7 +1705,7 @@ class Manager {
         $user_id = get_current_user_id();
 
         // Ensure user has configured their API key (copying Site Identity pattern)
-        $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
+        $user_has_api_key = $this->has_provider_credentials();
 
         if (!$user_has_api_key) {
             throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
@@ -1703,7 +1783,7 @@ class Manager {
         $user_id = get_current_user_id();
 
         // Ensure user has configured their API key (copying Site Identity pattern)
-        $user_has_api_key = !empty($this->settings->get('openai_api_key')) || !empty($this->settings->get('claude_api_key')) || !empty($this->settings->get('gemini_api_key')) || !empty($this->settings->get('openrouter_api_key'));
+        $user_has_api_key = $this->has_provider_credentials();
 
         if (!$user_has_api_key) {
             throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));

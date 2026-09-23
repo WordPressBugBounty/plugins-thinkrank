@@ -221,7 +221,7 @@ class Blocks_Manager {
             return $block_content;
         }
 
-        return $block_content . "\n" . '<script type="application/ld+json">' . $json . '</script>';
+        return $block_content . "\n" . '<script type="application/ld+json" data-thinkrank="block">' . $json . '</script>';
     }
 
     /**

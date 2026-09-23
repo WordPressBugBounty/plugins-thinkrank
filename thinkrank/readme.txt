@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.8.0
+Stable tag: 2.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -285,6 +285,10 @@ For AI features: metadata and content brief generation, AI insights, "Explain wi
 * Google Gemini (generativelanguage.googleapis.com): [Terms](https://ai.google.dev/gemini-api/terms), [Privacy](https://policies.google.com/privacy)
 * OpenRouter (openrouter.ai): [Terms](https://openrouter.ai/terms), [Privacy](https://openrouter.ai/privacy)
 
+= OpenAI-compatible endpoint you configure =
+
+Optional. If you choose the "Custom endpoint" AI provider and enter a base URL, the AI features above send the same content - and the API key you enter, if any - to that URL instead of to a provider above. Nothing is sent until you configure it, and where it goes is entirely your choice: a model on your own server (Ollama, LM Studio, vLLM), your Azure OpenAI deployment, your company gateway, or a hosted service. ThinkRank has no relationship with that endpoint, so its own terms and privacy policy apply.
+
 = ThinkRank Google connection (api.thinkrank.ai) =
 
 Clicking Connect Google (Search Console, GA4) signs in through api.thinkrank.ai, which holds ThinkRank's Google app credentials. It receives your site URL and a one-time sign-in code on connect, and your Google refresh token whenever the access token is renewed. [Terms](https://thinkrank.ai/terms-and-conditions/), [Privacy](https://thinkrank.ai/privacy-policy/)
@@ -322,6 +326,20 @@ Content brief competitor analysis and schema import fetch the URLs you type in, 
 9. AI Content Brief Generator with competitor analysis and content gaps.
 
 == Changelog ==
+
+= 2.9.0 =
+Release Date: 2026-09-23
+
+- New: Custom AI provider: connect any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, Azure)
+- New: AI spend controls: a daily request limit, a pause-all-AI switch and a per-minute limit
+- New: Bulk Snippets: every post's title, description and keyword in one table, with AI drafts
+- New: Sitemaps are served dynamically when the WordPress folder cannot be written to
+- New: Site Health warns when another plugin publishes schema markup on the same pages
+- New: Site Health and an admin notice flag a WordPress folder ThinkRank cannot write to
+- Changed: AI requests are no longer throttled to 10 per minute by default
+- Changed: The usage tracking prompt waits a week and appears only on ThinkRank screens
+- Fixed: MCP connectors on subdirectory multisite were sent to the main site instead of the subsite
+- Fixed: The AI usage meter turned red when AI was paused rather than when the limit was reached
 
 = 2.8.0 =
 Release Date: 2026-09-21
@@ -373,25 +391,12 @@ Release Date: 2026-09-10
 - Fixed: Turning product schema off also removed WooCommerce's own product data
 - Fixed: Minor Site SEO Audit, sitemap and robots.txt issues
 
-= 2.4.0 =
-Release Date: 2026-09-08
-
-- New: FAQ, How-To and Table of Contents elements for Bricks Builder
-- New: Option to use SEO titles in breadcrumbs
-- Improved: SEO score rates Core Web Vitals and Mobile Experience from real measurements
-- Improved: XML Sitemap screen warns when automatic regeneration fails or falls behind
-- Fixed: Duplicate and hidden FAQ structured data on Bricks pages
-- Fixed: Favicons are now generated at the correct sizes
-- Fixed: 404 pages printed the matched post's meta tags
-- Fixed: A failed PageSpeed audit counted as a score of zero
-- Fixed: Minor breadcrumb, sitemap, video sitemap and audit issues
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.9.0 =
+Adds a custom OpenAI-compatible AI provider, daily AI spend limits with a pause switch, Bulk Snippets editing, dynamic sitemaps for read-only hosts and schema conflict detection in Site Health. Fixes MCP connectors on subdirectory multisite. Recommended for all sites.
+
 = 2.8.0 =
 Adds import from Squirrly SEO and redesigned email reports that pause until Search Console is connected. Fixes migrations dropping title formats, the default social image and category SEO. Recommended for all sites.
-
-= 2.7.0 =
-Adds per-post search and archive visibility, RSS feed controls, alternative og:image tags, SEO metadata on post embeds, a canonical URL scheme setting and sitemap branding. Fixes the Schema master switch and non-Latin title and description truncation. Recommended for all sites.

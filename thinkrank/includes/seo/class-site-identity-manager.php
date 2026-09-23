@@ -3704,7 +3704,20 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             // here for the same reason, so they go through one list (#104).
             $extra = [];
 
-            if (file_exists(ABSPATH . 'local-sitemap.xml')) {
+            // Not a file test. Under dynamic delivery the local sitemap is
+            // served from PHP and no file is ever written, so file_exists()
+            // silently dropped a sitemap the site really does publish (#752).
+            // On static sites the file is still what proves it, so both count.
+            $local_sitemap_published = file_exists(ABSPATH . 'local-sitemap.xml');
+
+            if (!$local_sitemap_published && class_exists('ThinkRank\\SEO\\Sitemap_Generator')) {
+                $generator = new \ThinkRank\SEO\Sitemap_Generator(false);
+
+                $local_sitemap_published = 'dynamic' === $generator->resolve_delivery_mode()
+                    && $generator->publishes_local_sitemap();
+            }
+
+            if ($local_sitemap_published) {
                 $extra[] = '/local-sitemap.xml';
             }
 

@@ -441,7 +441,18 @@ class Setup_Wizard_Endpoint extends WP_REST_Controller {
         $generator = new \ThinkRank\SEO\Sitemap_Generator();
         $settings  = $generator->get_settings('site');
 
-        if (empty($settings['enabled']) || !$generator->primary_sitemap_file_exists($settings)) {
+        if (empty($settings['enabled'])) {
+            return '';
+        }
+
+        // "Can ThinkRank answer this URL right now?" — not "is there a file?".
+        // Dynamic delivery serves the sitemap from PHP and writes nothing, so a
+        // file test alone hid the wizard's View Sitemap link on exactly the
+        // sites where the sitemap was working (#752).
+        $can_serve = 'dynamic' === $generator->resolve_delivery_mode($settings)
+            || $generator->primary_sitemap_file_exists($settings);
+
+        if (!$can_serve) {
             return '';
         }
 
