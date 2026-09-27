@@ -292,10 +292,21 @@ class SEOScoreEndpoint {
             // empty() discarded it, so a post the editor scored as 0 kept
             // whatever the calculator had produced instead (#394). Both params
             // already default to null above, so null means "not sent".
-            if (null !== $readability_score) {
+            //
+            // Only when the editor actually measured something, though. Inside a
+            // page builder there is no editor content to read, so Refresh sent an
+            // empty `live_content` along with the two labels derived from that
+            // empty string — the literal words "No content" — and they were
+            // applied over the correct server-side analysis this request had just
+            // run, then persisted by save_score(). That is what put "No content"
+            // on the dashboard for a page with a valid score (#778). With nothing
+            // measured, the analysis above is the better answer.
+            $editor_measured = '' !== trim((string) $live_content);
+
+            if ($editor_measured && null !== $readability_score) {
                 $score_data['readability_score'] = $readability_score;
             }
-            if (null !== $content_quality) {
+            if ($editor_measured && null !== $content_quality) {
                 $score_data['content_quality'] = $content_quality;
             }
 

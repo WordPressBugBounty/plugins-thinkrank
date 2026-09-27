@@ -47,6 +47,32 @@ class Global_SEO_Schema_Output {
     private const SCHEMA_CONTEXT = 'https://schema.org';
 
     /**
+     * Returns the description already resolved for this request, or null.
+     *
+     * Injected rather than resolved here, because the chain behind it (post
+     * meta, global template, archive, site-identity default, derived excerpt,
+     * tagline) reads request state that Seo_Manager owns. Duplicating it would
+     * be a second implementation to keep in step; this way schema and the meta
+     * tags cannot disagree (#766).
+     *
+     * @since 2.10.0
+     * @var callable|null
+     */
+    private $description_resolver = null;
+
+    /**
+     * Supply the request's resolved description.
+     *
+     * @since 2.10.0
+     *
+     * @param callable $resolver Returns string|null.
+     * @return void
+     */
+    public function set_description_resolver(callable $resolver): void {
+        $this->description_resolver = $resolver;
+    }
+
+    /**
      * Initialize the schema output
      *
      * @since 1.0.0
@@ -315,8 +341,10 @@ class Global_SEO_Schema_Output {
             ],
         ];
 
-        $description = trim(wp_strip_all_tags($description));
-        if (!empty($description)) {
+        // Normalised like every other description: an entity or a trailing
+        // excerpt marker is as wrong in a CollectionPage as anywhere (#766).
+        $description = self::normalize_description((string) $description);
+        if ('' !== $description) {
             $schema['description'] = $description;
         }
 
@@ -524,11 +552,13 @@ class Global_SEO_Schema_Output {
             'dateModified' => get_the_modified_date('c', $post),
         ];
 
-        // Add description. A Bricks page's stored `post_content` is not on the
-        // page, so core's derived excerpt must not describe it (#651).
-        $excerpt = $this->post_excerpt_text($post);
-        if (!empty($excerpt)) {
-            $schema['description'] = wp_strip_all_tags($excerpt);
+        // Add description. Prefers the request's resolved description so the
+        // article describes itself the same way in JSON-LD as in the head
+        // (#766); a Bricks page's stored `post_content` is not on the page, so
+        // the excerpt fallback must not describe it either (#651).
+        $description = $this->schema_description($post);
+        if ('' !== $description) {
+            $schema['description'] = $description;
         }
 
         // Add author
@@ -678,10 +708,11 @@ class Global_SEO_Schema_Output {
             'dateModified' => get_the_modified_date('c', $post),
         ];
 
-        // Add description
-        $excerpt = $this->post_excerpt_text($post);
-        if (!empty($excerpt)) {
-            $schema['description'] = wp_strip_all_tags($excerpt);
+        // Add description, preferring the one already resolved for this
+        // request over core's auto excerpt (#766).
+        $description = $this->schema_description($post);
+        if ('' !== $description) {
+            $schema['description'] = $description;
         }
 
         // Add featured image if available
@@ -718,7 +749,7 @@ class Global_SEO_Schema_Output {
         $caption = wp_get_attachment_caption($post->ID);
         if (!empty($caption)) {
             $schema['caption'] = $caption;
-            $schema['description'] = $caption;
+            $schema['description'] = self::normalize_description((string) $caption);
         }
 
         // Add dimensions
@@ -748,16 +779,16 @@ class Global_SEO_Schema_Output {
             'url' => get_permalink($post),
         ];
 
-        // Add description
-        $description = $this->post_excerpt_text($post);
-        if (empty($description)) {
-            $caption = wp_get_attachment_caption($post->ID);
-            if (!empty($caption)) {
-                $description = $caption;
-            }
+        // Add description. Same resolution as the page-level types (#766); an
+        // attachment's caption remains the last resort.
+        $description = $this->schema_description($post);
+        if ('' === $description) {
+            $description = self::normalize_description(
+                (string) wp_get_attachment_caption($post->ID)
+            );
         }
-        if (!empty($description)) {
-            $schema['description'] = wp_strip_all_tags($description);
+        if ('' !== $description) {
+            $schema['description'] = $description;
         }
 
         // For video attachments, add contentUrl
@@ -915,11 +946,14 @@ class Global_SEO_Schema_Output {
         // Try custom meta field first
         $description = get_post_meta($post->ID, '_thinkrank_product_description', true);
 
-        // Fallback to excerpt or content. On a Bricks page the excerpt core
-        // derives comes from discarded `post_content`, so the visible body is
-        // used instead (#651).
+        // Then the description resolved for this request, so a product with a
+        // hand-written meta description does not describe itself differently
+        // in its Product node than in the head (#766). schema_description()
+        // falls through to the excerpt on its own, and on a Bricks page that
+        // excerpt comes from the visible body rather than the discarded
+        // `post_content` (#651).
         if (empty($description)) {
-            $description = $this->post_excerpt_text($post);
+            $description = $this->schema_description($post);
         }
 
         if (empty($description)) {
@@ -929,7 +963,12 @@ class Global_SEO_Schema_Output {
             );
         }
 
-        return wp_strip_all_tags($description);
+        // Normalised like every other description rather than merely stripped.
+        // `_thinkrank_product_description` is the branch a product author is
+        // most likely to be using, and it reached the Product node verbatim:
+        // an `&amp;` stayed an entity and a trailing `[…]` stayed a marker,
+        // which is the bug this was supposed to fix (#766).
+        return self::normalize_description((string) $description);
     }
 
     /**
@@ -1213,6 +1252,127 @@ class Global_SEO_Schema_Output {
         return '' !== $superseding
             ? \ThinkRank\SEO\Pattern_Resolver::derive_excerpt($superseding, 30)
             : (string) get_the_excerpt($post);
+    }
+
+    /**
+     * The description a schema node should carry for a post.
+     *
+     * Prefers the description ThinkRank already resolved for this request —
+     * the same value behind `<meta name="description">`, og:description and
+     * twitter:description, with the author's own meta at the top of its
+     * fallback chain. Schema used the auto excerpt instead, so a page with a
+     * hand-written description described itself one way to crawlers reading
+     * the head and another way to answer engines reading the JSON-LD (#766).
+     *
+     * The resolver is only consulted for the post the request is actually
+     * about. A node describing some other post (a related item, a listing
+     * entry) must not inherit this page's description, so those keep deriving
+     * their own excerpt.
+     *
+     * @since 2.10.0
+     *
+     * @param \WP_Post $post Post being described.
+     * @return string Description, or '' when nothing resolves.
+     */
+    private function schema_description(\WP_Post $post): string {
+        if (is_callable($this->description_resolver) && $this->describes_queried_object($post)) {
+            $resolved = (string) call_user_func($this->description_resolver);
+
+            if ('' !== trim($resolved)) {
+                return self::normalize_description($resolved);
+            }
+        }
+
+        return self::normalize_description($this->post_excerpt_text($post));
+    }
+
+    /**
+     * Whether this post is the one the current request is about.
+     *
+     * @since 2.10.0
+     *
+     * @param \WP_Post $post Post being described.
+     * @return bool
+     */
+    private function describes_queried_object(\WP_Post $post): bool {
+        if (!function_exists('is_singular') || !is_singular()) {
+            return false;
+        }
+
+        return (int) $post->ID === (int) get_queried_object_id();
+    }
+
+    /**
+     * Make a description fit to appear in JSON-LD.
+     *
+     * Delegates to Seo_Text so the Schema Manager's builder, whose deployed
+     * nodes outrank this class's, normalises exactly the same way (#766).
+     *
+     * @since 2.10.0
+     *
+     * @param string $description Raw description.
+     * @return string
+     */
+    private static function normalize_description(string $description): string {
+        return \ThinkRank\Core\Seo_Text::normalize_schema_text($description);
+    }
+
+    /**
+     * Types a deployed node describes with the post's own description.
+     *
+     * Schema_Builder fills `description` for these from the post excerpt or
+     * content and nothing else; the Schema Manager form has no description
+     * field for them. Types with such a field (Product, Event, HowTo,
+     * SoftwareApplication, VideoObject, Person) are absent on purpose: what the
+     * author typed there is theirs, not a stale copy of the page summary.
+     *
+     * @since 2.10.0
+     * @var string[]
+     */
+    private const POST_DESCRIBED_TYPES = [
+        'WebPage', 'AboutPage', 'ContactPage', 'ProfilePage',
+        'Article', 'BlogPosting', 'NewsArticle', 'TechnicalArticle', 'ScholarlyArticle', 'Report',
+    ];
+
+    /**
+     * Give a deployed node the description the automatic node would carry.
+     *
+     * A node deployed through the Schema Manager is a snapshot taken when the
+     * author pressed Deploy, and it outranks the node this class builds. So a
+     * page that deployed AboutPage, ContactPage or ProfilePage (#624), or an
+     * Article, published a frozen excerpt instead of the description the head
+     * resolves, and kept it after the meta description was edited. Replacing
+     * it here, at output, makes the two nodes agree and fixes existing
+     * deployments without a redeploy.
+     *
+     * Leaves the node alone when it is not about the queried post, or when
+     * nothing resolves, so the stored value still stands in that case.
+     *
+     * @since 2.10.0
+     *
+     * @param array    $node        Deployed schema node.
+     * @param string   $schema_type Deployed schema type.
+     * @param \WP_Post $post        Post the node was deployed on.
+     * @return array
+     */
+    public function refresh_deployed_description(array $node, string $schema_type, \WP_Post $post): array {
+        $type = '' !== $schema_type ? $schema_type : (string) ($node['@type'] ?? '');
+
+        if (!in_array($type, self::POST_DESCRIBED_TYPES, true)) {
+            return $node;
+        }
+
+        if (!is_callable($this->description_resolver) || !$this->describes_queried_object($post)) {
+            return $node;
+        }
+
+        $resolved = self::normalize_description((string) call_user_func($this->description_resolver));
+
+        if ('' !== $resolved) {
+            $node['description'] = $resolved;
+        }
+
+        return $node;
     }
 
     /**

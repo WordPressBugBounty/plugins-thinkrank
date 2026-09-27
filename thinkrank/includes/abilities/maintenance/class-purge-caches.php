@@ -45,6 +45,11 @@ class Purge_Caches extends Ability_Base {
 		'integrations' => 'Google integration responses',
 		'content_type' => 'Content Type Matrix resolution',
 		'transients'   => 'ThinkRank transients',
+		// Not a cache in the same sense — it rebuilds a published file rather
+		// than dropping a stored value — but it is what a caller looking at a
+		// stale sitemap reaches for, and the docblock above already named that
+		// problem as a reason this ability exists (#764).
+		'sitemap'      => 'Served XML sitemap (rebuilt, not just cleared)',
 	];
 
 	/**
@@ -53,7 +58,7 @@ class Purge_Caches extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/purge-caches';
 		$this->label       = __( 'Purge ThinkRank Caches', 'thinkrank' );
-		$this->description = __( 'Clear ThinkRank\'s cached data when it is showing something stale — the site audit, schema output, AI responses, Google integration responses, or all of them. Pass scopes to clear only what you need; omit it to clear everything. Nothing is deleted except caches: settings and content are untouched, and each cache rebuilds on the next request. After clearing the analyzer scope, use run-seo-analyzer to rebuild the audit immediately rather than waiting for the next request.', 'thinkrank' );
+		$this->description = __( 'Clear ThinkRank\'s cached data when it is showing something stale — the site audit, schema output, AI responses, Google integration responses, or all of them. Pass scopes to clear only what you need; omit it to clear everything. Nothing is deleted except caches: settings and content are untouched, and each cache rebuilds on the next request. After clearing the analyzer scope, use run-seo-analyzer to rebuild the audit immediately rather than waiting for the next request. The "sitemap" scope is the exception to "rebuilds on the next request": the sitemap is a published file, so that scope rebuilds it there and then and reports whether it succeeded.', 'thinkrank' );
 	}
 
 	/**
@@ -115,6 +120,11 @@ class Purge_Caches extends Ability_Base {
 					'items'       => [ 'type' => 'string' ],
 					'description' => __( 'Scopes whose subsystem is not present on this install, so there was nothing to clear.', 'thinkrank' ),
 				],
+				'failed'  => [
+					'type'        => 'array',
+					'items'       => [ 'type' => 'string' ],
+					'description' => __( 'Scopes that exist but could not be cleared or rebuilt. For "sitemap" this means the served sitemap did not change, because another rebuild held the lock or the files could not be written or removed. Try again shortly; the Sitemap settings screen shows any recorded reason.', 'thinkrank' ),
+				],
 			],
 		];
 	}
@@ -131,73 +141,92 @@ class Purge_Caches extends Ability_Base {
 			? array_values( array_intersect( array_keys( self::SCOPES ), array_map( 'strval', $input['scopes'] ) ) )
 			: array_keys( self::SCOPES );
 
-		$cleared = [];
-		$skipped = [];
+		$results = [
+			'cleared' => [],
+			'skipped' => [],
+			'failed'  => [],
+		];
 
 		foreach ( $requested as $scope ) {
-			if ( $this->purge( $scope ) ) {
-				$cleared[] = $scope;
-			} else {
-				$skipped[] = $scope;
-			}
+			$results[ $this->purge( $scope ) ][] = $scope;
 		}
 
-		return [
-			'success' => true,
-			'cleared' => $cleared,
-			'skipped' => $skipped,
-		];
+		// `success` stays true when a scope failed: the call itself ran, and
+		// every other requested scope was still cleared. The failure is
+		// reported per scope in `failed`, which is where a caller has to look
+		// to know which cache is still stale.
+		return [ 'success' => true ] + $results;
 	}
 
 	/**
 	 * Clear one scope.
 	 *
+	 * Three outcomes rather than a bool. A bool had only "cleared" and
+	 * "skipped" to map onto, and skipped is documented as "the subsystem is
+	 * not present", so a sitemap rebuild that lost the lock or failed to write
+	 * was reported to the caller as a sitemap that does not exist.
+	 *
+	 * @since 2.10.0 Returns 'cleared', 'skipped' or 'failed' instead of a bool.
+	 *
 	 * @param string $scope Scope key.
-	 * @return bool True when the subsystem existed and was cleared.
+	 * @return string 'cleared', 'skipped' (subsystem absent) or 'failed'.
 	 */
-	private function purge( string $scope ): bool {
+	private function purge( string $scope ): string {
 		switch ( $scope ) {
 			case 'analyzer':
 				if ( ! class_exists( 'ThinkRank\\SEO\\SEO_Analyzer' ) ) {
-					return false;
+					return 'skipped';
 				}
 				( new \ThinkRank\SEO\SEO_Analyzer() )->flush_cache();
-				return true;
+				return 'cleared';
 
 			case 'schema':
 				if ( ! class_exists( 'ThinkRank\\SEO\\Schema_Cache_Manager' ) ) {
-					return false;
+					return 'skipped';
 				}
 				( new \ThinkRank\SEO\Schema_Cache_Manager() )->clear_all();
-				return true;
+				return 'cleared';
 
 			case 'ai':
 				if ( ! class_exists( 'ThinkRank\\AI\\Cache_Manager' ) ) {
-					return false;
+					return 'skipped';
 				}
 				( new \ThinkRank\AI\Cache_Manager() )->clear_all();
-				return true;
+				return 'cleared';
 
 			case 'integrations':
 				if ( ! method_exists( 'ThinkRank\\API\\Integrations_Endpoint', 'purge_search_console_sites_cache' ) ) {
-					return false;
+					return 'skipped';
 				}
 				\ThinkRank\API\Integrations_Endpoint::purge_search_console_sites_cache();
-				return true;
+				return 'cleared';
 
 			case 'content_type':
 				if ( ! method_exists( 'ThinkRank\\SEO\\Content_Type_Settings', 'flush_cache' ) ) {
-					return false;
+					return 'skipped';
 				}
 				\ThinkRank\SEO\Content_Type_Settings::flush_cache();
-				return true;
+				return 'cleared';
 
 			case 'transients':
 				$this->purge_transients();
-				return true;
+				return 'cleared';
+
+			case 'sitemap':
+				if ( ! class_exists( 'ThinkRank\\SEO\\Sitemap_Generator' ) ) {
+					return 'skipped';
+				}
+
+				// Rebuilds rather than invalidates: the sitemap is a static file
+				// on most installs, so there is no next request that would
+				// regenerate it. Lock-guarded, and reports false when another
+				// process holds the lock or the write fails, so the caller is
+				// told the served file did not change.
+				return ( new \ThinkRank\SEO\Sitemap_Generator( false ) )
+					->regenerate_sitemap_from_settings() ? 'cleared' : 'failed';
 		}
 
-		return false;
+		return 'skipped';
 	}
 
 	/**

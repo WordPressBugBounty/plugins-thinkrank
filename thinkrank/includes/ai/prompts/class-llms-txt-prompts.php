@@ -128,6 +128,7 @@ Requirements:
 - Ensure the tone matches the specified style: {$data['tone']}
 - Target the content for: {$data['target_audience']}
 - Focus on {$data['business_type']} context
+- Return key_features as a single string with exactly one feature per line, separated by newline characters (\\n). Do not separate features with commas, and do not return an array. A comma inside a feature is fine, for example \"Collect reviews from Trustpilot, Google and Etsy\" is one feature.
 
 Focus on creating content that is informative, well-structured, and helpful for AI assistants to understand the website's purpose and functionality.";
     }
@@ -146,7 +147,7 @@ Focus on creating content that is informative, well-structured, and helpful for 
     "optimized_data": {
         "site_name": "improved website title",
         "website_description": "enhanced description",
-        "key_features": "optimized features list",
+        "key_features": "Feature one\\nFeature two\\nFeature three",
         "technical_stack": "improved technical details",
         "development_approach": "enhanced development info"
     },

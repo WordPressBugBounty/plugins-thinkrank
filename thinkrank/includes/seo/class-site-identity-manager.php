@@ -1542,9 +1542,10 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             }
         }
 
-        // Business type validation
-        if (empty($settings['business_type'])) {
-            $optimization['suggestions'][] = 'Select a specific business type for better schema markup';
+        // Business type validation (shared rule, one message — #622).
+        $business_type = $this->business_type_status($settings);
+        if ('suggestion' === $business_type['status']) {
+            $optimization['suggestions'][] = $business_type['message'];
             $optimization['score'] -= 5;
         }
 
@@ -2076,22 +2077,15 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             ];
         }
 
-        // Business Type validation
-        if (!empty($settings['business_type']) && $settings['business_type'] !== 'LocalBusiness') {
-            $field_details[] = [
-                'field' => 'business_type',
-                'label' => 'Business type is selected for proper schema markup.',
-                'status' => 'valid',
-                'icon' => '✓'
-            ];
-        } else {
-            $field_details[] = [
-                'field' => 'business_type',
-                'label' => 'Specific business type selection recommended for better schema markup.',
-                'status' => 'suggestion',
-                'icon' => '⚠'
-            ];
-        }
+        // Business Type validation — see business_type_status() for why there
+        // is exactly one rule here now (#622).
+        $business_type = $this->business_type_status($settings);
+        $field_details[] = [
+            'field' => 'business_type',
+            'label' => $business_type['message'],
+            'status' => $business_type['status'],
+            'icon' => 'valid' === $business_type['status'] ? '✓' : '⚠',
+        ];
 
         // Address validation (NAP consistency)
         $address_fields = ['business_address', 'business_city', 'business_state', 'business_country'];
@@ -2777,9 +2771,13 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             $validation['suggestions'][] = 'Add business hours to improve local search visibility';
         }
 
-        // Validate business type
-        if (empty($settings['business_type'])) {
-            $validation['suggestions'][] = 'Select a specific business type for better schema markup';
+        // Business type, through the shared rule (#622). This is the only place
+        // it is reported on the generic path: validate_settings() with no tab
+        // context attaches basic-info field details, not business-info ones, so
+        // without this the setting would go unreported there entirely.
+        $business_type = $this->business_type_status($settings);
+        if ('suggestion' === $business_type['status']) {
+            $validation['suggestions'][] = $business_type['message'];
         }
 
         return $validation;
@@ -2974,7 +2972,81 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
                 : Url_Scheme::AUTOMATIC;
         }
 
+        // Same reasoning again for the business type. It goes straight into
+        // LocalBusiness schema, so a type that is not in the schema.org
+        // vocabulary is invalid structured data — and storing it verbatim would
+        // have get-site-identity-settings report a type the site cannot
+        // actually publish. An empty value keeps meaning "not set"; anything
+        // else unrecognised falls back to the general-purpose root (#623).
+        if (array_key_exists('business_type', $sanitized)) {
+            $type = (string) $sanitized['business_type'];
+
+            if ('' !== $type && !\ThinkRank\Config\Local_Business_Types_Config::is_valid($type)) {
+                $type = \ThinkRank\Config\Local_Business_Types_Config::ROOT;
+            }
+
+            $sanitized['business_type'] = $type;
+        }
+
         return $sanitized;
+    }
+
+    /**
+     * schema.org's general-purpose LocalBusiness type.
+     *
+     * The default, the first option in the control, and a valid answer in its
+     * own right — which is the whole point of #622.
+     *
+     * @since 2.10.0
+     * @var string
+     */
+    private const GENERAL_BUSINESS_TYPE = 'LocalBusiness';
+
+    /**
+     * The one rule for whether a business type needs the user's attention.
+     *
+     * There were three, with two wordings and two different conditions. Two
+     * fired when the value was empty; the third fired when it WAS
+     * `LocalBusiness` — which is the default, the first option in the control
+     * and a perfectly valid schema.org type. So the warning appeared out of the
+     * box for every site, could not be cleared without choosing a type that
+     * might be inaccurate, and on an empty value it appeared three times in two
+     * different phrasings, which is why it was reported as showing twice (#622).
+     *
+     * The rule now: a type is expected, and any type in the vocabulary is a
+     * correct answer. Only an unset value is worth prompting about.
+     * `LocalBusiness` is the general-purpose answer and is accepted as one —
+     * with a note that a more specific type sharpens the schema, phrased as the
+     * guidance it is rather than as a fault the user has to clear.
+     *
+     * @since 2.10.0
+     *
+     * @param array $settings Site identity settings.
+     * @return array{status:string,message:string} `valid` or `suggestion`.
+     */
+    private function business_type_status(array $settings): array {
+        $type = trim((string) ($settings['business_type'] ?? ''));
+
+        if ('' === $type) {
+            return [
+                'status'  => 'suggestion',
+                'message' => __('Select a business type so your local schema describes the right kind of business.', 'thinkrank'),
+            ];
+        }
+
+        // The literal rather than a constant from the expanded type list (#623):
+        // that lands on its own branch, and this fix must not wait on it.
+        if (self::GENERAL_BUSINESS_TYPE === $type) {
+            return [
+                'status'  => 'valid',
+                'message' => __('Business type is set to Local Business. A more specific type sharpens your schema, if one fits.', 'thinkrank'),
+            ];
+        }
+
+        return [
+            'status'  => 'valid',
+            'message' => __('Business type is selected for proper schema markup.', 'thinkrank'),
+        ];
     }
 
     /**

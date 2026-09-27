@@ -642,9 +642,22 @@ class Schema_Graph {
                 continue;
             }
 
-            if (($block['blockName'] ?? '') === self::FAQ_BLOCK) {
-                $attrs = $block['attrs'] ?? [];
+            $block_name = (string) ($block['blockName'] ?? '');
+            $attrs      = is_array($block['attrs'] ?? null) ? $block['attrs'] : [];
 
+            // A leftover Rank Math FAQ block is absorbed as if it were ours, so
+            // an unmigrated post contributes its questions to the single
+            // FAQPage rather than to nothing at all (#777). The fallback stays
+            // silent while Rank Math is active and still emitting its own.
+            if (\ThinkRank\Integrations\Rank_Math_Blocks::is_source_block($block_name)) {
+                $fallback = \ThinkRank\Integrations\Rank_Math_Blocks::schema_fallback($block_name, $attrs);
+                if (null !== $fallback) {
+                    $block_name = $fallback['name'];
+                    $attrs      = $fallback['attrs'];
+                }
+            }
+
+            if ($block_name === self::FAQ_BLOCK) {
                 // Mirrors Blocks_Manager: schema is on unless explicitly disabled.
                 $disabled = array_key_exists('outputSchema', $attrs) && false === $attrs['outputSchema'];
 
@@ -1164,6 +1177,7 @@ class Schema_Graph {
 
         foreach ($this->supporting as $index => $node) {
             $type = $node['@type'] ?? '';
+            $slot = $this->site_level_slot($type);
 
             if ('BreadcrumbList' === $type) {
                 $node = $this->assign_id($node, $base . '#breadcrumb', $used_ids);
@@ -1174,7 +1188,7 @@ class Schema_Graph {
             } elseif ('Organization' === $type) {
                 $node = $this->assign_id($node, home_url('/#organization'), $used_ids);
                 $organization_nodes[] = $node;
-            } elseif (in_array($type, self::SITE_LEVEL_TYPES, true)) {
+            } elseif ('' !== $slot) {
                 // Site-level entities describe the site, not the page, so their
                 // @id must be stable across URLs. Falling through to the
                 // page-scoped branch minted a fresh identity on every URL, so
@@ -1186,16 +1200,16 @@ class Schema_Graph {
                 // that collision by minting "#person-2", turning a duplicate
                 // into two competing entities that split the identity a
                 // knowledge graph is meant to consolidate (#479).
-                $duplicate_key = $this->find_same_entity($nodes, $type, $node);
+                $duplicate_key = $this->find_same_entity($nodes, $slot, $node);
 
                 if (null !== $duplicate_key) {
                     $nodes[$duplicate_key] = $this->merge_entity($nodes[$duplicate_key], $node);
                     continue;
                 }
 
-                $node = $this->assign_id($node, home_url('/#' . strtolower($type)), $used_ids);
+                $node = $this->assign_id($node, home_url('/#' . strtolower($slot)), $used_ids);
 
-                if ('Person' === $type) {
+                if ('Person' === $slot) {
                     $person_nodes[] = $node;
                 }
             } elseif (is_string($type) && $type !== '') {
@@ -1290,6 +1304,30 @@ class Schema_Graph {
     }
 
     /**
+     * The site-level entity a node's @type makes it, or '' for none.
+     *
+     * A LocalBusiness is published under the subtype the site chose in Local
+     * SEO ("Dentist", "Restaurant"), but it is still the one business entity,
+     * so every subtype shares the LocalBusiness slot: the same home-scoped
+     * `/#localbusiness` @id it always had, and the same entity for
+     * find_same_entity() to fold a per-post copy into. Matching the literal
+     * type instead would have given a Dentist a fresh page-scoped @id on every
+     * URL, the exact split #471 closed.
+     *
+     * @since 2.10.0
+     *
+     * @param mixed $type Node @type.
+     * @return string 'LocalBusiness', 'Person' or ''.
+     */
+    private function site_level_slot($type): string {
+        if (\ThinkRank\Config\Local_Business_Types_Config::is_local_business($type)) {
+            return 'LocalBusiness';
+        }
+
+        return (is_string($type) && in_array($type, self::SITE_LEVEL_TYPES, true)) ? $type : '';
+    }
+
+    /**
      * Find an already-placed node describing the same entity as $node.
      *
      * Identity is `email` when both carry one — two people can share a name,
@@ -1300,7 +1338,7 @@ class Schema_Graph {
      * @since 2.0.2
      *
      * @param array  $nodes Nodes placed so far, keyed.
-     * @param string $type  Schema type to match within.
+     * @param string $type  Site-level slot to match within (see site_level_slot()).
      * @param array  $node  Candidate node.
      * @return string|null Key of the matching node, or null.
      */
@@ -1313,7 +1351,7 @@ class Schema_Graph {
         }
 
         foreach ($nodes as $key => $placed) {
-            if (($placed['@type'] ?? '') !== $type) {
+            if ($this->site_level_slot($placed['@type'] ?? '') !== $type) {
                 continue;
             }
 

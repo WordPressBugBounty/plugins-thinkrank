@@ -1065,6 +1065,10 @@ JS;
             // Token => value map (keys without %), for live client-side preview of
             // a custom pattern typed into a metabox field.
             'patternVariables' => Pattern_Resolver::variables($post_id),
+            // The uncapped copy the Content Analysis panel measures. Localized
+            // here so all six editors get it, rather than each builder adding
+            // its own (#778). `contentPreview` stays as the AI budget.
+            'contentFull' => $post instanceof \WP_Post ? $this->get_analysis_content($post) : '',
         ];
     }
 
@@ -1446,16 +1450,66 @@ JS;
     }
 
     /**
-     * Get content preview for AI analysis
-     * 
-     * @param \WP_Post $post Post object
-     * @return string Content preview
+     * Characters of page text an AI caller is given.
+     *
+     * A prompt budget, not a description of the page — one caller forwards this
+     * straight into an AI payload, so it stays capped.
+     *
+     * @since 2.10.0
+     * @var int
      */
-    public function get_content_preview(\WP_Post $post): string {
-        $content = $post->post_title . "\n\n";
+    private const AI_PREVIEW_LENGTH = 4000;
 
-        if (!empty($post->post_excerpt)) {
-            $content .= $post->post_excerpt . "\n\n";
+    /**
+     * Safety ceiling for the analysis copy.
+     *
+     * High enough that no real article reaches it, low enough that a runaway
+     * builder tree cannot put a megabyte of text through wp_localize_script
+     * into every editor page load.
+     *
+     * @since 2.10.0
+     * @var int
+     */
+    private const ANALYSIS_MAX_LENGTH = 200000;
+
+    /**
+     * Resolved body text per post, for this request.
+     *
+     * Every builder integration localizes get_localized_data() (which carries
+     * the analysis copy) and then adds get_content_preview() on top, and the
+     * classic screen renders the preview into the form as well as localizing
+     * the analysis copy. Each of those resolved the post through
+     * Builder_Content from scratch, so a builder page walked its whole tree
+     * twice on every editor load. Both now derive from one resolution.
+     *
+     * Keyed on the post's ID and modified time, so a post saved and re-read
+     * within the same request is resolved again.
+     *
+     * @since 2.10.0
+     * @var array<string,string>
+     */
+    private array $resolved_bodies = [];
+
+    /**
+     * The post's body text, resolved through whatever built it.
+     *
+     * Body only. The title and excerpt used to be prepended here, which is
+     * right for an AI prompt but wrong for a measurement: the Analysis panel
+     * counted them as body copy, so Word Count and Keyword Density in a
+     * builder included the title and excerpt, while the same panel in the
+     * block editor (which reads the editor's content) did not. They are added
+     * back for the AI preview only.
+     *
+     * @since 2.10.0
+     *
+     * @param \WP_Post $post Post object.
+     * @return string Plain text, whitespace collapsed, uncapped.
+     */
+    private function resolve_post_body(\WP_Post $post): string {
+        $key = $post->ID . '|' . (string) ($post->post_modified_gmt ?? '');
+
+        if (isset($this->resolved_bodies[$key])) {
+            return $this->resolved_bodies[$key];
         }
 
         // Resolve through Builder_Content: a page builder keeps its words
@@ -1465,15 +1519,75 @@ JS;
         if (!class_exists('\\ThinkRank\\SEO\\Builder_Content')) {
             require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-builder-content.php';
         }
-        $content .= \ThinkRank\SEO\Builder_Content::resolve($post);
 
-        // Clean and limit content
+        $this->resolved_bodies[$key] = self::collapse_text(\ThinkRank\SEO\Builder_Content::resolve($post));
+
+        return $this->resolved_bodies[$key];
+    }
+
+    /**
+     * Strip tags and collapse whitespace.
+     *
+     * @since 2.10.0
+     *
+     * @param string $content Markup or text.
+     * @return string
+     */
+    private static function collapse_text(string $content): string {
         $content = wp_strip_all_tags($content);
-        $content = preg_replace('/\s+/', ' ', $content);
+
+        return trim((string) preg_replace('/\s+/', ' ', $content));
+    }
+
+    /**
+     * The post's text for the editor's Content Analysis panel.
+     *
+     * Uncapped, because this is a measurement rather than a budget. In a page
+     * builder there is no `core/editor` store, no TinyMCE instance and no
+     * `#content` textarea, so the localized string is the ONLY thing the panel
+     * can count — and it was being handed the 4,000-character AI preview. Word
+     * Count, Keyword Density, Readability and Content Quality therefore
+     * described the first 4,000 characters and nothing after, freezing at
+     * roughly 600-700 words however long the page grew (#778).
+     *
+     * Still bounded, at a ceiling no real article reaches: this rides along on
+     * every editor page load.
+     *
+     * The body only, like the editor content it stands in for; the title and
+     * excerpt belong to the AI preview (see resolve_post_body()).
+     *
+     * @since 2.10.0
+     *
+     * @param \WP_Post $post Post object.
+     * @return string
+     */
+    public function get_analysis_content(\WP_Post $post): string {
+        return \ThinkRank\Core\Seo_Text::trim_to_length(
+            $this->resolve_post_body($post),
+            self::ANALYSIS_MAX_LENGTH
+        );
+    }
+
+    /**
+     * Get content preview for AI analysis
+     * 
+     * @param \WP_Post $post Post object
+     * @return string Content preview
+     */
+    public function get_content_preview(\WP_Post $post): string {
+        // The title and excerpt lead the preview: they are context an AI
+        // caller wants first, and they are not part of the measured body.
+        $lead = $post->post_title . "\n\n";
+
+        if (!empty($post->post_excerpt)) {
+            $lead .= $post->post_excerpt . "\n\n";
+        }
+
+        $preview = trim(self::collapse_text($lead) . ' ' . $this->resolve_post_body($post));
 
         // substr() counts BYTES: on Thai or CJK this handed the model a third
         // of the intended content and cut the last character in half (#687).
-        return trim(\ThinkRank\Core\Seo_Text::trim_to_length($content, 4000));
+        return \ThinkRank\Core\Seo_Text::trim_to_length($preview, self::AI_PREVIEW_LENGTH);
     }
 
     /**

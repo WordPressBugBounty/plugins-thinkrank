@@ -25,17 +25,25 @@ if (!defined('ABSPATH')) {
  * 20,000 products cannot afford (#727 review).
  *
  * So each post's verdict is computed once and stored in one post meta value,
- * `{generation}:{flags}:{duplicate key}`, and every list, count and page is
- * answered by SQL over it:
+ * `{generation}:{flags}:{title key}:{description key}`, and every list, count
+ * and page is answered by SQL over it:
  *
  * - **flags** is a bitmask of the issues that depend on the post alone.
- * - **duplicate key** is a hash of what produces the post's title
- *   ({@see Snippet_Issues::duplicate_key()}). Duplicates are found at query
- *   time by grouping on it, so fixing one of two duplicates clears the other
- *   without touching the other's entry.
+ * - **title key** is a hash of the title the page renders
+ *   ({@see Snippet_Issues::duplicate_key()}), and **description key** a hash
+ *   of the description it renders
+ *   ({@see Snippet_Issues::description_duplicate_key()}). Duplicates are found
+ *   at query time by grouping on them, so fixing one of two duplicates clears
+ *   the other without touching the other's entry.
  * - **generation** ties the entry to the global inputs (templates, robots
  *   settings, site name, separator). Changing any of them bumps the
  *   generation, which makes every entry stale at once without a write per post.
+ *
+ * Grouping is **sitewide**: two pages carrying the same title are competing
+ * with each other whether or not they are the same post type, which is how a
+ * post and a page built from one bad template collide (#564). Only entries at
+ * the current generation take part, so a post type the index has not reached
+ * yet cannot invent a duplicate — coverage growing can only reveal more.
  *
  * A post's own inputs (its title, content, SEO meta, robots meta, terms) mark
  * just that post stale. Stale entries are rebuilt a bounded batch at a time by
@@ -54,6 +62,59 @@ class Snippet_Index {
      * Option holding the current generation.
      */
     public const GENERATION_OPTION = 'thinkrank_snippet_index_generation';
+
+    /**
+     * Option counting how many times entries have been rebuilt.
+     *
+     * The generation answers "did a global input change". This answers "did
+     * any entry change", which is what a report derived from the whole index
+     * has to know: one post's title edited to match another's changes the
+     * duplicate report without touching the generation. Bumped once per batch
+     * rather than once per entry, so a 500-post rebuild is one extra write.
+     *
+     * @since 2.10.0
+     */
+    public const REVISION_OPTION = 'thinkrank_snippet_index_revision';
+
+    /**
+     * Version of the rules that turn a snapshot into an entry.
+     *
+     * Entries carry no record of how their keys were computed, so a change to
+     * those rules would leave every stored entry "current" with a key the new
+     * code would never produce: two posts indexed before a change and one
+     * after could not group. Raising this bumps the generation once on the
+     * next request, so everything is rebuilt under the new rules.
+     *
+     * - 2: keys compare entity-decoded text, and lengths are measured on it
+     *   ({@see Snippet_Issues::duplicate_key()}).
+     *
+     * @since 2.10.0
+     */
+    public const KEY_FORMAT = 2;
+
+    /**
+     * Option recording the {@see self::KEY_FORMAT} the stored entries follow.
+     *
+     * @since 2.10.0
+     */
+    public const KEY_FORMAT_OPTION = 'thinkrank_snippet_index_key_format';
+
+    /**
+     * Taxonomy whose term names render into titles, through `%category%`.
+     *
+     * @since 2.10.0
+     */
+    private const RENDERED_TAXONOMY = 'category';
+
+    /**
+     * Term names captured before an edit, keyed by term ID, so the edit can
+     * tell whether the name, the only thing a title renders, changed.
+     *
+     * @since 2.10.0
+     *
+     * @var array<int,string>
+     */
+    private static $term_names_before = [];
 
     /**
      * Most entries one refresh call will build, and the time it may spend.
@@ -80,6 +141,10 @@ class Snippet_Index {
         'thinkrank_global_seo_settings',
         'thinkrank_global_robot_meta_settings',
         'blogname',
+        // %date% and %modified% render through get_the_date() in the site's
+        // date format, and in its language.
+        'date_format',
+        'WPLANG',
     ];
 
     /**
@@ -105,6 +170,114 @@ class Snippet_Index {
 
         // %author% renders the display name.
         add_action('profile_update', [self::class, 'bump_generation'], 10, 0);
+
+        // Deleting a user and attributing their posts to someone else
+        // rewrites post_author in one query, with no save_post for any post,
+        // so %author% changes on every one of them unseen.
+        add_action('deleted_user', [self::class, 'on_user_deleted'], 10, 2);
+
+        // %category% renders the first category's name, and renaming a
+        // category changes it on every post filed there without touching any
+        // of them. Assigning or removing a category already arrives through
+        // set_object_terms above, including the reassignment wp_delete_term()
+        // does.
+        add_action('edit_terms', [self::class, 'before_term_edit'], 10, 2);
+        add_action('edited_term', [self::class, 'after_term_edit'], 10, 3);
+
+        self::maybe_upgrade_key_format();
+    }
+
+    /**
+     * Rebuild everything once when the entry rules have changed since the
+     * stored entries were written. See {@see self::KEY_FORMAT}.
+     *
+     * The option is autoloaded, so the check on every request after the first
+     * is a read from memory.
+     *
+     * @since 2.10.0
+     *
+     * @return void
+     */
+    public static function maybe_upgrade_key_format(): void {
+        if ((int) get_option(self::KEY_FORMAT_OPTION, 1) >= self::KEY_FORMAT) {
+            return;
+        }
+
+        self::bump_generation();
+        update_option(self::KEY_FORMAT_OPTION, self::KEY_FORMAT, true);
+    }
+
+    /**
+     * A user was deleted.
+     *
+     * @since 2.10.0
+     *
+     * @param int|mixed      $user_id  Deleted user.
+     * @param int|null|mixed $reassign User their posts went to, or null when
+     *                                 the posts were deleted with them.
+     * @return void
+     */
+    public static function on_user_deleted($user_id, $reassign = null): void {
+        // Without a reassignment the posts were deleted, which drops them
+        // from every scope on its own.
+        if (null !== $reassign && (int) $reassign > 0) {
+            self::bump_generation();
+        }
+    }
+
+    /**
+     * Remember a category's name before it is edited.
+     *
+     * @since 2.10.0
+     *
+     * @param int|mixed    $term_id  Term ID.
+     * @param string|mixed $taxonomy Taxonomy.
+     * @return void
+     */
+    public static function before_term_edit($term_id, $taxonomy): void {
+        if (self::RENDERED_TAXONOMY !== $taxonomy) {
+            return;
+        }
+
+        $term = get_term((int) $term_id, self::RENDERED_TAXONOMY);
+        if ($term instanceof \WP_Term) {
+            self::$term_names_before[(int) $term_id] = (string) $term->name;
+        }
+    }
+
+    /**
+     * A term was edited: rebuild everything when a category's name changed.
+     *
+     * Only the name renders, so a description, slug or parent edit is left
+     * alone; a rename is rare, and when it happens the posts filed under it
+     * are exactly the ones whose titles moved. Marking just those would mean a
+     * write per post in a category that may hold thousands, where the
+     * generation is one write and the rebuild is already bounded per request.
+     * Without a captured name, it is treated as renamed: a spurious rebuild
+     * costs time, a missed one reports stale duplicates.
+     *
+     * @since 2.10.0
+     *
+     * @param int|mixed    $term_id  Term ID.
+     * @param int|mixed    $tt_id    Term taxonomy ID.
+     * @param string|mixed $taxonomy Taxonomy.
+     * @return void
+     */
+    public static function after_term_edit($term_id, $tt_id, $taxonomy): void {
+        if (self::RENDERED_TAXONOMY !== $taxonomy) {
+            return;
+        }
+
+        $term_id = (int) $term_id;
+        $before  = self::$term_names_before[$term_id] ?? null;
+        unset(self::$term_names_before[$term_id]);
+
+        $term = get_term($term_id, self::RENDERED_TAXONOMY);
+        if (null !== $before && $term instanceof \WP_Term && (string) $term->name === $before) {
+            return;
+        }
+
+        self::bump_generation();
     }
 
     /**
@@ -123,6 +296,29 @@ class Snippet_Index {
      */
     public static function bump_generation(): void {
         update_option(self::GENERATION_OPTION, self::generation() + 1, true);
+    }
+
+    /**
+     * How many times a batch of entries has been rebuilt.
+     *
+     * @since 2.10.0
+     *
+     * @return int
+     */
+    public static function revision(): int {
+        return (int) get_option(self::REVISION_OPTION, 0);
+    }
+
+    /**
+     * Record that entries changed. Not autoloaded: only a report that spans
+     * the whole index reads it, and never on a front-end request.
+     *
+     * @since 2.10.0
+     *
+     * @return void
+     */
+    private static function bump_revision(): void {
+        update_option(self::REVISION_OPTION, self::revision() + 1, false);
     }
 
     /**
@@ -171,42 +367,102 @@ class Snippet_Index {
     /**
      * Encode an entry.
      *
-     * @param int    $generation Generation it was built under.
-     * @param int    $flags      Bitmask from {@see Snippet_Issues::to_flags()}.
-     * @param string $dup_key    Duplicate key ('' when there is nothing to compare).
+     * @since 2.10.0 Carries a description key as well as a title key.
+     *
+     * @param int    $generation      Generation it was built under.
+     * @param int    $flags           Bitmask from {@see Snippet_Issues::to_flags()}.
+     * @param string $title_key       Title duplicate key ('' when there is nothing to compare).
+     * @param string $description_key Description duplicate key ('' when there is nothing to compare).
      * @return string
      */
-    public static function encode(int $generation, int $flags, string $dup_key): string {
-        return $generation . ':' . $flags . ':' . ('' === $dup_key ? '-' : md5($dup_key));
+    public static function encode(int $generation, int $flags, string $title_key, string $description_key): string {
+        return $generation . ':' . $flags
+            . ':' . ('' === $title_key ? '-' : md5($title_key))
+            . ':' . ('' === $description_key ? '-' : md5($description_key));
     }
 
     /**
      * Decode an entry.
      *
+     * Entries written before 2.10.0 have three fields rather than four. They
+     * are rejected here and, because {@see self::current_like()} matches on the
+     * field count too, they read as stale and are rebuilt — so no upgrade
+     * routine is needed to migrate the format.
+     *
      * @param string $value Stored value.
-     * @return array{generation:int, flags:int, dup:string}|null Null when malformed.
+     * @return array{generation:int, flags:int, title:string, description:string}|null Null when malformed.
      */
     public static function decode(string $value): ?array {
         $parts = explode(':', $value);
-        if (3 !== count($parts) || !ctype_digit($parts[0]) || !ctype_digit($parts[1])) {
+        if (4 !== count($parts) || !ctype_digit($parts[0]) || !ctype_digit($parts[1])) {
             return null;
         }
 
         return [
-            'generation' => (int) $parts[0],
-            'flags'      => (int) $parts[1],
-            'dup'        => '-' === $parts[2] ? '' : $parts[2],
+            'generation'  => (int) $parts[0],
+            'flags'       => (int) $parts[1],
+            'title'       => '-' === $parts[2] ? '' : $parts[2],
+            'description' => '-' === $parts[3] ? '' : $parts[3],
         ];
     }
 
     /**
-     * Build a bounded batch of stale entries.
+     * LIKE pattern matching an entry that is current — right generation *and*
+     * right format.
+     *
+     * The three trailing wildcards mean three colons after the generation, so
+     * a pre-2.10.0 three-field entry does not match even at the current
+     * generation. That is the whole migration: it reads as stale.
+     *
+     * @since 2.10.0
+     *
+     * @return string
+     */
+    private static function current_like(): string {
+        global $wpdb;
+
+        return $wpdb->esc_like(self::generation() . ':') . '%:%:%';
+    }
+
+    /**
+     * Build a bounded batch of stale entries for one post type.
      *
      * @param string   $post_type Post type.
      * @param string[] $statuses  Post statuses.
      * @return int How many stale entries remain after this batch.
      */
     public static function refresh(string $post_type, array $statuses): int {
+        return self::refresh_scope(self::scope_sql([$post_type], $statuses, 'p'));
+    }
+
+    /**
+     * Build a bounded batch of stale entries across every post type given.
+     *
+     * The duplicate report is sitewide, so it needs entries for post types the
+     * Bulk Snippets screen may never have been opened on. Same batch bounds as
+     * {@see self::refresh()} — the caller keeps asking until it returns zero.
+     *
+     * @since 2.10.0
+     *
+     * @param string[] $post_types Post types.
+     * @param string[] $statuses   Post statuses.
+     * @return int How many stale entries remain after this batch.
+     */
+    public static function refresh_sitewide(array $post_types, array $statuses): int {
+        if (empty($post_types)) {
+            return 0;
+        }
+
+        return self::refresh_scope(self::scope_sql($post_types, $statuses, 'p'));
+    }
+
+    /**
+     * Build a bounded batch of the stale entries a scope covers.
+     *
+     * @param string $scope_sql Trusted WHERE fragment from {@see self::scope_sql()}.
+     * @return int How many stale entries remain after this batch.
+     */
+    private static function refresh_scope(string $scope_sql): int {
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder. The index is itself the cache.
         global $wpdb;
 
@@ -215,22 +471,20 @@ class Snippet_Index {
         $ids = $wpdb->get_col($wpdb->prepare(
             "SELECT p.ID FROM {$wpdb->posts} p
              LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = %s
-             WHERE " . self::scope_sql($post_type, $statuses, 'p') . "
+             WHERE " . $scope_sql . "
                AND (m.meta_value IS NULL OR m.meta_value NOT LIKE %s)
              ORDER BY p.ID DESC
              LIMIT %d",
             self::META_KEY,
-            $wpdb->esc_like($generation . ':') . '%',
+            self::current_like(),
             self::REFRESH_MAX_POSTS
         ));
 
-        $built = 0;
         foreach (array_chunk(array_map('intval', $ids), 100) as $chunk) {
             _prime_post_caches($chunk, false, true);
 
             foreach ($chunk as $post_id) {
                 self::build($post_id, $generation);
-                $built++;
             }
 
             if (microtime(true) - $started > self::REFRESH_MAX_SECONDS) {
@@ -238,7 +492,11 @@ class Snippet_Index {
             }
         }
 
-        return max(0, self::stale_count($post_type, $statuses) );
+        if (!empty($ids)) {
+            self::bump_revision();
+        }
+
+        return max(0, self::stale_count_in($scope_sql));
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
     }
 
@@ -260,6 +518,8 @@ class Snippet_Index {
         foreach ($post_ids as $post_id) {
             self::build($post_id, $generation);
         }
+
+        self::bump_revision();
     }
 
     /**
@@ -277,28 +537,42 @@ class Snippet_Index {
 
         $snapshot = Snippet_Issues::snapshot($post);
         $flags = Snippet_Issues::to_flags(Snippet_Issues::evaluate($snapshot));
-        $dup_key = Snippet_Issues::duplicate_key($snapshot['raw_title'], $post->post_title);
 
-        update_post_meta($post_id, self::META_KEY, self::encode($generation, $flags, $dup_key));
+        update_post_meta($post_id, self::META_KEY, self::encode(
+            $generation,
+            $flags,
+            Snippet_Issues::duplicate_key((string) $snapshot['effective_title']),
+            Snippet_Issues::description_duplicate_key((string) $snapshot['effective_description'])
+        ));
     }
 
     /**
-     * How many entries in scope are missing or stale.
+     * How many entries for one post type are missing or stale.
      *
      * @param string   $post_type Post type.
      * @param string[] $statuses  Post statuses.
      * @return int
      */
     public static function stale_count(string $post_type, array $statuses): int {
+        return self::stale_count_in(self::scope_sql([$post_type], $statuses, 'p'));
+    }
+
+    /**
+     * How many entries the given scope is missing or has stale.
+     *
+     * @param string $scope_sql Trusted WHERE fragment from {@see self::scope_sql()}.
+     * @return int
+     */
+    private static function stale_count_in(string $scope_sql): int {
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder. The index is itself the cache.
         global $wpdb;
         return (int) $wpdb->get_var($wpdb->prepare(
             "SELECT COUNT(*) FROM {$wpdb->posts} p
              LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = %s
-             WHERE " . self::scope_sql($post_type, $statuses, 'p') . "
+             WHERE " . $scope_sql . "
                AND (m.meta_value IS NULL OR m.meta_value NOT LIKE %s)",
             self::META_KEY,
-            $wpdb->esc_like(self::generation() . ':') . '%'
+            self::current_like()
         ));
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
     }
@@ -312,41 +586,41 @@ class Snippet_Index {
      * @param array{
      *     post_type: string,
      *     statuses: string[],
+     *     group_post_types: string[],
      *     issue: string,
      *     search: string,
      *     page: int,
      *     per_page: int,
      *     visibility_sql: string
      * } $args Query arguments. visibility_sql is a trusted WHERE fragment from
-     *        {@see self::visibility_sql()} ('' for no restriction).
-     * @return array{ids: int[], total: int, counts: array<string,int>, with_problem: int, duplicate_ids: int[]}
+     *        {@see self::visibility_sql()} ('' for no restriction), and
+     *        group_post_types are the post types duplicates are looked for
+     *        across ({@see Global_SEO_Post_Types::allowed()}).
+     * @return array{ids: int[], total: int, counts: array<string,int>, with_problem: int, duplicate_ids: int[], duplicate_description_ids: int[]}
      */
     public static function query(array $args): array {
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder. The index is itself the cache.
         global $wpdb;
 
-        $generation = self::generation();
-        $current    = $wpdb->esc_like($generation . ':') . '%';
+        $current = self::current_like();
 
         $flags_sql = "CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(m.meta_value, ':', 2), ':', -1) AS UNSIGNED)";
-        $dup_sql   = "SUBSTRING_INDEX(m.meta_value, ':', -1)";
+        $title_key_sql = self::key_sql('m', 'title');
+        $description_key_sql = self::key_sql('m', 'description');
 
         // Duplicates are about the site, not about what this user may see: a
         // title another post already uses is a problem whether or not the
         // viewer can open that post. Only the flag is revealed, never the peer.
-        $dupes_sql = $wpdb->prepare(
-            "SELECT SUBSTRING_INDEX(dm.meta_value, ':', -1) AS dk
-             FROM {$wpdb->posts} dp
-             INNER JOIN {$wpdb->postmeta} dm ON dm.post_id = dp.ID AND dm.meta_key = %s
-             WHERE " . self::scope_sql($args['post_type'], $args['statuses'], 'dp') . "
-               AND dm.meta_value LIKE %s
-             GROUP BY dk
-             HAVING COUNT(*) > 1 AND dk <> '-'",
-            self::META_KEY,
-            $current
-        );
+        //
+        // The scope is every post type ThinkRank manages, not the one being
+        // listed: a page and a post carrying the same title compete with each
+        // other (#564). Post types whose entries are still stale simply do not
+        // take part yet, which can hide a duplicate but never invent one.
+        $group_types = self::group_post_types($args);
+        $title_dupes_sql = self::duplicate_group_sql($group_types, $args['statuses'], 'title');
+        $description_dupes_sql = self::duplicate_group_sql($group_types, $args['statuses'], 'description');
 
-        $where = self::scope_sql($args['post_type'], $args['statuses'], 'p')
+        $where = self::scope_sql([$args['post_type']], $args['statuses'], 'p')
             . $wpdb->prepare(' AND m.meta_value LIKE %s', $current);
 
         if ('' !== $args['visibility_sql']) {
@@ -360,10 +634,16 @@ class Snippet_Index {
 
         $from = "{$wpdb->posts} p
                  INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '" . esc_sql(self::META_KEY) . "'
-                 LEFT JOIN ({$dupes_sql}) d ON d.dk = {$dup_sql}";
+                 LEFT JOIN ({$title_dupes_sql}) d ON d.dk = {$title_key_sql}
+                 LEFT JOIN ({$description_dupes_sql}) e ON e.dk = {$description_key_sql}";
 
         // One pass for every chip count.
-        $select = ['COUNT(*) AS total', "SUM(({$flags_sql}) > 0 OR d.dk IS NOT NULL) AS with_problem", 'SUM(d.dk IS NOT NULL) AS ' . Snippet_Issues::DUPLICATE_TITLE];
+        $select = [
+            'COUNT(*) AS total',
+            "SUM(({$flags_sql}) > 0 OR d.dk IS NOT NULL OR e.dk IS NOT NULL) AS with_problem",
+            'SUM(d.dk IS NOT NULL) AS ' . Snippet_Issues::DUPLICATE_TITLE,
+            'SUM(e.dk IS NOT NULL) AS ' . Snippet_Issues::DUPLICATE_DESCRIPTION,
+        ];
         foreach (Snippet_Issues::flag_bits() as $issue => $bit) {
             $select[] = "SUM(({$flags_sql} & {$bit}) > 0) AS {$issue}";
         }
@@ -377,6 +657,8 @@ class Snippet_Index {
         $issue_sql = '';
         if (Snippet_Issues::DUPLICATE_TITLE === $args['issue']) {
             $issue_sql = ' AND d.dk IS NOT NULL';
+        } elseif (Snippet_Issues::DUPLICATE_DESCRIPTION === $args['issue']) {
+            $issue_sql = ' AND e.dk IS NOT NULL';
         } elseif ('' !== $args['issue']) {
             $bits = Snippet_Issues::flag_bits();
             $issue_sql = ' AND (' . $flags_sql . ' & ' . (int) $bits[$args['issue']] . ') > 0';
@@ -385,7 +667,8 @@ class Snippet_Index {
         $total = '' === $args['issue'] ? (int) ($row['total'] ?? 0) : $counts[$args['issue']];
         $offset = max(0, ($args['page'] - 1) * $args['per_page']);
         $page = $wpdb->get_results($wpdb->prepare(
-            "SELECT p.ID, (d.dk IS NOT NULL) AS dup FROM {$from} WHERE {$where}{$issue_sql}
+            "SELECT p.ID, (d.dk IS NOT NULL) AS dup, (e.dk IS NOT NULL) AS dup_description
+             FROM {$from} WHERE {$where}{$issue_sql}
              ORDER BY p.post_date DESC, p.ID DESC LIMIT %d OFFSET %d",
             $args['per_page'],
             $offset
@@ -393,64 +676,296 @@ class Snippet_Index {
 
         $ids = [];
         $duplicate_ids = [];
+        $duplicate_description_ids = [];
         foreach ((array) $page as $item) {
             $ids[] = (int) $item['ID'];
             if (!empty($item['dup'])) {
                 $duplicate_ids[] = (int) $item['ID'];
             }
+            if (!empty($item['dup_description'])) {
+                $duplicate_description_ids[] = (int) $item['ID'];
+            }
         }
 
         return [
-            'ids'           => $ids,
-            'total'         => $total,
+            'ids'                       => $ids,
+            'total'                     => $total,
             // Before the issue filter, so the "All" chip keeps its number.
-            'total_all'     => (int) ($row['total'] ?? 0),
-            'counts'        => $counts,
-            'with_problem'  => (int) ($row['with_problem'] ?? 0),
-            'duplicate_ids' => $duplicate_ids,
+            'total_all'                 => (int) ($row['total'] ?? 0),
+            'counts'                    => $counts,
+            'with_problem'              => (int) ($row['with_problem'] ?? 0),
+            'duplicate_ids'             => $duplicate_ids,
+            'duplicate_description_ids' => $duplicate_description_ids,
         ];
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
     }
 
     /**
-     * Which of these posts share their title with another post in scope.
+     * Which of these posts share their title, or their description, with
+     * another post on the site.
      *
-     * @param string   $post_type Post type.
-     * @param string[] $statuses  Post statuses.
-     * @param int[]    $post_ids  Posts to check.
-     * @return int[] The ones that are duplicates.
+     * @since 2.10.0 Reports descriptions too, and groups across post types.
+     *
+     * @param string[] $post_types Post types duplicates are looked for across.
+     * @param string[] $statuses   Post statuses.
+     * @param int[]    $post_ids   Posts to check.
+     * @return array{title:int[], description:int[]} The ones that are duplicates.
      */
-    public static function duplicates_among(string $post_type, array $statuses, array $post_ids): array {
+    public static function duplicates_among(array $post_types, array $statuses, array $post_ids): array {
+        $post_ids = array_values(array_filter(array_map('intval', $post_ids)));
+        if (empty($post_ids) || empty($post_types)) {
+            return ['title' => [], 'description' => []];
+        }
+
+        return [
+            'title'       => self::duplicates_of($post_types, $statuses, $post_ids, 'title'),
+            'description' => self::duplicates_of($post_types, $statuses, $post_ids, 'description'),
+        ];
+    }
+
+    /**
+     * Which of these posts share one kind of key with another post on the site.
+     *
+     * @param string[] $post_types Post types duplicates are looked for across.
+     * @param string[] $statuses   Post statuses.
+     * @param int[]    $post_ids   Posts to check (already integers, non-empty).
+     * @param string   $which      'title' or 'description'.
+     * @return int[]
+     */
+    private static function duplicates_of(array $post_types, array $statuses, array $post_ids, string $which): array {
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder. The index is itself the cache.
         global $wpdb;
 
-        $post_ids = array_values(array_filter(array_map('intval', $post_ids)));
-        if (empty($post_ids)) {
-            return [];
-        }
-
-        $current = $wpdb->esc_like(self::generation() . ':') . '%';
+        $key_sql = self::key_sql('m', $which);
         $in = implode(',', $post_ids);
+        $groups = self::duplicate_group_sql($post_types, $statuses, $which);
+
         $rows = $wpdb->get_col($wpdb->prepare(
             "SELECT m.post_id FROM {$wpdb->postmeta} m
              WHERE m.meta_key = %s AND m.post_id IN ({$in}) AND m.meta_value LIKE %s
-               AND SUBSTRING_INDEX(m.meta_value, ':', -1) <> '-'
-               AND SUBSTRING_INDEX(m.meta_value, ':', -1) IN (
-                   SELECT SUBSTRING_INDEX(dm.meta_value, ':', -1)
-                   FROM {$wpdb->posts} dp
-                   INNER JOIN {$wpdb->postmeta} dm ON dm.post_id = dp.ID AND dm.meta_key = %s
-                   WHERE " . self::scope_sql($post_type, $statuses, 'dp') . " AND dm.meta_value LIKE %s
-                   GROUP BY SUBSTRING_INDEX(dm.meta_value, ':', -1)
-                   HAVING COUNT(*) > 1
-               )",
+               AND {$key_sql} <> '-'
+               AND {$key_sql} IN (SELECT dk FROM ({$groups}) g)",
             self::META_KEY,
-            $current,
-            self::META_KEY,
-            $current
+            self::current_like()
         ));
 
         return array_map('intval', (array) $rows);
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+    }
+
+    /**
+     * How many posts in scope have a current entry — the size of what the
+     * duplicate report actually looked at, as opposed to what it will cover
+     * once {@see self::refresh_sitewide()} has finished.
+     *
+     * @since 2.10.0
+     *
+     * @param string[] $post_types Post types.
+     * @param string[] $statuses   Post statuses.
+     * @return int
+     */
+    public static function current_count(array $post_types, array $statuses): int {
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder. The index is itself the cache.
+        global $wpdb;
+
+        if (empty($post_types)) {
+            return 0;
+        }
+
+        return (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = %s
+             WHERE " . self::scope_sql($post_types, $statuses, 'p') . "
+               AND m.meta_value LIKE %s",
+            self::META_KEY,
+            self::current_like()
+        ));
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+    }
+
+    /**
+     * How many duplicate groups there are, and how many posts they hold.
+     *
+     * Separate from {@see self::duplicate_groups()} because the report lists a
+     * bounded number of groups but must state the true totals above them — a
+     * count taken from the listed groups would under-report the moment the
+     * list is capped.
+     *
+     * @since 2.10.0
+     *
+     * @param string[] $post_types Post types to group across.
+     * @param string[] $statuses   Post statuses.
+     * @param string   $which      'title' or 'description'.
+     * @return array{groups:int, posts:int}
+     */
+    public static function duplicate_totals(array $post_types, array $statuses, string $which): array {
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder. The index is itself the cache.
+        global $wpdb;
+
+        if (empty($post_types)) {
+            return ['groups' => 0, 'posts' => 0];
+        }
+
+        $groups_sql = self::duplicate_group_sql($post_types, $statuses, $which, true);
+
+        $row = (array) $wpdb->get_row(
+            "SELECT COUNT(*) AS groups_count, COALESCE(SUM(g.members), 0) AS posts_count
+             FROM ({$groups_sql}) g",
+            ARRAY_A
+        );
+
+        return [
+            'groups' => (int) ($row['groups_count'] ?? 0),
+            'posts'  => (int) ($row['posts_count'] ?? 0),
+        ];
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+    }
+
+    /**
+     * Every key more than one post in scope shares, with the posts carrying it.
+     *
+     * Largest group first, so a template stamping one title on fifty pages is
+     * the first thing a reader sees rather than something they page to.
+     *
+     * The member IDs come back through GROUP_CONCAT so this stays one query
+     * rather than one per group. `total` is a real COUNT and is exact even
+     * when the concatenated list was cut short by `group_concat_max_len`,
+     * which is why the caller reports the count and the names separately.
+     *
+     * @since 2.10.0
+     *
+     * @param string[] $post_types  Post types to group across.
+     * @param string[] $statuses    Post statuses.
+     * @param string   $which       'title' or 'description'.
+     * @param int      $max_members Most member IDs to return per group.
+     * @param int      $max_groups  Most groups to return; 0 for all.
+     * @return array<int,array{key:string, post_ids:int[], total:int}>
+     */
+    public static function duplicate_groups(
+        array $post_types,
+        array $statuses,
+        string $which,
+        int $max_members,
+        int $max_groups = 0
+    ): array {
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder. The index is itself the cache.
+        global $wpdb;
+
+        if (empty($post_types)) {
+            return [];
+        }
+
+        $posts_alias = 'title' === $which ? 'dp' : 'ep';
+        $meta_alias  = 'title' === $which ? 'dm' : 'em';
+        $key_sql     = self::key_sql($meta_alias, $which);
+
+        $limit_sql = $max_groups > 0 ? $wpdb->prepare(' LIMIT %d', $max_groups) : '';
+
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT {$key_sql} AS dk,
+                    COUNT(*) AS total,
+                    GROUP_CONCAT({$posts_alias}.ID ORDER BY {$posts_alias}.post_date DESC) AS ids
+             FROM {$wpdb->posts} {$posts_alias}
+             INNER JOIN {$wpdb->postmeta} {$meta_alias}
+                ON {$meta_alias}.post_id = {$posts_alias}.ID AND {$meta_alias}.meta_key = %s
+             WHERE " . self::scope_sql($post_types, $statuses, $posts_alias) . "
+               AND {$meta_alias}.meta_value LIKE %s
+             GROUP BY dk
+             HAVING COUNT(*) > 1 AND dk <> '-'
+             ORDER BY total DESC, dk ASC" . $limit_sql,
+            self::META_KEY,
+            self::current_like()
+        ), ARRAY_A);
+
+        $groups = [];
+        foreach ((array) $rows as $row) {
+            $ids = array_values(array_filter(array_map('intval', explode(',', (string) $row['ids']))));
+
+            $groups[] = [
+                'key'      => (string) $row['dk'],
+                'total'    => (int) $row['total'],
+                'post_ids' => $max_members > 0 ? array_slice($ids, 0, $max_members) : $ids,
+            ];
+        }
+
+        return $groups;
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+    }
+
+    /**
+     * The keys shared by more than one post, as a subquery selecting `dk`.
+     *
+     * Each kind gets its own table aliases so two of these can appear in one
+     * statement.
+     *
+     * @since 2.10.0
+     *
+     * @param string[] $post_types  Post types to group across.
+     * @param string[] $statuses    Post statuses.
+     * @param string   $which       'title' or 'description'.
+     * @param bool     $with_counts Also select the group's size as `members`.
+     * @return string Trusted SQL.
+     */
+    private static function duplicate_group_sql(array $post_types, array $statuses, string $which, bool $with_counts = false): string {
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder. The index is itself the cache.
+        global $wpdb;
+
+        $posts_alias = 'title' === $which ? 'dp' : 'ep';
+        $meta_alias  = 'title' === $which ? 'dm' : 'em';
+        $key_sql     = self::key_sql($meta_alias, $which);
+        $members_sql = $with_counts ? ', COUNT(*) AS members' : '';
+
+        return $wpdb->prepare(
+            "SELECT {$key_sql} AS dk{$members_sql}
+             FROM {$wpdb->posts} {$posts_alias}
+             INNER JOIN {$wpdb->postmeta} {$meta_alias}
+                ON {$meta_alias}.post_id = {$posts_alias}.ID AND {$meta_alias}.meta_key = %s
+             WHERE " . self::scope_sql($post_types, $statuses, $posts_alias) . "
+               AND {$meta_alias}.meta_value LIKE %s
+             GROUP BY dk
+             HAVING COUNT(*) > 1 AND dk <> '-'",
+            self::META_KEY,
+            self::current_like()
+        );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+    }
+
+    /**
+     * SQL reading one key out of a stored entry.
+     *
+     * The title key is the third colon-separated field and the description key
+     * the fourth, which is also the last.
+     *
+     * @since 2.10.0
+     *
+     * @param string $alias Postmeta table alias.
+     * @param string $which 'title' or 'description'.
+     * @return string Trusted SQL.
+     */
+    private static function key_sql(string $alias, string $which): string {
+        $alias = self::alias($alias);
+
+        return 'title' === $which
+            ? "SUBSTRING_INDEX(SUBSTRING_INDEX({$alias}.meta_value, ':', 3), ':', -1)"
+            : "SUBSTRING_INDEX({$alias}.meta_value, ':', -1)";
+    }
+
+    /**
+     * The post types a query groups duplicates across.
+     *
+     * Falls back to the type being listed, so a caller that has not said
+     * behaves as the pre-#564 per-type grouping rather than silently grouping
+     * over nothing.
+     *
+     * @since 2.10.0
+     *
+     * @param array<string,mixed> $args Query arguments.
+     * @return string[]
+     */
+    private static function group_post_types(array $args): array {
+        $types = array_values(array_filter((array) ($args['group_post_types'] ?? []), 'is_string'));
+
+        return empty($types) ? [(string) $args['post_type']] : $types;
     }
 
     /**
@@ -502,29 +1017,40 @@ class Snippet_Index {
     }
 
     /**
-     * WHERE fragment for post type and statuses.
+     * WHERE fragment for post types and statuses.
      *
-     * @param string   $post_type Post type.
-     * @param string[] $statuses  Post statuses.
-     * @param string   $alias     Posts table alias.
+     * @since 2.10.0 Takes a list of post types rather than one.
+     *
+     * @param string[] $post_types Post types.
+     * @param string[] $statuses   Post statuses.
+     * @param string   $alias      Posts table alias.
      * @return string
      */
-    private static function scope_sql(string $post_type, array $statuses, string $alias): string {
+    private static function scope_sql(array $post_types, array $statuses, string $alias): string {
         $alias = self::alias($alias);
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder. The index is itself the cache.
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the alias is whitelisted in alias(); both IN lists are runs of %s built from the argument counts, so the sniff cannot see the placeholders it is looking for, and every value is still passed to prepare().
         global $wpdb;
+
+        $post_types = array_values(array_unique(array_filter((array) $post_types, 'is_string')));
+        if (empty($post_types)) {
+            // No post type matches nothing. Falling back to every post type
+            // here would silently widen a scope the caller meant to narrow.
+            return '1 = 0';
+        }
 
         $statuses = array_values(array_intersect($statuses, ['publish', 'future', 'draft', 'pending', 'private']));
         if (empty($statuses)) {
             $statuses = ['publish'];
         }
 
-        $placeholders = implode(',', array_fill(0, count($statuses), '%s'));
+        $types_in    = implode(',', array_fill(0, count($post_types), '%s'));
+        $statuses_in = implode(',', array_fill(0, count($statuses), '%s'));
+
         return $wpdb->prepare(
-            "{$alias}.post_type = %s AND {$alias}.post_status IN ({$placeholders})",
-            array_merge([$post_type], $statuses)
+            "{$alias}.post_type IN ({$types_in}) AND {$alias}.post_status IN ({$statuses_in})",
+            array_merge($post_types, $statuses)
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
     }
 
     /**
@@ -537,6 +1063,6 @@ class Snippet_Index {
      * @return string
      */
     private static function alias(string $alias): string {
-        return in_array($alias, ['p', 'dp'], true) ? $alias : 'p';
+        return in_array($alias, ['p', 'm', 'dp', 'dm', 'ep', 'em'], true) ? $alias : 'p';
     }
 }

@@ -18,7 +18,10 @@ use ThinkRank\Abilities\Analysis\Get_Term_Seo_Checks;
 use ThinkRank\Abilities\Content\Get_Post_Seo;
 use ThinkRank\Abilities\Content\Get_Term_Seo;
 use ThinkRank\Abilities\Content\List_Content_Items;
+use ThinkRank\Abilities\Content\Get_Duplicate_Snippets;
+use ThinkRank\Abilities\Content\Get_Thin_Content;
 use ThinkRank\Abilities\Content\List_Snippet_Issues;
+use ThinkRank\Abilities\Content\Update_Thin_Content_Settings;
 use ThinkRank\Abilities\Content\List_Content_Types;
 use ThinkRank\Abilities\Content\Update_Post_Seo;
 use ThinkRank\Abilities\Content\Update_Term_Seo;
@@ -342,6 +345,9 @@ class Abilities_Registrar {
 			new Get_Post_Seo(),
 			new Update_Post_Seo(),
 			new List_Snippet_Issues(),
+			new Get_Duplicate_Snippets(),
+			new Get_Thin_Content(),
+			new Update_Thin_Content_Settings(),
 			new Get_Term_Seo(),
 			new Update_Term_Seo(),
 			new Get_Post_Seo_Checks(),

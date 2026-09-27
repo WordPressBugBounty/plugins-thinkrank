@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.9.0
+Stable tag: 2.10.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -327,6 +327,20 @@ Content brief competitor analysis and schema import fetch the URLs you type in, 
 
 == Changelog ==
 
+= 2.10.0 =
+Release Date: 2026-09-27
+
+- New: Thin Content report: find short published pages sitewide, with a threshold per post type
+- New: Bulk Snippets flags duplicate titles and meta descriptions across every post type
+- New: About Page, Contact Page and Profile Page schema types for individual pages
+- New: Rank Math FAQ and HowTo blocks are converted to ThinkRank blocks when you migrate
+- Improved: Local SEO offers every schema.org LocalBusiness type, with search
+- Fixed: Content Analysis in page builders now measures the whole page, including Oxygen Classic
+- Fixed: Schema descriptions now match your meta description, without stray "&amp;" or "[...]"
+- Fixed: llms.txt no longer splits a key feature that contains a comma
+- Fixed: The unwritable WordPress folder notice no longer warns when nothing is affected
+- Fixed: Minor migration, MCP, sitemap and Local SEO validation issues
+
 = 2.9.0 =
 Release Date: 2026-09-23
 
@@ -377,26 +391,13 @@ Release Date: 2026-09-15
 - Changed: Automatic AI metadata, the GA4 tag installer and SEO insights moved to ThinkRank Pro
 - Removed: Brand Visibility
 
-= 2.5.0 =
-Release Date: 2026-09-10
-
-- New: AI Search (GEO) category in the Site SEO Audit, with one-click fixes
-- New: Audit findings list the exact pages and images affected
-- New: Allow or block individual AI crawlers in robots.txt
-- New: Automatic nofollow and new-tab for external links, with an exception list
-- New: Per-content-type matrix to turn SEO features on or off
-- New: Beaver Builder support, with FAQ, How-To and Table of Contents modules
-- Improved: Test Connection checks your AI model as well as your key
-- Fixed: Saving the Posts or Pages SEO screen reset matrix switches
-- Fixed: Turning product schema off also removed WooCommerce's own product data
-- Fixed: Minor Site SEO Audit, sitemap and robots.txt issues
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.10.0 =
+Adds a Thin Content report, sitewide duplicate title and description detection, About, Contact and Profile page schema, and Rank Math FAQ/HowTo block migration. Fixes Content Analysis in page builders. Recommended for all sites.
+
 = 2.9.0 =
 Adds a custom OpenAI-compatible AI provider, daily AI spend limits with a pause switch, Bulk Snippets editing, dynamic sitemaps for read-only hosts and schema conflict detection in Site Health. Fixes MCP connectors on subdirectory multisite. Recommended for all sites.
 
-= 2.8.0 =
-Adds import from Squirrly SEO and redesigned email reports that pause until Search Console is connected. Fixes migrations dropping title formats, the default social image and category SEO. Recommended for all sites.

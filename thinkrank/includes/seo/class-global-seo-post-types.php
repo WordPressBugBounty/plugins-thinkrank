@@ -59,6 +59,29 @@ class Global_SEO_Post_Types {
     }
 
     /**
+     * Every post type that passes {@see self::is_allowed()}.
+     *
+     * The sitewide half of duplicate snippet detection needs the whole list
+     * rather than one name, because a duplicate title is a duplicate whichever
+     * post type the other page happens to be (#564).
+     *
+     * @since 2.10.0
+     *
+     * @return string[] Post type names.
+     */
+    public static function allowed(): array {
+        $allowed = [];
+
+        foreach (get_post_types(['public' => true], 'objects') as $object) {
+            if (self::is_allowed($object)) {
+                $allowed[] = $object->name;
+            }
+        }
+
+        return $allowed;
+    }
+
+    /**
      * Builder and utility CPTs that are not optimizable content.
      *
      * These register `public => true` for preview purposes but are layout

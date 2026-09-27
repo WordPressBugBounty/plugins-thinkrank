@@ -183,6 +183,15 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             $types['404_logs'] = $log_count;
         }
 
+        // FAQ / HowTo blocks live in post_content, not in any meta table, so
+        // they are invisible to every count above. Without this type they were
+        // never migrated at all and simply broke when Rank Math went away
+        // (#777).
+        $block_count = Block_Converter::count_posts();
+        if ($block_count > 0) {
+            $types[Block_Converter::TYPE] = $block_count;
+        }
+
         foreach ($this->option_keys as $key) {
             if (get_option($key, null) !== null) {
                 $types['settings'] = 1;
@@ -743,6 +752,38 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                     ],
                 ];
             }
+        }
+
+        return $records;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * `content_blocks` records carry post ids only. The blocks themselves stay
+     * in `post_content` and are rewritten in place at migrate time — copying
+     * the content into the snapshot would mean holding a second copy of every
+     * FAQ page in `wp_options`, which is where snapshots live.
+     */
+    protected function export_custom_type_page(string $type, int $page): array {
+        if (Block_Converter::TYPE !== $type) {
+            return parent::export_custom_type_page($type, $page);
+        }
+
+        $post_ids = Block_Converter::get_post_ids($page, $this->chunk_size);
+
+        // export_chunk() decides whether another page follows from the number
+        // of rows the query returned, so report it even when nothing is emitted.
+        $this->last_page_row_count = count($post_ids);
+
+        $records = [];
+        foreach ($post_ids as $post_id) {
+            $records[] = [
+                'object_id'     => $post_id,
+                'object_type'   => 'post',
+                'source_plugin' => $this->plugin_slug,
+                'data'          => ['post_id' => $post_id],
+            ];
         }
 
         return $records;

@@ -217,8 +217,11 @@ class Post_List_Columns {
             'meta_description' => !empty($meta_description),
             'seo_title_raw' => $seo_title_raw,
             'meta_description_raw' => $meta_description_raw,
-            'effective_title' => $meta_title,
-            'effective_description' => $meta_description,
+            // Placeholders in Quick Edit, so decoded to the text the page
+            // shows: get_the_title() texturizes "&" into `&#038;`, which
+            // esc_attr() then carried into the field verbatim.
+            'effective_title' => \ThinkRank\Core\Seo_Text::as_displayed($meta_title),
+            'effective_description' => \ThinkRank\Core\Seo_Text::as_displayed($meta_description),
             'pillar_content' => $this->is_link_suggestions_enabled(get_post_type($post_id)) && get_post_meta($post_id, '_thinkrank_pillar_content', true) === '1',
         ];
     }

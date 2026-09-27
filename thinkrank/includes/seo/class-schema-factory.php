@@ -87,6 +87,38 @@ class Schema_Factory {
             'recommended' => ['about', 'author'],
             'optional' => ['name', 'description', 'url', 'dateModified']
         ],
+        // The WebPage family. Schema_Builder has had a `case 'WebPage'` branch
+        // all along, but nothing here declared the type — so build_schema()
+        // rejected it before the switch was ever reached, and that branch was
+        // dead code. A customer asking for AboutPage and ContactPage is what
+        // surfaced it (#624).
+        //
+        // Only the four the output side can actually emit as themselves.
+        // ItemPage, QAPage and CollectionPage appear in
+        // Schema_Graph::PAGE_LEVEL_TYPES but have no branch in
+        // Global_SEO_Schema_Output::generate_schema(), so they fall to its
+        // `default` arm and publish plain WebPage — offering a type that
+        // silently emits a different one is worse than not offering it.
+        'WebPage' => [
+            'required' => ['@type', 'name'],
+            'recommended' => ['description', 'url', 'datePublished', 'dateModified'],
+            'optional' => ['image', 'breadcrumb', 'primaryImageOfPage', 'about', 'mainEntity']
+        ],
+        'AboutPage' => [
+            'required' => ['@type', 'name'],
+            'recommended' => ['description', 'url', 'datePublished', 'dateModified'],
+            'optional' => ['image', 'breadcrumb', 'primaryImageOfPage', 'about', 'mainEntity']
+        ],
+        'ContactPage' => [
+            'required' => ['@type', 'name'],
+            'recommended' => ['description', 'url', 'datePublished', 'dateModified'],
+            'optional' => ['image', 'breadcrumb', 'primaryImageOfPage', 'about', 'mainEntity']
+        ],
+        'ProfilePage' => [
+            'required' => ['@type', 'name'],
+            'recommended' => ['description', 'url', 'datePublished', 'dateModified'],
+            'optional' => ['image', 'breadcrumb', 'primaryImageOfPage', 'about', 'mainEntity']
+        ],
         'LocalBusiness' => [
             'required' => ['@type', 'name', 'address'],
             'recommended' => ['telephone', 'url', 'openingHours', 'geo', 'priceRange'],

@@ -167,8 +167,16 @@ class Import_Detector {
         // Migrating from a plugin the user no longer runs isn't actionable, so
         // leftover data from a deactivated/uninstalled plugin is intentionally
         // excluded from the migration screen.
+        //
+        // The one exception is Rank Math's FAQ / HowTo blocks. Those live in
+        // post_content, and deactivating Rank Math is precisely what breaks
+        // them: the blocks turn into "unsupported block" in the editor and lose
+        // their schema on the front end. Hiding the only screen that can repair
+        // them, at the exact moment they need repairing, left users with no way
+        // out at all (#777) — so an inactive Rank Math stays listed whenever
+        // convertible blocks remain, carrying that type and nothing else.
         if (!$this->is_source_active($config['plugin_files'] ?? [])) {
-            return null;
+            return $this->detect_orphaned_blocks($slug, $config);
         }
 
         $counts = [];
@@ -215,6 +223,16 @@ class Import_Detector {
         // Monitor and Yoast Premium's redirects were never offered).
         $counts = array_merge($counts, $this->detect_redirect_data($slug));
 
+        // FAQ / HowTo blocks, offered while Rank Math is still active too, so
+        // the wizard converts them on the way out rather than leaving the user
+        // to discover the breakage after deactivation.
+        if ('rankmath' === $slug) {
+            $block_count = Block_Converter::count_posts();
+            if ($block_count > 0) {
+                $counts[Block_Converter::TYPE] = $block_count;
+            }
+        }
+
         // Check for settings
         $has_settings = false;
         foreach ($config['option_keys'] as $option_key) {
@@ -242,6 +260,37 @@ class Import_Detector {
             'plugin_name' => $config['name'],
             'counts'      => $counts,
             'total'       => $total,
+        ];
+    }
+
+    /**
+     * Detection result for a deactivated source that has left convertible
+     * content blocks behind, or null when there is nothing to repair.
+     *
+     * Only the block type is reported. The plugin's postmeta and settings are
+     * deliberately still withheld: migrating those from a plugin the site no
+     * longer runs is the case the active-only rule exists to prevent, and it is
+     * not what broke.
+     *
+     * @param string $slug   Plugin slug.
+     * @param array  $config Plugin configuration.
+     * @return array|null
+     */
+    private function detect_orphaned_blocks(string $slug, array $config): ?array {
+        if ('rankmath' !== $slug) {
+            return null;
+        }
+
+        $count = Block_Converter::count_posts();
+        if ($count < 1) {
+            return null;
+        }
+
+        return [
+            'plugin'      => $slug,
+            'plugin_name' => $config['name'],
+            'counts'      => [Block_Converter::TYPE => $count],
+            'total'       => $count,
         ];
     }
 

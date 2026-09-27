@@ -138,8 +138,10 @@ class Seo_Quick_Edit_Ajax {
             'post_title'            => $post->post_title,
             'seo_title'             => (string) get_post_meta($post_id, '_thinkrank_seo_title', true),
             'meta_description'      => (string) get_post_meta($post_id, '_thinkrank_meta_description', true),
-            'effective_title'       => \ThinkRank\SEO\Pattern_Resolver::effective_title($post_id),
-            'effective_description' => \ThinkRank\SEO\Pattern_Resolver::effective_description($post_id),
+            // Placeholders, so decoded to the text the page shows (see
+            // Seo_Text::as_displayed()); the column's embedded copy matches.
+            'effective_title'       => \ThinkRank\Core\Seo_Text::as_displayed(\ThinkRank\SEO\Pattern_Resolver::effective_title($post_id)),
+            'effective_description' => \ThinkRank\Core\Seo_Text::as_displayed(\ThinkRank\SEO\Pattern_Resolver::effective_description($post_id)),
             'focus_keywords'        => \ThinkRank\SEO\Focus_Keywords::get($post_id),
             'edit_link'             => get_edit_post_link($post_id, 'raw'),
         ]);

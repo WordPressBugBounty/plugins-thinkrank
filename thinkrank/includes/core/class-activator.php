@@ -53,6 +53,7 @@ class Activator {
         // `thinkrank_version`, which that method creates.
         $this->retire_sitemap_legacy_fallback();
         $this->seed_feed_defaults();
+        $this->skip_key_features_migration();
         $this->set_default_options();
         $this->setup_indexnow_key();
         $this->schedule_cron_jobs();
@@ -161,8 +162,12 @@ class Activator {
             delete_option(\ThinkRank\Admin\Webroot_Writable_Notice::OPT_DISMISSED);
 
             if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                // Not a fixed feature list: robots.txt, llms.txt and the Instant
+                // Indexing key all have a PHP path, so naming them as broken
+                // was untrue since #756. Webroot_Writable_Notice works out
+                // what, if anything, is actually affected.
                 // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                error_log('ThinkRank: WordPress root directory is not writable. robots.txt, llms.txt and the Instant Indexing key file cannot be published; the sitemap falls back to dynamic delivery.');
+                error_log('ThinkRank: WordPress root directory is not writable. Features on Automatic delivery are served from WordPress; any feature explicitly set to write files cannot publish them.');
             }
         }
     }
@@ -291,6 +296,33 @@ class Activator {
                 'feed_source_link' => true,
                 'feed_noindex'     => true,
             ]
+        );
+    }
+
+    /**
+     * Mark the llms.txt Key Features migration done on a fresh install.
+     *
+     * {@see \ThinkRank\SEO\LLMs_Txt_Manager::maybe_migrate_legacy_key_features()}
+     * converts a value saved while commas separated features. A brand-new
+     * install never saved one, so anything it stores later follows the
+     * one-per-line rule and must not be split on its commas by a migration
+     * that runs after the user typed it.
+     *
+     * Same signal as {@see self::seed_feed_defaults()}: `thinkrank_version` is
+     * absent only on the very first activation.
+     *
+     * @since 2.10.0
+     *
+     * @return void
+     */
+    private function skip_key_features_migration(): void {
+        if (get_option('thinkrank_version') !== false) {
+            return;
+        }
+
+        add_option(
+            \ThinkRank\SEO\LLMs_Txt_Manager::KEY_FEATURES_MIGRATION_OPTION,
+            \ThinkRank\SEO\LLMs_Txt_Manager::KEY_FEATURES_MIGRATION_VERSION
         );
     }
 

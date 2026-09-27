@@ -92,6 +92,12 @@ class Schema_Builder {
                 $schema = $this->populate_website_schema($schema, $data, $context);
                 break;
             case 'WebPage':
+            case 'AboutPage':
+            case 'ContactPage':
+            case 'ProfilePage':
+                // All four carry the same WebPage properties; only @type
+                // differs, and create_base_schema() has already set it from the
+                // requested type (#624).
                 $schema = $this->populate_webpage_schema($schema, $data, $context);
                 break;
             case 'FAQPage':
@@ -723,27 +729,33 @@ class Schema_Builder {
     }
 
     /**
-     * Truncate text to specified length
-     * PRESERVED: Exact same method logic from original Schema_Generator
+     * Normalise text for JSON-LD and truncate it to a length.
+     *
+     * Every description, headline and reviewBody this class emits passes
+     * through here, so this is the one place the deployed nodes get the same
+     * treatment the automatic ones have had since #766. Before, it only
+     * stripped tags: the block editor stores `&` as `&amp;`, which was then
+     * published literally (nothing decodes JSON-LD), and the cut landed
+     * mid-word with "..." glued on. A deployed node outranks the automatic
+     * one, so deploying a page type made its description worse than not
+     * deploying anything.
+     *
+     * Seo_Text::trim_to_length() is multibyte-aware, which the #473 fix here
+     * already required (a byte cut mojibaked every non-Latin description),
+     * and falls back to a character cut for scripts without spaces.
      *
      * @since 1.0.0
+     * @since 2.10.0 Decodes entities and cuts on a word boundary.
      *
      * @param string $text   Text to truncate
      * @param int    $length Maximum length
      * @return string Truncated text
      */
     private function truncate_text(string $text, int $length): string {
-        $text = wp_strip_all_tags($text);
-
-        // Multibyte-aware. strlen()/substr() count bytes, so a cut landing
-        // mid-character produced invalid UTF-8 — wp_json_encode()'s sanity
-        // check then replaced the tail with "?", mojibaking every non-Latin
-        // site's description and headline (#473).
-        if (mb_strlen($text) <= $length) {
-            return $text;
-        }
-
-        return mb_substr($text, 0, max(0, $length - 3)) . '...';
+        return \ThinkRank\Core\Seo_Text::trim_to_length(
+            \ThinkRank\Core\Seo_Text::normalize_schema_text($text),
+            $length
+        );
     }
 
     /**
@@ -1056,7 +1068,11 @@ class Schema_Builder {
         } elseif (!empty($data['content'])) {
             $schema['description'] = $this->truncate_text($data['content'], 160);
         } else {
-            $schema['description'] = get_bloginfo('description');
+            // The tagline is stored esc_html()'d by sanitize_option(), so an
+            // ampersand in it arrives as `&amp;`.
+            $schema['description'] = \ThinkRank\Core\Seo_Text::normalize_schema_text(
+                (string) get_bloginfo('description')
+            );
         }
 
         // Author - use organization or person data
@@ -1290,6 +1306,16 @@ class Schema_Builder {
     private function populate_local_business_schema(array $schema, array $data, string $context): array {
         // Get business data from Site Identity Business Info (single source of truth)
         $business_data = $this->get_business_data_from_site_identity();
+
+        // The business type chosen in Local SEO is what this node IS. It was
+        // read into $business_data and then never used, so every site published
+        // "@type": "LocalBusiness" whatever it had picked, and the ~150-type
+        // selector (#623) changed nothing but a meta tag. create_base_schema()
+        // has already put @type in place, so reassigning keeps key order and a
+        // site on the default publishes exactly what it did before.
+        $schema['@type'] = \ThinkRank\Config\Local_Business_Types_Config::schema_type(
+            $business_data['business_type'] ?? ''
+        );
 
         // Required properties - use business name from Business Info.
         // `name` is required for LocalBusiness, so an empty saved value must fall

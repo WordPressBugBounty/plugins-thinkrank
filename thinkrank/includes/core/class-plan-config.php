@@ -163,6 +163,80 @@ final class Plan_Config {
     }
 
     /**
+     * Capability map for sitewide duplicate snippet detection.
+     *
+     * The check itself is Free: finding out that two of your pages carry one
+     * title is a read, it runs when the user asks for it, and it is exactly the
+     * kind of thing that should work on a first install (#564). What Pro adds
+     * is the unattended half — a recheck that runs on a schedule and tells you
+     * when a new duplicate appears, rather than when you next open the screen.
+     *
+     * Nothing in the free plugin schedules anything, so `scheduled` only ever
+     * reports what Pro has arranged; the report reads it to say whether it is
+     * being watched or only answered on demand.
+     *
+     * Schema:
+     *   scheduled bool Duplicates are rechecked without the user asking.
+     *
+     * @since 2.10.0
+     *
+     * @return array Capability map.
+     */
+    public static function duplicate_snippets(): array {
+        $defaults = [
+            'scheduled' => false,
+        ];
+
+        /**
+         * Filter the duplicate snippets capability map.
+         *
+         * @since 2.10.0
+         *
+         * @param array $defaults Capability map (see schema above).
+         */
+        $caps = apply_filters('thinkrank_duplicate_snippets_capabilities', $defaults);
+
+        return array_merge($defaults, is_array($caps) ? $caps : []);
+    }
+
+    /**
+     * Capability map for the thin content report.
+     *
+     * Finding out which of your pages are thin is a read, it runs when the user
+     * asks for it, and it is exactly what should work on a first install, so
+     * the report is Free (#565). What Pro adds is the unattended half: an alert
+     * when content that was fine becomes thin, or when something thin is
+     * published, which is the decay framing Content Refresh Radar already uses.
+     *
+     * Nothing in the free plugin schedules anything, so `scheduled_alerts` only
+     * ever reports what Pro has arranged; the report reads it to say whether it
+     * is being watched or only answered on demand.
+     *
+     * Schema:
+     *   scheduled_alerts bool Newly-thin content is reported without being asked.
+     *
+     * @since 2.10.0
+     *
+     * @return array Capability map.
+     */
+    public static function thin_content(): array {
+        $defaults = [
+            'scheduled_alerts' => false,
+        ];
+
+        /**
+         * Filter the thin content capability map.
+         *
+         * @since 2.10.0
+         *
+         * @param array $defaults Capability map (see schema above).
+         */
+        $caps = apply_filters('thinkrank_thin_content_capabilities', $defaults);
+
+        return array_merge($defaults, is_array($caps) ? $caps : []);
+    }
+
+    /**
      * Check a single capability for a given feature.
      *
      * Adding a feature means adding a switch case to capabilities_for() that
@@ -190,6 +264,10 @@ final class Plan_Config {
                 return self::seo_analyzer();
             case 'focus_pages':
                 return self::focus_pages();
+            case 'duplicate_snippets':
+                return self::duplicate_snippets();
+            case 'thin_content':
+                return self::thin_content();
             default:
                 return [];
         }

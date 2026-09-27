@@ -67,6 +67,9 @@ class Thinkrank_Exporter extends Abstract_Plugin_Exporter {
         'thinkrank_image_seo_settings',
         'thinkrank_email_report_settings',
         'thinkrank_author_archives_settings',
+        // Thin content thresholds (#565). Saved by Thin_Content, not Settings,
+        // so without this an Export/Restore round trip dropped them.
+        'thinkrank_thin_content_settings',
     ];
 
     /**

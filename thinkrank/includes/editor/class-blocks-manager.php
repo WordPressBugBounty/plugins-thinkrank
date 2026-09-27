@@ -55,6 +55,13 @@ class Blocks_Manager {
     ];
 
     /**
+     * Webpack asset handle for the Rank Math block converter. Not a block of
+     * its own — it is an editor extension, so it is deliberately outside
+     * BLOCK_ASSETS, which also drives block stylesheet loading.
+     */
+    private const CONVERTER_ASSET = 'rank-math-block-converter';
+
+    /**
      * Wire up hooks.
      *
      * @return void
@@ -71,7 +78,12 @@ class Blocks_Manager {
      * @return void
      */
     public function enqueue_editor_assets(): void {
-        foreach (self::BLOCK_ASSETS as $handle) {
+        // The converter is not a block; it repairs Rank Math's FAQ / HowTo
+        // blocks in place (#777) and so has to load wherever those blocks might
+        // be edited, alongside the block scripts themselves.
+        $handles = array_merge(array_values(self::BLOCK_ASSETS), [self::CONVERTER_ASSET]);
+
+        foreach ($handles as $handle) {
             $asset_path = THINKRANK_PLUGIN_DIR . "assets/{$handle}.asset.php";
             $asset = file_exists($asset_path)
                 ? include $asset_path
@@ -152,7 +164,23 @@ class Blocks_Manager {
      */
     public function inject_block_schema(string $block_content, array $block): string {
         $name  = $block['blockName'] ?? '';
-        $attrs = $block['attrs'] ?? [];
+        $attrs = is_array($block['attrs'] ?? null) ? $block['attrs'] : [];
+
+        // A leftover Rank Math FAQ / HowTo block is treated as the ThinkRank
+        // block it converts to, so its schema comes back on a site that has not
+        // run the migration yet. Returns null while Rank Math is active, since
+        // Rank Math is still publishing its own copy (#777).
+        $is_converted_source = false;
+        if (\ThinkRank\Integrations\Rank_Math_Blocks::is_source_block($name)) {
+            $fallback = \ThinkRank\Integrations\Rank_Math_Blocks::schema_fallback($name, $attrs);
+            if (null === $fallback) {
+                return $block_content;
+            }
+
+            $name  = $fallback['name'];
+            $attrs = $fallback['attrs'];
+            $is_converted_source = true;
+        }
 
         if (!isset(self::BLOCK_ASSETS[$name])) {
             return $block_content;
@@ -173,13 +201,18 @@ class Blocks_Manager {
             return $block_content;
         }
 
-        if (self::FAQ_BLOCK === $name) {
+        if (self::FAQ_BLOCK === $name && !$is_converted_source) {
             // Saved markup carries a bare <img src>, because save.js output is
             // what the block validates against and cannot be changed without
             // invalidating every FAQ block already in the wild. Upgrading it
             // here gives srcset/sizes and intrinsic dimensions from the stored
             // attachment id, and drops the image entirely when the attachment
             // has since been deleted (#418).
+            //
+            // Skipped for a Rank Math block rendering through the fallback: the
+            // markup on the page is Rank Math's, not save.js's, so the image
+            // rewrite has nothing it can match and no business editing it. The
+            // schema below is the only thing the fallback contributes.
             $block_content = $this->upgrade_faq_images($block_content, $attrs);
         }
 

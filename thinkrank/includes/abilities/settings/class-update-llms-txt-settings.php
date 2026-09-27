@@ -100,6 +100,10 @@ class Update_Llms_Txt_Settings extends Ability_Base {
 		$props['delivery_mode']['enum']        = [ 'auto', 'static', 'dynamic' ];
 		$props['delivery_mode']['description'] = __( 'How /llms.txt is served: "static" writes a physical file the web server answers, "dynamic" keeps the document in WordPress and serves it from PHP as UTF-8, "auto" prefers static on Apache/LiteSpeed but falls back to dynamic when the published file turns out to be served without a character set.', 'thinkrank' );
 
+		// The delimiter is not guessable from the field name, and getting it
+		// wrong publishes mangled bullets to the file AI crawlers read (#765).
+		$props['key_features']['description'] = __( 'Key features of the site, one per line. A newline separates features; a comma is treated as part of a feature, so "Collect reviews from Trustpilot, Google, and Etsy" stays one feature rather than becoming three.', 'thinkrank' );
+
 		return $props;
 	}
 

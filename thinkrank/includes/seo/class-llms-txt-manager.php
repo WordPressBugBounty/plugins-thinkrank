@@ -91,7 +91,7 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
         'key_features' => [
             'title' => 'Key Features',
             'required' => true,
-            'description' => 'Main features and functionality of the website',
+            'description' => 'Main features and functionality of the website, one feature per line. Commas are part of a feature, not separators.',
             'max_length' => 300
         ],
         'architecture' => [
@@ -204,6 +204,18 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
     private const DELIVERY_MODES = ['auto', 'static', 'dynamic'];
 
     /**
+     * One-time marker for {@see LLMs_Txt_Manager::maybe_migrate_legacy_key_features()}.
+     *
+     * Public so the activator can record it on a fresh install, which has no
+     * value saved under the old comma rule and must never be migrated.
+     *
+     * @since 2.10.0
+     * @var string
+     */
+    public const KEY_FEATURES_MIGRATION_OPTION  = 'thinkrank_llms_key_features_migration';
+    public const KEY_FEATURES_MIGRATION_VERSION = '1';
+
+    /**
      * Business type templates for content generation
      *
      * @since 1.0.0
@@ -296,6 +308,11 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
             'validation' => [],
             'file_info' => []
         ];
+
+        // Generating from saved settings (the MCP ability passes an empty
+        // payload) can happen before any admin request has run the upgrade,
+        // so make sure a legacy comma list has been converted first.
+        self::maybe_migrate_legacy_key_features();
 
         // Get current settings
         $settings = $this->get_settings('site');
@@ -540,6 +557,16 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
 
         if ('static' === $mode || 'dynamic' === $mode) {
             return $mode;
+        }
+
+        // A root PHP cannot write to has no static path at all: publishing
+        // would simply fail and /llms.txt would 404. The sitemap's `auto`
+        // already resolves this way (#754); llms.txt did not, so on an
+        // Apache/LiteSpeed host with a read-only root — a managed stack such as
+        // Flywheel, where ABSPATH is the locked core folder — `auto` chose
+        // static and then could not deliver it (#756).
+        if (!wp_is_writable(ABSPATH)) {
+            return 'dynamic';
         }
 
         // $is_apache also covers LiteSpeed, which reads .htaccess the same way.
@@ -1573,8 +1600,17 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
 
         // Check key features quality
         if (!empty($user_input['key_features'])) {
-            $features = explode("\n", $user_input['key_features']);
-            $feature_count = count(array_filter($features, 'trim'));
+            // The same splitter the generated file uses, so the count reported
+            // here and the bullets written out can never disagree (#765).
+            $feature_count = count(self::split_key_features((string) $user_input['key_features']));
+
+            // A single line containing commas is ambiguous: it is either a
+            // legacy comma-separated list or one feature with a comma in it.
+            // Rather than guess and risk publishing "and Etsy" as a feature,
+            // say so and let the author decide.
+            if (self::looks_like_comma_list((string) $user_input['key_features'])) {
+                $validation['suggestions'][] = 'Put each key feature on its own line. Commas are treated as part of a feature, not as separators.';
+            }
 
             if ($feature_count < 3) {
                 $validation['warnings'][] = 'Consider adding more key features (3-8 recommended) for comprehensive AI understanding';
@@ -2038,7 +2074,7 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
             'key_features' => [
                 'type' => 'string',
                 'title' => 'Key Features',
-                'description' => 'Main features and functionality of your website',
+                'description' => 'Main features and functionality of your website. One feature per line: a comma is treated as part of a feature, not as a separator.',
                 'default' => '',
                 'maxLength' => 500
             ],
@@ -2148,6 +2184,241 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * Split the Key Features field into individual features.
+     *
+     * One feature per line. Commas used to be delimiters too, which meant a
+     * single feature that happened to contain one — "Collect reviews from
+     * Trustpilot, Google, and Etsy" — was published as three bullets, one of
+     * them reading "and Etsy" (#765). Validation counted by newline only, so
+     * it reported one feature while the file showed three and never flagged
+     * the split.
+     *
+     * Commas are not a fallback delimiter even when the value has no newlines.
+     * A comma inside a feature is ordinary prose and far more likely than a
+     * deliberate comma-separated list, and guessing wrong publishes mangled
+     * text to the file AI crawlers read. A single-line value with commas is
+     * kept whole and validate_content_quality() suggests splitting it, which
+     * tells the user what to do instead of quietly deciding for them.
+     *
+     * The one splitter both generation and validation use, so the file and the
+     * feature count can no longer disagree.
+     *
+     * @since 2.10.0
+     *
+     * @param string $key_features Raw field value.
+     * @return string[] Trimmed features, empties removed.
+     */
+    public static function split_key_features(string $key_features): array {
+        $features = preg_split('/[\r\n]+/', $key_features);
+
+        if (!is_array($features)) {
+            return [];
+        }
+
+        $features = array_map('trim', $features);
+
+        return array_values(array_filter($features, static fn(string $f): bool => '' !== $f));
+    }
+
+    /**
+     * Whether a value looks like the old comma-separated list.
+     *
+     * One line, and a comma in it. That is either a legacy list saved before
+     * newlines became the delimiter, or a single feature containing a comma —
+     * indistinguishable from the outside, which is exactly why this prompts
+     * rather than splits.
+     *
+     * @since 2.10.0
+     *
+     * @param string $key_features Raw field value.
+     * @return bool
+     */
+    public static function looks_like_comma_list(string $key_features): bool {
+        $trimmed = trim($key_features);
+
+        if ('' === $trimmed || false !== strpbrk($trimmed, "\r\n")) {
+            return false;
+        }
+
+        return false !== strpos($trimmed, ',');
+    }
+
+    /**
+     * Turn a single-line comma list into one feature per line.
+     *
+     * Returns null when the value is not something to convert: it already has
+     * line breaks, has no comma, or reads as one feature containing a series.
+     *
+     * Only for text that was written under a comma rule: values saved before
+     * newlines became the only delimiter (see
+     * {@see self::maybe_migrate_legacy_key_features()}), and AI replies that
+     * ignored the one-per-line instruction. Typed input never goes through
+     * this; split_key_features() still keeps a comma inside a feature (#765).
+     *
+     * A series is the one shape the old rule demonstrably mangled: "Collect
+     * reviews from Trustpilot, Google, and Etsy" became three bullets, the
+     * last reading "and Etsy". So a value is left whole when a segment after
+     * the first opens with a conjunction (the Oxford form), or when the final
+     * segment carries one ("..., Google and Etsy", the form the field's own
+     * placeholder uses). A plain list that happens to end "X and Y" is left
+     * whole too; validation still suggests splitting it, and one intact bullet
+     * is the safer wrong answer than a sentence cut into fragments.
+     *
+     * A comma between digits ("1,000 templates") is a thousands separator,
+     * not a delimiter.
+     *
+     * @since 2.10.0
+     *
+     * @param string $key_features Raw value.
+     * @return string|null Newline-separated features, or null to leave as is.
+     */
+    public static function comma_list_to_lines(string $key_features): ?string {
+        if (!self::looks_like_comma_list($key_features)) {
+            return null;
+        }
+
+        $segments = preg_split('/\s*,(?!\d)\s*/', trim($key_features));
+
+        if (!is_array($segments)) {
+            return null;
+        }
+
+        $segments = array_values(array_filter(
+            array_map('trim', $segments),
+            static fn(string $s): bool => '' !== $s
+        ));
+
+        if (count($segments) < 2) {
+            return null;
+        }
+
+        foreach (array_slice($segments, 1) as $segment) {
+            if (preg_match('/^(?:(?:and|or|nor|plus)\b|&)/i', $segment)) {
+                return null;
+            }
+        }
+
+        if (preg_match('/\s(?:and|or|&)\s/i', (string) end($segments))) {
+            return null;
+        }
+
+        return implode("\n", $segments);
+    }
+
+    /**
+     * Coerce an AI reply for Key Features into the one-per-line field value.
+     *
+     * The prompt asks for one feature per line, but models still answer with a
+     * JSON array or a comma-separated line. An array went through
+     * sanitize_textarea_field() as '' and the field silently kept its old
+     * value; a comma line was published as a single bullet now that commas are
+     * not delimiters. Both are normalised to lines here, before sanitising.
+     *
+     * @since 2.10.0
+     *
+     * @param mixed $value Decoded `key_features` from the reply.
+     * @return string Sanitised, newline-separated features.
+     */
+    public static function normalize_ai_key_features($value): string {
+        if (is_array($value)) {
+            $features = [];
+            foreach ($value as $item) {
+                if (is_scalar($item)) {
+                    $item = trim((string) $item);
+                    if ('' !== $item) {
+                        $features[] = $item;
+                    }
+                }
+            }
+            $value = implode("\n", $features);
+        } elseif (!is_scalar($value)) {
+            return '';
+        }
+
+        $value = (string) $value;
+        $lines = self::comma_list_to_lines($value);
+
+        return sanitize_textarea_field(null === $lines ? $value : $lines);
+    }
+
+    /**
+     * Convert a Key Features value saved under the old comma rule, once.
+     *
+     * Up to 2.9.0 a comma separated features, so a site that saved
+     * "SEO audits, Schema markup, XML sitemaps" published three bullets. After
+     * #765 made newlines the only delimiter the same stored value regenerates
+     * as one bullet holding the whole line, a silent change to the file AI
+     * crawlers read. Rewriting the stored value as lines keeps that site's
+     * output what it was, in the form the field now documents.
+     *
+     * A migration rather than a runtime fallback on purpose: a fallback would
+     * keep treating commas as delimiters for every single-line value forever,
+     * which is the #765 bug. Here only values that were saved while commas
+     * really were delimiters are touched, exactly once; anything typed after
+     * this has run follows the new rule. comma_list_to_lines() still leaves a
+     * series such as the #765 value whole.
+     *
+     * Version-gated like Settings::retire_seeded_ai_provider(), and the marker
+     * is written first so a site that fails the write does not retry on every
+     * admin request. The activator records it on a fresh install.
+     *
+     * @since 2.10.0
+     *
+     * @return void
+     */
+    public static function maybe_migrate_legacy_key_features(): void {
+        if (get_option(self::KEY_FEATURES_MIGRATION_OPTION) === self::KEY_FEATURES_MIGRATION_VERSION) {
+            return;
+        }
+
+        update_option(self::KEY_FEATURES_MIGRATION_OPTION, self::KEY_FEATURES_MIGRATION_VERSION, true);
+
+        (new static())->migrate_stored_key_features();
+    }
+
+    /**
+     * Rewrite the stored Key Features as lines when it is a legacy comma list.
+     *
+     * @since 2.10.0
+     *
+     * @return bool True when a value was converted and saved.
+     */
+    public function migrate_stored_key_features(): bool {
+        $stored = $this->get_stored_settings('site');
+
+        if (!isset($stored['key_features']) || !is_string($stored['key_features'])) {
+            return false;
+        }
+
+        $lines = self::comma_list_to_lines($stored['key_features']);
+
+        if (null === $lines) {
+            return false;
+        }
+
+        // validate_settings() rejects a payload without `enabled`, so carry the
+        // stored flag along. Written through the base save, not this class's,
+        // which would also reconcile the delivery mode: a stored-value rewrite
+        // must not republish anything.
+        return $this->write_migrated_key_features([
+            'enabled'      => $stored['enabled'] ?? true,
+            'key_features' => $lines,
+        ]);
+    }
+
+    /**
+     * Persist the converted value. Separate so tests can observe the write.
+     *
+     * @since 2.10.0
+     *
+     * @param array $settings `enabled` and `key_features`.
+     * @return bool
+     */
+    protected function write_migrated_key_features(array $settings): bool {
+        return parent::save_settings('site', null, $settings);
+    }
+
+    /**
      * Build additional details section
      *
      * @since 1.0.0
@@ -2167,16 +2438,8 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
 
         if (!empty($key_features)) {
             $content .= "**Key Features:**\n";
-            // The UI field is a multi-line textarea and validation counts by
-            // newline, so split on newlines (and still tolerate commas) rather
-            // than commas only — otherwise newline-separated input collapses
-            // into one broken bullet.
-            $features = preg_split('/[\r\n,]+/', $key_features);
-            foreach ($features as $feature) {
-                $feature = trim($feature);
-                if (!empty($feature)) {
-                    $content .= "- " . $feature . "\n";
-                }
+            foreach (self::split_key_features($key_features) as $feature) {
+                $content .= "- " . $feature . "\n";
             }
             $content .= "\n";
         }

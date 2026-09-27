@@ -61,7 +61,15 @@ class Import_Controller extends \WP_REST_Controller {
      * 404_logs was missing, so Rank Math's 404 Monitor could never be
      * exported or migrated through REST.
      */
-    private const ALLOWED_TYPES = ['postmeta', 'termmeta', 'usermeta', 'redirections', '404_logs', 'settings'];
+    private const ALLOWED_TYPES = [
+        'postmeta',
+        'termmeta',
+        'usermeta',
+        'redirections',
+        '404_logs',
+        'settings',
+        Block_Converter::TYPE,
+    ];
 
     /**
      * Types the export and migrate endpoints accept.
@@ -146,6 +154,39 @@ class Import_Controller extends \WP_REST_Controller {
                         'required' => false,
                         'type'     => 'boolean',
                         'default'  => false,
+                    ],
+                ],
+            ],
+        ]);
+
+        // Undo for the Rank Math FAQ/HowTo block conversion on sites with
+        // revisions disabled, where Block_Converter kept the original content
+        // in post meta. With revisions on, the post's revision history is the
+        // undo and this route has nothing to restore.
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/content-blocks/restore', [
+            [
+                'methods'             => \WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'restore_content_blocks'],
+                'permission_callback' => [$this, 'check_permissions'],
+                'args'                => [
+                    'post_id' => [
+                        'type'              => 'integer',
+                        'default'           => 0,
+                        'minimum'           => 0,
+                        'sanitize_callback' => 'absint',
+                        'description'       => __('Restore one post. Omit to restore every post with a backup, one page at a time.', 'thinkrank'),
+                    ],
+                    'after'   => [
+                        'type'              => 'integer',
+                        'default'           => 0,
+                        'minimum'           => 0,
+                        'sanitize_callback' => 'absint',
+                        'description'       => __('Paging cursor: pass the previous response\'s next_after.', 'thinkrank'),
+                    ],
+                    'force'   => [
+                        'type'        => 'boolean',
+                        'default'     => false,
+                        'description' => __('Restore posts that were edited after the conversion, discarding those edits.', 'thinkrank'),
                     ],
                 ],
             ],
@@ -459,6 +500,56 @@ class Import_Controller extends \WP_REST_Controller {
             'message' => sprintf('Deleted %d source data entries for %s', $deleted, $plugin),
             'deleted' => $deleted,
         ], 200);
+    }
+
+    /**
+     * POST /import/content-blocks/restore: put converted posts back.
+     *
+     * Restores the pre-conversion `post_content` Block_Converter kept for posts
+     * converted while revisions were disabled. A post edited since is reported
+     * under `modified` and left alone unless `force` is set.
+     *
+     * Without `post_id` it works through one page of posts per call; while
+     * `next_after` is non-null, call again with `after` set to it.
+     *
+     * @since 2.10.0
+     *
+     * @param \WP_REST_Request $request Request object
+     * @return \WP_REST_Response
+     */
+    public function restore_content_blocks(\WP_REST_Request $request): \WP_REST_Response {
+        $post_id = (int) $request->get_param('post_id');
+        $force   = (bool) $request->get_param('force');
+        $limit   = Block_Converter::chunk_size();
+
+        $ids = $post_id > 0
+            ? [$post_id]
+            : Block_Converter::get_backup_post_ids((int) $request->get_param('after'), $limit);
+
+        $report = [
+            'restored'   => [],
+            'modified'   => [],
+            'no_backup'  => [],
+            'errors'     => [],
+            'next_after' => null,
+        ];
+
+        foreach ($ids as $id) {
+            $result = Block_Converter::restore_post($id, $force);
+
+            if ('error' === $result['status']) {
+                $report['errors'][] = ['post_id' => $id, 'message' => $result['message']];
+                continue;
+            }
+
+            $report[$result['status']][] = $id;
+        }
+
+        if ($post_id < 1 && count($ids) === $limit) {
+            $report['next_after'] = (int) end($ids);
+        }
+
+        return new \WP_REST_Response($report, 200);
     }
 
     /**

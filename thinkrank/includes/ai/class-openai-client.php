@@ -1154,7 +1154,7 @@ class OpenAI_Client {
             'optimized_data' => [
                 'site_name' => sanitize_text_field($optimization['optimized_data']['site_name'] ?? ''),
                 'project_overview' => sanitize_textarea_field($optimization['optimized_data']['project_overview'] ?? ''),
-                'key_features' => sanitize_textarea_field($optimization['optimized_data']['key_features'] ?? ''),
+                'key_features' => \ThinkRank\SEO\LLMs_Txt_Manager::normalize_ai_key_features($optimization['optimized_data']['key_features'] ?? ''),
                 'architecture' => sanitize_textarea_field($optimization['optimized_data']['architecture'] ?? ''),
                 'development_guidelines' => sanitize_textarea_field($optimization['optimized_data']['development_guidelines'] ?? ''),
                 'ai_context' => sanitize_textarea_field($optimization['optimized_data']['ai_context'] ?? ''),

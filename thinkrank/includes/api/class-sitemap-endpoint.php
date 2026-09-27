@@ -483,16 +483,13 @@ class Sitemap_Endpoint extends WP_REST_Controller {
                 $stuck   = is_array($removal['failed'] ?? null) ? $removal['failed'] : [];
 
                 // A stale file shadows the dynamic route, so this is a real
-                // failure rather than a tidy-up that did not matter.
+                // failure rather than a tidy-up that did not matter. Worded by
+                // the generator so this and its own rebuild paths cannot
+                // describe the same stuck files differently (#764).
                 if (!empty($stuck)) {
                     return new WP_Error(
                         'sitemap_stale_files',
-                        sprintf(
-                            /* translators: 1: comma-separated file names, 2: absolute path to the WordPress root. */
-                            __('The sitemap is served by WordPress, but these files are still in the site root and your web server will keep serving them instead: %1$s. They could not be removed because %2$s is not writable.', 'thinkrank'),
-                            implode(', ', $stuck),
-                            untrailingslashit(ABSPATH)
-                        ),
+                        $this->sitemap_generator->stuck_files_message($stuck),
                         ['status' => 500]
                     );
                 }

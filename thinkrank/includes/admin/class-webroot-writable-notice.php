@@ -2,9 +2,9 @@
 /**
  * Web Root Writability Notice
  *
- * Tells the site owner when the WordPress root cannot be written to, which is
- * what stops robots.txt, llms.txt and the Instant Indexing key file from being
- * published.
+ * Tells the site owner when the WordPress root cannot be written to and a
+ * feature is explicitly set to publish files there, which is the one case that
+ * stops it from being delivered (#756).
  *
  * @package ThinkRank\Admin
  * @since 2.9.0
@@ -116,20 +116,183 @@ class Webroot_Writable_Notice {
     }
 
     /**
-     * Features that stop working when the root cannot be written.
+     * Features that genuinely stop working when the root cannot be written.
+     *
+     * Derived from what is actually unavailable rather than from a fixed list.
+     * The fixed list named robots.txt, llms.txt and the Instant Indexing key
+     * file, and on a read-only root all three still work — each has a PHP path
+     * that answers the request:
+     *
+     *  - robots.txt through the `robots_txt` filter. Core only runs do_robots()
+     *    when no physical file exists, so an unwritable root is precisely the
+     *    case where the filter does answer. The file is an optional extra.
+     *  - the Instant Indexing key through `maybe_serve_key_file()` on
+     *    `parse_request` when no file exists (#243 / #247).
+     *  - llms.txt through `serve_llms_txt()`, whose `auto` mode now resolves to
+     *    dynamic on an unwritable root (#756).
+     *
+     * That mattered because on a managed host such as Flywheel, ABSPATH is the
+     * locked core folder (`/www/.wordpress/`) while the document root (`/www`)
+     * is writable — so the notice fired permanently, naming three features that
+     * were working, and told the user to ask the host to change something the
+     * host locks by design.
+     *
+     * What remains genuinely broken is a feature explicitly set to write files
+     * on a root that cannot be written. `auto` never lands there any more.
      *
      * Kept in one place so the notice and the Site Health test cannot drift.
      *
      * @since 2.9.0
+     * @since 2.10.0 Reports only what is actually unavailable (#756).
      *
-     * @return string[]
+     * @return string[] Human labels of features that cannot be delivered.
      */
     private static function affected_features(): array {
+        return self::labels_for(self::feature_states()['affected']);
+    }
+
+    /**
+     * Features that keep working on the unwritable root, for the reassurance.
+     *
+     * The complement of {@see self::affected_features()}, derived rather than
+     * written out. The sentence used to be a fixed string naming robots.txt,
+     * llms.txt and the Instant Indexing key, so with llms.txt forced to write
+     * files the notice said "ThinkRank cannot publish llms.txt" and, one line
+     * later, that llms.txt was unaffected and kept working.
+     *
+     * A feature that is switched off is in neither list: it publishes nothing,
+     * so it is not failing, but "ThinkRank serves it from WordPress" would not
+     * be true of it either.
+     *
+     * @since 2.10.0
+     *
+     * @return string[] Human labels of features still being delivered.
+     */
+    private static function unaffected_features(): array {
+        return self::labels_for(self::feature_states()['unaffected']);
+    }
+
+    /**
+     * Every feature that is switched on, whatever its delivery.
+     *
+     * For the writable-root pass, where nothing is failing and the question is
+     * only what the folder is used for.
+     *
+     * @since 2.10.0
+     *
+     * @return string[] Human labels.
+     */
+    private static function enabled_features(): array {
+        $states = self::feature_states();
+
+        return self::labels_for(array_merge($states['affected'], $states['unaffected']));
+    }
+
+    /**
+     * Join feature labels into a readable, localised list.
+     *
+     * wp_sprintf_l() rather than implode(): the lists are now built at run
+     * time, and "robots.txt, llms.txt, the Instant Indexing key" with no
+     * conjunction read as a sentence that had been cut short.
+     *
+     * @since 2.10.0
+     *
+     * @param string[] $labels Human labels.
+     * @return string
+     */
+    private static function list_text(array $labels): string {
+        return wp_sprintf_l('%l', $labels);
+    }
+
+    /**
+     * Human labels for a set of feature keys, in feature_labels() order.
+     *
+     * @since 2.10.0
+     *
+     * @param string[] $keys Feature keys.
+     * @return string[]
+     */
+    private static function labels_for(array $keys): array {
+        return array_values(array_intersect_key(self::feature_labels(), array_flip($keys)));
+    }
+
+    /**
+     * Every file-backed feature this class reports on, keyed for the lists.
+     *
+     * The one place the feature names are written, so the failure sentence,
+     * the reassurance and the Site Health pass text cannot name different sets.
+     *
+     * @since 2.10.0
+     *
+     * @return array<string,string> Feature key => human label.
+     */
+    private static function feature_labels(): array {
         return [
-            __('robots.txt', 'thinkrank'),
-            __('llms.txt', 'thinkrank'),
-            __('the Instant Indexing key file', 'thinkrank'),
+            'robots'   => __('robots.txt', 'thinkrank'),
+            'llms'     => __('llms.txt', 'thinkrank'),
+            'indexnow' => __('the Instant Indexing key', 'thinkrank'),
+            'sitemap'  => __('the XML sitemap', 'thinkrank'),
         ];
+    }
+
+    /**
+     * Sort every feature into affected, unaffected, or switched off.
+     *
+     * robots.txt and the Instant Indexing key always have a PHP path, so they
+     * are never affected (see {@see self::affected_features()}) and have no
+     * delivery setting that could make them so.
+     *
+     * @since 2.10.0
+     *
+     * @return array{affected: string[], unaffected: string[]} Feature keys.
+     */
+    private static function feature_states(): array {
+        $states = [
+            'affected'   => [],
+            'unaffected' => ['robots', 'indexnow'],
+        ];
+
+        $llms = self::delivery_state('ThinkRank\\SEO\\LLMs_Txt_Manager');
+        if (null !== $llms) {
+            $states[$llms][] = 'llms';
+        }
+
+        $sitemap = self::sitemap_state();
+        if (null !== $sitemap) {
+            $states[$sitemap][] = 'sitemap';
+        }
+
+        return $states;
+    }
+
+    /**
+     * Is this manager's delivery explicitly set to write files?
+     *
+     * Only an explicit `static` counts. `auto` resolving to static means the
+     * root IS writable, in which case none of this applies.
+     *
+     * @since 2.10.0
+     * @since 2.10.0 Returns the feature's state rather than a bool, so a
+     *               switched-off feature can be left out of both lists.
+     *
+     * @param string $manager_class Fully-qualified manager class name.
+     * @return string|null 'affected', 'unaffected', or null when switched off.
+     */
+    private static function delivery_state(string $manager_class): ?string {
+        if (!class_exists($manager_class)) {
+            return null;
+        }
+
+        $manager  = new $manager_class();
+        $settings = $manager->get_settings('site');
+
+        if (empty($settings['enabled'])) {
+            // A feature that is switched off publishes nothing, so it cannot be
+            // failing to publish.
+            return null;
+        }
+
+        return 'static' === (string) ($settings['delivery_mode'] ?? 'auto') ? 'affected' : 'unaffected';
     }
 
     /**
@@ -142,15 +305,27 @@ class Webroot_Writable_Notice {
      * a notice that was in fact reporting a broken sitemap.
      *
      * @since 2.9.0
+     * @since 2.10.0 Returns the state rather than a bool; see delivery_state().
      *
-     * @return bool True when the sitemap is served from PHP and needs no file.
+     * @return string|null 'affected', 'unaffected', or null when switched off.
      */
-    private static function sitemap_is_unaffected(): bool {
+    private static function sitemap_state(): ?string {
         if (!class_exists('ThinkRank\\SEO\\Sitemap_Generator')) {
-            return true;
+            return null;
         }
 
-        return 'dynamic' === (new \ThinkRank\SEO\Sitemap_Generator(false))->resolve_delivery_mode();
+        $sitemap = new \ThinkRank\SEO\Sitemap_Generator(false);
+
+        // Same rule delivery_state() applies to llms.txt: a feature that is
+        // switched off publishes nothing, so it cannot be failing to publish.
+        // Without this a site with the sitemap disabled and a stale
+        // `delivery_mode` of `static` gets the permanent notice back, which is
+        // the bug this class was rewritten to stop (#756).
+        if (empty($sitemap->get_settings('site')['enabled'])) {
+            return null;
+        }
+
+        return 'dynamic' === $sitemap->resolve_delivery_mode() ? 'unaffected' : 'affected';
     }
 
     /**
@@ -160,6 +335,15 @@ class Webroot_Writable_Notice {
      */
     private function should_display(): bool {
         if (self::root_is_writable()) {
+            return false;
+        }
+
+        // An unwritable root is not itself a problem. Every file feature has a
+        // PHP path, and `auto` uses it, so there is nothing to report unless a
+        // feature is explicitly set to write files. Warning regardless is what
+        // made this permanent on hosts that lock the core folder by design and
+        // will not be unlocking it (#756).
+        if (empty(self::affected_features())) {
             return false;
         }
 
@@ -208,22 +392,22 @@ class Webroot_Writable_Notice {
                     <p class="thinkrank-notice__text">
                         <?php
                         printf(
-                            /* translators: 1: absolute path to the WordPress root, 2: comma-separated list of affected features. */
-                            esc_html__('The folder %1$s is not writable by PHP, so ThinkRank cannot publish %2$s. Ask your host to make the WordPress root writable by the web server user.', 'thinkrank'),
-                            '<code>' . esc_html(untrailingslashit(ABSPATH)) . '</code>',
-                            esc_html(implode(', ', self::affected_features()))
+                            /* translators: 1: list of affected features, 2: absolute path to the WordPress root. */
+                            esc_html__('ThinkRank cannot publish %1$s. Its delivery is set to write files, and the folder %2$s is not writable by PHP. Set delivery to Automatic and ThinkRank will serve it directly. Asking your host to make the folder writable also works, though some managed hosts lock it deliberately.', 'thinkrank'),
+                            esc_html(self::list_text(self::affected_features())),
+                            '<code>' . esc_html(untrailingslashit(ABSPATH)) . '</code>'
                         );
                         ?>
                     </p>
-                    <?php if (self::sitemap_is_unaffected()) : ?>
                     <p class="thinkrank-notice__text">
-                        <?php esc_html_e('Your XML sitemap is not affected: ThinkRank serves it directly when the folder is not writable.', 'thinkrank'); ?>
+                        <?php
+                        printf(
+                            /* translators: %s: list of features that keep working. */
+                            esc_html__('Everything else is unaffected. ThinkRank serves %s from WordPress when there is no file to read, so those keep working on a read-only folder.', 'thinkrank'),
+                            esc_html(self::list_text(self::unaffected_features()))
+                        );
+                        ?>
                     </p>
-                    <?php else : ?>
-                    <p class="thinkrank-notice__text">
-                        <?php esc_html_e('Your XML sitemap is affected too: sitemap delivery is set to write files, and those files cannot be written. Set sitemap delivery to automatic so WordPress serves the sitemap directly, or make the folder writable.', 'thinkrank'); ?>
-                    </p>
-                    <?php endif; ?>
                     <p class="thinkrank-notice__actions">
                         <a href="<?php echo esc_url(admin_url('site-health.php')); ?>" class="button button-primary">
                             <?php esc_html_e('Check Site Health', 'thinkrank'); ?>
@@ -331,7 +515,11 @@ class Webroot_Writable_Notice {
                 'label' => __('SEO', 'thinkrank'),
                 'color' => 'blue',
             ],
-            'description' => '<p>' . esc_html__('ThinkRank can write to the WordPress root, so robots.txt, llms.txt and the Instant Indexing key file can be published.', 'thinkrank') . '</p>',
+            'description' => '<p>' . sprintf(
+                /* translators: %s: list of features that can publish files. */
+                esc_html__('ThinkRank can write to the WordPress root, so %s can be published as files.', 'thinkrank'),
+                esc_html(self::list_text(self::enabled_features()))
+            ) . '</p>',
             'actions'     => '',
             'test'        => self::HEALTH_TEST,
         ];
@@ -340,19 +528,45 @@ class Webroot_Writable_Notice {
             return $result;
         }
 
+        // The root is read-only, but that alone is not a fault: every file
+        // feature has a PHP path and `auto` uses it. Report a pass, and say so,
+        // rather than a permanent "recommended" on hosts that lock the folder
+        // by design (#756).
+        if (empty(self::affected_features())) {
+            $result['label']       = __('ThinkRank serves its files from WordPress', 'thinkrank');
+            $result['description'] = '<p>' . sprintf(
+                /* translators: 1: absolute path to the WordPress root, 2: list of features served from WordPress. */
+                esc_html__('The folder %1$s is not writable by PHP, which is normal on managed hosts that keep the WordPress core folder read-only. Nothing is affected: ThinkRank serves %2$s directly from WordPress when it cannot write them to disk.', 'thinkrank'),
+                '<code>' . esc_html(untrailingslashit(ABSPATH)) . '</code>',
+                esc_html(self::list_text(self::unaffected_features()))
+            ) . '</p>';
+
+            return $result;
+        }
+
         $result['status'] = 'recommended';
         $result['label']  = __('ThinkRank cannot publish files to your WordPress folder', 'thinkrank');
 
         $description = '<p>' . sprintf(
-            /* translators: 1: absolute path to the WordPress root, 2: comma-separated list of affected features. */
-            esc_html__('The folder %1$s is not writable by PHP, so ThinkRank cannot publish %2$s.', 'thinkrank'),
-            '<code>' . esc_html(untrailingslashit(ABSPATH)) . '</code>',
-            esc_html(implode(', ', self::affected_features()))
+            /* translators: 1: list of affected features, 2: absolute path to the WordPress root. */
+            esc_html__('ThinkRank cannot publish %1$s. Its delivery is set to write files, and the folder %2$s is not writable by PHP.', 'thinkrank'),
+            esc_html(self::list_text(self::affected_features())),
+            '<code>' . esc_html(untrailingslashit(ABSPATH)) . '</code>'
         ) . '</p>';
 
-        $description .= self::sitemap_is_unaffected()
-            ? '<p>' . esc_html__('Your XML sitemap is not affected. ThinkRank detects this and serves the sitemap directly instead of writing it to a file.', 'thinkrank') . '</p>'
-            : '<p>' . esc_html__('Your XML sitemap is affected too. Sitemap delivery is set to write files, and those files cannot be written. Set sitemap delivery to automatic so WordPress serves the sitemap directly, or make the folder writable.', 'thinkrank') . '</p>';
+        // The feature-level remedy comes first: it is the one the user can
+        // actually apply. Some managed hosts lock this folder deliberately, so
+        // "ask your host" is the fallback, not the headline (#756).
+        $description .= '<p>' . esc_html__('Set delivery to Automatic and ThinkRank will serve it directly from WordPress, with no file to write. Making the folder writable also works, though some managed hosts keep it read-only by design.', 'thinkrank') . '</p>';
+
+        // Built from what is actually still working rather than written out:
+        // the fixed sentence named llms.txt as unaffected directly under a
+        // paragraph saying llms.txt could not be published.
+        $description .= '<p>' . sprintf(
+            /* translators: %s: list of features that keep working. */
+            esc_html__('Everything else is unaffected: ThinkRank serves %s from WordPress when there is no file to read.', 'thinkrank'),
+            esc_html(self::list_text(self::unaffected_features()))
+        ) . '</p>';
 
         // Named explicitly because both are the usual first guesses and neither
         // has any effect here: the write fails on the root directory itself,

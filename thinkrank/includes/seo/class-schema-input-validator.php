@@ -127,6 +127,38 @@ class Schema_Input_Validator {
             'required_fields' => ['@type', 'itemReviewed', 'reviewRating', 'author'],
             'optional_fields' => ['reviewBody', 'datePublished', 'publisher', 'name', 'url'],
             'max_length' => ['name' => 110, 'reviewBody' => 500]
+        ],
+        // The WebPage family. #624 made all four selectable in the metabox and
+        // taught the generate/validate/optimize/preview routes, Schema_Builder,
+        // Schema_Factory and Schema_Graph about them — but not this array, and
+        // deploy_schema_markup() gates every entry on it. So each one generated
+        // cleanly, validated at a score of 100, reported deployment_ready, then
+        // failed deployment with "Invalid schema type: AboutPage" and no row
+        // written. Exactly the #462 Review bug, one array and two releases
+        // later, which is why SchemaInputValidatorCoverageTest now scans the
+        // dropdown instead of trusting this list to be extended by hand.
+        //
+        // `name` and `url` are the two populate_webpage_schema() always sets;
+        // the rest are conditional, so they are optional here.
+        'WebPage' => [
+            'required_fields' => ['@type', 'name', 'url'],
+            'optional_fields' => ['description', 'datePublished', 'dateModified', 'isPartOf', 'breadcrumb', 'primaryImageOfPage', 'inLanguage', 'mainEntity'],
+            'max_length' => ['name' => 110, 'description' => 160]
+        ],
+        'AboutPage' => [
+            'required_fields' => ['@type', 'name', 'url'],
+            'optional_fields' => ['description', 'datePublished', 'dateModified', 'isPartOf', 'breadcrumb', 'primaryImageOfPage', 'inLanguage', 'mainEntity'],
+            'max_length' => ['name' => 110, 'description' => 160]
+        ],
+        'ContactPage' => [
+            'required_fields' => ['@type', 'name', 'url'],
+            'optional_fields' => ['description', 'datePublished', 'dateModified', 'isPartOf', 'breadcrumb', 'primaryImageOfPage', 'inLanguage', 'mainEntity'],
+            'max_length' => ['name' => 110, 'description' => 160]
+        ],
+        'ProfilePage' => [
+            'required_fields' => ['@type', 'name', 'url'],
+            'optional_fields' => ['description', 'datePublished', 'dateModified', 'isPartOf', 'breadcrumb', 'primaryImageOfPage', 'inLanguage', 'mainEntity'],
+            'max_length' => ['name' => 110, 'description' => 160]
         ]
     ];
 

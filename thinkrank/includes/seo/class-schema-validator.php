@@ -81,7 +81,16 @@ class Schema_Validator {
         }
 
         $schema_type = $schema['@type'];
-        $spec = $this->schema_factory->get_schema_specification($schema_type);
+
+        // A LocalBusiness node carries the subtype the site chose ("Dentist"),
+        // and none of the ~150 subtypes has a spec of its own. They all share
+        // LocalBusiness's requirements, so validate against that rather than
+        // reporting the site's own business type as unsupported.
+        if (\ThinkRank\Config\Local_Business_Types_Config::is_local_business($schema_type)) {
+            $schema_type = 'LocalBusiness';
+        }
+
+        $spec =$this->schema_factory->get_schema_specification($schema_type);
 
         if (empty($spec)) {
             $validation['errors'][] = "Unsupported schema type: {$schema_type}";

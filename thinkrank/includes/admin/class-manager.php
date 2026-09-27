@@ -17,6 +17,7 @@ use ThinkRank\Core\Settings;
 use ThinkRank\Core\Database;
 use ThinkRank\Core\Plan_Config;
 use ThinkRank\Core\Capability_Manager;
+use ThinkRank\Config\Local_Business_Types_Config;
 use ThinkRank\Admin\Metabox_Manager;
 use ThinkRank\Admin\Elementor_Metabox;
 use ThinkRank\Admin\Oxygen_Metabox;
@@ -445,6 +446,11 @@ class Manager {
             'adminEmail' => get_option('admin_email'),
             // Post types for Global SEO navigation
             'postTypes' => $this->get_public_post_types(),
+            // schema.org LocalBusiness subtypes for the Local SEO control.
+            // Localized rather than mirrored in a JS config: the list runs to
+            // ~150 entries and is also the MCP ability's enum, so a second copy
+            // would be a second thing to keep in step (#623).
+            'localBusinessTypes' => Local_Business_Types_Config::get_options(),
             // Role Manager: capabilities the current user holds + the
             // section → capability map, so the SPA can hide sections a role
             // cannot access. Administrators receive every capability.
@@ -490,6 +496,11 @@ class Manager {
 
         // Check for plugin updates
         $this->check_plugin_updates();
+
+        // One-time: a Key Features value saved while commas were delimiters
+        // becomes one feature per line, so the next regeneration publishes the
+        // bullets the site already had rather than one merged line.
+        \ThinkRank\SEO\LLMs_Txt_Manager::maybe_migrate_legacy_key_features();
     }
 
     /**

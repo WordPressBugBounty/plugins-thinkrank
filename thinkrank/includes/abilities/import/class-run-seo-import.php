@@ -14,6 +14,7 @@ use ThinkRank\Admin\Importers\AIOSEO_Exporter;
 use ThinkRank\Admin\Importers\Rankmath_Exporter;
 use ThinkRank\Admin\Importers\SEOPress_Exporter;
 use ThinkRank\Admin\Importers\Snapshot_Migrator;
+use ThinkRank\Admin\Importers\Squirrly_Exporter;
 use ThinkRank\Admin\Importers\Yoast_Exporter;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -28,6 +29,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  * a snapshot, then migrates that snapshot into ThinkRank's `_thinkrank_*`
  * metadata. Existing ThinkRank values are never overwritten. Source-plugin data
  * is left intact (no cleanup); reports aggregate counters, not per-item rows.
+ *
+ * One step is not metadata: `content_blocks` rewrites Rank Math FAQ / HowTo
+ * blocks inside `post_content` into ThinkRank blocks (#777). The description
+ * says so, and `types` lets a caller leave it out.
  */
 class Run_Seo_Import extends Ability_Base {
 	/**
@@ -42,7 +47,7 @@ class Run_Seo_Import extends Ability_Base {
 	 *
 	 * @var string[]
 	 */
-	private const TYPES = [ 'postmeta', 'termmeta', 'usermeta', 'redirections', 'settings' ];
+	private const TYPES = [ 'postmeta', 'termmeta', 'usermeta', 'redirections', 'content_blocks', 'settings' ];
 
 	/**
 	 * Safety cap on chunk iterations per type (avoids runaway loops).
@@ -55,7 +60,7 @@ class Run_Seo_Import extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/run-seo-import';
 		$this->label       = __( 'Run SEO Data Import', 'thinkrank' );
-		$this->description = __( 'Import SEO metadata from another plugin (Yoast, RankMath, SEOPress, or AIOSEO) into ThinkRank. Exports the source to a snapshot then migrates it; existing ThinkRank values are never overwritten and source data is left intact. Returns aggregate export/migration counters. Run preview-seo-import first to see what would change; get-import-status reports on the snapshot afterwards.', 'thinkrank' );
+		$this->description = __( 'Import SEO data from another plugin (Yoast, RankMath, SEOPress, AIOSEO, or Squirrly) into ThinkRank. Exports the source to a snapshot then migrates it; existing ThinkRank values are never overwritten and the source plugin\'s own meta and settings are left intact. The content_blocks type (RankMath only) edits post content: it rewrites RankMath FAQ and HowTo blocks into ThinkRank blocks. Each converted post gets a revision, or a restorable backup where revisions are disabled. Pass types to limit the run, for example to leave content_blocks out. Posts with malformed block markup are left unchanged and listed in errors. Returns aggregate export/migration counters. Run preview-seo-import first to see what would change; get-import-status reports on the snapshot afterwards.', 'thinkrank' );
 	}
 
 	/**
@@ -66,6 +71,14 @@ class Run_Seo_Import extends Ability_Base {
 	public function get_annotations() {
 		return [
 			'readonly'      => false,
+			// Still false, deliberately, although content_blocks edits
+			// post_content. `destructive` is for losses that cannot be undone
+			// (#675), and this one can: every converted post gets a revision,
+			// and where revisions are off Block_Converter keeps the original
+			// in post meta for POST /import/content-blocks/restore. A post
+			// whose markup cannot be converted safely is not written at all.
+			// The description spells the content edit out instead, so the
+			// caller can decide, and `types` can leave the step out.
 			'destructive'   => false,
 			'idempotent'    => false,
 			'priority'      => 2.0,
@@ -88,6 +101,16 @@ class Run_Seo_Import extends Ability_Base {
 					'description' => __( 'The source SEO plugin to import from.', 'thinkrank' ),
 					'enum'        => self::ALLOWED_PLUGINS,
 				],
+				'types'  => [
+					'type'        => 'array',
+					'description' => __( 'Data types to import. Defaults to all of them. Omit content_blocks to leave post content untouched.', 'thinkrank' ),
+					'items'       => [
+						'type' => 'string',
+						'enum' => self::TYPES,
+					],
+					'minItems'    => 1,
+					'uniqueItems' => true,
+				],
 			],
 			'required'             => [ 'plugin' ],
 		];
@@ -107,6 +130,10 @@ class Run_Seo_Import extends Ability_Base {
 				'exported' => [
 					'type'                 => 'object',
 					'additionalProperties' => true,
+				],
+				'types'    => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
 				],
 				'migrated' => [
 					'type'                 => 'object',
@@ -137,6 +164,12 @@ class Run_Seo_Import extends Ability_Base {
 			);
 		}
 
+		$types = $this->resolve_types( $input['types'] ?? null );
+
+		if ( is_wp_error( $types ) ) {
+			return $types;
+		}
+
 		$exporter = $this->get_exporter( $plugin );
 
 		if ( null === $exporter ) {
@@ -148,8 +181,8 @@ class Run_Seo_Import extends Ability_Base {
 		}
 
 		try {
-			$exported = $this->run_export( $exporter );
-			$migrated = $this->run_migration( $plugin );
+			$exported = $this->run_export( $exporter, $types );
+			$migrated = $this->run_migration( $plugin, $types );
 		} catch ( \Throwable $e ) {
 			return new \WP_Error(
 				'thinkrank_import_failed',
@@ -161,15 +194,59 @@ class Run_Seo_Import extends Ability_Base {
 		return [
 			'success'  => empty( $migrated['errors'] ),
 			'plugin'   => $plugin,
+			'types'    => $types,
 			'exported' => $exported,
 			'migrated' => [
 				'processed'       => $migrated['processed'],
 				'skipped'         => $migrated['skipped'],
+				'failed'          => $migrated['failed'],
 				'analyzed'        => $migrated['analyzed'],
 				'keywords_seeded' => $migrated['keywords_seeded'],
 			],
 			'errors'   => $migrated['errors'],
 		];
+	}
+
+	/**
+	 * The types to run, in pipeline order.
+	 *
+	 * Absent means every type, which is what the ability did before `types`
+	 * existed. Order always follows TYPES rather than the caller's list, since
+	 * the migrator relies on postmeta running before settings.
+	 *
+	 * @param mixed $requested The `types` input, if any.
+	 * @return string[]|\WP_Error
+	 */
+	private function resolve_types( $requested ) {
+		if ( null === $requested ) {
+			return self::TYPES;
+		}
+
+		if ( ! is_array( $requested ) || empty( $requested ) ) {
+			return new \WP_Error(
+				'thinkrank_invalid_import_types',
+				__( 'types must be a non-empty list of data types.', 'thinkrank' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		$requested = array_map( 'sanitize_key', array_map( 'strval', $requested ) );
+		$unknown   = array_diff( $requested, self::TYPES );
+
+		if ( ! empty( $unknown ) ) {
+			return new \WP_Error(
+				'thinkrank_invalid_import_types',
+				sprintf(
+					/* translators: 1: unknown type slugs, 2: allowed type slugs. */
+					__( 'Unknown import types: %1$s. Allowed: %2$s.', 'thinkrank' ),
+					implode( ', ', $unknown ),
+					implode( ', ', self::TYPES )
+				),
+				[ 'status' => 400 ]
+			);
+		}
+
+		return array_values( array_intersect( self::TYPES, $requested ) );
 	}
 
 	/**
@@ -198,13 +275,14 @@ class Run_Seo_Import extends Ability_Base {
 	/**
 	 * Export every data type into a snapshot and finalize it.
 	 *
-	 * @param object $exporter Source-plugin exporter.
+	 * @param object   $exporter Source-plugin exporter.
+	 * @param string[] $types    Types to export, in pipeline order.
 	 * @return array<string, int> Per-type exported counts.
 	 */
-	private function run_export( $exporter ) {
+	private function run_export( $exporter, array $types ) {
 		$exported = [];
 
-		foreach ( self::TYPES as $type ) {
+		foreach ( $types as $type ) {
 			$count = 0;
 			$page  = 1;
 
@@ -227,20 +305,22 @@ class Run_Seo_Import extends Ability_Base {
 	/**
 	 * Migrate the snapshot into ThinkRank metadata.
 	 *
-	 * @param string $plugin Source plugin slug.
+	 * @param string   $plugin Source plugin slug.
+	 * @param string[] $types  Types to migrate, in pipeline order.
 	 * @return array<string, mixed> Aggregate counters and any errors.
 	 */
-	private function run_migration( $plugin ) {
+	private function run_migration( $plugin, array $types ) {
 		$migrator = new Snapshot_Migrator();
 		$totals   = [
 			'processed'       => 0,
 			'skipped'         => 0,
+			'failed'          => 0,
 			'analyzed'        => 0,
 			'keywords_seeded' => 0,
 			'errors'          => [],
 		];
 
-		foreach ( self::TYPES as $type ) {
+		foreach ( $types as $type ) {
 			$page = 1;
 
 			do {
@@ -259,6 +339,15 @@ class Run_Seo_Import extends Ability_Base {
 				$totals['skipped']         += (int) ( $result['skipped'] ?? 0 );
 				$totals['analyzed']        += (int) ( $result['analyzed'] ?? 0 );
 				$totals['keywords_seeded'] += (int) ( $result['keywords_seeded'] ?? 0 );
+				$totals['failed']          += (int) ( $result['failed'] ?? 0 );
+
+				// Per-post failures (content_blocks: a post whose block markup
+				// could not be converted safely and was left as it was). The
+				// chunk itself succeeded, so they are not a chunk error, but
+				// the caller needs the post ids to go and fix them.
+				foreach ( (array) ( $result['failures'] ?? [] ) as $failure ) {
+					$totals['errors'][] = (string) ( $failure['message'] ?? '' );
+				}
 
 				$has_more = ! empty( $result['has_more'] );
 				++$page;

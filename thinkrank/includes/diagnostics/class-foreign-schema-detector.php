@@ -484,7 +484,16 @@ class Foreign_Schema_Detector {
      * @return string[]
      */
     private function page_level_only(array $types): array {
-        return array_values(array_intersect($types, self::PAGE_LEVEL_TYPES));
+        // Every LocalBusiness subtype is the same kind of entity for this
+        // purpose. ThinkRank publishes the subtype the site chose, so a
+        // "Dentist" of ours beside another plugin's "LocalBusiness" is still
+        // two businesses on one URL, and must still be reported as one.
+        $types = array_map(
+            static fn($type) => \ThinkRank\Config\Local_Business_Types_Config::is_local_business($type) ? 'LocalBusiness' : $type,
+            $types
+        );
+
+        return array_values(array_unique(array_intersect($types, self::PAGE_LEVEL_TYPES)));
     }
 
     /**

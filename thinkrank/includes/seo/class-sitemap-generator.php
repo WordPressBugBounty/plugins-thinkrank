@@ -2163,14 +2163,18 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * expects the served file to reflect them even if content-triggered
      * auto-generation is turned off. Still respects the master `enabled` flag.
      *
-     * @return void
+     * @since 2.10.0 Reports whether the served sitemap was actually rebuilt, so
+     *              a caller can say so rather than assume it (#764). Existing
+     *              callers that ignore the return are unaffected.
+     *
+     * @return bool True when the served sitemap now reflects the settings.
      */
-    public function regenerate_sitemap_from_settings(): void {
+    public function regenerate_sitemap_from_settings(): bool {
         if (!$this->acquire_generation_lock()) {
             // A manual generation (or another request's takeover) is already
             // writing the files; the pending marker survives so this rebuild is
             // retried rather than lost.
-            return;
+            return false;
         }
 
         try {
@@ -2179,31 +2183,76 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 // The sitemap was disabled: remove the previously generated static
                 // files so the web server stops serving a stale sitemap that
                 // crawlers would otherwise keep fetching.
-                $this->delete_published_sitemaps();
+                //
+                // A file that could not be removed is still being served, so
+                // this is not a success. Reporting one here would tell a caller
+                // the sitemap was gone while the web server kept answering with
+                // it, which is the failure this return value exists to prevent
+                // (#764).
+                $removal = $this->delete_published_sitemaps($settings);
+                $stuck   = is_array($removal['failed'] ?? null) ? $removal['failed'] : [];
+
+                if (!empty($stuck)) {
+                    $this->record_regeneration_failure(
+                        $this->stuck_files_message($stuck, true),
+                        'settings'
+                    );
+
+                    return false;
+                }
+
                 $this->mark_regeneration_complete();
-                return;
+
+                return true;
             }
 
             $revision = $this->current_regeneration_revision();
 
             if ('dynamic' === $this->resolve_delivery_mode($settings)) {
-                $this->switch_to_dynamic_delivery($settings, $revision, 'settings');
-                return;
+                // Returns false when a static file is stuck in the web root:
+                // the server keeps serving that file in preference to WordPress,
+                // so the switch has not taken effect (#764).
+                return $this->switch_to_dynamic_delivery($settings, $revision, 'settings');
             }
 
             if ($this->generate_and_save($settings)) {
                 $this->mark_regeneration_complete($revision);
-            } else {
-                $this->record_regeneration_failure(
-                    $this->write_failure_message(),
-                    'settings'
-                );
+
+                return true;
             }
+
+            $this->record_regeneration_failure(
+                $this->write_failure_message(),
+                'settings'
+            );
+
+            return false;
         } catch (\Throwable $e) {
             $this->record_regeneration_failure($e->getMessage(), 'settings');
+
+            return false;
         } finally {
             $this->release_generation_lock();
         }
+    }
+
+    /**
+     * When a rebuild has been outstanding since, or 0 when none is.
+     *
+     * Lets a caller report an honest "saved, but the served file has not caught
+     * up yet" instead of a bare success (#764).
+     *
+     * @since 2.10.0
+     * @return int Unix timestamp, or 0 when nothing is pending.
+     */
+    public static function regeneration_pending_since(): int {
+        $pending = get_option(self::REGENERATION_PENDING_OPTION, []);
+
+        if (!is_array($pending) || empty($pending['since'])) {
+            return 0;
+        }
+
+        return (int) $pending['since'];
     }
 
     /**
@@ -2445,27 +2494,62 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @param string $source   'settings' or 'content', for the failure record.
      * @return void
      */
-    private function switch_to_dynamic_delivery(array $settings, int $revision, string $source): void {
+    private function switch_to_dynamic_delivery(array $settings, int $revision, string $source): bool {
         $this->flush_dynamic_cache();
 
         $removal = $this->delete_published_sitemaps($settings);
         $stuck = is_array($removal['failed'] ?? null) ? $removal['failed'] : [];
 
         if (!empty($stuck)) {
-            $this->record_regeneration_failure(
-                sprintf(
-                    /* translators: 1: comma-separated file names, 2: absolute path to the WordPress root. */
-                    __('The sitemap is being served from WordPress, but these files are still in the site root and your web server will keep serving them instead: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable.', 'thinkrank'),
-                    implode(', ', $stuck),
-                    untrailingslashit(ABSPATH)
-                ),
-                $source
-            );
+            $this->record_regeneration_failure($this->stuck_files_message($stuck), $source);
 
-            return;
+            return false;
         }
 
         $this->mark_regeneration_complete($revision);
+
+        return true;
+    }
+
+    /**
+     * Why a stale file left in the web root means the change has not landed.
+     *
+     * Shared by every path that removes published files, so they cannot
+     * describe the same situation differently (#764).
+     *
+     * The two situations that reach it differ in what WordPress is doing, and
+     * the message has to say which. After a switch to dynamic delivery
+     * WordPress IS serving the sitemap and the files shadow it. After the
+     * sitemap is switched off WordPress serves nothing, so the one message
+     * used to tell a site owner who had just disabled the sitemap that it was
+     * "being served from WordPress", which is the opposite of what they did.
+     *
+     * @since 2.10.0
+     * @since 2.10.0 Public, so the REST endpoint uses it rather than a copy;
+     *               takes $sitemap_disabled for the disabled path.
+     *
+     * @param string[] $stuck            Basenames that could not be removed.
+     * @param bool     $sitemap_disabled True when the files outlived disabling
+     *                                   the sitemap rather than a switch to
+     *                                   dynamic delivery.
+     * @return string
+     */
+    public function stuck_files_message(array $stuck, bool $sitemap_disabled = false): string {
+        if ($sitemap_disabled) {
+            return sprintf(
+                /* translators: 1: comma-separated file names, 2: absolute path to the WordPress root. */
+                __('The sitemap is disabled, but these files are still in the site root and your web server is still serving them: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable.', 'thinkrank'),
+                implode(', ', $stuck),
+                untrailingslashit(ABSPATH)
+            );
+        }
+
+        return sprintf(
+            /* translators: 1: comma-separated file names, 2: absolute path to the WordPress root. */
+            __('The sitemap is being served from WordPress, but these files are still in the site root and your web server will keep serving them instead: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable.', 'thinkrank'),
+            implode(', ', $stuck),
+            untrailingslashit(ABSPATH)
+        );
     }
 
     /**

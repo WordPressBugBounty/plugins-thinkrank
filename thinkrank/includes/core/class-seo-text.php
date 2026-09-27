@@ -82,6 +82,27 @@ class Seo_Text {
     }
 
     /**
+     * The text a reader sees for a resolved title or description.
+     *
+     * Pattern_Resolver hands back what the page will print, and that is still
+     * HTML: get_the_title() runs wptexturize, so "Foo & Bar" arrives as
+     * `Foo &#038; Bar`, while the same words typed into the SEO title field
+     * arrive as `Foo &amp; Bar` or a bare `&`. All three render as one `<title>`.
+     * Anything that compares, measures or displays the value as text has to
+     * look at it after the browser would have decoded it, or it groups two
+     * identical titles apart, counts `&#038;` as six characters, and shows the
+     * entity to the user.
+     *
+     * @since 2.10.0
+     *
+     * @param string $value Resolved title or description.
+     * @return string The same value with HTML entities decoded.
+     */
+    public static function as_displayed(string $value): string {
+        return html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+
+    /**
      * Trim a description to a character budget, multibyte-safe.
      *
      * Cuts on a word boundary when one is available inside the budget, so the
@@ -119,6 +140,66 @@ class Seo_Text {
         }
 
         return rtrim($cut) . '…';
+    }
+
+    /**
+     * Make text fit to appear in JSON-LD.
+     *
+     * JSON-LD is not HTML, so an HTML entity in it is not decoded by anything
+     * downstream: `&amp;` was published to answer engines literally. And the
+     * excerpt path appends core's trimming marker, so descriptions arrived
+     * ending in `[…]`, a truncation artefact presented as the page's own
+     * summary.
+     *
+     * Lives here rather than in the schema class that introduced it (#766)
+     * because two producers build description nodes: the automatic
+     * Global_SEO_Schema_Output and the Schema Manager's Schema_Builder. Only
+     * the first normalised, so a deployed node, which outranks the automatic
+     * one, published the raw entity again.
+     *
+     * @since 2.10.0
+     *
+     * @param string $text Raw text.
+     * @return string
+     */
+    public static function normalize_schema_text(string $text): string {
+        if ('' === trim($text)) {
+            return '';
+        }
+
+        $text = self::decode_schema_entities(wp_strip_all_tags($text));
+
+        // Core's excerpt marker, in both its entity and literal forms, with or
+        // without the surrounding brackets it is normally wrapped in.
+        $text = (string) preg_replace(
+            '/\s*(\[\s*(\x{2026}|\.\.\.)\s*\]|\x{2026})\s*$/u',
+            '',
+            $text
+        );
+
+        return trim((string) preg_replace('/\s+/u', ' ', $text));
+    }
+
+    /**
+     * Decode HTML entities in text bound for JSON-LD, and nothing else.
+     *
+     * The narrow half of normalize_schema_text(), for values that must keep
+     * their exact shape otherwise: a stored snapshot already truncated with an
+     * ellipsis would lose it to the excerpt-marker strip.
+     *
+     * @since 2.10.0
+     *
+     * @param string $text Text that may carry HTML entities.
+     * @return string
+     */
+    public static function decode_schema_entities(string $text): string {
+        // Twice: a description that has been through an escaping pass already
+        // (core stores `&amp;amp;` for a literal `&amp;` in some paths) would
+        // otherwise still carry an entity after one decode. Decoding an
+        // already-plain string is a no-op, so this is safe to repeat.
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        return html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     /**

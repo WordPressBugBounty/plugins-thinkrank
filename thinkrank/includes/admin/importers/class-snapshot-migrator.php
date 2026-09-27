@@ -73,7 +73,15 @@ class Snapshot_Migrator {
     /**
      * Data types that are migratable (have post/term/user meta mappings)
      */
-    private const MIGRATABLE_TYPES = ['postmeta', 'termmeta', 'usermeta', 'redirections', '404_logs', 'settings'];
+    private const MIGRATABLE_TYPES = [
+        'postmeta',
+        'termmeta',
+        'usermeta',
+        'redirections',
+        '404_logs',
+        'settings',
+        Block_Converter::TYPE,
+    ];
 
     /**
      * Settings-record `extended` keys that either migrate today or are safe to
@@ -158,6 +166,10 @@ class Snapshot_Migrator {
 
         if ($type === '404_logs') {
             return $this->migrate_404_logs($plugin, $page);
+        }
+
+        if ($type === Block_Converter::TYPE) {
+            return $this->migrate_content_blocks($plugin, $page);
         }
 
         $chunk = Snapshot_Store::read_chunk($plugin, $type, $page);
@@ -287,6 +299,10 @@ class Snapshot_Migrator {
                     continue;
                 }
 
+                // The meta writers unslash their value, so every write below
+                // slashes first. Unslashed, a title or description with a
+                // backslash in it lost it on the way in, and a JSON value lost
+                // the backslash of every `\"` and `\uXXXX` escape.
                 if ($object_type === 'post') {
                     // Never overwrite existing ThinkRank data
                     $existing = get_post_meta($object_id, $thinkrank_key, true);
@@ -294,7 +310,7 @@ class Snapshot_Migrator {
                         continue;
                     }
 
-                    update_post_meta($object_id, $thinkrank_key, $value);
+                    update_post_meta($object_id, $thinkrank_key, wp_slash($value));
                     $record_had_writes = true;
                 } elseif ($object_type === 'term') {
                     $existing = get_term_meta($object_id, $thinkrank_key, true);
@@ -302,7 +318,7 @@ class Snapshot_Migrator {
                         continue;
                     }
 
-                    update_term_meta($object_id, $thinkrank_key, $value);
+                    update_term_meta($object_id, $thinkrank_key, wp_slash($value));
                     $record_had_writes = true;
                 } elseif ($object_type === 'user') {
                     $existing = get_user_meta($object_id, $thinkrank_key, true);
@@ -310,7 +326,7 @@ class Snapshot_Migrator {
                         continue;
                     }
 
-                    update_user_meta($object_id, $thinkrank_key, $value);
+                    update_user_meta($object_id, $thinkrank_key, wp_slash($value));
                     $record_had_writes = true;
                 }
             }
@@ -630,16 +646,20 @@ class Snapshot_Migrator {
         // verbatim, and a file holding one as an array would otherwise raise a
         // TypeError that takes down the rest of the chunk with it. One bad key
         // is worth skipping, not the records behind it.
+        //
+        // wp_slash() because the meta writers unslash: a restored JSON value
+        // (schema form data, robots) would otherwise lose the backslash of
+        // every escaped quote and come back as invalid JSON.
         try {
             switch ($object_type) {
                 case 'post':
-                    update_post_meta($object_id, $key, $value);
+                    update_post_meta($object_id, $key, wp_slash($value));
                     return true;
                 case 'term':
-                    update_term_meta($object_id, $key, $value);
+                    update_term_meta($object_id, $key, wp_slash($value));
                     return true;
                 case 'user':
-                    update_user_meta($object_id, $key, $value);
+                    update_user_meta($object_id, $key, wp_slash($value));
                     return true;
             }
         } catch (\Throwable $e) {
@@ -1415,7 +1435,7 @@ class Snapshot_Migrator {
 
         $robots['index'] = empty($robots['noindex']);
 
-        update_term_meta($term_id, '_thinkrank_robots_meta', wp_json_encode($robots));
+        update_term_meta($term_id, '_thinkrank_robots_meta', wp_slash(wp_json_encode($robots)));
         update_term_meta($term_id, '_thinkrank_robots_meta_enabled', 1);
 
         return true;
@@ -1576,7 +1596,7 @@ class Snapshot_Migrator {
             return false;
         }
 
-        update_post_meta($post_id, '_thinkrank_schema_form_data', wp_json_encode($review));
+        update_post_meta($post_id, '_thinkrank_schema_form_data', wp_slash(wp_json_encode($review)));
 
         return true;
     }
@@ -1610,7 +1630,7 @@ class Snapshot_Migrator {
             return false;
         }
 
-        update_post_meta($post_id, '_thinkrank_schema_form_data', wp_json_encode($video));
+        update_post_meta($post_id, '_thinkrank_schema_form_data', wp_slash(wp_json_encode($video)));
 
         return true;
     }
@@ -1692,11 +1712,11 @@ class Snapshot_Migrator {
 
         $wrote = false;
         if (!empty($robots)) {
-            update_post_meta($post_id, '_thinkrank_robots_meta', wp_json_encode($robots));
+            update_post_meta($post_id, '_thinkrank_robots_meta', wp_slash(wp_json_encode($robots)));
             $wrote = true;
         }
         if (!empty($advanced)) {
-            update_post_meta($post_id, '_thinkrank_advanced_robots_meta', wp_json_encode($advanced));
+            update_post_meta($post_id, '_thinkrank_advanced_robots_meta', wp_slash(wp_json_encode($advanced)));
             $wrote = true;
         }
         if ($wrote) {
@@ -2527,6 +2547,114 @@ class Snapshot_Migrator {
             'total_chunks' => $this->chunk_total($plugin, '404_logs'),
             'processed'    => $processed,
             'skipped'      => $skipped,
+        ];
+    }
+
+    /**
+     * Rewrite a chunk of posts' Rank Math FAQ / HowTo blocks into ThinkRank's
+     * own blocks.
+     *
+     * Unlike every other type here this does not write meta — it edits
+     * `post_content` in place, because that is where the blocks live. The
+     * snapshot chunk carries post ids only, so the conversion always runs
+     * against the post as it stands now rather than a stale copy.
+     *
+     * The conflict strategy is deliberately ignored. A Rank Math block and a
+     * ThinkRank block are not two values competing for one field: the Rank Math
+     * one is broken markup that needs replacing, and any ThinkRank block
+     * already in the post is simply left alone by the converter.
+     *
+     * @param string $plugin Plugin slug
+     * @param int    $page   Chunk number
+     * @return array Migration result
+     */
+    private function migrate_content_blocks(string $plugin, int $page): array {
+        $chunk = Snapshot_Store::read_chunk($plugin, Block_Converter::TYPE, $page);
+        $total_chunks = $this->chunk_total($plugin, Block_Converter::TYPE);
+
+        if ($chunk === null || empty($chunk)) {
+            $has_more = $page < $total_chunks;
+
+            return [
+                'status'    => $has_more ? 'processing' : 'complete',
+                'message'   => 'No content blocks in chunk',
+                'has_more'  => $has_more,
+                'page'      => $page,
+                'processed' => 0,
+                'skipped'   => 0,
+                'failed'    => 0,
+                'failures'  => [],
+            ];
+        }
+
+        // Rewriting a few hundred posts is well past the default execution
+        // window on shared hosting, and a timeout mid-chunk would leave the
+        // migration looking stalled.
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(300); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+        }
+
+        $processed = 0;
+        $skipped   = 0;
+        $failed    = 0;
+        $failures  = [];
+        $blocks    = 0;
+
+        foreach ($chunk as $record) {
+            $post_id = (int) ($record['object_id'] ?? ($record['data']['post_id'] ?? 0));
+            if ($post_id < 1) {
+                $skipped++;
+                continue;
+            }
+
+            $result = Block_Converter::convert_post($post_id);
+
+            if ('converted' === $result['status']) {
+                $processed++;
+                $blocks += $result['converted'];
+                continue;
+            }
+
+            // A post the converter refused (broken block markup, a PCRE
+            // failure) was left untouched and still holds its Rank Math
+            // blocks. Folding it into `skipped` made it indistinguishable from
+            // a post that was simply already converted, so it is counted and
+            // named on its own.
+            if ('error' === $result['status']) {
+                $failed++;
+                $failures[] = ['post_id' => $post_id, 'message' => $result['message']];
+                continue;
+            }
+
+            // `unchanged` is the normal outcome of a re-run, not a failure.
+            $skipped++;
+        }
+
+        $has_more = $page < $total_chunks;
+
+        if (!$has_more) {
+            // The detector caches its scan for an hour; without clearing it the
+            // Migration screen keeps offering blocks that are no longer there.
+            (new Import_Detector())->clear_cache();
+        }
+
+        return [
+            'status'       => $has_more ? 'processing' : 'complete',
+            'message'      => sprintf(
+                'Converted %d FAQ/HowTo blocks in %d posts, skipped %d, failed %d (page %d)',
+                $blocks,
+                $processed,
+                $skipped,
+                $failed,
+                $page
+            ),
+            'has_more'     => $has_more,
+            'page'         => $page,
+            'total_chunks' => $total_chunks,
+            'processed'    => $processed,
+            'skipped'      => $skipped,
+            'failed'       => $failed,
+            'failures'     => $failures,
         ];
     }
 

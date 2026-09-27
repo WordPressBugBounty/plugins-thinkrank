@@ -811,7 +811,7 @@ class LLMs_Txt_Endpoint extends WP_REST_Controller {
                     ],
                     'key_features' => [
                         'type' => 'string',
-                        'description' => 'Key website features'
+                        'description' => 'Key website features, one per line. A comma is part of a feature, not a separator.'
                     ],
                     'target_audience' => [
                         'type' => 'string',
@@ -861,7 +861,7 @@ class LLMs_Txt_Endpoint extends WP_REST_Controller {
                     ],
                     'key_features' => [
                         'type' => 'string',
-                        'description' => 'Key features to optimize'
+                        'description' => 'Key features to optimize, one per line. A comma is part of a feature, not a separator.'
                     ],
                     'target_audience' => [
                         'type' => 'string',

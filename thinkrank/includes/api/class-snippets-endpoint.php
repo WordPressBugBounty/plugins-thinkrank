@@ -18,7 +18,9 @@ namespace ThinkRank\API;
 use ThinkRank\Admin\Metabox_Manager;
 use ThinkRank\AI\Metadata_Generator;
 use ThinkRank\Core\Capability_Manager;
+use ThinkRank\Core\Seo_Text;
 use ThinkRank\Core\Settings;
+use ThinkRank\SEO\Duplicate_Snippets;
 use ThinkRank\SEO\Focus_Keywords;
 use ThinkRank\SEO\Global_SEO_Post_Types;
 use ThinkRank\SEO\Snippet_Index;
@@ -169,6 +171,18 @@ class Snippets_Endpoint {
             ],
         ]);
 
+        register_rest_route(self::NAMESPACE, '/' . self::REST_BASE . '/duplicates', [
+            'methods'             => 'GET',
+            'callback'            => [$this, 'list_duplicates'],
+            'permission_callback' => [$this, 'check_permissions'],
+            'args'                => [
+                'refresh' => [
+                    'type'    => 'boolean',
+                    'default' => false,
+                ],
+            ],
+        ]);
+
         register_rest_route(self::NAMESPACE, '/' . self::REST_BASE . '/(?P<id>\d+)/generate', [
             'methods'             => 'POST',
             'callback'            => [$this, 'generate_suggestion'],
@@ -213,29 +227,22 @@ class Snippets_Endpoint {
     /**
      * Is the selected AI provider configured?
      *
-     * Defers to Settings::has_ai_provider_configured() when it exists (#721),
-     * which knows that an OpenAI-compatible endpoint is configured by URL and
-     * model rather than by key. Until then, the selected provider's key is the
-     * answer — the same test the metabox uses.
+     * Settings::has_ai_provider_configured() is the one answer to this across
+     * the plugin, and it knows what a per-provider key check cannot: an
+     * OpenAI-compatible endpoint is configured by URL and model rather than by
+     * key, so a key test reports it unconfigured.
+     *
+     * This used to probe with method_exists() and fall back to the selected
+     * provider's key, because #741 and #745 were open at the same time and
+     * either could merge first. Both have landed, so the probe and its fallback
+     * are gone (#759).
      *
      * @since 2.8.0
      *
      * @return bool
      */
     private static function ai_configured(): bool {
-        $settings = Settings::instance();
-
-        if (method_exists($settings, 'has_ai_provider_configured')) {
-            return (bool) $settings->has_ai_provider_configured();
-        }
-
-        $provider = (string) $settings->get('ai_provider', '');
-
-        // A provider stored by a newer build (openai_compatible before #721
-        // lands) has no client here, so a key under its name is not enough.
-        return in_array($provider, Settings::selectable_ai_providers(), true)
-            && '' !== $provider
-            && !empty($settings->get($provider . '_api_key'));
+        return Settings::instance()->has_ai_provider_configured();
     }
 
     /**
@@ -293,6 +300,34 @@ class Snippets_Endpoint {
     }
 
     /**
+     * GET — the sitewide duplicate title / description report.
+     *
+     * Separate from the list above because it answers a different question.
+     * The list is "what is wrong with this post type's snippets"; this is "which
+     * pages on this site carry the same title as another one", and the answer
+     * has to cross post types to be true (#564).
+     *
+     * Bounded like the list: each call builds one batch of missing index
+     * entries and reports how many are left, so the screen keeps asking until
+     * `pending` reaches zero rather than any one request scanning the site.
+     *
+     * @since 2.10.0
+     *
+     * @param WP_REST_Request $request Request.
+     * @return WP_REST_Response
+     */
+    public function list_duplicates(WP_REST_Request $request): WP_REST_Response {
+        $report = Duplicate_Snippets::report((bool) $request->get_param('refresh'));
+
+        $report['limits'] = [
+            'max_groups'  => Duplicate_Snippets::MAX_GROUPS,
+            'max_members' => Duplicate_Snippets::MAX_MEMBERS,
+        ];
+
+        return new WP_REST_Response($report);
+    }
+
+    /**
      * One page of snippets, answered from the persisted index.
      *
      * The work a request does is bounded: {@see Snippet_Index::refresh()}
@@ -314,13 +349,17 @@ class Snippets_Endpoint {
         $pending = Snippet_Index::refresh($args['post_type'], $args['statuses']);
 
         $result = Snippet_Index::query([
-            'post_type'      => $args['post_type'],
-            'statuses'       => $args['statuses'],
-            'issue'          => $args['issue'],
-            'search'         => $args['search'],
-            'page'           => $args['page'],
-            'per_page'       => $args['per_page'],
-            'visibility_sql' => Snippet_Index::visibility_sql($args['post_type']),
+            'post_type'        => $args['post_type'],
+            'statuses'         => $args['statuses'],
+            // Duplicates are looked for across every post type ThinkRank
+            // manages, not only the one being listed: a page sharing a title
+            // with a post is still a duplicate (#564).
+            'group_post_types' => Global_SEO_Post_Types::allowed(),
+            'issue'            => $args['issue'],
+            'search'           => $args['search'],
+            'page'             => $args['page'],
+            'per_page'         => $args['per_page'],
+            'visibility_sql'   => Snippet_Index::visibility_sql($args['post_type']),
         ]);
 
         _prime_post_caches($result['ids'], false, true);
@@ -338,7 +377,8 @@ class Snippets_Endpoint {
 
             $snippets[] = self::judge(
                 Snippet_Issues::snapshot($post),
-                in_array($post_id, $result['duplicate_ids'], true)
+                in_array($post_id, $result['duplicate_ids'], true),
+                in_array($post_id, $result['duplicate_description_ids'], true)
             );
         }
 
@@ -356,12 +396,14 @@ class Snippets_Endpoint {
     /**
      * Attach the verdict to a snapshot.
      *
-     * @param array<string,mixed> $snapshot  From {@see Snippet_Issues::snapshot()}.
-     * @param bool                $duplicate Whether another post shares its title.
+     * @param array<string,mixed> $snapshot              From {@see Snippet_Issues::snapshot()}.
+     * @param bool                $duplicate             Whether another post shares its title.
+     * @param bool                $duplicate_description Whether another post shares its description.
      * @return array<string,mixed>
      */
-    private static function judge(array $snapshot, bool $duplicate): array {
+    private static function judge(array $snapshot, bool $duplicate, bool $duplicate_description = false): array {
         $snapshot['duplicate_title'] = $duplicate;
+        $snapshot['duplicate_description'] = $duplicate_description;
         $snapshot['issues'] = Snippet_Issues::evaluate($snapshot);
 
         return $snapshot;
@@ -390,8 +432,11 @@ class Snippets_Endpoint {
             'focus_keyword'         => $snippet['focus_keyword'],
             // What the page renders when the field above is empty, so the
             // table can show the inherited template value as a placeholder.
-            'effective_title'       => $snippet['effective_title'],
-            'effective_description' => $snippet['effective_description'],
+            // Decoded: the resolved value is still HTML, so a texturized
+            // `&#038;` was shown in the placeholder and counted as six
+            // characters by the length counter beside it.
+            'effective_title'       => Seo_Text::as_displayed((string) $snippet['effective_title']),
+            'effective_description' => Seo_Text::as_displayed((string) $snippet['effective_description']),
             'noindex'               => (bool) $snippet['noindex'],
             'noindex_source'        => $snippet['noindex_source'],
             'issues'                => $snippet['issues'],
@@ -437,17 +482,19 @@ class Snippets_Endpoint {
         // index, so peers need no work — the other half of a duplicate pair
         // clears itself the next time the list is read.
         $fresh = [];
+        $group_types = Global_SEO_Post_Types::allowed();
         foreach ($reload as $post_type => $statuses) {
             $ids = $saved_ids[$post_type] ?? [];
             Snippet_Index::rebuild($ids);
-            $duplicates = Snippet_Index::duplicates_among($post_type, array_keys($statuses), $ids);
+            $duplicates = Snippet_Index::duplicates_among($group_types, array_keys($statuses), $ids);
 
             foreach ($ids as $post_id) {
                 $post = get_post($post_id);
                 if ($post instanceof \WP_Post) {
                     $fresh[$post_id] = self::judge(
                         Snippet_Issues::snapshot($post),
-                        in_array($post_id, $duplicates, true)
+                        in_array($post_id, $duplicates['title'], true),
+                        in_array($post_id, $duplicates['description'], true)
                     );
                 }
             }

@@ -202,9 +202,39 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             'name' => 'WebPage',
             'description' => 'Individual web pages',
             'required_properties' => ['name', 'url'],
+            // 'post' as well as 'page': the per-page selector reaches this for
+            // any post type, and a registry limited to 'page' silently produced
+            // nothing for the rest (#624).
             'recommended_properties' => ['description', 'author', 'datePublished', 'breadcrumb'],
             'rich_snippets' => ['webpage', 'breadcrumb'],
-            'context_types' => ['page'],
+            'context_types' => ['page', 'post'],
+            'priority' => 'medium'
+        ],
+        'AboutPage' => [
+            'name' => 'AboutPage',
+            'description' => 'A page describing the organisation or person behind the site',
+            'required_properties' => ['name', 'url'],
+            'recommended_properties' => ['description', 'author', 'datePublished', 'breadcrumb'],
+            'rich_snippets' => ['webpage', 'breadcrumb'],
+            'context_types' => ['page', 'post'],
+            'priority' => 'medium'
+        ],
+        'ContactPage' => [
+            'name' => 'ContactPage',
+            'description' => 'A page giving contact details',
+            'required_properties' => ['name', 'url'],
+            'recommended_properties' => ['description', 'author', 'datePublished', 'breadcrumb'],
+            'rich_snippets' => ['webpage', 'breadcrumb'],
+            'context_types' => ['page', 'post'],
+            'priority' => 'medium'
+        ],
+        'ProfilePage' => [
+            'name' => 'ProfilePage',
+            'description' => 'A page about a single person or organisation',
+            'required_properties' => ['name', 'url'],
+            'recommended_properties' => ['description', 'author', 'datePublished', 'breadcrumb'],
+            'rich_snippets' => ['webpage', 'breadcrumb'],
+            'context_types' => ['page', 'post'],
             'priority' => 'medium'
         ],
         'FAQPage' => [
@@ -2259,7 +2289,10 @@ class Schema_Management_System extends Abstract_SEO_Manager {
 
         $type = $schema['@type'] ?? '';
         $type = is_array($type) ? reset($type) : $type;
-        $is_entity = in_array((string) $type, self::ENTITY_URL_TYPES, true);
+        // A LocalBusiness is deployed under the subtype the site chose, so the
+        // exemption has to cover every subtype, not only the literal root.
+        $is_entity = in_array((string) $type, self::ENTITY_URL_TYPES, true)
+            || \ThinkRank\Config\Local_Business_Types_Config::is_local_business($type);
 
         if (isset($schema['url']) && !$is_entity) {
             $schema['url'] = $permalink;
@@ -2289,7 +2322,13 @@ class Schema_Management_System extends Abstract_SEO_Manager {
      * be a BCP-47 tag — en-US, not en_US (#473). Walks nested nodes so values
      * inside author/publisher/@graph entries are covered too.
      *
+     * Also decodes HTML entities in plain-text properties. Schema_Builder
+     * stored the block editor's `&amp;` as-is until 2.10.0, and nothing
+     * decodes JSON-LD downstream, so every deployed node built from post text
+     * published the entity literally.
+     *
      * @since 1.16.0
+     * @since 2.10.0 Decodes entities in plain-text properties.
      *
      * @param array $schema Decoded schema data.
      * @return array Normalised schema.
@@ -2300,6 +2339,14 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             'startDate', 'endDate', 'validFrom', 'validThrough', 'expires',
         ];
 
+        // Plain text in schema.org. Answer/HowToStep `text` is deliberately
+        // absent: Google reads Answer.text as HTML, where an entity is correct
+        // and decoding `&lt;` would turn escaped text into live markup.
+        static $text_keys = [
+            'name', 'headline', 'alternativeHeadline', 'description',
+            'reviewBody', 'about', 'abstract', 'caption',
+        ];
+
         foreach ($schema as $key => $value) {
             if (is_array($value)) {
                 $schema[$key] = $this->normalize_stored_schema($value);
@@ -2308,6 +2355,14 @@ class Schema_Management_System extends Abstract_SEO_Manager {
 
             if ('inLanguage' === $key && is_string($value) && '' !== $value) {
                 $schema[$key] = str_replace('_', '-', $value);
+                continue;
+            }
+
+            // Decode only: a snapshot already truncated with an ellipsis must
+            // keep it, which the full Seo_Text::normalize_schema_text() would
+            // strip as an excerpt marker.
+            if (in_array($key, $text_keys, true) && is_string($value) && '' !== $value) {
+                $schema[$key] = \ThinkRank\Core\Seo_Text::decode_schema_entities($value);
                 continue;
             }
 

@@ -51,7 +51,28 @@ class Builder_Content {
     private const BUILDER_META_KEYS = [
         '_breakdance_data',        // Oxygen 6+ / Breakdance
         '_oxygen_data',            // Oxygen (earlier releases)
-        'ct_builder_shortcodes',   // Oxygen classic
+        // Oxygen classic. 4.x writes the tree as JSON to `ct_builder_json`
+        // while still keeping `ct_builder_shortcodes`. A post carrying only
+        // the JSON key used to match no key at all and fall through to an
+        // empty `post_content`, which reads as a one-word page (#776).
+        //
+        // Oxygen 4.8.3 then renamed every `ct_*` post meta key to `_ct_*`
+        // (`oxygen_vsb_update_4_8_3()` runs `oxy_prefix_meta_keys()` on
+        // upgrade, and `oxy_get_post_meta()` only reads the prefixed name
+        // from then on). A current Oxygen classic site therefore has only the
+        // underscored keys, which nothing here listed, so every one of its
+        // pages resolved as empty. The prefixed keys come first because they
+        // are what Oxygen itself reads; the bare ones cover a site that has
+        // not run the migration (or reverted it with `?unprefix_meta`).
+        //
+        // These four are not read in this loop: from_oxygen_classic() pairs
+        // each JSON key with its shortcode sibling so the two forms can be
+        // compared. They are listed here because this list is also what the
+        // word-count index watches and what FAQ detection scans.
+        '_ct_builder_json',        // Oxygen classic 4.8.3+ (JSON tree)
+        'ct_builder_json',         // Oxygen classic 4.0-4.8.2 (JSON tree)
+        '_ct_builder_shortcodes',  // Oxygen classic 4.8.3+ (shortcode tree)
+        'ct_builder_shortcodes',   // Oxygen classic < 4.8.3 (shortcode tree)
         '_elementor_data',         // Elementor
         // Beaver Builder. Published layout first: `_fl_builder_draft` holds
         // unsaved changes and would score content the visitor cannot see.
@@ -143,6 +164,33 @@ class Builder_Content {
         'text', 'title', 'subtitle', 'heading', 'subheading', 'content',
         'description', 'caption', 'excerpt', 'label', 'value', 'html',
         'editor', 'quote', 'answer', 'question', 'body', 'button_text',
+        // Oxygen classic keeps an element's copy in `options.ct_content`
+        // (headline, text block, rich text, link and button labels). It is the
+        // field Oxygen's own serializer moves between the tags when it writes
+        // shortcodes (`parse_components_tree()`), and the one Relevanssi and
+        // Oxygen's WPML integration read. Missing from this list, the walker
+        // kept only copy that happened to contain markup: a page of plain
+        // headings and paragraphs lost almost all of its words.
+        'ct_content',
+        // Oxygen's composite elements keep their copy under `options.original`
+        // instead, one key per field. Taken from the list Oxygen itself treats
+        // as text when it serializes (`$options_to_encode`); the numeric price
+        // fields and the progress bar's right-hand percentage are left out.
+        'testimonial_text', 'testimonial_author', 'testimonial_author_info',
+        'icon_box_heading', 'icon_box_text',
+        'pricing_box_package_title', 'pricing_box_package_subtitle', 'pricing_box_content',
+        'progress_bar_left_text',
+    ];
+
+    /**
+     * Oxygen classic's storage generations, as JSON key => shortcode key.
+     *
+     * @since 2.10.0
+     * @var array<string,string>
+     */
+    private const OXYGEN_CLASSIC_KEYS = [
+        '_ct_builder_json' => '_ct_builder_shortcodes',
+        'ct_builder_json'  => 'ct_builder_shortcodes',
     ];
 
     /**
@@ -973,6 +1021,19 @@ class Builder_Content {
         }
 
         foreach (self::BUILDER_META_KEYS as $key) {
+            if (self::is_oxygen_classic_key($key)) {
+                // Resolved as a pair, once, at the first of its keys.
+                if ('_ct_builder_json' !== $key) {
+                    continue;
+                }
+
+                $oxygen = self::from_oxygen_classic($post_id);
+                if (!self::is_blank($oxygen)) {
+                    return $oxygen;
+                }
+                continue;
+            }
+
             $stored = get_post_meta($post_id, $key, true);
 
             if (is_string($stored) && '' !== trim($stored)) {
@@ -985,18 +1046,6 @@ class Builder_Content {
                         return $text;
                     }
                     continue;
-                }
-
-                // Shortcode tree (Oxygen classic).
-                if (strpos($stored, '[') !== false && function_exists('do_shortcode')) {
-                    try {
-                        $rendered = do_shortcode($stored);
-                    } catch (\Throwable $e) {
-                        $rendered = $stored;
-                    }
-                    if (!self::is_blank($rendered)) {
-                        return $rendered;
-                    }
                 }
 
                 continue;
@@ -1014,6 +1063,256 @@ class Builder_Content {
         }
 
         return '';
+    }
+
+    /**
+     * Whether a meta key is one of Oxygen classic's storage keys.
+     *
+     * @since 2.10.0
+     *
+     * @param string $key Meta key.
+     * @return bool
+     */
+    private static function is_oxygen_classic_key(string $key): bool {
+        return isset(self::OXYGEN_CLASSIC_KEYS[$key]) || in_array($key, self::OXYGEN_CLASSIC_KEYS, true);
+    }
+
+    /**
+     * Text of an Oxygen classic page, from whichever stored form holds more.
+     *
+     * Oxygen 4.x keeps the same tree twice: as JSON, and as the shortcodes it
+     * used before 4.0. The JSON is preferred because it carries copy the
+     * shortcode form hides (a composite element's text is base64-encoded
+     * inside `ct_options`, which is configuration and stripped). It is not
+     * trusted blindly, though. Reading `ct_builder_json` first once meant a
+     * key missing from CONTENT_KEYS silently threw the page away while the
+     * shortcode copy sat unread next to it, because a non-empty JSON result
+     * stopped the search. Comparing the two means the next such gap costs
+     * nothing: the richer form wins.
+     *
+     * A generation is only read as a pair. The prefixed keys are what Oxygen
+     * 4.8.3+ reads, so an unprefixed leftover next to them is stale.
+     *
+     * @since 2.10.0
+     *
+     * @param int $post_id Post ID.
+     * @return string Extracted text, or '' when Oxygen classic stored nothing.
+     */
+    private static function from_oxygen_classic(int $post_id): string {
+        foreach (self::OXYGEN_CLASSIC_KEYS as $json_key => $shortcode_key) {
+            $json       = get_post_meta($post_id, $json_key, true);
+            $shortcodes = get_post_meta($post_id, $shortcode_key, true);
+
+            $from_json = '';
+            if (is_string($json) && '' !== trim($json)) {
+                $decoded = json_decode($json, true);
+                if (is_array($decoded)) {
+                    // `[oxygen data="..."]` is a dynamic-data placeholder
+                    // Oxygen fills at render time. The shortcode path drops it
+                    // with every other tag, so it goes here too or the two
+                    // forms would disagree on the same page.
+                    $from_json = (string) preg_replace(
+                        '/\[oxygen\b[^\]]*\]/i',
+                        ' ',
+                        self::text_from_tree($decoded)
+                    );
+                }
+            }
+
+            $from_shortcodes = '';
+            if (is_string($shortcodes) && strpos($shortcodes, '[') !== false) {
+                $from_shortcodes = self::text_from_shortcodes($shortcodes);
+            }
+
+            if (self::is_blank($from_json) && self::is_blank($from_shortcodes)) {
+                continue;
+            }
+
+            return self::visible_word_count($from_json) >= self::visible_word_count($from_shortcodes)
+                ? $from_json
+                : $from_shortcodes;
+        }
+
+        return '';
+    }
+
+    /**
+     * Rough count of the words a visitor would read in extracted text.
+     *
+     * Only used to compare two extractions of the same page, so it needs to
+     * be consistent rather than locale-exact.
+     *
+     * @since 2.10.0
+     *
+     * @param string $text Extracted text or markup.
+     * @return int
+     */
+    private static function visible_word_count(string $text): int {
+        $plain = trim((string) preg_replace('/\s+/u', ' ', wp_strip_all_tags($text)));
+
+        return '' === $plain ? 0 : count(explode(' ', $plain));
+    }
+
+    /**
+     * Shortcode attributes that carry copy a visitor reads.
+     *
+     * An allow-list, not a deny-list. Oxygen Classic tags carry far more
+     * attributes than they do copy — `id`, `class`, `selector`, `url`,
+     * `ct_options` and friends — and a deny-list silently admits every
+     * attribute a future builder release invents, which is how markup ends up
+     * being counted as prose.
+     *
+     * @var string[]
+     */
+    private const SHORTCODE_TEXT_ATTRIBUTES = [
+        'text',
+        'content',
+        'heading',
+        'title',
+        'subtitle',
+        'label',
+        'caption',
+        'description',
+        'alt',
+        'button_text',
+        'link_text',
+    ];
+
+    /**
+     * Extract readable text from a shortcode tree, without rendering it.
+     *
+     * Oxygen Classic is the only builder whose storage is shortcodes rather
+     * than JSON, and the previous implementation handed the string to
+     * `do_shortcode()`. That silently depends on Oxygen having registered its
+     * `ct_*` handlers in the current request — which it has on a front-end
+     * view, and has not during bulk analysis, the post-list column, cron or
+     * REST/MCP. With no handlers registered `do_shortcode()` returns its input
+     * unchanged, so the raw shortcode source was scored as if it were the
+     * page's prose: `[ct_section`, `id="section-1"` and the rest counted toward
+     * the word count, while the actual copy sitting in `text="..."` attributes
+     * was never counted at all (#776).
+     *
+     * `strip_shortcodes()` is no help either — it also only knows registered
+     * shortcodes, so it leaves the same text untouched.
+     *
+     * Reading the stored tree directly is what every other builder here already
+     * does, and it matches the class's stated design: no render engine, no
+     * dependency on load order, safe during a bulk run.
+     *
+     * Parsing unconditionally, rather than rendering when Oxygen happens to be
+     * loaded and parsing otherwise, is deliberate. It makes the extracted text
+     * the same in every context, so the score in the editor matches the score
+     * from a bulk run or from MCP. The old code produced whichever of the two
+     * the request happened to allow, which is why the same post could report
+     * two different word counts depending on how it was asked.
+     *
+     * The trade-off is that rendered output (resolved images, links, anything
+     * Oxygen pulls in from a reusable part) is no longer reflected here. For
+     * what this text feeds — word count, content scoring, meta-description
+     * fallbacks and schema text — that markup was never the point, and counting
+     * it only when the builder happened to be booted was the bug.
+     *
+     * @since 2.10.0
+     *
+     * @param string $stored Raw shortcode source.
+     * @return string Extracted text.
+     */
+    private static function text_from_shortcodes(string $stored): string {
+        // Oxygen stores each element's settings as a JSON blob in `ct_options`.
+        // It is configuration, never copy, and it contains braces and brackets
+        // that would otherwise confuse the tag scan below, so it goes first.
+        //
+        // The blob is matched as a balanced JSON object, not as "up to the
+        // next quote". Oxygen wraps it in single quotes but does not escape
+        // an apostrophe inside it (`"nicename":"Bob's Plumbing"`), so the
+        // quote-to-quote match stopped mid-value and the rest of the blob,
+        // `s Plumbing"}'` and all, was left in the tag and leaked into the
+        // text. Strings inside the object are skipped whole, so neither a quote
+        // nor a brace inside a value can end the match early.
+        $source = (string) preg_replace(
+            '/\sct_options\s*=\s*\'(?<obj>\{(?:[^{}"]++|"(?:[^"\\\\]|\\\\.)*+"|(?&obj))*+\})\'/s',
+            '',
+            $stored
+        );
+
+        // Anything not shaped like Oxygen's JSON blob keeps the old,
+        // quote-delimited strip.
+        $source = (string) preg_replace(
+            '/\sct_options\s*=\s*(["\']).*?\1/s',
+            '',
+            $source
+        );
+
+        $attributes = implode('|', array_map(
+            static fn(string $name): string => preg_quote($name, '/'),
+            self::SHORTCODE_TEXT_ATTRIBUTES
+        ));
+
+        // Replace each shortcode tag with whatever readable copy its attributes
+        // carry. Text between tags is left exactly where it is, so the result
+        // keeps the page's reading order rather than hoisting all the headings
+        // to the front.
+        // The attribute blob is matched quote-aware rather than as "anything up
+        // to the first `]`". Oxygen copy contains brackets often enough to
+        // matter — "Best tools [2026]", "[Updated] our policy" — and a naive
+        // scan ends the tag inside the `text` attribute, dropping the copy
+        // before the bracket and leaking the stray `"]` after it into the
+        // prose. Which is this bug's own failure mode: the wrong text scored.
+        //
+        // A tag name must start with a letter or underscore. `[2026]` is not a
+        // shortcode anyone can register, and scanning it as one dropped the
+        // year out of "Best tools [2026]".
+        $text = (string) preg_replace_callback(
+            '/\[\/?[a-zA-Z_][a-zA-Z0-9_-]*((?:[^\]"\']|"[^"]*"|\'[^\']*\')*)\]/',
+            static function (array $matches) use ($attributes): string {
+                if ('' === trim($matches[1])) {
+                    return ' ';
+                }
+
+                if (!preg_match_all(
+                    '/\b(' . $attributes . ')\s*=\s*(["\'])(.*?)\2/s',
+                    $matches[1],
+                    $found,
+                    PREG_SET_ORDER
+                )) {
+                    return ' ';
+                }
+
+                $parts = [];
+                foreach ($found as $attribute) {
+                    $value = trim($attribute[3]);
+
+                    // An attribute holding markup or a JSON fragment is
+                    // configuration that happens to share a name with a copy
+                    // field, not something a visitor reads.
+                    if ('' === $value || preg_match('/^[\[{<]/', $value)) {
+                        continue;
+                    }
+
+                    $parts[] = $value;
+                }
+
+                return empty($parts) ? ' ' : ' ' . implode(' ', $parts) . ' ';
+            },
+            $source
+        );
+
+        // Oxygen escapes square brackets in an element's copy before writing
+        // it between the tags, so that "Best tools [2026]" cannot be mistaken
+        // for a shortcode (`oxygen_vsb_filter_shortcode_content_encode()`).
+        // Decoded only now, after the tag scan, for the same reason; left
+        // encoded, the placeholders were scored as words of their own.
+        $text = str_replace(
+            ['_OXY_OPENING_BRACKET_', '_OXY_CLOSING_BRACKET_'],
+            ['[', ']'],
+            $text
+        );
+
+        // Entities are stored encoded in attributes (&amp;, &#8217;), and would
+        // otherwise be counted as words.
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        return trim((string) preg_replace('/\s+/u', ' ', $text));
     }
 
     /**

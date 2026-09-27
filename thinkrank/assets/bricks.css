@@ -1142,6 +1142,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-min-w-\[170px\]{
   min-width: 170px;
 }
+.tr-root .tr-min-w-\[180px\]{
+  min-width: 180px;
+}
 .tr-root .tr-min-w-\[18px\]{
   min-width: 18px;
 }
@@ -1410,6 +1413,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-gap-x-2{
   column-gap: 0.5rem;
+}
+.tr-root .tr-gap-x-3{
+  column-gap: 0.75rem;
 }
 .tr-root .tr-gap-x-4{
   column-gap: 1rem;

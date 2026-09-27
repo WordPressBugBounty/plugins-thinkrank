@@ -2676,6 +2676,15 @@ class Manager {
         }
 
         try {
+            // Thin content report (#565): also under global-seo/, so the same
+            // Bulk SEO Optimization capability covers it.
+            $thin_content_endpoint = new \ThinkRank\API\Thin_Content_Endpoint();
+            $thin_content_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register Thin Content endpoint
+        }
+
+        try {
             $image_seo_endpoint = new Image_SEO_Endpoint();
             $image_seo_endpoint->register_routes();
         } catch (\Exception $e) {

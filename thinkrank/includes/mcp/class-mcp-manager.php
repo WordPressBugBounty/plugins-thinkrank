@@ -54,6 +54,32 @@ final class Mcp_Manager {
 	private const QUERY_VAR = 'thinkrank_mcp';
 
 	/**
+	 * Whether this request is an MCP call being served.
+	 *
+	 * The pretty /thinkrank/mcp route is dispatched from `parse_request`, so it
+	 * is neither `is_admin()` nor `REST_REQUEST`. Anything deciding whether a
+	 * request may take on deferred work needs to be able to see it (#764).
+	 *
+	 * @since 2.10.0
+	 * @var bool
+	 */
+	private static $serving_request = false;
+
+	/**
+	 * Whether an MCP call is being served on this request.
+	 *
+	 * Pair with `is_user_logged_in()` to mean "an authenticated MCP call":
+	 * Mcp_Server sets the current user only once a credential has validated, so
+	 * an unauthenticated POST never looks like one.
+	 *
+	 * @since 2.10.0
+	 * @return bool
+	 */
+	public static function is_serving_request(): bool {
+		return self::$serving_request;
+	}
+
+	/**
 	 * Query var carrying the token when embedded in the URL path.
 	 */
 	private const TOKEN_QUERY_VAR = 'thinkrank_mcp_token';
@@ -153,96 +179,192 @@ final class Mcp_Manager {
 	 * @return void
 	 */
 	public function add_rewrite(): void {
-		// Token-in-URL form: /thinkrank/mcp/<token> — a single string the user
-		// pastes into their AI client (no separate token field). The bare
-		// /thinkrank/mcp still works with a Bearer token.
-		add_rewrite_rule(
-			'^thinkrank/mcp/([a-f0-9]{64})/?$',
-			'index.php?' . self::QUERY_VAR . '=1&' . self::TOKEN_QUERY_VAR . '=$matches[1]',
-			'top'
-		);
-		add_rewrite_rule( '^thinkrank/mcp/?$', 'index.php?' . self::QUERY_VAR . '=1', 'top' );
+		$rules = self::rewrite_rules();
 
-		// OAuth discovery documents. RFC 9728 §3.1 / RFC 8414 §3.1 place the
-		// `.well-known` segment BEFORE the resource path, so our resource at
-		// /thinkrank/mcp is discovered at the path-suffixed form:
-		//   /.well-known/oauth-protected-resource/thinkrank/mcp
-		//   /.well-known/oauth-authorization-server/thinkrank/mcp
-		// The OAuth issuer is the path-based identifier home_url('/thinkrank/mcp')
-		// (see Mcp_OAuth::issuer), so spec-compliant clients derive exactly
-		// these URLs — and the rule stays specific to OUR path. That matters
-		// for coexistence: another plugin serving its own MCP OAuth surface
-		// (e.g. xSpeed) claims the generic `(?:/.*)?` root rule, and rewrite
-		// rules are keyed by regex, so a shared broad rule would be silently
-		// overwritten by whichever plugin registers last.
-		add_rewrite_rule(
-			'^\.well-known/oauth-(protected-resource|authorization-server)/thinkrank/mcp/?$',
-			'index.php?' . self::WELLKNOWN_QUERY_VAR . '=$matches[1]',
-			'top'
-		);
-		// Root-form fallback for clients that only try the bare well-known
-		// URL. Harmless when another plugin also registers this exact regex —
-		// last registrant wins, and our clients use the path-suffixed form.
-		//
-		// The trailing path is CAPTURED rather than discarded (#516). It names
-		// the resource the client is asking about, and answering for a resource
-		// that is not ours is how this rule broke subdirectory multisite: the
-		// network root belongs to the main site, so a client discovering
-		// /ca/thinkrank/mcp was served the MAIN site's document, with every
-		// endpoint missing the /ca/ prefix. The same rule also answered for
-		// another plugin's resource path on a plain single site. The handler
-		// below compares the capture with our own path and declines the rest.
-		add_rewrite_rule(
-			'^\.well-known/oauth-(protected-resource|authorization-server)(/.*)?/?$',
-			'index.php?' . self::WELLKNOWN_QUERY_VAR . '=$matches[1]&' . self::WELLKNOWN_RESOURCE_QUERY_VAR . '=$matches[2]',
-			'top'
-		);
-		// Suffix form: <issuer>/.well-known/... . RFC 8414 specifies the
-		// path-INSERT form above, but the older OpenID Connect Discovery
-		// convention appends instead, and clients built on an OIDC library
-		// try that shape first (sometimes only that shape). Serving both
-		// costs two rules and removes a whole class of "server does not
-		// implement OAuth" failures from clients that never fall back.
-		add_rewrite_rule(
-			'^thinkrank/mcp/\.well-known/oauth-(protected-resource|authorization-server)/?$',
-			'index.php?' . self::WELLKNOWN_QUERY_VAR . '=$matches[1]',
-			'top'
-		);
-		add_rewrite_rule(
-			'^thinkrank/mcp/\.well-known/openid-configuration/?$',
-			'index.php?' . self::WELLKNOWN_QUERY_VAR . '=authorization-server',
-			'top'
-		);
-
-		// Browser-facing OAuth consent page — served OUTSIDE REST so cookie
-		// auth (is_user_logged_in) works after the wp-login round-trip.
-		add_rewrite_rule( '^thinkrank/authorize/?$', 'index.php?' . self::AUTHORIZE_QUERY_VAR . '=1', 'top' );
+		foreach ( $rules as $regex => $query ) {
+			add_rewrite_rule( $regex, $query, 'top' );
+		}
 
 		// Self-heal: flush once if ANY of our rules is missing from the stored
 		// rewrite table, so the endpoints work without a manual permalink
 		// re-save (and newly added rules trigger a re-flush on upgrade).
-		$expected = [
-			'^thinkrank/mcp/([a-f0-9]{64})/?$',
-			'^thinkrank/mcp/?$',
-			'^\.well-known/oauth-(protected-resource|authorization-server)/thinkrank/mcp/?$',
-			// Listed so an upgrade re-flushes and the pre-#516 rule, which
-			// discarded the resource path, leaves the stored rewrite table.
-			// Without this the old regex keeps matching until someone re-saves
-			// permalinks by hand.
-			'^\.well-known/oauth-(protected-resource|authorization-server)(/.*)?/?$',
-			'^thinkrank/mcp/\.well-known/oauth-(protected-resource|authorization-server)/?$',
-			'^thinkrank/mcp/\.well-known/openid-configuration/?$',
-			'^thinkrank/authorize/?$',
-		];
-		$rules = get_option( 'rewrite_rules' );
-		if ( is_array( $rules ) ) {
-			foreach ( $expected as $rule ) {
-				if ( ! isset( $rules[ $rule ] ) ) {
-					flush_rewrite_rules( false );
-					break;
-				}
+		//
+		// Checked against the same array that was just registered, never
+		// against a second hand-maintained list. The two drifted apart once
+		// already: #775's first pass changed the discovery regex and left the
+		// superseded one in the list, so a rule that is never registered was
+		// permanently "missing" and every front-end request rebuilt the whole
+		// rewrite table. Measured at 4 regenerations across 3 page loads
+		// against 0 before the change — silent, because a rebuilt table is
+		// still a correct one.
+		//
+		// It also has to notice the opposite: a rule of ours that is stored
+		// but no longer wanted. The bare discovery rule is registered only
+		// while thinkrank_mcp_serve_root_discovery is on, and "missing" alone
+		// never fires when it is switched off again, because every rule still
+		// registered is present. The stale rule then kept claiming the bare
+		// URL from other MCP plugins (#775) until someone re-saved
+		// permalinks. The unwanted set is derived from the same table built
+		// with every optional rule on, not listed, so it cannot drift either.
+		// A flush rebuilds the table from what this request registered, so
+		// the stale rule is gone afterwards and the check settles instead of
+		// flushing on every request.
+		$stored = get_option( 'rewrite_rules' );
+		if ( is_array( $stored ) ) {
+			$unwanted = array_diff_key( self::rewrite_rules( true ), $rules );
+			$stale    = array_intersect_key( $unwanted, $stored );
+			$missing  = array_diff_key( $rules, $stored );
+
+			if ( ! empty( $missing ) || ! empty( $stale ) ) {
+				flush_rewrite_rules( false );
 			}
 		}
+	}
+
+	/**
+	 * Every rewrite rule this plugin owns, as regex => query string.
+	 *
+	 * Single source of truth for registration AND for the self-heal check, so
+	 * the two cannot describe different sets of rules. All of them register at
+	 * `'top'`; a `'bottom'` rule would never be reached, because core's own
+	 * pagename rule matches almost any path ahead of it.
+	 *
+	 * @since 2.10.0
+	 *
+	 * @param bool|null $root_discovery Include the opt-in bare discovery rule.
+	 *                                  Null (the default) follows
+	 *                                  {@see self::serves_root_discovery()};
+	 *                                  true is how add_rewrite() learns which
+	 *                                  optional rules exist, to retire one
+	 *                                  that was switched off.
+	 * @return array<string,string> Regex => query string.
+	 */
+	private static function rewrite_rules( ?bool $root_discovery = null ): array {
+		$endpoint = preg_quote( trim( Mcp_Pairing::SITE_ENDPOINT_PATH, '/' ), '/' );
+
+		$rules = [
+			// Token-in-URL form: /thinkrank/mcp/<token> — a single string the
+			// user pastes into their AI client (no separate token field). The
+			// bare /thinkrank/mcp still works with a Bearer token.
+			'^thinkrank/mcp/([a-f0-9]{64})/?$' =>
+				'index.php?' . self::QUERY_VAR . '=1&' . self::TOKEN_QUERY_VAR . '=$matches[1]',
+			'^thinkrank/mcp/?$' => 'index.php?' . self::QUERY_VAR . '=1',
+
+			// OAuth discovery documents. RFC 9728 §3.1 / RFC 8414 §3.1 place
+			// the `.well-known` segment BEFORE the resource path, so our
+			// resource at /thinkrank/mcp is discovered at:
+			//   /.well-known/oauth-protected-resource/thinkrank/mcp
+			//   /.well-known/oauth-authorization-server/thinkrank/mcp
+			// The OAuth issuer is the path-based identifier
+			// home_url('/thinkrank/mcp') (see Mcp_OAuth::issuer), so
+			// spec-compliant clients derive exactly these URLs.
+			'^\.well-known/oauth-(protected-resource|authorization-server)/thinkrank/mcp/?$' =>
+				'index.php?' . self::WELLKNOWN_QUERY_VAR . '=$matches[1]',
+
+			// The same form with a site prefix in front of our endpoint path,
+			// which is how subdirectory multisite discovers /ca/thinkrank/mcp
+			// (#516). The trailing path is CAPTURED rather than discarded and
+			// the pattern only accepts a path ENDING in our own endpoint: an
+			// earlier version matched `(/.*)?` — anything at all — and so
+			// claimed every neighbouring MCP plugin's RFC 9728 discovery URL
+			// alongside our own (#775).
+			//
+			// Declining inside the handler does not undo that, and this is the
+			// part worth being precise about: rewrite matching happens once, in
+			// WP::parse_request(), before the `parse_request` action our
+			// handler runs on. By then this rule has already won and the owning
+			// plugin's rule has not matched, so its query var is never set and
+			// its handler never fires. Returning instead of exiting would leave
+			// the request to die in the main query — a 404 either way, exactly
+			// as broken for the neighbour as serving them our document was. The
+			// rule itself has to stop matching, so normal rewrite resolution
+			// reaches the plugin that owns the URL.
+			//
+			// The handler still validates what this does match: a prefix that
+			// is not a real site on this network is declined there.
+			'^\.well-known/oauth-(protected-resource|authorization-server)((?:/.*)?/' . $endpoint . ')/?$' =>
+				'index.php?' . self::WELLKNOWN_QUERY_VAR . '=$matches[1]&' . self::WELLKNOWN_RESOURCE_QUERY_VAR . '=$matches[2]',
+
+			// Suffix form: <issuer>/.well-known/... . RFC 8414 specifies the
+			// path-INSERT form above, but the older OpenID Connect Discovery
+			// convention appends instead, and clients built on an OIDC library
+			// try that shape first (sometimes only that shape). Both of these
+			// live under our own endpoint path, so neither can collide with
+			// another plugin's discovery URLs.
+			'^thinkrank/mcp/\.well-known/oauth-(protected-resource|authorization-server)/?$' =>
+				'index.php?' . self::WELLKNOWN_QUERY_VAR . '=$matches[1]',
+			'^thinkrank/mcp/\.well-known/openid-configuration/?$' =>
+				'index.php?' . self::WELLKNOWN_QUERY_VAR . '=authorization-server',
+
+			// Browser-facing OAuth consent page — served OUTSIDE REST so cookie
+			// auth (is_user_logged_in) works after the wp-login round-trip.
+			'^thinkrank/authorize/?$' => 'index.php?' . self::AUTHORIZE_QUERY_VAR . '=1',
+		];
+
+		if ( $root_discovery ?? self::serves_root_discovery() ) {
+			$rules['^\.well-known/oauth-(protected-resource|authorization-server)/?$'] =
+				'index.php?' . self::WELLKNOWN_QUERY_VAR . '=$matches[1]';
+		}
+
+		return $rules;
+	}
+
+	/**
+	 * Whether to answer the BARE `/.well-known/oauth-*` URLs, with no resource
+	 * path after the document name. Off by default.
+	 *
+	 * That URL is not ours to answer, in two separate senses.
+	 *
+	 * It is not ours by the specs. RFC 9728 §3.1 builds a resource's metadata
+	 * URL by inserting `.well-known` before the resource's path, so the bare
+	 * form is the metadata URL for the resource `https://example.com` — the
+	 * site root. Ours is `https://example.com/thinkrank/mcp`. §3.3 requires the
+	 * `resource` in the document to equal the identifier it was fetched for, so
+	 * answering there returns a document that contradicts its own URL. RFC 8414
+	 * §3.3 says the same of `issuer`. A client that validates is entitled to
+	 * reject it; the only clients it ever helped were those that do not.
+	 *
+	 * And it is not ours on a site with a second MCP plugin. Registered at
+	 * `'top'`, our rule did not merely enter the ordering race for that URL, it
+	 * went to the front of it — so a neighbour's client reading the bare form
+	 * got OUR resource identifier while connecting somewhere else, which is the
+	 * same RFC 9728 mismatch #775 was filed about, reached by the other URL.
+	 * Because the winner depends on registration and flush order, it also
+	 * reproduced intermittently: the same site could behave differently after
+	 * an unrelated flush.
+	 *
+	 * Nothing of ours needs it. The 401 challenge advertises
+	 * {@see Mcp_OAuth::resource_metadata_url()}, a route in our own REST
+	 * namespace that no other plugin can claim; the path-insert and
+	 * OIDC-suffix forms above cover spec-compliant and OIDC-library clients;
+	 * {@see Mcp_Self_Test} probes none of the bare URLs; and
+	 * {@see Mcp_Static_Discovery} publishes only the path-suffixed files.
+	 *
+	 * What it did cover is a client that derives the metadata URL from the host
+	 * alone, dropping the path. On a site where ThinkRank is the only MCP
+	 * plugin that client worked, and this filter is how such a site keeps it
+	 * working. It is opt-in because switching it on is a claim over a shared
+	 * URL, and only the site owner knows whether anything else wants it.
+	 *
+	 * @since 2.10.0
+	 *
+	 * @return bool
+	 */
+	public static function serves_root_discovery(): bool {
+		/**
+		 * Filter whether ThinkRank answers the bare `/.well-known/oauth-*`
+		 * discovery URLs, which carry no resource path.
+		 *
+		 * Off by default: the URL identifies the site root rather than our MCP
+		 * endpoint, and claiming it breaks any other MCP plugin on the site.
+		 * Switch it on only where ThinkRank is the sole MCP provider and a
+		 * client derives the metadata URL from the host without the path.
+		 *
+		 * @since 2.10.0
+		 *
+		 * @param bool $serve Whether to register the bare discovery rules.
+		 */
+		return (bool) apply_filters( 'thinkrank_mcp_serve_root_discovery', false );
 	}
 
 	/**
@@ -473,6 +595,13 @@ final class Mcp_Manager {
 		if ( empty( $wp->query_vars[ self::QUERY_VAR ] ) ) {
 			return;
 		}
+
+		// Mark the request so work that only front-end traffic must not pay for
+		// can tell this apart from an anonymous page view. An MCP call is a
+		// deliberate admin-equivalent action, but it arrives on the pretty
+		// /thinkrank/mcp route, so it is neither is_admin() nor REST_REQUEST
+		// and was invisible to those checks (#764).
+		self::$serving_request = true;
 
 		$request = new \WP_REST_Request( 'POST', '/' . self::NS . '/mcp' );
 		$request->set_header( 'content-type', 'application/json' );

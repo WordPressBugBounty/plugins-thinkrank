@@ -1815,7 +1815,13 @@ class Schema_Endpoint extends WP_REST_Controller {
                         'Article', 'BlogPosting', 'TechnicalArticle', 'NewsArticle',
                         'ScholarlyArticle', 'Report', 'Product', 'Organization',
                         'LocalBusiness', 'Person', 'WebSite', 'FAQPage',
-                        'Event', 'HowTo', 'SoftwareApplication', 'Review', 'VideoObject'
+                        'Event', 'HowTo', 'SoftwareApplication', 'Review', 'VideoObject',
+                        // The WebPage family (#624). This route is the one the
+                        // per-page selector calls, and it did not accept even
+                        // WebPage — so every entry in that dropdown was refused
+                        // with a 400 before any of the registries below were
+                        // consulted. Appended so existing ordering is unchanged.
+                        'WebPage', 'AboutPage', 'ContactPage', 'ProfilePage'
                     ]
                 ],
                 'description' => 'Schema types to generate'
@@ -1862,7 +1868,9 @@ class Schema_Endpoint extends WP_REST_Controller {
                     'Article', 'BlogPosting', 'TechnicalArticle', 'NewsArticle',
                     'ScholarlyArticle', 'Report', 'Product', 'Organization',
                     'LocalBusiness', 'Person', 'WebSite', 'WebPage', 'FAQPage',
-                    'SoftwareApplication', 'Event', 'Recipe', 'HowTo', 'Review', 'VideoObject'
+                    'SoftwareApplication', 'Event', 'Recipe', 'HowTo', 'Review', 'VideoObject',
+                    // WebPage's subtypes, which validate exactly as it does (#624).
+                    'AboutPage', 'ContactPage', 'ProfilePage'
                 ],
                 'description' => 'Schema type'
             ],
@@ -1928,7 +1936,9 @@ class Schema_Endpoint extends WP_REST_Controller {
                 'enum' => [
                     'Article', 'BlogPosting', 'Product', 'Organization', 'LocalBusiness',
                     'Person', 'WebSite', 'WebPage', 'FAQPage', 'SoftwareApplication',
-                    'BreadcrumbList', 'Event', 'Recipe', 'HowTo', 'Review', 'VideoObject'
+                    'BreadcrumbList', 'Event', 'Recipe', 'HowTo', 'Review', 'VideoObject',
+                    // WebPage's subtypes, which carry the same properties (#624).
+                    'AboutPage', 'ContactPage', 'ProfilePage'
                 ],
                 'description' => 'Schema type'
             ],
@@ -1960,7 +1970,9 @@ class Schema_Endpoint extends WP_REST_Controller {
                 'enum' => [
                     'Article', 'BlogPosting', 'Product', 'Organization', 'LocalBusiness',
                     'Person', 'WebSite', 'WebPage', 'FAQPage', 'SoftwareApplication',
-                    'BreadcrumbList', 'Event', 'Recipe', 'HowTo', 'Review', 'VideoObject'
+                    'BreadcrumbList', 'Event', 'Recipe', 'HowTo', 'Review', 'VideoObject',
+                    // WebPage's subtypes, which carry the same properties (#624).
+                    'AboutPage', 'ContactPage', 'ProfilePage'
                 ],
                 'description' => 'Schema type'
             ]

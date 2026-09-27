@@ -63,10 +63,15 @@ class Update_Sitemap_Settings extends Ability_Base {
 			'type'                 => 'object',
 			'additionalProperties' => false,
 			'properties'           => [
-				'settings' => [
+				'settings'   => [
 					'type'        => 'object',
 					'description' => __( 'Sitemap settings to update.', 'thinkrank' ),
 					'properties'  => Settings_Key_Map::sitemap(),
+				],
+				'regenerate' => [
+					'type'        => 'boolean',
+					'default'     => true,
+					'description' => __( 'Rebuild the served sitemap before returning, so the change is live when this call reports success. Leave it on unless you are making several changes in a row and want to rebuild once at the end, in which case the last call should set it to true.', 'thinkrank' ),
 				],
 			],
 			'required'             => [ 'settings' ],
@@ -82,8 +87,17 @@ class Update_Sitemap_Settings extends Ability_Base {
 		return [
 			'type'       => 'object',
 			'properties' => [
-				'success' => [ 'type' => 'boolean' ],
-				'message' => [ 'type' => 'string' ],
+				'success'       => [ 'type' => 'boolean' ],
+				'message'       => [ 'type' => 'string' ],
+				// Whether the SERVED sitemap reflects the change yet. Saving and
+				// serving are separate steps, and reporting only the save let an
+				// agent state the exclusion had taken effect while the static
+				// file still listed the page (#764).
+				'rebuilt'       => [ 'type' => 'boolean' ],
+				'pending_since' => [
+					'type'        => [ 'integer', 'null' ],
+					'description' => __( 'Unix time a rebuild has been outstanding since, when the served sitemap has not caught up.', 'thinkrank' ),
+				],
 			],
 		];
 	}
@@ -120,17 +134,49 @@ class Update_Sitemap_Settings extends Ability_Base {
 
 		$result = $gen->save_settings( 'site', null, $merged );
 
-		// Rebuild the served sitemap so the change takes effect instead of going
-		// stale until an unrelated content edit (debounced).
-		if ( $result ) {
-			$gen->schedule_regeneration();
+		if ( ! $result ) {
+			return [
+				'success' => false,
+				'message' => __( 'Failed to update sitemap settings.', 'thinkrank' ),
+				'rebuilt' => false,
+			];
 		}
 
+		// Mark the rebuild outstanding either way, so a caller that opts out of
+		// the synchronous rebuild still converges via cron or the request-time
+		// takeover, and so a failed rebuild below is retried rather than lost.
+		$gen->schedule_regeneration();
+
+		$regenerate = ! isset( $input['regenerate'] ) || (bool) $input['regenerate'];
+
+		// Rebuild inline rather than leaving it to WP-Cron. The sitemap is a
+		// static file on most installs, so nothing re-runs PHP for it; where
+		// cron does not fire, the old debounced-only path left the served file
+		// stale indefinitely while this ability had already reported success
+		// (#764). A settings change is deliberate and infrequent, and the
+		// rebuild is lock-guarded, so doing it now is the honest thing.
+		$rebuilt = $regenerate ? $gen->regenerate_sitemap_from_settings() : false;
+
+		$pending_since = Sitemap_Generator::regeneration_pending_since();
+
+		if ( $rebuilt && 0 === $pending_since ) {
+			return [
+				'success'       => true,
+				'message'       => __( 'Sitemap settings updated and the served sitemap was rebuilt.', 'thinkrank' ),
+				'rebuilt'       => true,
+				'pending_since' => null,
+			];
+		}
+
+		// Saved, but the file a crawler fetches does not reflect it yet. Say so
+		// rather than report a success the caller cannot verify.
 		return [
-			'success' => (bool) $result,
-			'message' => (bool) $result
-				? __( 'Sitemap settings updated.', 'thinkrank' )
-				: __( 'Failed to update sitemap settings.', 'thinkrank' ),
+			'success'       => true,
+			'message'       => $regenerate
+				? __( 'Sitemap settings updated, but the served sitemap could not be rebuilt yet and still shows the previous contents. It will be retried automatically; purge-caches with the "sitemap" scope forces another attempt.', 'thinkrank' )
+				: __( 'Sitemap settings updated. The served sitemap has not been rebuilt, as requested; run purge-caches with the "sitemap" scope when you are ready to publish the change.', 'thinkrank' ),
+			'rebuilt'       => false,
+			'pending_since' => $pending_since > 0 ? $pending_since : null,
 		];
 	}
 }

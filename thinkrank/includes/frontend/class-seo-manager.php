@@ -378,6 +378,14 @@ class SEO_Manager {
 
         // Initialize Global SEO Schema Output and store reference
         $this->global_seo_schema = new Global_SEO_Schema_Output();
+        // Let schema reuse the description this class already resolves, so the
+        // JSON-LD and the meta/og/twitter tags cannot disagree about what the
+        // page is (#766). Passed as a callback rather than a value: schema is
+        // built during wp_head, by which point the request context this
+        // resolution depends on is set, and it must not be captured earlier.
+        $this->global_seo_schema->set_description_resolver(
+            fn (): string => (string) $this->get_meta_description()
+        );
         $this->global_seo_schema->init();
     }
 
@@ -2955,8 +2963,20 @@ class SEO_Manager {
                     $context_id
                 );
 
+                // A deployed node is a snapshot from Deploy time and outranks
+                // the automatic node, so page and article types would publish
+                // a frozen excerpt instead of the description the head
+                // resolves. Give them the live one, as the automatic node has.
+                $context_post = get_post($context_id);
+
                 foreach ($page_specific_schemas as $schema_type => $schema_info) {
-                    Schema_Graph::instance()->add_primary($schema_info['data'], (string) $schema_type, 'schema_manager');
+                    $node = $schema_info['data'];
+
+                    if ($this->global_seo_schema && $context_post instanceof \WP_Post) {
+                        $node = $this->global_seo_schema->refresh_deployed_description($node, (string) $schema_type, $context_post);
+                    }
+
+                    Schema_Graph::instance()->add_primary($node, (string) $schema_type, 'schema_manager');
                 }
                 $has_schema_manager_output = true;
             }
@@ -3016,6 +3036,10 @@ class SEO_Manager {
         ];
 
         $description = !empty($settings['site_description']) ? $settings['site_description'] : get_bloginfo('description');
+        // The tagline is stored esc_html()'d by sanitize_option(), so a site
+        // called "Fish & Chips" published `&amp;` literally in its WebSite
+        // node; nothing decodes JSON-LD downstream.
+        $description = \ThinkRank\Core\Seo_Text::normalize_schema_text((string) $description);
         if (!empty($description)) {
             $schema['description'] = $description;
         }

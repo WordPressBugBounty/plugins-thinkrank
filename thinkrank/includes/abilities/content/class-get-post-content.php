@@ -207,14 +207,19 @@ class Get_Post_Content extends Ability_Base {
 
 		// Same keys Builder_Content resolves through, in the same order. Kept
 		// as a local map because this one also needs a display label per key,
-		// and Oxygen spans three of them across its generations — Oxygen 6 is
-		// Breakdance under the hood.
+		// and Oxygen spans several of them across its generations — Oxygen 6 is
+		// Breakdance under the hood, and Oxygen classic 4.8.3+ prefixes its
+		// keys with an underscore. Missing the JSON and prefixed keys, a
+		// current Oxygen classic page was reported as built in no builder.
 		$labels = [
-			'_breakdance_data'      => 'breakdance',
-			'_oxygen_data'          => 'oxygen',
-			'ct_builder_shortcodes' => 'oxygen',
-			'_elementor_data'       => 'elementor',
-			'_fl_builder_data'      => 'beaver-builder',
+			'_breakdance_data'       => 'breakdance',
+			'_oxygen_data'           => 'oxygen',
+			'_ct_builder_json'       => 'oxygen',
+			'ct_builder_json'        => 'oxygen',
+			'_ct_builder_shortcodes' => 'oxygen',
+			'ct_builder_shortcodes'  => 'oxygen',
+			'_elementor_data'        => 'elementor',
+			'_fl_builder_data'       => 'beaver-builder',
 		];
 
 		foreach ( $labels as $key => $label ) {

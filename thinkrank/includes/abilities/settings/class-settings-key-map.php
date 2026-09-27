@@ -121,7 +121,20 @@ final class Settings_Key_Map {
 			// Business / Local SEO. Feeds LocalBusiness schema.
 			'local_seo_enabled'        => self::boolean( __( 'Whether Local SEO output and LocalBusiness schema are enabled.', 'thinkrank' ) ),
 			'business_name'            => self::string( __( 'Registered business name.', 'thinkrank' ) ),
-			'business_type'            => self::string( __( 'schema.org business type, e.g. "Restaurant", "Store".', 'thinkrank' ) ),
+			// Enumerated rather than free-form: the value goes straight into
+			// LocalBusiness schema, so an invented type is invalid structured
+			// data. ~150 schema.org subtypes are accepted (#623).
+			//
+			// '' is in the list because it is a real stored state ("not set"):
+			// the store holds it on every site that never opened Local SEO, and
+			// without it the READ ability failed its own output schema on those
+			// sites and there was no way to clear the value over MCP. It goes
+			// last so the root stays first, which read() falls back to.
+			'business_type'            => [
+				'type'        => 'string',
+				'enum'        => array_merge( \ThinkRank\Config\Local_Business_Types_Config::get_types(), [ '' ] ),
+				'description' => __( 'schema.org LocalBusiness type, e.g. "Restaurant", "HealthAndBeautyBusiness". "LocalBusiness" is the general-purpose default and is always valid. An empty string means not set, and is published as LocalBusiness.', 'thinkrank' ),
+			],
 			'business_email'           => self::string( __( 'Public contact email address.', 'thinkrank' ) ),
 			'business_phone'           => self::string( __( 'Public contact telephone number.', 'thinkrank' ) ),
 			'business_address'         => self::string( __( 'Street address.', 'thinkrank' ) ),
@@ -205,6 +218,15 @@ final class Settings_Key_Map {
 	 * The store keeps everything as strings ("1"/""), so each value is coerced
 	 * back to the type the schema advertises before it reaches an agent.
 	 *
+	 * The same properties are the read ability's OUTPUT schema, which the
+	 * Abilities API validates, and one value that fails it fails the whole
+	 * call. So what comes out has to fit the schema for any stored value, not
+	 * only for what today's save path writes: a business type imported before
+	 * the list was enumerated, or a crawler rule whose crawler a filter has
+	 * since removed, used to turn every get-site-identity-settings call into
+	 * ability_invalid_output. Hence the recursion into objects, and the enum
+	 * fallback in read_value().
+	 *
 	 * @param array<string, array<string, mixed>> $properties Schema properties for the category.
 	 * @param array<string, mixed>                $stored     Settings as the manager returns them.
 	 * @return array<string, mixed> Exposed settings, one entry per declared key.
@@ -213,37 +235,84 @@ final class Settings_Key_Map {
 		$out = [];
 
 		foreach ( $properties as $key => $property ) {
-			$value = $stored[ $key ] ?? null;
-
-			$type = $property['type'] ?? 'string';
-
-			// A union type ('string' or a list of them) keeps whichever shape
-			// it arrived in: casting to string would flatten a list, and
-			// casting to array would replace a name with [] (#692).
-			if ( is_array( $type ) ) {
-				$out[ $key ] = is_array( $value )
-					? array_values( array_map( 'strval', $value ) )
-					: (string) ( $value ?? '' );
-				continue;
-			}
-
-			switch ( $type ) {
-				case 'boolean':
-					$out[ $key ] = (bool) $value;
-					break;
-				case 'integer':
-					$out[ $key ] = (int) $value;
-					break;
-				case 'array':
-				case 'object':
-					$out[ $key ] = is_array( $value ) ? $value : [];
-					break;
-				default:
-					$out[ $key ] = (string) ( $value ?? '' );
-			}
+			$out[ $key ] = self::read_value( $property, $stored[ $key ] ?? null );
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Coerce one stored value to the shape its property declares.
+	 *
+	 * An enumerated string that holds something outside its enum reads as the
+	 * enum's FIRST entry. Every enum in this map is ordered so that entry is
+	 * the value its manager falls back to for anything unrecognised
+	 * (`automatic`, `auto`, `allow`, `LocalBusiness`), so the agent is told
+	 * what the site actually does rather than a value it would be refused if
+	 * it wrote it back.
+	 *
+	 * @since 2.10.0
+	 *
+	 * @param array<string, mixed> $property Schema property.
+	 * @param mixed                $value    Stored value, or null when absent.
+	 * @return mixed
+	 */
+	private static function read_value( array $property, $value ) {
+		$type = $property['type'] ?? 'string';
+
+		// A union type ('string' or a list of them) keeps whichever shape
+		// it arrived in: casting to string would flatten a list, and
+		// casting to array would replace a name with [] (#692).
+		if ( is_array( $type ) ) {
+			return is_array( $value )
+				? array_values( array_map( 'strval', array_filter( $value, 'is_scalar' ) ) )
+				: ( is_scalar( $value ) ? (string) $value : '' );
+		}
+
+		switch ( $type ) {
+			case 'boolean':
+				return (bool) $value;
+			case 'integer':
+				return (int) $value;
+			case 'array':
+				if ( ! is_array( $value ) ) {
+					return [];
+				}
+				if ( isset( $property['items'] ) && is_array( $property['items'] ) ) {
+					$items = $property['items'];
+					return array_values( array_map( static fn( $item ) => self::read_value( $items, $item ), $value ) );
+				}
+				return $value;
+			case 'object':
+				if ( ! is_array( $value ) ) {
+					return [];
+				}
+				if ( empty( $property['properties'] ) || ! is_array( $property['properties'] ) ) {
+					return $value;
+				}
+
+				$declared = $property['properties'];
+				$closed   = isset( $property['additionalProperties'] ) && false === $property['additionalProperties'];
+				$object   = [];
+
+				foreach ( $value as $name => $item ) {
+					if ( isset( $declared[ $name ] ) ) {
+						$object[ $name ] = self::read_value( $declared[ $name ], $item );
+					} elseif ( ! $closed ) {
+						$object[ $name ] = $item;
+					}
+				}
+
+				return $object;
+			default:
+				$string = is_scalar( $value ) ? (string) $value : '';
+
+				if ( ! empty( $property['enum'] ) && ! in_array( $string, $property['enum'], true ) ) {
+					return (string) reset( $property['enum'] );
+				}
+
+				return $string;
+		}
 	}
 
 	/**

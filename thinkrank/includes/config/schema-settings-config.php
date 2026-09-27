@@ -214,7 +214,10 @@ class Schema_Settings_Config {
         $all_types = [
             'Article', 'Product', 'Organization', 'LocalBusiness',
             'Person', 'WebSite', 'FAQPage', 'SoftwareApplication',
-            'Event', 'HowTo', 'Review', 'VideoObject'
+            'Event', 'HowTo', 'Review', 'VideoObject',
+            // The WebPage family, which the per-page selector can now offer
+            // (#624). Kept last so an existing site's ordering is unchanged.
+            'WebPage', 'AboutPage', 'ContactPage', 'ProfilePage'
         ];
 
         // Context-specific filtering can be added here if needed

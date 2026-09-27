@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 2.9.0
+ * Version: 2.10.0
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Requires PHP: 7.4
  * 
  * @package ThinkRank
- * @version 2.9.0
+ * @version 2.10.0
  * @since 1.0.0
  */
 
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '2.9.0');
+define('THINKRANK_VERSION', '2.10.0');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -235,12 +235,25 @@ final class ThinkRank {
         // without the logged-in test a visitor could still pay for the rebuild
         // this method documents as never being theirs to pay for. WP-CLI has no
         // user, and is trusted by definition.
+        //
+        // An MCP call counts too. It is an admin-equivalent action, but it is
+        // dispatched from `parse_request` on the pretty /thinkrank/mcp route,
+        // so it is neither is_admin() nor REST_REQUEST and never qualified —
+        // which meant an agent could change sitemap settings on a site with no
+        // working cron and leave the served file stale indefinitely, having
+        // already reported success (#764). The logged-in test still applies:
+        // Mcp_Server sets the current user only after a credential validates,
+        // so an anonymous POST to that route is not eligible.
+        $is_mcp_request = class_exists('ThinkRank\Mcp\Mcp_Manager')
+            && ThinkRank\Mcp\Mcp_Manager::is_serving_request();
+
         $eligible = (defined('WP_CLI') && WP_CLI)
             || (
                 is_user_logged_in()
                 && (
                     is_admin()
                     || (defined('REST_REQUEST') && REST_REQUEST)
+                    || $is_mcp_request
                 )
             );
 
@@ -371,6 +384,10 @@ final class ThinkRank {
             // Bulk Snippets' persisted issue index: invalidation hooks must run
             // on every request, since posts are edited everywhere but there.
             'snippet_index' => new ThinkRank\SEO\Snippet_Index(),
+            // The thin content report's word counts: same reason, and a
+            // separate index because a word count and a snippet verdict go
+            // stale for different reasons (#565).
+            'word_count_index' => new ThinkRank\SEO\Word_Count_Index(),
             'email_report' => new ThinkRank\SEO\Email_Report_Manager(),
             'google_oauth' => new ThinkRank\Integrations\Google_OAuth_Proxy(),
             'multilingual' => new ThinkRank\Integrations\Multilingual_Manager(),
