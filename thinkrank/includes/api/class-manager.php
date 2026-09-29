@@ -2732,5 +2732,12 @@ class Manager {
         } catch (\Exception $e) {
             // Failed to register Setup Wizard endpoint
         }
+
+        // Simple / Advanced navigation, per user (#730)
+        try {
+            (new UI_Mode_Endpoint())->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register UI mode endpoint
+        }
     }
 }

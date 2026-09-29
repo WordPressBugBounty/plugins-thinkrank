@@ -745,6 +745,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   margin-left: auto;
   margin-right: auto;
 }
+.tr-root .tr-my-3{
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
 .tr-root .tr-my-5{
   margin-top: 1.25rem;
   margin-bottom: 1.25rem;
@@ -1511,6 +1515,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-rounded-md{
   border-radius: 8px;
+}
+.tr-root .tr-rounded-sm{
+  border-radius: 4px;
 }
 .tr-root .tr-rounded-xl{
   border-radius: 16px;
@@ -2910,6 +2917,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 
 .tr-root .disabled\:tr-cursor-not-allowed:disabled{
   cursor: not-allowed;
+}
+
+.tr-root .disabled\:tr-cursor-wait:disabled{
+  cursor: wait;
 }
 
 .tr-root .disabled\:tr-border-secondary:disabled{

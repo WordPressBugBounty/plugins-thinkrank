@@ -69,6 +69,14 @@ class Update_Post_Seo extends Ability_Base {
 						'robots_meta_enabled'  => [ 'type' => 'boolean' ],
 						'robots_meta'          => [ 'type' => 'object' ],
 						'advanced_robots_meta' => [ 'type' => 'object' ],
+						'exclude_from_search'  => [
+							'type'        => 'boolean',
+							'description' => __( 'Keep this post out of this site\'s own search results. Not noindex: search engines are unaffected, and the post keeps its own URL. Use robots_meta for search engines.', 'thinkrank' ),
+						],
+						'exclude_from_archives' => [
+							'type'        => 'boolean',
+							'description' => __( 'Keep this post out of category, tag, author, date and blog listings on this site. Not noindex: search engines are unaffected, and the post keeps its own URL, its feed entry and its sitemap entry.', 'thinkrank' ),
+						],
 						'og_title'             => [ 'type' => 'string' ],
 						'og_description'       => [ 'type' => 'string' ],
 						'og_image'             => [ 'type' => 'string' ],
@@ -209,7 +217,9 @@ class Update_Post_Seo extends Ability_Base {
 		$has_robots = array_key_exists( 'robots_meta', $settings ) || array_key_exists( 'advanced_robots_meta', $settings );
 
 		if ( array_key_exists( 'robots_meta_enabled', $settings ) ) {
-			$fields['thinkrank_robots_meta_enabled'] = (int) (bool) $settings['robots_meta_enabled'];
+			// Sanitized for the same reason as the visibility flags below: the
+			// string "false" passes the schema and is truthy in PHP.
+			$fields['thinkrank_robots_meta_enabled'] = (int) rest_sanitize_boolean( $settings['robots_meta_enabled'] );
 		} elseif ( $has_robots ) {
 			// The metabox only persists robots blobs when the toggle key is
 			// present; default to the currently stored value (or 1).
@@ -223,6 +233,34 @@ class Update_Post_Seo extends Ability_Base {
 
 		if ( array_key_exists( 'advanced_robots_meta', $settings ) ) {
 			$fields['thinkrank_advanced_robots_meta'] = (string) wp_json_encode( (array) $settings['advanced_robots_meta'] );
+		}
+
+		// On-site visibility (#633). get-post-seo already reports both, because
+		// it returns get_post_metadata() wholesale — so without these an agent
+		// could read a field it had no way to change, which is the worst shape
+		// a tool pair can have.
+		//
+		// The value goes through Metabox_Manager::save_visibility_meta(), which
+		// stores 1 on a truthy submission and DELETES the meta on a falsy one,
+		// so '' is how a flag is cleared. Passing the boolean straight through
+		// would work too; the string keeps this in the same shape as every
+		// other field in this map.
+		//
+		// rest_sanitize_boolean() rather than PHP truthiness: WP_Ability only
+		// VALIDATES the input against the schema, it never sanitizes it, and
+		// rest_is_boolean() accepts the strings 'true'/'false'/'1'/'0' for a
+		// boolean property. So a caller that sends "false" — which the schema
+		// accepts — reaches this line with a truthy string and would have the
+		// flag SET, the opposite of what it asked for, reported as a success.
+		foreach (
+			[
+				'exclude_from_search'   => 'thinkrank_exclude_from_search',
+				'exclude_from_archives' => 'thinkrank_exclude_from_archives',
+			] as $key => $field
+		) {
+			if ( array_key_exists( $key, $settings ) ) {
+				$fields[ $field ] = rest_sanitize_boolean( $settings[ $key ] ) ? '1' : '';
+			}
 		}
 
 		return $fields;

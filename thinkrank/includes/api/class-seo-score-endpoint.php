@@ -348,6 +348,8 @@ class SEOScoreEndpoint {
             $existing_data = $this->calculator->get_existing_score_data($post_id);
 
             if ($existing_data) {
+                $existing_data['keywords'] = $this->keyword_placements((int) $post_id);
+
                 return new WP_REST_Response([
                     'success' => true,
                     'data' => $existing_data,
@@ -364,6 +366,25 @@ class SEOScoreEndpoint {
         } catch (\Exception $e) {
             return new WP_Error('get_score_error', $e->getMessage(), ['status' => 500]);
         }
+    }
+
+    /**
+     * Where each focus keyword sits (#729), for a stored score. A stored score
+     * predates the editor's current keywords and content, so this is read
+     * from the post as saved now — a text pass, no request, no AI.
+     *
+     * @param int $post_id Post ID.
+     * @return array<int, array<string, mixed>>
+     */
+    private function keyword_placements(int $post_id): array {
+        return $this->calculator->keyword_placements(
+            $this->calculator->analyze_post_content($post_id),
+            [
+                'title'       => \ThinkRank\SEO\Pattern_Resolver::effective_title($post_id),
+                'description' => \ThinkRank\SEO\Pattern_Resolver::effective_description($post_id),
+            ],
+            \ThinkRank\SEO\Focus_Keywords::get($post_id)
+        );
     }
 
     /**
@@ -403,8 +424,12 @@ class SEOScoreEndpoint {
         try {
             $post_id = $request->get_param('post_id');
             
+            // The stored row only — no keyword gauges (#729). The dashboard
+            // asks for five posts at once and reads overall_score; a gauge
+            // pass would analyse and render each whole post for nothing. The
+            // editor reads its gauges from /seo-score/get.
             $latest_score = $this->calculator->get_latest_score($post_id);
-            
+
             return new WP_REST_Response([
                 'success' => true,
                 'data' => $latest_score,

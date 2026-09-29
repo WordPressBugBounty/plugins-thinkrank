@@ -156,6 +156,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
                     'twitter_description' => $this->convert_template_variables($meta['_yoast_wpseo_twitter-description'] ?? '', $post_id),
                     'twitter_image'       => $meta['_yoast_wpseo_twitter-image'] ?? '',
                     'primary_category'    => (int) ($meta['_yoast_wpseo_primary_category'] ?? 0),
+                    'product_identifier'  => $this->extract_product_identifier($meta),
                     'schema_type'         => $meta['_yoast_wpseo_schema_page_type'] ?? '',
                     // Yoast "cornerstone content" maps to ThinkRank pillar content.
                     'pillar_content'      => (int) ($meta['_yoast_wpseo_is_cornerstone'] ?? 0),
@@ -550,6 +551,13 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
             '%%name%%'             => '%author%',
             '%%category%%'         => '%category%',
             '%%primary_category%%' => '%category%',
+            // WooCommerce SEO product variables. Stripped rather than mapped
+            // until #715, so a product description template imported as "Buy
+            // %title% for" with the price and stock gone.
+            '%%wc_price%%'         => '%price%',
+            '%%wc_sku%%'           => '%sku%',
+            '%%wc_shortdesc%%'     => '%short_description%',
+            '%%wc_brand%%'         => '%brand%',
         ];
 
         $template = str_replace(array_keys($map), array_values($map), $template);
@@ -789,6 +797,20 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
             // itself cannot resolve either. Map them rather than stripping them,
             // or the format silently loses its search term / term name.
             '%%search_query%%' => '%search_term%',
+            // NOT the WooCommerce product variables, deliberately. This
+            // converter writes Site Identity title formats, and those are
+            // resolved by SEO_Manager::process_title_template() against its own
+            // vocabulary — %site_title%, %separator%, %search_term% and the
+            // rest — which has no %price%/%sku%/%brand% and, unlike
+            // Pattern_Resolver, does not strip what it cannot resolve. Mapping
+            // them here published "Search pennant - %price% - Media Wipe" in a
+            // live <title>: a silent loss traded for the literal leak #715 is
+            // about. The formats this feeds are the homepage, search, archive,
+            // author, category and tag titles, where there is no one product
+            // for a price to belong to either way, so the strip below is the
+            // right answer. The per-post converter keeps them, because
+            // Pattern_Resolver does resolve them: see
+            // convert_template_pattern().
         ];
         if ($context_token !== '') {
             $map['%%title%%']      = $context_token;
@@ -993,5 +1015,43 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
         }
 
         return $settings;
+    }
+
+    /**
+     * A product's identifier from Yoast WooCommerce SEO.
+     *
+     * Yoast stores every identifier type in one serialised map keyed by type
+     * (`gtin8`, `gtin12`, `gtin13`, `gtin14`, `isbn`, `mpn`) rather than in a
+     * field per type. ThinkRank Pro holds a single identifier, so the first
+     * non-empty one wins, in the order Google prefers: a GTIN identifies the
+     * product itself, an MPN only identifies it within one manufacturer, and
+     * an ISBN applies to books alone.
+     *
+     * @since 2.10.1
+     *
+     * @param array $meta Post meta for the product.
+     * @return string Identifier, or '' when the product has none.
+     */
+    private function extract_product_identifier(array $meta): string {
+        $raw = $meta['wpseo_global_identifier_values'] ?? '';
+
+        if (is_string($raw) && '' !== $raw) {
+            $decoded = maybe_unserialize($raw);
+            $raw     = is_array($decoded) ? $decoded : [];
+        }
+
+        if (!is_array($raw) || empty($raw)) {
+            return '';
+        }
+
+        foreach (['gtin13', 'gtin14', 'gtin12', 'gtin8', 'mpn', 'isbn'] as $type) {
+            $value = trim((string) ($raw[$type] ?? ''));
+
+            if ('' !== $value) {
+                return $value;
+            }
+        }
+
+        return '';
     }
 }

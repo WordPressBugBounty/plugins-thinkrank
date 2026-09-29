@@ -29,7 +29,7 @@ class Get_Post_Seo_Checks extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-post-seo-checks';
 		$this->label       = __( 'Get ThinkRank Post SEO Checks', 'thinkrank' );
-		$this->description = __( 'Run ThinkRank SEO score analysis for one or more posts, pages, or custom post type items. Scores are not persisted; use bulk-analyze-and-save to score and store them.', 'thinkrank' );
+		$this->description = __( 'Run ThinkRank SEO score analysis for one or more posts, pages, or custom post type items. Each score includes keywords: for every focus keyword, whether it appears in the SEO title, meta description, URL slug, first paragraph, a subheading (H2-H6), the body, and an image alt text, with the heading or alt text that matched - use it to see which keyword is missing where. Scores are not persisted; use bulk-analyze-and-save to score and store them.', 'thinkrank' );
 	}
 
 	/**
@@ -80,7 +80,45 @@ class Get_Post_Seo_Checks extends Ability_Base {
 			'properties' => [
 				'status'  => [ 'type' => 'string' ],
 				'message' => [ 'type' => 'string' ],
-				'data'    => [ 'type' => 'array' ],
+				'data'    => [
+					'type'  => 'array',
+					'items' => [
+						'type'       => 'object',
+						'properties' => [
+							'post_id' => [ 'type' => 'integer' ],
+							'error'   => [ 'type' => 'string' ],
+							'score'   => [
+								'type'       => 'object',
+								'properties' => [
+									'overall_score' => [ 'type' => 'integer' ],
+									'grade'         => [ 'type' => 'string' ],
+									'keywords'      => [
+										'type'  => 'array',
+										'items' => [
+											'type'       => 'object',
+											'properties' => [
+												'keyword'    => [ 'type' => 'string' ],
+												'passed'     => [
+													'type'        => 'integer',
+													'description' => __( 'Placements the keyword appears in.', 'thinkrank' ),
+												],
+												'total'      => [ 'type' => 'integer' ],
+												'placements' => [
+													'type'        => 'object',
+													'description' => sprintf(
+														/* translators: %s: comma-separated placement names. */
+														__( 'One entry per placement (%s), each {passed, where}; where is the matching heading or alt text.', 'thinkrank' ),
+														implode( ', ', SEOScoreCalculator::PLACEMENTS )
+													),
+												],
+											],
+										],
+									],
+								],
+							],
+						],
+					],
+				],
 			],
 		];
 	}

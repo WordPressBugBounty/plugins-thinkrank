@@ -141,6 +141,7 @@ class SEOScoreCalculator {
             ]];
             $result['keyword_checks'] = $this->analyze_keyword_checks($content_data, $metadata, $keywords);
         }
+        $result['keywords'] = $this->keyword_placements($content_data, $metadata, $keywords);
 
         return $result;
     }
@@ -252,6 +253,7 @@ class SEOScoreCalculator {
         $best['target_keywords'] = $keywords;
         $best['keyword_results'] = $per_keyword;
         $best['keyword_checks'] = $this->analyze_keyword_checks($content_data, $metadata, $keywords);
+        $best['keywords'] = $this->keyword_placements($content_data, $metadata, $keywords);
 
         return $best;
     }
@@ -268,13 +270,13 @@ class SEOScoreCalculator {
      * @return array<string,array{passed:bool,matched_keywords:string[]}>
      */
     private function analyze_keyword_checks(array $content_data, array $metadata, array $keywords): array {
-        $title = strtolower((string) ($metadata['title'] ?? $content_data['title'] ?? ''));
-        $description = strtolower((string) ($metadata['description'] ?? ''));
-        $content = strtolower(wp_strip_all_tags((string) ($content_data['content'] ?? '')));
+        $title = self::lower((string) ($metadata['title'] ?? $content_data['title'] ?? ''));
+        $description = self::lower((string) ($metadata['description'] ?? ''));
+        $content = self::lower(self::plain_text((string) ($content_data['content'] ?? '')));
 
         $alts = '';
         foreach ((array) ($content_data['images'] ?? []) as $image) {
-            $alts .= ' ' . strtolower((string) ($image['alt'] ?? ''));
+            $alts .= ' ' . self::lower((string) ($image['alt'] ?? ''));
         }
 
         // Build a searchable slug haystack from the post's OWN slug — never the
@@ -285,15 +287,7 @@ class SEOScoreCalculator {
         // returns ?p=123), so the path held no slug at all and every draft
         // scored "no match" until it was published. Hyphens/underscores become
         // spaces so multi-word keywords can match.
-        $slug_source = (string) ($content_data['slug'] ?? '');
-        if ($slug_source === '') {
-            // Draft with no slug assigned yet: score what WordPress would
-            // generate from the title, which is what the editor shows as the
-            // proposed URL — so the check reads the same before and after
-            // publishing instead of flipping.
-            $slug_source = sanitize_title((string) ($content_data['title'] ?? ''));
-        }
-        $slug = strtolower(str_replace(['-', '_'], ' ', $slug_source));
+        $slug = self::lower(self::slug_haystack($content_data));
 
         $haystacks = [
             'title'            => trim($title),
@@ -307,7 +301,7 @@ class SEOScoreCalculator {
         foreach ($haystacks as $location => $haystack) {
             $matched = [];
             foreach ($keywords as $keyword) {
-                if ($this->keyword_matches($haystack, strtolower(trim($keyword)))) {
+                if ($this->keyword_matches($haystack, self::lower(trim($keyword)))) {
                     $matched[] = $keyword;
                 }
             }
@@ -318,6 +312,208 @@ class SEOScoreCalculator {
         }
 
         return $checks;
+    }
+
+    /**
+     * The keyword placements the editor draws one gauge segment for, in the
+     * order a reader meets them (#729).
+     *
+     * @since 2.11.0
+     * @var string[]
+     */
+    public const PLACEMENTS = ['title', 'meta_description', 'slug', 'first_paragraph', 'subheading', 'content', 'image_alt'];
+
+    /**
+     * Characters of plain text read as the opening when the content has no
+     * paragraph tag.
+     *
+     * @since 2.11.0
+     */
+    private const OPENING_CHARS = 300;
+
+    /**
+     * Where each focus keyword is placed, keyword by keyword (#729).
+     *
+     * analyze_keyword_checks() answers "does ANY keyword appear here" for
+     * five places; this answers "where does THIS keyword appear" for seven,
+     * so the editor can show each keyword's own gauge. Same matcher, so a
+     * keyword counts as a word (not a fragment) and a keyword in a script
+     * written without spaces (Thai, Chinese, Japanese) still matches.
+     *
+     * `where` names the heading or alt text that matched, so the editor can
+     * say which one.
+     *
+     * @since 2.11.0
+     *
+     * @param array    $content_data Content analysis data.
+     * @param array    $metadata     Post metadata (title, description).
+     * @param string[] $keywords     Focus keywords.
+     * @return array<int, array{keyword: string, passed: int, total: int, placements: array<string, array{passed: bool, where: string}>}>
+     */
+    public function keyword_placements(array $content_data, array $metadata, array $keywords): array {
+        $html  = (string) ($content_data['content'] ?? '');
+        $plain = self::lower(self::plain_text($html));
+
+        $headings = [];
+        $source   = isset($content_data['headings']) && is_array($content_data['headings']) ? $content_data['headings'] : $this->extract_headings($html);
+        foreach ($source as $heading) {
+            $text = trim((string) ($heading['text'] ?? ''));
+            if ((int) ($heading['level'] ?? 0) >= 2 && '' !== $text) {
+                $headings[] = $text;
+            }
+        }
+
+        $alts = [];
+        foreach ((array) ($content_data['images'] ?? []) as $image) {
+            $alt = trim((string) ($image['alt'] ?? ''));
+            if ('' !== $alt) {
+                $alts[] = $alt;
+            }
+        }
+
+        $single = [
+            'title'            => self::lower((string) ($metadata['title'] ?? $content_data['title'] ?? '')),
+            'meta_description' => self::lower((string) ($metadata['description'] ?? '')),
+            'slug'             => self::lower(self::slug_haystack($content_data)),
+            'first_paragraph'  => self::lower(self::opening($html)),
+            'content'          => $plain,
+        ];
+
+        $out = [];
+        foreach ($keywords as $keyword) {
+            $needle     = self::lower(trim((string) $keyword));
+            $placements = [];
+
+            foreach (self::PLACEMENTS as $placement) {
+                if ('subheading' === $placement || 'image_alt' === $placement) {
+                    $where = '';
+                    foreach ('subheading' === $placement ? $headings : $alts as $text) {
+                        if ($this->keyword_matches(self::lower($text), $needle)) {
+                            $where = $text;
+                            break;
+                        }
+                    }
+                    $placements[$placement] = ['passed' => '' !== $where, 'where' => $where];
+                    continue;
+                }
+
+                $placements[$placement] = ['passed' => $this->keyword_matches($single[$placement], $needle), 'where' => ''];
+            }
+
+            $out[] = [
+                'keyword'    => (string) $keyword,
+                'passed'     => count(array_filter(array_column($placements, 'passed'))),
+                'total'      => count(self::PLACEMENTS),
+                'placements' => $placements,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * The post's own slug as searchable text: hyphens and underscores become
+     * spaces so a multi-word keyword can match, and a slug WordPress
+     * percent-encoded (Thai, Cyrillic, Chinese) is decoded, or it could never
+     * match a keyword typed in that script.
+     *
+     * Never the full URL path: the path carries ancestors, category bases and
+     * date segments, so a child of /clinical-trials/ reported "keyword in slug"
+     * for a page actually slugged `contact-us`. An unpublished post has no
+     * pretty permalink either, so the path held no slug at all.
+     *
+     * @param array $content_data Content analysis data.
+     * @return string
+     */
+    private static function slug_haystack(array $content_data): string {
+        $slug = (string) ($content_data['slug'] ?? '');
+        if ('' === $slug) {
+            // Draft with no slug assigned yet: score what WordPress would
+            // generate from the title, which is what the editor shows as the
+            // proposed URL — so the check reads the same before and after
+            // publishing instead of flipping.
+            $slug = sanitize_title((string) ($content_data['title'] ?? ''));
+        }
+
+        return trim(str_replace(['-', '_'], ' ', rawurldecode($slug)));
+    }
+
+    /**
+     * The opening of the content: its first paragraph with text, or the first
+     * few hundred characters when it has none. Counted in characters, not
+     * words, so a language written without spaces is not read as one word.
+     *
+     * @param string $html Content HTML.
+     * @return string Plain text.
+     */
+    private static function opening(string $html): string {
+        if (preg_match_all('/<p\b[^>]*>(.*?)<\/p>/isu', $html, $matches)) {
+            foreach ($matches[1] as $paragraph) {
+                $text = self::collapse_whitespace(wp_strip_all_tags($paragraph));
+                if ('' !== $text) {
+                    return $text;
+                }
+            }
+        }
+
+        $text = self::plain_text($html);
+
+        return function_exists('mb_substr') ? mb_substr($text, 0, self::OPENING_CHARS) : substr($text, 0, self::OPENING_CHARS);
+    }
+
+    /**
+     * Content as plain text, with a space where each tag was. wp_strip_all_tags()
+     * alone joins neighbouring blocks — "…coffee grinder</h3><p>A good…" became
+     * "coffee grinderA good" — so a keyword at the end of a heading or a
+     * paragraph was no longer a word and did not match.
+     *
+     * @param string $html Content HTML.
+     * @return string
+     */
+    private static function plain_text(string $html): string {
+        $spaced = preg_replace('/<[^>]+>/', ' $0 ', $html);
+
+        return self::collapse_whitespace(wp_strip_all_tags(null === $spaced ? $html : (string) $spaced));
+    }
+
+    /**
+     * Runs of whitespace down to one space.
+     *
+     * The `/u` pass is the one that understands a multibyte space, but
+     * preg_replace() answers null on bytes that are not valid UTF-8 rather than
+     * throwing — and casting that null to a string blanked the haystack, so a
+     * post carrying one mojibake byte (a Latin-1 paste, an old import) reported
+     * every keyword as missing from its body, its opening, and every
+     * subheading. The gauge said 0/7 and told the author to add a keyword that
+     * was already there.
+     *
+     * Falls back to the byte-wise collapse, which is what this did before the
+     * multibyte work added the modifier. Same reasoning keyword_matches()
+     * already records for its own PCRE failure: a pattern PCRE refuses must not
+     * be reported as a confident "no match".
+     *
+     * @param string $text Text to collapse.
+     * @return string
+     */
+    private static function collapse_whitespace(string $text): string {
+        $collapsed = preg_replace('/\s+/u', ' ', $text);
+
+        if (null === $collapsed) {
+            $collapsed = preg_replace('/\s+/', ' ', $text);
+        }
+
+        return trim(null === $collapsed ? $text : (string) $collapsed);
+    }
+
+    /**
+     * Lowercase in any script. strtolower() only folds ASCII, so "Кофе" never
+     * matched "кофе".
+     *
+     * @param string $text Text.
+     * @return string
+     */
+    private static function lower(string $text): string {
+        return function_exists('mb_strtolower') ? mb_strtolower($text, 'UTF-8') : strtolower($text);
     }
 
     /**

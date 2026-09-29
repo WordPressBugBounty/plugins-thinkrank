@@ -55,6 +55,13 @@ class Snapshot_Migrator {
         'twitter_image'       => '_thinkrank_twitter_image',
         'primary_category'    => '_thinkrank_primary_category',
         'schema_type'         => '_thinkrank_selected_schema_type',
+        // WooCommerce product identifier (GTIN/MPN/ISBN). Free does not read
+        // it; ThinkRank Pro's Product_Fields does, under this exact key, so
+        // importing it here means the identifier is already in place when Pro
+        // is activated. Without it Google reports "missing identifier" on every
+        // product after a switch, which is a rich-result warning the user did
+        // not have before they migrated (#715).
+        'product_identifier'  => '_thinkrank_product_gtin',
     ];
 
     /**

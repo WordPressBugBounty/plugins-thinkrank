@@ -389,7 +389,7 @@ class Block_Converter {
             return $unchanged;
         }
 
-        $spans = self::find_source_blocks($content);
+        $spans = self::find_blocks($content, [Rank_Math_Blocks::class, 'is_source_block']);
 
         if (is_string($spans)) {
             return ['content' => $content, 'converted' => 0, 'error' => $spans];
@@ -426,13 +426,61 @@ class Block_Converter {
     }
 
     /**
-     * Byte spans of every convertible block, in document order.
+     * Byte spans of every `thinkrank/faq` block in a post, in document order.
      *
+     * Exposed so the FAQ abilities can edit FAQ blocks the same way this class
+     * edits Rank Math ones: by replacing exact byte ranges. A
+     * parse_blocks()/serialize_blocks() round trip would rewrite every other
+     * block in the post as a side effect, which is the property the class
+     * docblock above opens with (#767).
+     *
+     * @since 2.10.1
      * @param string $content Post content.
+     * @return array<int,array{start:int,end:int,name:string,attrs:array<string,mixed>}>|string
+     *         The spans, or a message describing why the content is unsafe to edit.
+     */
+    public static function find_faq_blocks(string $content) {
+        if (!class_exists('WP_Block_Parser')) {
+            return [];
+        }
+
+        return self::find_blocks(
+            $content,
+            static fn(string $name): bool => \ThinkRank\SEO\FAQ_Content::FAQ_BLOCK === $name
+        );
+    }
+
+    /**
+     * A `thinkrank/faq` block, serialized exactly as the editor would save it.
+     *
+     * Only `faqs` is written: Gutenberg omits attributes that equal their
+     * registered default, so a block carrying anything else would not match
+     * what the editor regenerates on the next save.
+     *
+     * @since 2.10.1
+     * @param array<int,array<string,mixed>> $faqs Repeater rows.
+     * @return string Block markup, or '' when no row carries anything.
+     */
+    public static function serialize_faq_block(array $faqs): string {
+        $attrs = ['faqs' => array_values($faqs)];
+        $html  = self::render_faq_html($attrs);
+
+        if ('' === $html) {
+            return '';
+        }
+
+        return self::serialize_block('thinkrank/faq', $attrs, $html);
+    }
+
+    /**
+     * Byte spans of every matching block, in document order.
+     *
+     * @param string   $content Post content.
+     * @param callable $matches Receives a block name, returns whether to collect it.
      * @return array<int,array{start:int,end:int,name:string,attrs:array<string,mixed>}>|string
      *         The spans, or a message describing why the content is unsafe to convert.
      */
-    private static function find_source_blocks(string $content) {
+    private static function find_blocks(string $content, callable $matches) {
         $parser           = new \WP_Block_Parser();
         $parser->document = $content;
         $parser->offset   = 0;
@@ -455,15 +503,15 @@ class Block_Converter {
 
             $parser->offset = $start + $length;
 
-            // A stray Rank Math closer with no opener has nothing to convert,
-            // and removing it is not ours to decide.
-            if ('block-closer' === $type || !Rank_Math_Blocks::is_source_block((string) $name)) {
+            // A stray closer with no opener has nothing to convert, and
+            // removing it is not ours to decide.
+            if ('block-closer' === $type || !$matches((string) $name)) {
                 continue;
             }
 
-            // Attribute text that is not valid JSON decodes to null. Mapping
-            // that as "no attributes" would convert a block with questions in
-            // it into an empty one and delete them.
+            // Attribute text that is not valid JSON decodes to null. Treating
+            // that as "no attributes" would turn a block with questions in it
+            // into an empty one and delete them.
             if (!is_array($attrs)) {
                 return sprintf('%s at byte %d has attributes that are not valid JSON.', $name, $start);
             }

@@ -429,6 +429,9 @@ class Manager {
             'settings' => $this->get_admin_settings(),
             'i18n' => $this->get_i18n_strings(),
             'isAdmin' => current_user_can('manage_options'),
+            // Simple / Advanced navigation for this user (#730). Read once
+            // when the page is built; the header switch updates it in place.
+            'uiMode' => UI_Mode::get(),
             // One flag per half of the Import / Export page: the "import from
             // another SEO plugin" section, and ThinkRank's own export/restore.
             'migrationToolsEnabled' => (bool) $this->settings->get('enable_migration_tools', false),

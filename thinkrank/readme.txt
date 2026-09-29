@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.10.0
+Stable tag: 2.11.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -327,6 +327,19 @@ Content brief competitor analysis and schema import fetch the URLs you type in, 
 
 == Changelog ==
 
+= 2.11.0 =
+Release Date: 2026-09-29
+
+- New: Basic / Advanced mode: keep only the everyday SEO sections in the menu, and switch any time
+- New: A gauge per focus keyword in the editor shows where it is placed and re-scores as you type
+- New: MCP agents can read and write a post's FAQ, published as the FAQ block and FAQPage schema
+- New: Product tokens for titles and descriptions (price, SKU, stock status, brand), kept on migration
+- Changed: MCP agents can set a post's search and archive visibility, not only read it
+- Fixed: Scheduled posts, Quick Edit and classic editor saves now queue a sitemap rebuild
+- Fixed: Sitemap rebuilds on large sites no longer run out of memory or stall until a manual rebuild
+- Fixed: Unresolved template tokens no longer print literally in titles and descriptions
+- Fixed: A keyword ending a heading or paragraph now counts as placed there
+
 = 2.10.0 =
 Release Date: 2026-09-27
 
@@ -381,23 +394,13 @@ Release Date: 2026-09-17
 - Fixed: Turning Schema off now stops every schema producer, including blocks and page builders
 - Fixed: Non-Latin titles and descriptions are no longer cut short, plus minor sitemap, feed and database fixes
 
-= 2.6.0 =
-Release Date: 2026-09-15
-
-- New: Pages publish every schema you deploy, not just the first two
-- Changed: Admin screens load the Inter font from your site instead of Google Fonts
-- Changed: Email reports go out every 30 days to the admin email; schedule, recipients and branding are in ThinkRank Pro
-- Changed: Posts take up to five focus keywords; ThinkRank Pro adds more
-- Changed: Automatic AI metadata, the GA4 tag installer and SEO insights moved to ThinkRank Pro
-- Removed: Brand Visibility
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.11.0 =
+Adds a Basic / Advanced mode switch, a placement gauge per focus keyword in the editor, FAQ abilities for MCP agents and WooCommerce product tokens. Fixes sitemap rebuilds that missed scheduled posts or ran out of memory on large sites. Recommended for all sites.
+
 = 2.10.0 =
 Adds a Thin Content report, sitewide duplicate title and description detection, About, Contact and Profile page schema, and Rank Math FAQ/HowTo block migration. Fixes Content Analysis in page builders. Recommended for all sites.
-
-= 2.9.0 =
-Adds a custom OpenAI-compatible AI provider, daily AI spend limits with a pause switch, Bulk Snippets editing, dynamic sitemaps for read-only hosts and schema conflict detection in Site Health. Fixes MCP connectors on subdirectory multisite. Recommended for all sites.
 

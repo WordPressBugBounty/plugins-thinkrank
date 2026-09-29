@@ -286,6 +286,12 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                     'twitter_image'       => $meta['rank_math_twitter_image'] ?? '',
                     'primary_category'    => (int) ($meta['rank_math_primary_category'] ?? 0),
                     'schema_type'         => $this->resolve_schema_type($meta),
+                    // WooCommerce product identifier. Rank Math keeps it in its
+                    // own per-post meta; ThinkRank Pro reads the canonical field
+                    // this maps to, so a migrating store keeps the identifier
+                    // Google asks for instead of collecting a "missing
+                    // identifier" warning on every product (#715).
+                    'product_identifier'  => (string) ($meta['rank_math_gtin_code'] ?? ''),
                     // Rank Math pillar content maps directly to ThinkRank pillar content.
                     'pillar_content'      => $this->normalize_pillar_content($meta['rank_math_pillar_content'] ?? ''),
                 ],
@@ -1102,11 +1108,23 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         // Rank Math token => ThinkRank Global SEO token (structure preserved).
         $token_map = [
             '%name%' => '%author%', // Rank Math author display name token
+            // WooCommerce product variables. Rank Math lets a product title or
+            // description carry the price, SKU and stock status; every one of
+            // them used to be stripped by the pass below, so "Buy %title% for
+            // %wc_price%" imported as "Buy %title% for" (#715).
+            '%wc_price%'      => '%price%',
+            '%wc_sku%'        => '%sku%',
+            '%wc_shortdesc%'  => '%short_description%',
+            '%wc_brand%'      => '%brand%',
         ];
         $template = str_replace(array_keys($token_map), array_values($token_map), $template);
 
         // Tokens ThinkRank's Global SEO engine resolves natively — keep as-is.
-        $supported = ['%title%', '%sitename%', '%sep%', '%excerpt%', '%date%', '%modified%', '%author%', '%category%'];
+        $supported = [
+            '%title%', '%sitename%', '%sep%', '%excerpt%', '%date%', '%modified%', '%author%', '%category%',
+            // Resolved by Pattern_Resolver on a product, empty elsewhere.
+            '%price%', '%sale_price%', '%sku%', '%stock_status%', '%short_description%', '%brand%',
+        ];
 
         // Strip any token ThinkRank cannot resolve so it does not render literally.
         $template = preg_replace_callback(

@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 2.10.0
+ * Version: 2.11.0
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Requires PHP: 7.4
  * 
  * @package ThinkRank
- * @version 2.10.0
+ * @version 2.11.0
  * @since 1.0.0
  */
 
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '2.10.0');
+define('THINKRANK_VERSION', '2.11.0');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -189,7 +189,8 @@ final class ThinkRank {
     }
 
     /**
-     * Register the sitemap regeneration WP-Cron listeners.
+     * Register the sitemap regeneration WP-Cron listeners, and the
+     * content-change listeners that queue them.
      *
      * Runs on plugins_loaded (via init()), so the callbacks exist on every
      * request — including WP-Cron, which never fires rest_api_init and therefore
@@ -198,9 +199,15 @@ final class ThinkRank {
      * generator is built lazily inside the callback so this stays cheap on the
      * vast majority of requests where no regeneration is due.
      *
+     * The content-change listeners need the same treatment for the same
+     * reason: WP-Cron publishes scheduled posts, and Quick Edit, the classic
+     * editor and WP-CLI change content without REST either (#824).
+     *
      * @return void
      */
     private function register_sitemap_cron_listeners(): void {
+        ThinkRank\SEO\Sitemap_Generator::register_content_listeners();
+
         add_action('thinkrank_regenerate_sitemap', static function () {
             (new ThinkRank\SEO\Sitemap_Generator())->auto_regenerate_sitemap();
         });
@@ -234,7 +241,11 @@ final class ThinkRank {
         // core routes, both of which anonymous front-end traffic reaches — so
         // without the logged-in test a visitor could still pay for the rebuild
         // this method documents as never being theirs to pay for. WP-CLI has no
-        // user, and is trusted by definition.
+        // user, and is trusted by definition. A cron run is the process this
+        // work belongs to in the first place: a scheduled event that was
+        // consumed while another request held the generation lock is never
+        // re-queued, so without this a site whose admins see only failures
+        // could not recover through a (often memory-unlimited) system cron.
         //
         // An MCP call counts too. It is an admin-equivalent action, but it is
         // dispatched from `parse_request` on the pretty /thinkrank/mcp route,
@@ -248,6 +259,7 @@ final class ThinkRank {
             && ThinkRank\Mcp\Mcp_Manager::is_serving_request();
 
         $eligible = (defined('WP_CLI') && WP_CLI)
+            || wp_doing_cron()
             || (
                 is_user_logged_in()
                 && (

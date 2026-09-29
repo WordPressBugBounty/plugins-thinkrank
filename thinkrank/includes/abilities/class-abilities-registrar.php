@@ -53,6 +53,8 @@ use ThinkRank\Abilities\Links\Get_External_Links_Settings;
 use ThinkRank\Abilities\Links\Update_External_Links_Settings;
 use ThinkRank\Abilities\Matrix\Get_Content_Type_Matrix;
 use ThinkRank\Abilities\Matrix\Update_Content_Type_Matrix;
+use ThinkRank\Abilities\Content\Get_FAQ;
+use ThinkRank\Abilities\Content\Update_FAQ;
 use ThinkRank\Abilities\Media\List_Images;
 use ThinkRank\Abilities\Media\Get_Image_Alt_Text;
 use ThinkRank\Abilities\Media\Update_Image_Alt_Text;
@@ -376,6 +378,8 @@ class Abilities_Registrar {
 			new Update_Image_Alt_Text(),
 			new Fill_Missing_Alt_Text(),
 			new Get_Post_Content(),
+			new Get_FAQ(),
+			new Update_FAQ(),
 			new Purge_Caches(),
 			new Update_Robots_Meta_Settings(),
 			new Get_Ai_Budget(),

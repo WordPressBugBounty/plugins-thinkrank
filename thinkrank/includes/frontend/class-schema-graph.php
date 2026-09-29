@@ -106,31 +106,14 @@ class Schema_Graph {
     ];
 
     /**
-     * Gutenberg FAQ block name.
-     */
-    private const FAQ_BLOCK = 'thinkrank/faq';
-
-    /**
-     * Elementor FAQ widget name.
-     */
-    private const FAQ_WIDGET = 'thinkrank-faq';
-
-    /**
-     * Bricks FAQ element name.
+     * The FAQ surfaces themselves are read by FAQ_Content, which owns their
+     * names, their stored shapes and their per-surface schema toggles. Only the
+     * *foreign* FAQ producers are listed below, because standing down for them
+     * is this class's decision rather than a fact about where ThinkRank keeps
+     * its own content (#767).
      *
-     * @since 2.3.1
+     * @since 2.10.1
      */
-    private const FAQ_BRICKS_ELEMENT = 'thinkrank-faq';
-
-    /**
-     * The Beaver Builder FAQ module's slug, as stored in its layout nodes.
-     *
-     * Matches `ThinkRank_Beaver_FAQ_Module::SLUG`. Duplicated as a literal
-     * rather than referenced, because that class extends `FLBuilderModule` and
-     * so cannot be loaded at all when Beaver Builder is inactive — which is
-     * exactly the site that still has a stored layout, after a builder switch.
-     */
-    private const FAQ_BEAVER_MODULE = 'thinkrank-faq';
 
     /**
      * Third-party Elementor widgets that publish their own FAQPage.
@@ -566,32 +549,129 @@ class Schema_Graph {
         // page was switched over never renders. Publishing its questions would
         // put schema on the page for content no visitor can see — which Google
         // treats as a violation, not merely a duplicate (#650).
-        if (!$this->bricks_supersedes_post_content((int) $post->ID)) {
-            $this->collect_block_faq($post);
-        }
+        foreach (self::faq_groups($post) as $group) {
+            // The stored toggle decides whether a producer contributes schema.
+            // FAQ_Content reports it rather than applying it, because a block
+            // with schema switched off is still visible FAQ content that the
+            // abilities have to describe (#767).
+            if (empty($group['schema'])) {
+                continue;
+            }
 
-        $this->collect_elementor_faq($post);
-        $this->collect_bricks_faq($post);
-        $this->collect_beaver_faq($post);
+            $this->absorb_content_faq($this->questions_from_pairs($group['pairs']));
+        }
     }
 
     /**
-     * Whether Bricks renders this post and discards its `post_content`.
+     * Whether ThinkRank would publish a FAQPage for this post.
      *
-     * @since 2.3.1
-     * @param int $post_id Post being viewed.
+     * Answers the question `get-faq` has to put to an agent — "is this actually
+     * being emitted?" — without rendering the page. Kept here rather than in the
+     * ability because every term of it is this class's own rule: the password
+     * form, the master switch, the per-content-type Schema switch, the other
+     * plugins whose FAQ output makes ThinkRank stand down, and the filter that
+     * overrides all of it.
+     *
+     * It answers for the post as a visitor gets it. A draft or a scheduled post
+     * is reported on what it will emit once it is served, because that is the
+     * question an agent preparing one is asking; a password-protected post is
+     * not, because publishing it changes nothing — the form stays.
+     *
+     * @since 2.10.1
+     * @param \WP_Post $post Post to test.
      * @return bool
      */
-    private function bricks_supersedes_post_content(int $post_id): bool {
-        if (!class_exists('ThinkRank\\SEO\\Builder_Content')) {
-            $file = THINKRANK_PLUGIN_DIR . 'includes/seo/class-builder-content.php';
+    public static function will_emit_faqpage(\WP_Post $post): bool {
+        // The same gate collect_post_faq() applies, and for the same reason:
+        // behind a password form the block never renders, so no FAQPage is
+        // published. Without this the ability answered "yes, it is emitted"
+        // about a page that emits nothing — which is the answer that stops an
+        // agent looking any further.
+        if (function_exists('post_password_required') && post_password_required($post)) {
+            return false;
+        }
+
+        $has_questions = false;
+
+        foreach (self::faq_groups($post) as $group) {
+            if (empty($group['schema'])) {
+                continue;
+            }
+
+            foreach ($group['pairs'] as $pair) {
+                if ('' !== trim((string) ($pair['question'] ?? '')) && '' !== trim((string) ($pair['answer'] ?? ''))) {
+                    $has_questions = true;
+                    break 2;
+                }
+            }
+        }
+
+        if (!$has_questions) {
+            return false;
+        }
+
+        if (!self::schema_allowed_for_post($post)) {
+            return false;
+        }
+
+        $emit = !(new self())->has_foreign_faq_source($post);
+
+        /** This filter is documented in includes/frontend/class-schema-graph.php */
+        return (bool) apply_filters('thinkrank_emit_faqpage', $emit, $post);
+    }
+
+    /**
+     * output_allowed(), asked about a named post instead of the current query.
+     *
+     * output_allowed() resolves the content type from the main query, which in
+     * an admin or MCP request is not the post being asked about.
+     *
+     * @since 2.10.1
+     * @param \WP_Post $post Post to test.
+     * @return bool
+     */
+    private static function schema_allowed_for_post(\WP_Post $post): bool {
+        if (null === self::$master_switch_on) {
+            // Resolve the site-wide half through the existing reader.
+            self::output_allowed();
+        }
+
+        if (!self::$master_switch_on) {
+            return false;
+        }
+
+        if (class_exists('ThinkRank\\SEO\\Content_Type_Settings')) {
+            return \ThinkRank\SEO\Content_Type_Settings::is_enabled(
+                \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
+                (string) $post->post_type,
+                true
+            );
+        }
+
+        return true;
+    }
+
+    /**
+     * Every FAQ producer on a post, loaded defensively.
+     *
+     * The reader lives in the SEO namespace, and this class runs in contexts
+     * where that autoloader is not guaranteed — which is why the Bricks gate it
+     * replaced carried the same require.
+     *
+     * @since 2.10.1
+     * @param \WP_Post $post Post being read.
+     * @return array<int, array{source: string, schema: bool, pairs: array}>
+     */
+    private static function faq_groups(\WP_Post $post): array {
+        if (!class_exists('ThinkRank\\SEO\\FAQ_Content')) {
+            $file = THINKRANK_PLUGIN_DIR . 'includes/seo/class-faq-content.php';
             if (!file_exists($file)) {
-                return false;
+                return [];
             }
             require_once $file;
         }
 
-        return \ThinkRank\SEO\Builder_Content::bricks_supersedes_post_content($post_id);
+        return \ThinkRank\SEO\FAQ_Content::groups($post);
     }
 
     /**
@@ -612,217 +692,6 @@ class Schema_Graph {
 
         $this->add_faq_entities($entities);
         $this->absorbed_content_faq = true;
-    }
-
-    /**
-     * Collect FAQ questions from thinkrank/faq blocks, including nested ones.
-     *
-     * @since 1.32.0
-     * @param \WP_Post $post Post being viewed.
-     * @return void
-     */
-    private function collect_block_faq(\WP_Post $post): void {
-        if (!function_exists('parse_blocks') || !has_blocks($post->post_content)) {
-            return;
-        }
-
-        $this->walk_blocks(parse_blocks($post->post_content));
-    }
-
-    /**
-     * Recurse a parsed block tree collecting FAQ entries.
-     *
-     * @since 1.32.0
-     * @param array $blocks Parsed blocks.
-     * @return void
-     */
-    private function walk_blocks(array $blocks): void {
-        foreach ($blocks as $block) {
-            if (!is_array($block)) {
-                continue;
-            }
-
-            $block_name = (string) ($block['blockName'] ?? '');
-            $attrs      = is_array($block['attrs'] ?? null) ? $block['attrs'] : [];
-
-            // A leftover Rank Math FAQ block is absorbed as if it were ours, so
-            // an unmigrated post contributes its questions to the single
-            // FAQPage rather than to nothing at all (#777). The fallback stays
-            // silent while Rank Math is active and still emitting its own.
-            if (\ThinkRank\Integrations\Rank_Math_Blocks::is_source_block($block_name)) {
-                $fallback = \ThinkRank\Integrations\Rank_Math_Blocks::schema_fallback($block_name, $attrs);
-                if (null !== $fallback) {
-                    $block_name = $fallback['name'];
-                    $attrs      = $fallback['attrs'];
-                }
-            }
-
-            if ($block_name === self::FAQ_BLOCK) {
-                // Mirrors Blocks_Manager: schema is on unless explicitly disabled.
-                $disabled = array_key_exists('outputSchema', $attrs) && false === $attrs['outputSchema'];
-
-                if (!$disabled) {
-                    $this->absorb_content_faq($this->questions_from_pairs($attrs['faqs'] ?? []));
-                }
-            }
-
-            if (!empty($block['innerBlocks']) && is_array($block['innerBlocks'])) {
-                $this->walk_blocks($block['innerBlocks']);
-            }
-        }
-    }
-
-    /**
-     * Collect FAQ questions from Elementor FAQ widgets.
-     *
-     * @since 1.32.0
-     * @param \WP_Post $post Post being viewed.
-     * @return void
-     */
-    private function collect_elementor_faq(\WP_Post $post): void {
-        $raw = get_post_meta($post->ID, '_elementor_data', true);
-        if (empty($raw) || !is_string($raw)) {
-            return;
-        }
-
-        $elements = json_decode($raw, true);
-        if (!is_array($elements)) {
-            return;
-        }
-
-        $this->walk_elementor($elements);
-    }
-
-    /**
-     * Collect FAQ questions from Bricks FAQ elements.
-     *
-     * Reads the tree Bricks will actually render — resolved through
-     * `Builder_Content`, so a page whose content lives on a content template or
-     * inside a component is covered, and one switched back to the block editor
-     * is not.
-     *
-     * Unlike the block, this is not gated on Bricks owning `post_content`: a
-     * Bricks element is on the page whenever Bricks renders the page, which is
-     * exactly what resolving the tree already establishes (#626).
-     *
-     * @since 2.3.1
-     * @param \WP_Post $post Post being viewed.
-     * @return void
-     */
-    private function collect_bricks_faq(\WP_Post $post): void {
-        $this->walk_bricks($this->bricks_tree((int) $post->ID));
-    }
-
-    /**
-     * Collect FAQ questions from Beaver Builder FAQ modules.
-     *
-     * Beaver Builder keeps its layout in postmeta as a map of node objects and
-     * leaves `post_content` alone, so — unlike Bricks — there is no
-     * "supersedes post_content" gate to apply: a block FAQ left in the body and
-     * a module FAQ in the layout can both genuinely be on the page, and both
-     * belong in the one FAQPage.
-     *
-     * The published layout is preferred over the draft for the same reason the
-     * rest of the plugin prefers it: a draft holds edits no visitor has been
-     * served yet, and schema must describe the page as delivered.
-     *
-     * @since 2.5.0
-     * @param \WP_Post $post Post being viewed.
-     * @return void
-     */
-    private function collect_beaver_faq(\WP_Post $post): void {
-        $layout = get_post_meta($post->ID, '_fl_builder_data', true);
-
-        if (!is_array($layout) || empty($layout)) {
-            return;
-        }
-
-        foreach ($layout as $node) {
-            $settings = is_object($node) ? ($node->settings ?? null) : ($node['settings'] ?? null);
-            $settings = is_object($settings) ? get_object_vars($settings) : $settings;
-
-            if (!is_array($settings) || ($settings['type'] ?? '') !== self::FAQ_BEAVER_MODULE) {
-                continue;
-            }
-
-            // Mirrors ThinkRank_Beaver_FAQ_Module::schema_enabled(): Beaver
-            // Builder stores a cleared toggle as the string '0'.
-            if (empty($settings['output_schema'])) {
-                continue;
-            }
-
-            $rows = $settings['faqs'] ?? [];
-            $rows = is_array($rows) ? array_map(
-                static function ($row) {
-                    return is_object($row) ? get_object_vars($row) : $row;
-                },
-                $rows
-            ) : [];
-
-            $this->absorb_content_faq($this->questions_from_pairs($rows));
-        }
-    }
-
-    /**
-     * Collect FAQ entries from a resolved Bricks tree.
-     *
-     * The tree is flat, so no recursion: `Builder_Content::bricks_tree()`
-     * splices component definitions into the same list.
-     *
-     * The element's own settings are read here rather than through
-     * `FAQ_Element`, whose class extends `Bricks\Element` and so cannot even be
-     * loaded when the theme is inactive — which is exactly the case that still
-     * has a stored tree, on a site that has since switched themes. The repeater
-     * uses the same `question` / `answer` keys as the block, so the shared
-     * builder below already understands it.
-     *
-     * @since 2.3.1
-     * @param array $elements Bricks elements.
-     * @return void
-     */
-    private function walk_bricks(array $elements): void {
-        foreach ($elements as $element) {
-            if (!is_array($element) || ($element['name'] ?? '') !== self::FAQ_BRICKS_ELEMENT) {
-                continue;
-            }
-
-            $settings = is_array($element['settings'] ?? null) ? $element['settings'] : [];
-
-            // Mirrors FAQ_Element: a cleared Bricks checkbox loses its key.
-            if (empty($settings['outputSchema'])) {
-                continue;
-            }
-
-            $this->absorb_content_faq($this->questions_from_pairs($settings['faqs'] ?? []));
-        }
-    }
-
-    /**
-     * Recurse an Elementor element tree collecting FAQ entries.
-     *
-     * @since 1.32.0
-     * @param array $elements Elementor elements.
-     * @return void
-     */
-    private function walk_elementor(array $elements): void {
-        foreach ($elements as $element) {
-            if (!is_array($element)) {
-                continue;
-            }
-
-            if (($element['widgetType'] ?? '') === self::FAQ_WIDGET) {
-                $settings = $element['settings'] ?? [];
-
-                // Mirrors FAQ_Widget: schema unless the toggle is off.
-                if ('yes' === ($settings['output_schema'] ?? 'yes')) {
-                    $this->absorb_content_faq($this->questions_from_pairs($settings['faqs'] ?? []));
-                }
-            }
-
-            if (!empty($element['elements']) && is_array($element['elements'])) {
-                $this->walk_elementor($element['elements']);
-            }
-        }
     }
 
     /**

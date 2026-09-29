@@ -393,16 +393,143 @@ class Pattern_Resolver {
             $category = !empty($categories) ? $categories[0]->name : '';
         }
 
-        return [
-            '%title%' => get_the_title($post_id),
-            '%sitename%' => get_bloginfo('name'),
-            '%sep%' => self::separator(),
-            '%excerpt%' => $excerpt,
-            '%date%' => get_the_date('', $post_id),
-            '%modified%' => get_the_modified_date('', $post_id),
-            '%author%' => $author_id ? get_the_author_meta('display_name', $author_id) : '',
-            '%category%' => $category,
+        return array_merge(
+            [
+                '%title%' => get_the_title($post_id),
+                '%sitename%' => get_bloginfo('name'),
+                '%sep%' => self::separator(),
+                '%excerpt%' => $excerpt,
+                '%date%' => get_the_date('', $post_id),
+                '%modified%' => get_the_modified_date('', $post_id),
+                '%author%' => $author_id ? get_the_author_meta('display_name', $author_id) : '',
+                '%category%' => $category,
+            ],
+            self::product_placeholders($post_id)
+        );
+    }
+
+    /**
+     * Tokens that only mean anything on a WooCommerce product.
+     *
+     * Rank Math and Yoast WooCommerce SEO both let a product title or
+     * description carry the price, the SKU and the stock status, and both of
+     * our converters dropped every token they did not recognise — so
+     * "Buy %title% for %wc_price%" imported as "Buy %title% for" and the
+     * customer in support #171748 found four variables where they had had a
+     * stock one (#715).
+     *
+     * Always present, never conditional on the post type. A token that exists
+     * on a product and is an unknown token everywhere else would resolve on
+     * one page and leak literally on another; resolving to an empty string off
+     * a product is the same answer every other token gives when it has nothing
+     * to say, and process() then collapses the separator it leaves behind.
+     *
+     * @since 2.10.1
+     *
+     * @param int $post_id Post ID.
+     * @return array<string,string>
+     */
+    private static function product_placeholders(int $post_id): array {
+        $empty = [
+            '%price%'             => '',
+            '%sale_price%'        => '',
+            '%sku%'               => '',
+            '%stock_status%'      => '',
+            '%short_description%' => '',
+            '%brand%'             => '',
         ];
+
+        if (!function_exists('wc_get_product') || 'product' !== get_post_type($post_id)) {
+            return $empty;
+        }
+
+        $product = wc_get_product($post_id);
+        if (!$product) {
+            return $empty;
+        }
+
+        // Read through wc_price()/get_price_html() rather than formatting the
+        // number here: currency symbol, position, decimals and the "from X"
+        // form on a variable product are all store settings, and a second
+        // formatter is how a template starts disagreeing with the price shown
+        // three lines below it on the same page.
+        $price      = (string) $product->get_price();
+        $sale_price = (string) $product->get_sale_price();
+
+        $stock_status = (string) $product->get_stock_status();
+        $stock_labels = [
+            'instock'     => __('In stock', 'thinkrank'),
+            'outofstock'  => __('Out of stock', 'thinkrank'),
+            'onbackorder' => __('On backorder', 'thinkrank'),
+        ];
+
+        return [
+            '%price%'             => self::formatted_price($price),
+            '%sale_price%'        => self::formatted_price($sale_price),
+            '%sku%'               => (string) $product->get_sku(),
+            '%stock_status%'      => $stock_labels[$stock_status] ?? $stock_status,
+            '%short_description%' => self::derive_excerpt((string) $product->get_short_description()),
+            '%brand%'             => self::product_brand($post_id),
+        ];
+    }
+
+    /**
+     * A price as text, in the store's own currency format.
+     *
+     * wc_price() returns markup, and stripping the tags off it leaves the
+     * entities behind: a title read "11.05&#2547;&nbsp;" on the first live
+     * run. Entities are decoded and the non-breaking space collapsed, because
+     * this value ends up inside a `<title>` and a meta description, where
+     * markup has no meaning and an entity is just noise a reader sees.
+     *
+     * @since 2.10.1
+     *
+     * @param string $price Raw price, or '' when the product has none.
+     * @return string
+     */
+    private static function formatted_price(string $price): string {
+        if ('' === $price) {
+            return '';
+        }
+
+        $text = wp_strip_all_tags((string) wc_price((float) $price));
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        // \xC2\xA0 is the non-breaking space wc_price() puts between the
+        // amount and the symbol; a literal one in a title is invisible to a
+        // reader and awkward for everything else.
+        $text = str_replace("\xC2\xA0", ' ', $text);
+
+        return trim((string) preg_replace('/\s+/u', ' ', $text));
+    }
+
+    /**
+     * A product's brand, from whichever taxonomy the store uses for one.
+     *
+     * WooCommerce core added `product_brand` in 9.4; before that every brand
+     * plugin shipped its own taxonomy, and a store that migrated from one of
+     * them still has the old terms. Asking each in turn costs one cached term
+     * lookup and means the token is not empty on the stores most likely to
+     * have used a brand token in the plugin they are leaving.
+     *
+     * @since 2.10.1
+     *
+     * @param int $post_id Product ID.
+     * @return string
+     */
+    private static function product_brand(int $post_id): string {
+        foreach (['product_brand', 'pwb-brand', 'yith_product_brand', 'berocket_brand'] as $taxonomy) {
+            if (!taxonomy_exists($taxonomy)) {
+                continue;
+            }
+
+            $terms = get_the_terms($post_id, $taxonomy);
+            if (is_array($terms) && !empty($terms)) {
+                return (string) $terms[0]->name;
+            }
+        }
+
+        return '';
     }
 
     /**
@@ -425,6 +552,15 @@ class Pattern_Resolver {
      * @return string Resolved string.
      */
     private static function process(string $template, array $placeholders): string {
+        // Both forms go BEFORE substitution, and the strip is decided against
+        // the placeholder map rather than by what is left over afterwards.
+        // Running it on the substituted string scanned the resolved VALUES too,
+        // so a post whose own title read "Using %name% placeholders in
+        // %%mustache%% templates" published "Using placeholders in %%
+        // templates" — its title edited, and a stray double percent where the
+        // inner token had been eaten out of the middle of one.
+        $template = self::strip_unresolved_tokens($template, $placeholders);
+
         $value = str_replace(array_keys($placeholders), array_values($placeholders), $template);
 
         // Collapse whitespace.
@@ -442,5 +578,58 @@ class Pattern_Resolver {
 
         // Strip leading/trailing separators and whitespace.
         return trim($value, " \t\n\r\0\x0B" . $separator);
+    }
+
+    /**
+     * Remove any token the placeholder map did not resolve.
+     *
+     * The last line of defence, and the reason it exists is that every layer
+     * above it is a list someone has to remember to extend. A converter that
+     * misses a token, a template typed by hand, a value written straight into
+     * postmeta by an importer we have not met: each one ends with `%%title%%`
+     * or `%some_token%` rendering literally in a `<title>` on a live site, and
+     * that is precisely what was reported on 14 September (#715).
+     *
+     * Both syntaxes, because a migrated site carries both: Yoast's `%%x%%`
+     * (which includes Rank Math tokens Yoast's own importer wrapped in double
+     * percent signs without translating them) and the single-percent form
+     * ThinkRank and Rank Math share. `%%x%%` is matched as a whole so the pass
+     * cannot eat the inner `%x%` and leave a stray percent sign at each end.
+     *
+     * Applied to the TEMPLATE, and a token is kept only when the placeholder
+     * map has it. Stripping whatever still looked like a token after
+     * substitution read the resolved values as well, and content is not a
+     * template: a post titled "Using %name% placeholders in %%mustache%%
+     * templates" published "Using placeholders in %% templates", and an excerpt
+     * of "Learn %name% and %fabric% placeholders." published "Learn and
+     * placeholders." Deciding against the map also means a token this resolver
+     * knows about is never at risk, whatever a value happens to contain.
+     *
+     * A bare percent is left alone: "50% off" is ordinary copy, and a guard
+     * that ate it would be a worse bug than the one it prevents.
+     *
+     * @since 2.10.1
+     *
+     * @param string                $template     Raw template.
+     * @param array<string, string> $placeholders Tokens this resolver can resolve.
+     * @return string
+     */
+    private static function strip_unresolved_tokens(string $template, array $placeholders): string {
+        if (false === strpos($template, '%')) {
+            return $template;
+        }
+
+        $stripped = preg_replace_callback(
+            '/%%[a-z0-9_-]+%%|%[a-z0-9_-]+%/i',
+            static function (array $found) use ($placeholders): string {
+                return array_key_exists($found[0], $placeholders) ? $found[0] : '';
+            },
+            $template
+        );
+
+        // preg_replace_callback() answers null on content that is not valid
+        // UTF-8 rather than throwing, and returning null here would blank a
+        // title outright.
+        return null === $stripped ? $template : (string) $stripped;
     }
 }

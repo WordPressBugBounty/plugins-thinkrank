@@ -252,6 +252,31 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      */
     private const TERM_WALK_CHUNK = 1000;
 
+    /**
+     * Exception code for an automatic rebuild stopped short of the memory limit.
+     *
+     * @since 2.10.1
+     * @var int
+     */
+    private const MEMORY_ABORT_CODE = 4290;
+
+    /**
+     * Whether the chunked walks should stop before the memory limit. Only on
+     * for automatic rebuilds, whose failure is recorded and retried.
+     *
+     * @since 2.10.1
+     * @var bool
+     */
+    private bool $memory_guard = false;
+
+    /**
+     * Largest memory cost of one walked chunk in this rebuild, in bytes.
+     *
+     * @since 2.10.1
+     * @var int
+     */
+    private int $walk_chunk_cost = 0;
+
     private array $sitemap_types = [
         'posts' => [
             'name' => 'Posts',
@@ -280,23 +305,27 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     ];
 
     /**
+     * The generator the content-change listeners share, built on the first
+     * change of a request.
+     *
+     * @since 2.10.1
+     * @var self|null
+     */
+    private static ?self $listener = null;
+
+    /**
      * Constructor
      *
      * @since 1.0.0
+     * @since 2.10.1 Registers no hooks, whatever `$register_hooks` says. The
+     *              content-change listeners are registered once, at bootstrap,
+     *              by register_content_listeners().
      *
-     * @param bool $register_hooks Optional. Whether to register the auto-generation
-     *                             hooks. Pass false for a read-only instance built
-     *                             solely to query settings — the hooks are bound to
-     *                             `$this`, so a second hook-registering instance
-     *                             would run `handle_content_change()` twice per save.
+     * @param bool $register_hooks Unused since 2.10.1; kept so existing callers,
+     *                             Pro's included, keep working.
      */
     public function __construct(bool $register_hooks = true) {
         parent::__construct('sitemap');
-
-        // Initialize auto-generation hooks
-        if ($register_hooks) {
-            $this->init_auto_generation_hooks();
-        }
     }
 
     /**
@@ -342,29 +371,55 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     }
 
     /**
-     * Initialize WordPress hooks for auto-generation
+     * Register the content-change listeners that queue an automatic rebuild.
      *
-     * @since 1.0.0
+     * Called once per request, at plugin bootstrap, next to the WP-Cron
+     * listeners that run the rebuild these queue (both in
+     * Plugin::register_sitemap_cron_listeners(), on plugins_loaded). The
+     * constructor used to register them, so they existed only in a request
+     * that happened to build a generator: the REST endpoint, the setup wizard,
+     * an MCP ability. Block-editor saves go through REST and were heard. A
+     * scheduled post published by WP-Cron, Quick Edit, the classic editor and
+     * WP-CLI were not, so the post stayed out of the sitemap with nothing
+     * pending to recover it (#824). Each instance also added its own set, so
+     * one REST save ran the handlers once per generator built.
+     *
+     * The generator is built on the first change and shared for the rest of
+     * the request, so a bulk edit does not construct one per post.
+     *
+     * @since 2.10.1
      * @return void
      */
-    private function init_auto_generation_hooks(): void {
-        // Content change hooks - use priority 20 to run after other plugins
-        add_action('save_post', [$this, 'handle_content_change'], 20, 2);
-        add_action('delete_post', [$this, 'handle_content_deletion'], 20);
-        add_action('wp_trash_post', [$this, 'handle_content_deletion'], 20);
-        add_action('untrash_post', [$this, 'handle_content_change_by_id'], 20);
+    public static function register_content_listeners(): void {
+        // Priority 20, to run after other plugins.
+        add_action('save_post', static function (int $post_id, \WP_Post $post): void {
+            self::listener()->handle_content_change($post_id, $post);
+        }, 20, 2);
+        add_action('delete_post', static function (int $post_id): void {
+            self::listener()->handle_content_deletion($post_id);
+        }, 20);
+        add_action('wp_trash_post', static function (int $post_id): void {
+            self::listener()->handle_content_deletion($post_id);
+        }, 20);
+        add_action('untrash_post', static function (int $post_id): void {
+            self::listener()->handle_content_change_by_id($post_id);
+        }, 20);
 
-        // Taxonomy change hooks
-        add_action('created_term', [$this, 'handle_taxonomy_change'], 20, 3);
-        add_action('edited_term', [$this, 'handle_taxonomy_change'], 20, 3);
-        add_action('delete_term', [$this, 'handle_taxonomy_change'], 20, 3);
+        foreach (['created_term', 'edited_term', 'delete_term'] as $hook) {
+            add_action($hook, static function (int $term_id, int $tt_id, string $taxonomy): void {
+                self::listener()->handle_taxonomy_change($term_id, $tt_id, $taxonomy);
+            }, 20, 3);
+        }
+    }
 
-        // NOTE: the WP-Cron regeneration listeners (thinkrank_regenerate_sitemap
-        // and thinkrank_regenerate_sitemap_settings) are registered at plugin
-        // bootstrap (Plugin::register_sitemap_cron_listeners(), on plugins_loaded)
-        // rather than here. A cron run never builds this class via the REST
-        // endpoint (no rest_api_init), so registering them in the constructor
-        // would leave the scheduled events with no listener at cron time.
+    /**
+     * The generator the content-change listeners share.
+     *
+     * @since 2.10.1
+     * @return self
+     */
+    private static function listener(): self {
+        return self::$listener ??= new self(false);
     }
 
     /**
@@ -875,6 +930,9 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $total = count($all_ids);
 
         for ($offset = 0; $offset < $total; $offset += self::ID_WALK_CHUNK) {
+            $this->assert_memory_headroom();
+            $chunk_start = memory_get_usage(true);
+
             $chunk = array_slice($all_ids, $offset, self::ID_WALK_CHUNK);
 
             $posts = get_posts($this->filter_query_args([
@@ -884,6 +942,10 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 'post__in'    => $chunk,
                 'orderby'     => 'post__in', // preserve the resolved order
             ]));
+
+            // get_featured_image() hydrates each featured image under the
+            // attachment's own ID, which the chunk's post IDs do not reach.
+            $attachment_ids = [];
 
             foreach ($posts as $post) {
                 if ($this->should_include_in_sitemap($post, $settings)) {
@@ -907,12 +969,23 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                     $changefreq = $this->calculate_change_frequency($post, $post->post_type);
                     $images = $this->extract_post_images($post, $settings);
 
+                    $thumbnail_id = (int) get_post_thumbnail_id($post);
+                    if ($thumbnail_id > 0) {
+                        $attachment_ids[] = $thumbnail_id;
+                    }
+
                     yield $this->generate_url_entry($url, $lastmod, $priority, $changefreq, $images);
                 }
             }
 
-            // Free the hydrated chunk before loading the next one.
+            // Free the hydrated chunk before loading the next one — including
+            // the copies get_posts() left in the runtime object cache.
             unset($posts);
+            $this->release_walk_memory(
+                $chunk_start,
+                $this->chunk_post_cache_groups($post_types),
+                array_merge($chunk, $attachment_ids)
+            );
         }
     }
 
@@ -974,6 +1047,9 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $total = count($all_ids);
 
         for ($offset = 0; $offset < $total; $offset += self::TERM_WALK_CHUNK) {
+            $this->assert_memory_headroom();
+            $chunk_start = memory_get_usage(true);
+
             $chunk = array_slice($all_ids, $offset, self::TERM_WALK_CHUNK);
 
             $terms = get_terms($this->filter_term_query_args([
@@ -1004,6 +1080,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
 
             unset($terms);
+            $this->release_walk_memory($chunk_start, ['terms', 'term_meta'], $chunk);
         }
     }
 
@@ -1855,9 +1932,11 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $current = isset($pending['source']) ? (string) $pending['source'] : '';
         $source  = ($current === 'settings' || $source === 'settings') ? 'settings' : 'content';
 
+        // Merged so the bookkeeping a rebuild keeps on the marker (`started`,
+        // `memory_limit`) survives an edit made while it is outstanding.
         update_option(
             self::REGENERATION_PENDING_OPTION,
-            [
+            array_merge($pending, [
                 'since'        => $since,
                 'source'       => $source,
                 'attempts'     => !empty($pending['attempts']) ? (int) $pending['attempts'] : 0,
@@ -1867,7 +1946,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 // Bumped on every change so a rebuild can tell whether the edit
                 // it started for is still the newest one outstanding.
                 'revision'     => (!empty($pending['revision']) ? (int) $pending['revision'] : 0) + 1,
-            ],
+            ]),
             true
         );
     }
@@ -1915,10 +1994,81 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             && is_array($pending)
             && (int) ($pending['revision'] ?? 0) !== $revision
         ) {
+            // This attempt succeeded, so drop what it claimed: the newer change
+            // waits the grace a fresh edit gets, not a failure backoff it never
+            // earned. Not zero: that edit queued its own debounced event, and
+            // a marker due at once had the next admin request rebuild in its
+            // shutdown and the event rebuild again seconds later.
+            unset($pending['started'], $pending['memory_limit']);
+            $pending['attempts']     = 0;
+            $pending['next_attempt'] = time() + self::REGENERATION_TAKEOVER_GRACE;
+
+            update_option(self::REGENERATION_PENDING_OPTION, $pending, true);
             return;
         }
 
         delete_option(self::REGENERATION_PENDING_OPTION);
+    }
+
+    /**
+     * Record the attempt that is about to run before it runs.
+     *
+     * A PHP fatal — the memory limit or max_execution_time — is not a
+     * Throwable, so no catch or finally around the generation runs when the
+     * process dies, and a failure recorded afterwards was never recorded at
+     * all: `attempts` stayed 0, the backoff never applied, and the next request
+     * started the same doomed rebuild again (a fatal every few minutes for as
+     * long as an admin was logged in). Claiming the attempt up front makes the
+     * backoff hold even when nothing after this line gets to run, and leaves a
+     * `started` stamp the next attempt can recognise as an interrupted one.
+     *
+     * @since 2.10.1
+     * @return void
+     */
+    private function claim_regeneration_attempt(): void {
+        $pending = get_option(self::REGENERATION_PENDING_OPTION, null);
+
+        // Nothing outstanding (e.g. a manual generation already satisfied it):
+        // there is no marker to retry from, so nothing to claim.
+        if (!is_array($pending) || empty($pending['since'])) {
+            return;
+        }
+
+        if (!empty($pending['started'])) {
+            // The previous attempt claimed itself and never reported back.
+            update_option(
+                self::REGENERATION_ERROR_OPTION,
+                [
+                    'message'  => __('The previous automatic sitemap rebuild stopped before it finished, most likely because PHP ran out of memory or time. It is retried with a growing delay. If this keeps happening, raise the PHP memory_limit or max_execution_time, or run WP-Cron from a system cron.', 'thinkrank'),
+                    'source'   => isset($pending['source']) ? (string) $pending['source'] : 'content',
+                    'attempts' => !empty($pending['attempts']) ? (int) $pending['attempts'] : 1,
+                    'time'     => (int) $pending['started'],
+                ],
+                false
+            );
+        }
+
+        $attempts = (!empty($pending['attempts']) ? (int) $pending['attempts'] : 0) + 1;
+
+        $pending['attempts']     = $attempts;
+        $pending['next_attempt'] = time() + $this->regeneration_backoff($attempts);
+        $pending['started']      = time();
+
+        update_option(self::REGENERATION_PENDING_OPTION, $pending, true);
+    }
+
+    /**
+     * Delay before the next takeover after the given number of attempts.
+     *
+     * @since 2.10.1
+     * @param int $attempts Attempts made so far (1 or more).
+     * @return int Seconds.
+     */
+    private function regeneration_backoff(int $attempts): int {
+        return (int) min(
+            self::REGENERATION_TAKEOVER_GRACE * (2 ** min(max($attempts, 1), 10)),
+            self::REGENERATION_MAX_BACKOFF
+        );
     }
 
     /**
@@ -1929,19 +2079,27 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * generation cannot run on every admin request.
      *
      * @since 2.2.1
-     * @param string $message Failure detail.
-     * @param string $source  Either 'content' or 'settings'.
+     * @since 2.10.1 Accepts the memory limit a rebuild had to stop short of, and
+     *              does not count an attempt claim_regeneration_attempt()
+     *              already counted.
+     * @param string   $message      Failure detail.
+     * @param string   $source       Either 'content' or 'settings'.
+     * @param int|null $memory_limit Memory limit (bytes) the rebuild stopped
+     *                               short of, when that was the failure.
      * @return void
      */
-    private function record_regeneration_failure(string $message, string $source): void {
+    private function record_regeneration_failure(string $message, string $source, ?int $memory_limit = null): void {
         $pending  = get_option(self::REGENERATION_PENDING_OPTION, []);
         $pending  = is_array($pending) ? $pending : [];
-        $attempts = (!empty($pending['attempts']) ? (int) $pending['attempts'] : 0) + 1;
+        $attempts = !empty($pending['attempts']) ? (int) $pending['attempts'] : 0;
 
-        $backoff = min(
-            self::REGENERATION_TAKEOVER_GRACE * (2 ** min($attempts, 10)),
-            self::REGENERATION_MAX_BACKOFF
-        );
+        // An attempt that claimed itself up front has already been counted.
+        if (empty($pending['started'])) {
+            $attempts++;
+        }
+        $attempts = max($attempts, 1);
+
+        $backoff = $this->regeneration_backoff($attempts);
 
         // Same precedence mark_regeneration_pending() enforces: a settings
         // rebuild outranks a content one and must not be downgraded by a failed
@@ -1953,17 +2111,21 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $current         = isset($pending['source']) ? (string) $pending['source'] : '';
         $pending_source  = ($current === 'settings' || $source === 'settings') ? 'settings' : 'content';
 
-        update_option(
-            self::REGENERATION_PENDING_OPTION,
-            [
-                'since'        => !empty($pending['since']) ? (int) $pending['since'] : time(),
-                'source'       => $pending_source,
-                'attempts'     => $attempts,
-                'next_attempt' => time() + $backoff,
-                'revision'     => !empty($pending['revision']) ? (int) $pending['revision'] : 0,
-            ],
-            true
-        );
+        $marker = [
+            'since'        => !empty($pending['since']) ? (int) $pending['since'] : time(),
+            'source'       => $pending_source,
+            'attempts'     => $attempts,
+            'next_attempt' => time() + $backoff,
+            'revision'     => !empty($pending['revision']) ? (int) $pending['revision'] : 0,
+        ];
+
+        // Remembered so has_memory_for_retry() can keep requests with no more
+        // memory than this from repeating the same attempt.
+        if ($memory_limit !== null && $memory_limit > 0) {
+            $marker['memory_limit'] = $memory_limit;
+        }
+
+        update_option(self::REGENERATION_PENDING_OPTION, $marker, true);
 
         update_option(
             self::REGENERATION_ERROR_OPTION,
@@ -2021,13 +2183,31 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             return;
         }
 
-        // Cron is running: it is about to do exactly this work.
+        $pending = get_option(self::REGENERATION_PENDING_OPTION, []);
+        $pending = is_array($pending) ? $pending : [];
+        $source  = isset($pending['source']) ? (string) $pending['source'] : 'content';
+
+        // Cron is running and its own event for this rebuild is still queued
+        // and due: it is about to do exactly this work. Only then — an event
+        // that has already been consumed (e.g. it fired while another process
+        // held the generation lock) is never re-queued, and returning here
+        // unconditionally left the rebuild to requests that could not finish it.
         if (wp_doing_cron()) {
-            return;
+            $hook = $source === 'settings' ? 'thinkrank_regenerate_sitemap_settings' : 'thinkrank_regenerate_sitemap';
+            $next = wp_next_scheduled($hook);
+
+            if ($next !== false && $next <= time()) {
+                return;
+            }
         }
 
-        $pending = get_option(self::REGENERATION_PENDING_OPTION, []);
-        $source  = (is_array($pending) && isset($pending['source'])) ? (string) $pending['source'] : 'content';
+        // The last attempt had to stop short of this process's memory limit.
+        // Retrying at the same (or a lower) limit only repeats that, so leave
+        // the rebuild to a process with more room — WP-CLI, a system cron, or a
+        // host with a higher limit — instead of burning it on every request.
+        if (!$this->has_memory_for_retry($pending)) {
+            return;
+        }
 
         if ($source === 'settings') {
             $this->regenerate_sitemap_from_settings();
@@ -2061,6 +2241,225 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      */
     private function release_generation_lock(): void {
         delete_transient(self::GENERATION_LOCK_TRANSIENT);
+    }
+
+    /**
+     * This process's PHP memory limit in bytes.
+     *
+     * @since 2.10.1
+     * @return int Bytes, or -1 when unlimited (or unreadable).
+     */
+    private function current_memory_limit(): int {
+        $limit = (string) ini_get('memory_limit');
+
+        if ($limit === '' || $limit === '-1') {
+            return -1;
+        }
+
+        $bytes = (int) wp_convert_hr_to_bytes($limit);
+
+        return $bytes > 0 ? $bytes : -1;
+    }
+
+    /**
+     * May this process retry a rebuild that last stopped at the memory limit?
+     *
+     * Raises the limit the way wp-admin does first, so a request that can get
+     * more room than the failed attempt had is still allowed to try.
+     *
+     * @since 2.10.1
+     * @param array $pending The pending marker.
+     * @return bool True when there is no recorded memory failure, or this
+     *              process has more memory than the attempt that failed.
+     */
+    private function has_memory_for_retry(array $pending): bool {
+        if (empty($pending['memory_limit'])) {
+            return true;
+        }
+
+        wp_raise_memory_limit('admin');
+
+        $limit = $this->current_memory_limit();
+
+        return $limit === -1 || $limit > (int) $pending['memory_limit'];
+    }
+
+    /**
+     * Release what one walked chunk left behind.
+     *
+     * Hydrating a chunk through get_posts()/get_terms() also stores every
+     * object and its meta in the in-process object cache, which nothing
+     * empties until the request ends. Unsetting the chunk therefore freed
+     * nothing, and the walk grew with the size of the site instead of the size
+     * of a chunk — about 1.3 GB on a 45k-post site.
+     *
+     * A persistent object cache that supports it drops only its in-process
+     * copy (`flush_runtime`); the shared store keeps its data. WordPress's
+     * default cache has no shared store, and flushing it would empty every
+     * group for the rest of the request (options, the queried object, other
+     * plugins' data), so there only the chunk's own entries are deleted. A
+     * persistent cache without `flush_runtime` is left alone: deleting from it
+     * would evict the objects for every other request too.
+     *
+     * @since 2.10.1
+     * @param int   $chunk_start memory_get_usage(true) before the chunk was hydrated.
+     * @param array $groups      Cache groups keyed by the chunk's object IDs.
+     * @param int[] $ids         The chunk's object IDs, plus any objects it
+     *                           hydrated under their own (featured images).
+     * @return void
+     * @throws \Error See assert_memory_headroom().
+     */
+    private function release_walk_memory(int $chunk_start, array $groups, array $ids): void {
+        // What one chunk costs before it is released: the margin the next one
+        // needs. Measured in the same real allocated size assert_memory_headroom()
+        // compares against the limit, so the two are the same unit.
+        $this->walk_chunk_cost = max($this->walk_chunk_cost, memory_get_usage(true) - $chunk_start);
+
+        if (wp_using_ext_object_cache()) {
+            if (
+                function_exists('wp_cache_supports')
+                && wp_cache_supports('flush_runtime')
+                && function_exists('wp_cache_flush_runtime')
+            ) {
+                wp_cache_flush_runtime();
+            }
+        } elseif (!empty($ids)) {
+            foreach ($groups as $group) {
+                wp_cache_delete_multiple($ids, $group);
+            }
+        }
+
+        $this->assert_memory_headroom();
+    }
+
+    /**
+     * Cache groups get_posts() fills per post for the given post types.
+     *
+     * The post, its meta, and one relationships group per taxonomy the post
+     * type uses (update_object_term_cache()). Term objects themselves are
+     * bounded by the number of terms, not posts, so they are left cached.
+     *
+     * @since 2.10.1
+     * @param string[] $post_types Post types being walked.
+     * @return string[] Cache groups keyed by post ID.
+     */
+    private function chunk_post_cache_groups(array $post_types): array {
+        $groups = ['posts', 'post_meta'];
+
+        foreach (get_object_taxonomies($post_types) as $taxonomy) {
+            $groups[] = $taxonomy . '_relationships';
+        }
+
+        return array_values(array_unique($groups));
+    }
+
+    /**
+     * Stop an automatic rebuild before the memory limit rather than at it.
+     *
+     * A PHP memory fatal skips every catch and finally, so the lock, the
+     * failure record and the backoff are all lost with it, while stopping here
+     * is an ordinary, fully recorded failure. Checked before each chunk is
+     * hydrated, against a margin of at least the largest chunk seen so far.
+     *
+     * It throws an \Error, not an \Exception, on purpose: the per-segment
+     * catch (\Exception) blocks in generate_multiple_sitemaps() would otherwise
+     * swallow it and carry on — writing an index without the aborted segments
+     * and then pruning their files as orphans. Only the automatic rebuild's
+     * catch (\Throwable) is meant to see it.
+     *
+     * @since 2.10.1
+     * @return void
+     * @throws \Error When the automatic rebuild is close to the memory limit.
+     */
+    private function assert_memory_headroom(): void {
+        if (!$this->memory_guard) {
+            return;
+        }
+
+        $limit = $this->current_memory_limit();
+        if ($limit === -1) {
+            return;
+        }
+
+        // A fifth of the limit (at least 32 MB) for writing the files, or one
+        // and a half of the costliest chunk if that is more — and never more
+        // than half the limit either way. Without that outer cap a single
+        // anomalously expensive chunk (500 posts of serialised page-builder or
+        // ACF meta reaches hundreds of megabytes) puts the margin above the
+        // limit itself, so every later check aborts at any usage at all, the
+        // failure records this process's limit, and has_memory_for_retry()
+        // then refuses every process that has the same limit. A site that
+        // never actually ran out of memory would stop rebuilding until WP-CLI
+        // or a system cron happened to run.
+        $headroom = (int) min(
+            max(
+                min(max($limit * 0.2, 32 * MB_IN_BYTES), $limit * 0.5),
+                $this->walk_chunk_cost * 1.5
+            ),
+            $limit * 0.5
+        );
+
+        // The real allocated size, which is what PHP enforces memory_limit
+        // against; memory_get_usage(false) reports only what is handed out of
+        // those allocations and so understates the margin by the allocator's
+        // slack.
+        $usage = memory_get_usage(true);
+
+        if ($usage > $limit - $headroom) {
+            throw new \Error(
+                sprintf(
+                    /* translators: 1: memory in use, 2: PHP memory limit. */
+                    __('The sitemap rebuild was stopped at %1$s of the %2$s PHP memory limit, before PHP would have run out of memory. It will be retried by a process with more memory (WP-CLI or a system cron). To let it finish in the admin, raise the PHP memory_limit.', 'thinkrank'),
+                    size_format($usage),
+                    size_format($limit)
+                ),
+                self::MEMORY_ABORT_CODE
+            );
+        }
+    }
+
+    /**
+     * Run an automatic rebuild's generation with the fatal-safe bookkeeping.
+     *
+     * @since 2.10.1
+     * @param array $settings Sitemap settings.
+     * @return bool Whatever generate_and_save() returned.
+     * @throws \Throwable Whatever generation throws, after the memory guard is
+     *                    switched back off.
+     */
+    private function generate_for_regeneration(array $settings): bool {
+        // Same headroom wp-admin gives itself; a no-op when the limit is
+        // already higher or unlimited.
+        wp_raise_memory_limit('admin');
+
+        $this->claim_regeneration_attempt();
+        $this->memory_guard    = true;
+        $this->walk_chunk_cost = 0;
+
+        try {
+            return $this->generate_and_save($settings);
+        } finally {
+            $this->memory_guard = false;
+        }
+    }
+
+    /**
+     * Record a failure thrown by an automatic rebuild.
+     *
+     * @since 2.10.1
+     * @param \Throwable $e      What was thrown.
+     * @param string     $source Either 'content' or 'settings'.
+     * @return void
+     */
+    private function record_thrown_regeneration_failure(\Throwable $e, string $source): void {
+        $memory_limit = null;
+
+        if ($e instanceof \Error && $e->getCode() === self::MEMORY_ABORT_CODE) {
+            $memory_limit = $this->current_memory_limit();
+            $memory_limit = $memory_limit > 0 ? $memory_limit : null;
+        }
+
+        $this->record_regeneration_failure($e->getMessage(), $source, $memory_limit);
     }
 
     /**
@@ -2215,7 +2614,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 return $this->switch_to_dynamic_delivery($settings, $revision, 'settings');
             }
 
-            if ($this->generate_and_save($settings)) {
+            if ($this->generate_for_regeneration($settings)) {
                 $this->mark_regeneration_complete($revision);
 
                 return true;
@@ -2228,7 +2627,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
 
             return false;
         } catch (\Throwable $e) {
-            $this->record_regeneration_failure($e->getMessage(), 'settings');
+            $this->record_thrown_regeneration_failure($e, 'settings');
 
             return false;
         } finally {
@@ -2364,7 +2763,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 return;
             }
 
-            if ($this->generate_and_save($settings)) {
+            if ($this->generate_for_regeneration($settings)) {
                 $this->mark_regeneration_complete($revision);
             } else {
                 // Previously this returned quietly and last_generated simply
@@ -2376,7 +2775,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 );
             }
         } catch (\Throwable $e) {
-            $this->record_regeneration_failure($e->getMessage(), 'content');
+            $this->record_thrown_regeneration_failure($e, 'content');
         } finally {
             $this->release_generation_lock();
         }
