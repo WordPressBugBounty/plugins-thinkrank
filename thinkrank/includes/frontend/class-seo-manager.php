@@ -1800,17 +1800,21 @@ class SEO_Manager {
                 $image_id = get_post_thumbnail_id($this->current_post_id);
                 $image_meta = wp_get_attachment_metadata($image_id);
                 if ($image_meta) {
+                    // The `large` file being published, not the original it
+                    // was generated from: the metadata's own width and height
+                    // describe an image this tag does not point at (#847).
+                    $image_file = \ThinkRank\SEO\Attachment_Lookup::describe((int) $image_id, (string) $image_url);
                     // SVGs (and other vector uploads) report 0x0 — emitting
                     // those as og:image dimensions is invalid, so skip them.
-                    $og_width  = isset($image_meta['width']) ? (int) $image_meta['width'] : 0;
-                    $og_height = isset($image_meta['height']) ? (int) $image_meta['height'] : 0;
+                    $og_width  = $image_file['width'];
+                    $og_height = $image_file['height'];
                     if ($og_width > 0 && $og_height > 0) {
                         echo "<meta property=\"og:image:width\" content=\"" . esc_attr($og_width) . "\" />\n";
                         echo "<meta property=\"og:image:height\" content=\"" . esc_attr($og_height) . "\" />\n";
                     }
                     // Derive the real mime type instead of hardcoding image/jpeg,
                     // which mislabels PNG/WebP featured images.
-                    $image_mime = get_post_mime_type($image_id);
+                    $image_mime = $image_file['type'];
                     if ($image_mime) {
                         echo "<meta property=\"og:image:type\" content=\"" . esc_attr($image_mime) . "\" />\n";
                     }

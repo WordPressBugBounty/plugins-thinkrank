@@ -33,7 +33,7 @@ class Update_Image_Alt_Text extends Image_Alt_Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-image-alt-text';
 		$this->label       = __( 'Update ThinkRank Image Alt Text', 'thinkrank' );
-		$this->description = __( 'Set one image\'s alt text in the Media Library. Pass alt_text to write specific words, or generate: true to build one from the site\'s alt text template. Existing alt text is kept unless overwrite is true, so a sweep never replaces what an author wrote. Returns the stored value. Call get-image-alt-text to read the current value first, list-images to find ids, or fill-missing-alt-text to do the whole library at once.', 'thinkrank' );
+		$this->description = __( 'Set one image\'s alt text in the Media Library. Pass alt_text to write specific words, or generate: true to build one from the site\'s alt text template. Existing alt text is kept unless overwrite is true, so a sweep never replaces what an author wrote. Returns the stored value. Call get-image-alt-text to read the current value first, list-images to find ids, or fill-missing-alt-text to do the whole library at once. Caches holding the old alt text are cleared where possible; check cache.warnings and pass on anything the user still has to clear by hand.', 'thinkrank' );
 	}
 
 	/**
@@ -98,7 +98,8 @@ class Update_Image_Alt_Text extends Image_Alt_Ability_Base {
 						'description' => __( 'True when the image already had alt text and overwrite was not set. Nothing was changed.', 'thinkrank' ),
 					],
 				],
-				$this->image_properties()
+				$this->image_properties(),
+				[ 'cache' => $this->cache_property() ]
 			),
 		];
 	}
@@ -146,6 +147,10 @@ class Update_Image_Alt_Text extends Image_Alt_Ability_Base {
 			// stores: alt text is a plain-text attribute, and markup in it is
 			// escaped into visible noise rather than rendered.
 			update_post_meta( $attachment_id, self::ALT_META_KEY, sanitize_text_field( (string) $input['alt_text'] ) );
+
+			// fill_attachment_alt() purges for itself; this branch writes the
+			// meta directly, so it has to ask for the same thing (#763).
+			$this->manager()->purge_alt_caches( [ $attachment_id ] );
 		} elseif ( ! $this->manager()->fill_attachment_alt( $attachment_id, true ) ) {
 			return new \WP_Error(
 				'thinkrank_alt_generation_failed',
@@ -159,7 +164,8 @@ class Update_Image_Alt_Text extends Image_Alt_Ability_Base {
 				'success' => true,
 				'skipped' => false,
 			],
-			$this->describe_image( $attachment_id )
+			$this->describe_image( $attachment_id ),
+			[ 'cache' => $this->cache_outcome() ]
 		);
 	}
 }

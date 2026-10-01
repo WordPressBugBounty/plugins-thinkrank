@@ -132,6 +132,48 @@ abstract class Image_Alt_Ability_Base extends Ability_Base {
 	}
 
 	/**
+	 * The shape a cache-purge outcome is reported in.
+	 *
+	 * An alt-text write lands in post meta, but what a visitor reads is HTML
+	 * something else rendered and stored. Reporting only the write let an agent
+	 * tell a user the image was fixed while the page still showed the old words
+	 * (#763), so the outcome of clearing those caches travels with the result.
+	 *
+	 * @return array<string, mixed>
+	 */
+	protected function cache_property(): array {
+		return [
+			'type'        => 'object',
+			'description' => __( 'What was cleared so the new alt text is visible, and what the user still has to clear by hand.', 'thinkrank' ),
+			'properties'  => [
+				'posts_purged' => [
+					'type'        => 'integer',
+					'description' => __( 'Pages whose cached rendering of this image was dropped.', 'thinkrank' ),
+				],
+				'warnings'     => [
+					'type'        => 'array',
+					'items'       => [ 'type' => 'string' ],
+					'description' => __( 'Caching layers that are active but cannot be cleared from here. Pass these on: the page keeps serving the old alt text until the user clears them.', 'thinkrank' ),
+				],
+			],
+		];
+	}
+
+	/**
+	 * The cache outcome of the write that just happened.
+	 *
+	 * @return array{posts_purged: int, warnings: string[]}
+	 */
+	protected function cache_outcome(): array {
+		$purge = $this->manager()->last_alt_cache_purge();
+
+		return [
+			'posts_purged' => count( $purge['posts'] ),
+			'warnings'     => $purge['warnings'],
+		];
+	}
+
+	/**
 	 * Post statuses an image can carry.
 	 *
 	 * Mirrors Image_SEO_Manager's own list: 'inherit' alone misses the private

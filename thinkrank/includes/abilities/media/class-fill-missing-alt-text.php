@@ -32,7 +32,7 @@ class Fill_Missing_Alt_Text extends Image_Alt_Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/fill-missing-alt-text';
 		$this->label       = __( 'Fill Missing ThinkRank Image Alt Text', 'thinkrank' );
-		$this->description = __( 'Fill in missing alt text across the Media Library using the site\'s alt text template, in batches. Returns how many images were updated plus remaining and next_offset; call again with that offset until done is true. Images that already have alt text are skipped unless overwrite is true. Call list-images with alt_status \'missing\' first to see how many need filling, and update-image-alt-text when you want to write one image yourself.', 'thinkrank' );
+		$this->description = __( 'Fill in missing alt text across the Media Library using the site\'s alt text template, in batches. Returns how many images were updated plus remaining and next_offset; call again with that offset until done is true. Images that already have alt text are skipped unless overwrite is true. Call list-images with alt_status \'missing\' first to see how many need filling, and update-image-alt-text when you want to write one image yourself. Caches holding the old alt text are cleared where possible; check cache.warnings and pass on anything the user still has to clear by hand.', 'thinkrank' );
 	}
 
 	/**
@@ -104,6 +104,7 @@ class Fill_Missing_Alt_Text extends Image_Alt_Ability_Base {
 					'type'        => 'boolean',
 					'description' => __( 'True when the whole library has been walked. Call again with next_offset while this is false.', 'thinkrank' ),
 				],
+				'cache'       => $this->cache_property(),
 			],
 		];
 	}

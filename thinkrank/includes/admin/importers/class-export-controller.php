@@ -430,12 +430,19 @@ class Export_Controller extends \WP_REST_Controller {
         // file must not be able to steer where the chunks land. The original key
         // is carried alongside it because that is what the records are filed
         // under in `data` — sanitising is for the destination, not the lookup.
-        $present = [];
+        //
+        // sanitize_key() bounds the alphabet but not the length, and an
+        // over-long slug makes a chunk key MySQL truncates on write and cannot
+        // find on read: from the next request on, the type counts records that
+        // read back as nothing. Keeping such a type would only preserve a
+        // promise the storage cannot honour, so it is dropped at the door.
+        $max_slug   = Snapshot_Store::max_type_length(Thinkrank_Exporter::SLUG);
+        $present    = [];
         foreach (array_keys((array) $payload['data']) as $key) {
             $slug = sanitize_key((string) $key);
             // First one wins, so two keys that sanitise alike cannot have the
             // second silently overwrite the first's chunks.
-            if ($slug !== '' && !isset($present[$slug])) {
+            if ($slug !== '' && strlen($slug) <= $max_slug && !isset($present[$slug])) {
                 $present[$slug] = (string) $key;
             }
         }
@@ -576,15 +583,24 @@ class Export_Controller extends \WP_REST_Controller {
      * `total_records: 0, total_chunks: 1`. Writing that into the file would
      * advertise data the file does not contain.
      *
+     * The question is what the *snapshot* holds, not what this build can
+     * produce. Filtering on get_exportable_types() here conflated the two and
+     * broke the guarantee payload_types() makes on the way in: a file exported
+     * with Pro active and uploaded to a free build keeps its Pro records so a
+     * later Pro activation can drain the same snapshot — and then re-downloading
+     * it on that free build stripped exactly those records from both `types` and
+     * `data` (#589). A fresh export cannot smuggle a type in this way: the run
+     * starts from an empty slot (the `reset` flag on the first chunk) and the
+     * manifest only ever gains the types that build actually exported.
+     *
+     * @since 2.12.0 Tests the stored payload rather than the running build's
+     *              exportable types.
+     *
      * @param array  $manifest Snapshot manifest
      * @param string $type     Data type
      * @return bool
      */
     private function type_has_records(array $manifest, string $type): bool {
-        if (!in_array($type, Thinkrank_Exporter::get_exportable_types(), true)) {
-            return false;
-        }
-
         return (int) ($manifest['types'][$type]['total_records'] ?? 0) > 0;
     }
 

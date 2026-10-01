@@ -3815,10 +3815,28 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                     }
                 }
 
-                // Flush the trailing partial page, or a single empty page when the
-                // type had no entries at all (parity with the previous behavior of
-                // always writing at least one page per configured child).
-                if (!empty($buffer) || $page === 0) {
+                // Flush the trailing partial page.
+                //
+                // A type that produced nothing writes no page at all in index
+                // mode (#836). It used to write one empty urlset and list it in
+                // the index, so a crawler was asked to fetch a file that
+                // answers with no URLs — Search Console reports an empty
+                // sitemap referenced from an index as a warning, and the fetch
+                // is wasted on every pass. On this site three of eleven
+                // children were empty: a post type with nothing published and
+                // two taxonomies with no terms.
+                //
+                // Single-file mode still writes its one page even when empty,
+                // because that file IS the site's /sitemap.xml and a 404 there
+                // is worse than an empty urlset. Nothing lists it, so it costs
+                // no crawl budget.
+                //
+                // Skipping the write also keeps the filename out of
+                // $results['sitemaps_generated'], which is what
+                // prune_orphaned_segments() treats as "written this run" — so
+                // a type that empties after previously publishing has its
+                // stale file deleted rather than left serving.
+                if (!empty($buffer) || ($page === 0 && $index_config === null)) {
                     $page++;
                     $this->write_sitemap_page($this->paginate_url($sitemap_config['url'], $page), $this->wrap_urlset($buffer, $settings, $image_ns), $type, count($buffer), $results, $index_children);
                 }

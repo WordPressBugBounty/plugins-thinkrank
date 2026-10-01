@@ -802,8 +802,11 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
      *
      * A cached response outlives a republish, so without this a mode switch or
      * a content change keeps serving the old document (and, on the static path,
-     * the old headers). Every call is guarded — a site running none of these
-     * simply gets the action hook, which integrations can use.
+     * the old headers).
+     *
+     * The layer-by-layer work moved to Cache_Purger in 2.10.1, once alt-text
+     * writes needed the same thing (#763). The llms.txt-specific hook stays
+     * here because it names this document, which a generic URL purge cannot.
      *
      * @since 2.1.0
      *
@@ -822,20 +825,7 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
          */
         do_action('thinkrank_llms_txt_updated', $url);
 
-        // LiteSpeed Cache and Nginx Helper both listen on their own actions.
-        // These are third-party hook names we fire, not ours to prefix.
-        do_action('litespeed_purge_url', $url); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
-        do_action('rt_nginx_helper_purge_all'); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
-
-        if (function_exists('rocket_clean_files')) {
-            rocket_clean_files([$url]);
-        }
-        if (function_exists('w3tc_flush_url')) {
-            w3tc_flush_url($url);
-        }
-        if (function_exists('wpsc_delete_url_cache')) {
-            wpsc_delete_url_cache($url);
-        }
+        Cache_Purger::purge_urls([$url]);
     }
 
     /**

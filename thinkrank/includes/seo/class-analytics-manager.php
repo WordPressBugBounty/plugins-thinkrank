@@ -602,64 +602,70 @@ class Analytics_Manager {
      * @return array Connection test results
      */
     public function test_connections(): array {
+        // Every entry carries a `message`, configured or not: the result is
+        // handed to the Integrations screen as JSON, and a key that exists on
+        // some services and not others reads as `undefined` there.
         $results = [
-            'google_analytics' => ['status' => 'not_configured'],
-            'search_console' => ['status' => 'not_configured'],
-            'pagespeed' => ['status' => 'not_configured']
+            'google_analytics' => ['status' => 'not_configured', 'message' => ''],
+            'search_console' => ['status' => 'not_configured', 'message' => ''],
+            'pagespeed' => ['status' => 'not_configured', 'message' => '']
         ];
 
-        // Test Google Analytics connection
-        if ($this->analytics_client) {
-            try {
-                $test_result = $this->analytics_client->test_connection();
-                $results['google_analytics'] = [
-                    'status' => $test_result['success'] ? 'connected' : 'error',
-                    'message' => $test_result['message'],
-                    'details' => $test_result
-                ];
-            } catch (\Exception $e) {
-                $results['google_analytics'] = [
-                    'status' => 'error',
-                    'message' => $e->getMessage()
-                ];
-            }
-        }
+        // One shape for all three. They were three copies of the same block
+        // differing only in the client, which is how the same unguarded read
+        // came to exist in triplicate (#852).
+        $clients = [
+            'google_analytics' => $this->analytics_client,
+            'search_console' => $this->search_console_client,
+            'pagespeed' => $this->pagespeed_client,
+        ];
 
-        // Test Search Console connection
-        if ($this->search_console_client) {
-            try {
-                $test_result = $this->search_console_client->test_connection();
-                $results['search_console'] = [
-                    'status' => $test_result['success'] ? 'connected' : 'error',
-                    'message' => $test_result['message'],
-                    'details' => $test_result
-                ];
-            } catch (\Exception $e) {
-                $results['search_console'] = [
-                    'status' => 'error',
-                    'message' => $e->getMessage()
-                ];
+        foreach ($clients as $service => $client) {
+            if (!$client) {
+                continue;
             }
-        }
 
-        // Test PageSpeed connection
-        if ($this->pagespeed_client) {
-            try {
-                $test_result = $this->pagespeed_client->test_connection();
-                $results['pagespeed'] = [
-                    'status' => $test_result['success'] ? 'connected' : 'error',
-                    'message' => $test_result['message'],
-                    'details' => $test_result
-                ];
-            } catch (\Exception $e) {
-                $results['pagespeed'] = [
-                    'status' => 'error',
-                    'message' => $e->getMessage()
-                ];
-            }
+            $results[$service] = $this->describe_connection_test($client);
         }
 
         return $results;
+    }
+
+    /**
+     * Run one client's connection test and report it in a fixed shape.
+     *
+     * The clients answer success with `message` and failure with `error`, and
+     * this read `$test_result['message']` unconditionally — so a failed test
+     * raised "Undefined array key" and handed the admin an error with
+     * `message => null`. The reason the client had in hand was the one thing
+     * the screen needed. The clients now set `message` on both branches; the
+     * fallbacks here cover a client that does not, including one that answers
+     * with neither key.
+     *
+     * @since 2.12.0
+     *
+     * @param object $client A client exposing test_connection(): array.
+     * @return array{status:string, message:string, details?:array}
+     */
+    private function describe_connection_test($client): array {
+        try {
+            $test_result = $client->test_connection();
+
+            if (!is_array($test_result)) {
+                return ['status' => 'error', 'message' => ''];
+            }
+
+            return [
+                'status' => !empty($test_result['success']) ? 'connected' : 'error',
+                'message' => (string) ($test_result['message'] ?? $test_result['error'] ?? ''),
+                'details' => $test_result,
+            ];
+        } catch (\Exception $e) {
+            return [
+                'status' => 'error',
+                'message' => $e->getMessage(),
+            ];
+        }
     }
 
     /**

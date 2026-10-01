@@ -91,12 +91,12 @@ class Social_Images {
 
         $images = [];
 
-        foreach (self::candidates($post_id) as $url) {
+        foreach (self::candidates($post_id) as $candidate) {
             if (count($images) >= $limit - 1) {
                 break;
             }
 
-            $url = self::usable($url);
+            $url = self::usable($candidate['url']);
 
             if ('' === $url) {
                 continue;
@@ -109,7 +109,7 @@ class Social_Images {
             }
 
             $seen[$print] = true;
-            $images[]     = self::describe($url, $post_id);
+            $images[]     = self::describe($url, $post_id, $candidate['attachment_id']);
         }
 
         /**
@@ -124,14 +124,18 @@ class Social_Images {
     }
 
     /**
-     * Candidate URLs, in the order they should be offered.
+     * Candidate images, in the order they should be offered.
+     *
+     * Each carries the attachment ID it is believed to come from, where there
+     * is one to be had without asking the database: the featured image's own,
+     * or the `wp-image-{ID}` the editor wrote on a body image (#847).
      *
      * @since 2.7.0
      * @param int $post_id Post being rendered.
-     * @return array<int, string>
+     * @return array<int, array{url:string, attachment_id:int}>
      */
     private static function candidates(int $post_id): array {
-        $urls = [];
+        $candidates = [];
 
         // The featured image. Usually this IS the primary and the fingerprint
         // check drops it; it matters when a per-post social override displaced
@@ -142,19 +146,22 @@ class Social_Images {
             $src = wp_get_attachment_image_src($thumbnail_id, 'large');
 
             if (is_array($src) && !empty($src[0])) {
-                $urls[] = (string) $src[0];
+                $candidates[] = [
+                    'url'           => (string) $src[0],
+                    'attachment_id' => $thumbnail_id,
+                ];
             }
         }
 
-        foreach (self::from_content($post_id) as $url) {
-            $urls[] = $url;
+        foreach (self::from_content($post_id) as $candidate) {
+            $candidates[] = $candidate;
         }
 
-        return $urls;
+        return $candidates;
     }
 
     /**
-     * Image URLs in the post body, in document order.
+     * Images in the post body, in document order.
      *
      * Reads the stored content rather than running it through `the_content`.
      * This is called while the document head is being written, and rendering
@@ -163,7 +170,7 @@ class Social_Images {
      *
      * @since 2.7.0
      * @param int $post_id Post being rendered.
-     * @return array<int, string>
+     * @return array<int, array{url:string, attachment_id:int}>
      */
     private static function from_content(int $post_id): array {
         $content = (string) get_post_field('post_content', $post_id);
@@ -176,15 +183,18 @@ class Social_Images {
             return [];
         }
 
-        $urls = [];
+        $images = [];
 
         foreach ($tags[0] as $tag) {
             if (preg_match('/\bsrc\s*=\s*["\']([^"\']+)["\']/i', $tag, $match)) {
-                $urls[] = $match[1];
+                $images[] = [
+                    'url'           => $match[1],
+                    'attachment_id' => Attachment_Lookup::hint_from_markup($tag),
+                ];
             }
         }
 
-        return $urls;
+        return $images;
     }
 
     /**
@@ -222,32 +232,31 @@ class Social_Images {
      *
      * @since 2.7.0
      *
-     * @param string $url     Image URL.
-     * @param int    $post_id Post being rendered, for the alt fallback.
+     * @param string $url           Image URL.
+     * @param int    $post_id       Post being rendered, for the alt fallback.
+     * @param int    $attachment_id Attachment the URL is believed to come from,
+     *                              or 0. Checked before it is trusted.
      * @return array<string, mixed>
      */
-    private static function describe(string $url, int $post_id): array {
+    private static function describe(string $url, int $post_id, int $attachment_id = 0): array {
         $image = ['url' => $url];
 
-        $attachment_id = (int) attachment_url_to_postid($url);
+        $attachment_id = Attachment_Lookup::id_from_url($url, $attachment_id);
 
         if ($attachment_id) {
-            $meta = wp_get_attachment_metadata($attachment_id);
+            // The file this URL names, which for a body image is usually a
+            // generated size rather than the original upload.
+            $file = Attachment_Lookup::describe($attachment_id, $url);
 
             // Vector uploads report 0x0; publishing that as a dimension is
             // invalid, so the companions are omitted rather than zeroed.
-            $width  = is_array($meta) && isset($meta['width']) ? (int) $meta['width'] : 0;
-            $height = is_array($meta) && isset($meta['height']) ? (int) $meta['height'] : 0;
-
-            if ($width > 0 && $height > 0) {
-                $image['width']  = $width;
-                $image['height'] = $height;
+            if ($file['width'] > 0 && $file['height'] > 0) {
+                $image['width']  = $file['width'];
+                $image['height'] = $file['height'];
             }
 
-            $type = (string) get_post_mime_type($attachment_id);
-
-            if ('' !== $type) {
-                $image['type'] = $type;
+            if ('' !== $file['type']) {
+                $image['type'] = $file['type'];
             }
 
             $alt = trim((string) get_post_meta($attachment_id, '_wp_attachment_image_alt', true));

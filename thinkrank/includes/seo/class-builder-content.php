@@ -304,6 +304,20 @@ class Builder_Content {
     private const ALT_KEYS = ['alt', 'alt_text', 'image_alt', 'title'];
 
     /**
+     * The global post and every global `setup_postdata()` writes.
+     *
+     * Rendering points them at the post being analyzed, then puts each one
+     * back exactly as it was, unset included (#860).
+     *
+     * @since 2.12.0
+     * @var string[]
+     */
+    private const POSTDATA_GLOBALS = [
+        'post', 'id', 'authordata', 'currentday', 'currentmonth',
+        'page', 'pages', 'multipage', 'more', 'numpages',
+    ];
+
+    /**
      * Resolve the content worth analyzing for a post.
      *
      * @param \WP_Post $post Post being analyzed.
@@ -555,7 +569,7 @@ class Builder_Content {
      * @return string Content to analyze.
      */
     public static function resolve_markup(string $raw, \WP_Post $post): string {
-        $content = self::render_post_content($raw);
+        $content = self::render_post_content($raw, $post);
 
         // Block markup that renders to nothing usually means the builder that
         // owns those blocks did not register them in this context — Divi 5
@@ -605,17 +619,43 @@ class Builder_Content {
      * Best-effort: a third-party block that fatals must not take the whole
      * score down with it.
      *
-     * @param string $raw Raw post content.
+     * Runs as the post's own context, as it would on the front end. Admin and
+     * REST requests have no current post, so a shortcode reading
+     * `get_the_ID()` got nothing, and one looping a related-posts query left
+     * the global post on the last of them: its `wp_reset_postdata()` goes back
+     * to the main query's post, and there is none. On the Classic Editor this
+     * runs after the form prints its hidden `post_ID` and before the title and
+     * editor, which then showed the related post, and Update saved it over the
+     * original (#860).
+     *
+     * @param string   $raw  Raw post content.
+     * @param \WP_Post $post Post the content belongs to.
      * @return string Rendered content.
      */
-    private static function render_post_content(string $raw): string {
+    private static function render_post_content(string $raw, \WP_Post $post): string {
         if ('' === trim($raw)) {
             return '';
         }
 
-        $content = $raw;
+        $content  = $raw;
+        $previous = self::snapshot_post_globals();
 
         try {
+            // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Made current for the render, restored in finally.
+            $GLOBALS['post'] = $post;
+
+            // Fires `the_post`, which these paths never fired before: admin,
+            // REST and cron analysis had no current post at all. That is the
+            // same signal the front-end loop sends and it is what makes
+            // `get_the_ID()` work inside a shortcode, but it is a new call on a
+            // path that runs in bulk — the word-count index resolves every post
+            // it visits — so a theme that counts views on `the_post` will count
+            // them during indexing. Accepted deliberately: without it a
+            // shortcode cannot resolve its own post, which is the bug (#860).
+            if (function_exists('setup_postdata')) {
+                setup_postdata($post);
+            }
+
             if (function_exists('has_blocks') && function_exists('do_blocks') && has_blocks($raw)) {
                 $content = do_blocks($raw);
             }
@@ -626,9 +666,52 @@ class Builder_Content {
             }
         } catch (\Throwable $e) {
             return $raw;
+        } finally {
+            self::restore_post_globals($previous);
         }
 
         return self::is_blank($content) ? $raw : $content;
+    }
+
+    /**
+     * The post globals as they are now; a global that is unset has no key.
+     *
+     * @since 2.12.0
+     *
+     * @return array<string,mixed>
+     */
+    private static function snapshot_post_globals(): array {
+        $snapshot = [];
+
+        foreach (self::POSTDATA_GLOBALS as $name) {
+            if (array_key_exists($name, $GLOBALS)) {
+                $snapshot[$name] = $GLOBALS[$name];
+            }
+        }
+
+        return $snapshot;
+    }
+
+    /**
+     * Put the post globals back as snapshot_post_globals() found them.
+     *
+     * Assigned directly rather than through `setup_postdata()`: there may have
+     * been no post to set up, and re-running it would fire `the_post` again.
+     *
+     * @since 2.12.0
+     *
+     * @param array<string,mixed> $snapshot From snapshot_post_globals().
+     * @return void
+     */
+    private static function restore_post_globals(array $snapshot): void {
+        foreach (self::POSTDATA_GLOBALS as $name) {
+            if (array_key_exists($name, $snapshot)) {
+                // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Core's own globals, put back as they were.
+                $GLOBALS[$name] = $snapshot[$name];
+            } else {
+                unset($GLOBALS[$name]);
+            }
+        }
     }
 
     /**

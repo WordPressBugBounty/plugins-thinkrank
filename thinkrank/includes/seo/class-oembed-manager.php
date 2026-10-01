@@ -301,13 +301,15 @@ class Oembed_Manager {
      * @return array{0:int,1:int} Width and height; 0,0 when unknown.
      */
     private function image_dimensions(string $url, array $settings): array {
-        $attachment_id = attachment_url_to_postid($url);
+        $attachment_id = Attachment_Lookup::id_from_url($url);
 
         if ($attachment_id) {
-            $meta = wp_get_attachment_image_src($attachment_id, 'full');
+            // The file this URL names: a social image picked at a generated
+            // size is not as large as the upload it was cut from.
+            $file = Attachment_Lookup::describe($attachment_id, $url);
 
-            if (is_array($meta) && !empty($meta[1]) && !empty($meta[2])) {
-                return [(int) $meta[1], (int) $meta[2]];
+            if ($file['width'] > 0 && $file['height'] > 0) {
+                return [$file['width'], $file['height']];
             }
         }
 

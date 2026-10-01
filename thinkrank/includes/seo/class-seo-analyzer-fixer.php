@@ -301,20 +301,30 @@ class SEO_Analyzer_Fixer {
             ];
         }
 
+        $message = $remaining > 0
+            ? sprintf(
+                /* translators: 1: images updated in this batch, 2: images still to process. */
+                __('Added alt text to %1$d images. %2$d still to go — run the fix again to continue.', 'thinkrank'),
+                $updated,
+                $remaining
+            )
+            : sprintf(
+                /* translators: %d: number of images updated. */
+                __('Added alt text to %d images. Your media library is done.', 'thinkrank'),
+                $updated
+            );
+
+        // The write is done, but a cache ThinkRank cannot reach still decides
+        // what the visitor sees. Saying so beats a green toast over a page
+        // that has not changed (#763).
+        $warnings = (array) ($result['cache']['warnings'] ?? []);
+        if ([] !== $warnings) {
+            $message .= ' ' . implode(' ', $warnings);
+        }
+
         return [
             'fixed'   => true,
-            'message' => $remaining > 0
-                ? sprintf(
-                    /* translators: 1: images updated in this batch, 2: images still to process. */
-                    __('Added alt text to %1$d images. %2$d still to go — run the fix again to continue.', 'thinkrank'),
-                    $updated,
-                    $remaining
-                )
-                : sprintf(
-                    /* translators: %d: number of images updated. */
-                    __('Added alt text to %d images. Your media library is done.', 'thinkrank'),
-                    $updated
-                ),
+            'message' => $message,
             'data'    => [
                 'updated'   => $updated,
                 'remaining' => $remaining,

@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.11.0
+Stable tag: 2.12.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -327,6 +327,18 @@ Content brief competitor analysis and schema import fetch the URLs you type in, 
 
 == Changelog ==
 
+= 2.12.0 =
+Release Date: 2026-10-01
+
+- Improved: Alt text updates clear Elementor and page caches, and name any cache to clear by hand
+- Fixed: Related-posts shortcodes no longer swap the post in the Classic Editor or skew its score
+- Fixed: Content Analysis no longer measures only the FAQ block on a post that has one
+- Fixed: Page-builder posts no longer save "No content" for readability and content quality
+- Fixed: Open Graph tags now include the size, type and alt of large featured images
+- Fixed: Schema deployed from the Schema Manager now appears on sites running MySQL 5.7
+- Fixed: The sitemap index no longer lists sitemaps that contain no URLs
+- Fixed: Re-downloading an uploaded export file now keeps the Pro data it carried
+
 = 2.11.0 =
 Release Date: 2026-09-29
 
@@ -380,27 +392,12 @@ Release Date: 2026-09-21
 - Fixed: Re-scan on the Migration screen now finds newly installed SEO plugins
 - Fixed: Minor migration issues with sparse snapshots, deleted content and sitemap exclusions
 
-= 2.7.0 =
-Release Date: 2026-09-17
-
-- New: Hide a post from this site's own search results and archive listings
-- New: RSS feed controls: excerpt only, a link back to the source post, and noindex for feeds
-- New: Extra og:image tags, so a share has a fallback when the first image fails validation
-- New: Post embeds carry your SEO title, description and social image
-- New: A canonical URL scheme setting for sites behind a proxy that terminates TLS
-- New: Brand the XML sitemap stylesheet with your logo and two colours
-- New: URLs asking for content that does not exist now answer 404 instead of the page
-- Changed: Archive titles drop the "Category:" label and strip markup, and your alternate site name is published as schema
-- Fixed: Turning Schema off now stops every schema producer, including blocks and page builders
-- Fixed: Non-Latin titles and descriptions are no longer cut short, plus minor sitemap, feed and database fixes
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.12.0 =
+Alt text updates now clear Elementor and page caches. Fixes related-posts shortcodes swapping the post in the Classic Editor, FAQ blocks skewing Content Analysis, and deployed schema on MySQL 5.7. Recommended for all sites.
+
 = 2.11.0 =
 Adds a Basic / Advanced mode switch, a placement gauge per focus keyword in the editor, FAQ abilities for MCP agents and WooCommerce product tokens. Fixes sitemap rebuilds that missed scheduled posts or ran out of memory on large sites. Recommended for all sites.
-
-= 2.10.0 =
-Adds a Thin Content report, sitewide duplicate title and description detection, About, Contact and Profile page schema, and Rank Math FAQ/HowTo block migration. Fixes Content Analysis in page builders. Recommended for all sites.
-

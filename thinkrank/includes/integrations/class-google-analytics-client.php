@@ -85,8 +85,14 @@ class Google_Analytics_Client extends Google_API_Base_Client {
                 'metrics_count' => count($result['metrics'] ?? [])
             ];
         } catch (\Exception $e) {
+            // `message` as well as `error`: the success branch above reports
+            // its outcome as `message`, and every consumer reads that key, so
+            // a failure that only set `error` was reported to the admin as an
+            // error with no reason at all (#852). `error` is kept for any
+            // caller that already reads it.
             return [
                 'success' => false,
+                'message' => $e->getMessage(),
                 'error' => $e->getMessage()
             ];
         }

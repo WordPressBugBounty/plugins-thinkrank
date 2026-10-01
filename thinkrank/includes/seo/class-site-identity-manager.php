@@ -509,9 +509,10 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      *
      * attachment_url_to_postid() matches _wp_attached_file, which holds the
      * ORIGINAL upload path, so the URL of a generated derivative
-     * (`logo-512.png`) returns 0 — and that is exactly what the media picker
-     * hands back when the user chooses a size. Strip the dimension suffix and
-     * try the original once.
+     * (`logo-512x512.png`) returns 0 — and that is exactly what the media
+     * picker hands back when the user chooses a size. Attachment_Lookup falls
+     * back to the original behind it; the fallback started here and moved
+     * there when every other image lookup turned out to need it (#847).
      *
      * Shared with SEO_Manager's site-icon filter so both sides of the feature
      * agree on which attachment a configured URL means.
@@ -522,19 +523,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      * @return int Attachment ID, or 0.
      */
     public static function icon_attachment_id(string $url): int {
-        $attachment_id = (int) attachment_url_to_postid($url);
-
-        if ($attachment_id) {
-            return $attachment_id;
-        }
-
-        $original = preg_replace('/-\d+x\d+(?=\.[a-zA-Z0-9]+$)/', '', $url);
-
-        if (is_string($original) && $original !== $url) {
-            return (int) attachment_url_to_postid($original);
-        }
-
-        return 0;
+        return Attachment_Lookup::id_from_url($url);
     }
 
     /**
@@ -1433,11 +1422,14 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
 
         // Additional logo analysis for local images
         if (!empty($logo_url) && filter_var($logo_url, FILTER_VALIDATE_URL)) {
-            $attachment_id = attachment_url_to_postid($logo_url);
+            $attachment_id = Attachment_Lookup::id_from_url($logo_url);
             if ($attachment_id) {
                 $image_meta = wp_get_attachment_metadata($attachment_id);
-                $width  = isset($image_meta['width']) ? (int) $image_meta['width'] : 0;
-                $height = isset($image_meta['height']) ? (int) $image_meta['height'] : 0;
+                // The configured file's own size — a logo picked at a generated
+                // size is not as large as the upload behind it.
+                $logo_file = Attachment_Lookup::describe($attachment_id, $logo_url);
+                $width  = $logo_file['width'];
+                $height = $logo_file['height'];
 
                 // SVG logos store 0x0 metadata — no dimension/ratio analysis
                 // is possible (and dividing by 0 is fatal).
@@ -4262,16 +4254,18 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         }
 
         // Check if it's a local image
-        $attachment_id = attachment_url_to_postid($value);
+        $attachment_id = Attachment_Lookup::id_from_url($value);
         if ($attachment_id) {
             $image_meta = wp_get_attachment_metadata($attachment_id);
 
             if ($image_meta && isset($image_meta['width'], $image_meta['height'])) {
-                // Check recommended size
+                // Check recommended size, against the configured file itself
+                // rather than the upload it may have been generated from.
                 if (isset($config['recommended_size'])) {
                     [$rec_width, $rec_height] = explode('x', $config['recommended_size']);
+                    $image_file = Attachment_Lookup::describe($attachment_id, $value);
 
-                    if ((int) $image_meta['width'] !== (int) $rec_width || (int) $image_meta['height'] !== (int) $rec_height) {
+                    if ($image_file['width'] !== (int) $rec_width || $image_file['height'] !== (int) $rec_height) {
                         $optimization['suggestions'][] = "Consider using {$config['recommended_size']} size for optimal {$element}";
                     }
                 }

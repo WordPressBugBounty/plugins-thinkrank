@@ -2,14 +2,14 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 2.11.0\n"
+"Project-Id-Version: ThinkRank 2.12.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-29T12:14:59+00:00\n"
+"POT-Creation-Date: 2026-10-01T10:40:20+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
@@ -277,7 +277,7 @@ msgstr ""
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:798
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1406
 #: src/admin/components/seo/KeywordGauges.js:25
-#: src/admin/components/seo/SEOScoreSummary.js:435
+#: src/admin/components/seo/SEOScoreSummary.js:423
 msgid "Meta description"
 msgstr ""
 
@@ -1128,7 +1128,7 @@ msgid "Fill Missing ThinkRank Image Alt Text"
 msgstr ""
 
 #: includes/abilities/media/class-fill-missing-alt-text.php:35
-msgid "Fill in missing alt text across the Media Library using the site's alt text template, in batches. Returns how many images were updated plus remaining and next_offset; call again with that offset until done is true. Images that already have alt text are skipped unless overwrite is true. Call list-images with alt_status 'missing' first to see how many need filling, and update-image-alt-text when you want to write one image yourself."
+msgid "Fill in missing alt text across the Media Library using the site's alt text template, in batches. Returns how many images were updated plus remaining and next_offset; call again with that offset until done is true. Images that already have alt text are skipped unless overwrite is true. Call list-images with alt_status 'missing' first to see how many need filling, and update-image-alt-text when you want to write one image yourself. Caches holding the old alt text are cleared where possible; check cache.warnings and pass on anything the user still has to clear by hand."
 msgstr ""
 
 #: includes/abilities/media/class-fill-missing-alt-text.php:70
@@ -1174,6 +1174,18 @@ msgstr ""
 msgid "False when the alt text is missing or whitespace only."
 msgstr ""
 
+#: includes/abilities/media/class-image-alt-ability-base.php:147
+msgid "What was cleared so the new alt text is visible, and what the user still has to clear by hand."
+msgstr ""
+
+#: includes/abilities/media/class-image-alt-ability-base.php:151
+msgid "Pages whose cached rendering of this image was dropped."
+msgstr ""
+
+#: includes/abilities/media/class-image-alt-ability-base.php:156
+msgid "Caching layers that are active but cannot be cleared from here. Pass these on: the page keeps serving the old alt text until the user clears them."
+msgstr ""
+
 #: includes/abilities/media/class-list-images.php:29
 msgid "List ThinkRank Images"
 msgstr ""
@@ -1203,7 +1215,7 @@ msgid "Update ThinkRank Image Alt Text"
 msgstr ""
 
 #: includes/abilities/media/class-update-image-alt-text.php:36
-msgid "Set one image's alt text in the Media Library. Pass alt_text to write specific words, or generate: true to build one from the site's alt text template. Existing alt text is kept unless overwrite is true, so a sweep never replaces what an author wrote. Returns the stored value. Call get-image-alt-text to read the current value first, list-images to find ids, or fill-missing-alt-text to do the whole library at once."
+msgid "Set one image's alt text in the Media Library. Pass alt_text to write specific words, or generate: true to build one from the site's alt text template. Existing alt text is kept unless overwrite is true, so a sweep never replaces what an author wrote. Returns the stored value. Call get-image-alt-text to read the current value first, list-images to find ids, or fill-missing-alt-text to do the whole library at once. Caches holding the old alt text are cleared where possible; check cache.warnings and pass on anything the user still has to clear by hand."
 msgstr ""
 
 #: includes/abilities/media/class-update-image-alt-text.php:71
@@ -1222,11 +1234,11 @@ msgstr ""
 msgid "True when the image already had alt text and overwrite was not set. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/media/class-update-image-alt-text.php:127
+#: includes/abilities/media/class-update-image-alt-text.php:128
 msgid "Provide alt_text, or set generate to true to build it from the site template."
 msgstr ""
 
-#: includes/abilities/media/class-update-image-alt-text.php:152
+#: includes/abilities/media/class-update-image-alt-text.php:157
 msgid "The alt text template produced no value for this image. Set alt_text explicitly, or review the template under Essential SEO → Image SEO."
 msgstr ""
 
@@ -2383,7 +2395,7 @@ msgstr ""
 #: src/admin/components/essential-seo/SiteIdentityTab.js:1057
 #: src/admin/components/import-export/NativeExportCard.js:315
 #: src/admin/components/seo/ImprovementSuggestions.js:547
-#: src/admin/components/seo/SEOScoreCalculator.js:1095
+#: src/admin/components/seo/SEOScoreCalculator.js:1091
 #: src/admin/setup-wizard/steps/Step2Migration.js:147
 msgid "Dismiss"
 msgstr ""
@@ -2410,7 +2422,7 @@ msgstr ""
 #: src/admin/components/import-export/ConfirmationDialog.js:45
 #: src/admin/components/pages/MCPConnectedApps.js:460
 #: src/admin/components/pages/MCPConnectionConfig.js:503
-#: src/admin/components/seo/SEOScoreCalculator.js:1087
+#: src/admin/components/seo/SEOScoreCalculator.js:1083
 #: src/metabox/components/metabox-schema-tab/ImportSection.js:510
 msgid "Cancel"
 msgstr ""
@@ -2427,7 +2439,7 @@ msgstr ""
 #: src/admin/components/content-brief/ContentStructure.js:1467
 #: src/admin/components/essential-seo/ai-insights/AIInsightsTab.js:612
 #: src/admin/components/pages/UsageAnalytics.js:19
-#: src/admin/components/seo/SEOScoreCalculator.js:790
+#: src/admin/components/seo/SEOScoreCalculator.js:786
 msgid "Overview"
 msgstr ""
 
@@ -2456,7 +2468,7 @@ msgid "Optimize this content for search & AI with ThinkRank."
 msgstr ""
 
 #: includes/admin/class-metabox-manager.php:462
-#: src/metabox/components/MetaboxApp.js:1534
+#: src/metabox/components/MetaboxApp.js:1523
 #: src/metabox/components/MetaboxDrawer.js:169
 msgid "Open ThinkRank SEO"
 msgstr ""
@@ -2527,7 +2539,7 @@ msgstr ""
 
 #: includes/admin/class-post-list-columns.php:480
 #: includes/admin/class-post-list-columns.php:484
-#: src/admin/components/seo/SEOScoreSummary.js:265
+#: src/admin/components/seo/SEOScoreSummary.js:253
 msgid "SEO Score"
 msgstr ""
 
@@ -2538,7 +2550,7 @@ msgstr ""
 #: includes/admin/class-post-list-columns.php:492
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsTxtValidation.js:226
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsTxtValidation.js:245
-#: src/admin/components/seo/SEOScoreSummary.js:283
+#: src/admin/components/seo/SEOScoreSummary.js:271
 msgid "Content Quality"
 msgstr ""
 
@@ -2558,7 +2570,7 @@ msgid "Focus Keyword - Click to edit"
 msgstr ""
 
 #: includes/admin/class-post-list-columns.php:552
-#: src/admin/components/seo/SEOScoreSummary.js:291
+#: src/admin/components/seo/SEOScoreSummary.js:279
 msgid "Readability"
 msgstr ""
 
@@ -3465,11 +3477,11 @@ msgstr ""
 msgid "You do not have permission to run the site SEO analyzer."
 msgstr ""
 
-#: includes/api/class-seo-score-endpoint.php:356
+#: includes/api/class-seo-score-endpoint.php:384
 msgid "Existing SEO score retrieved successfully"
 msgstr ""
 
-#: includes/api/class-seo-score-endpoint.php:362
+#: includes/api/class-seo-score-endpoint.php:390
 msgid "No existing SEO analysis found"
 msgstr ""
 
@@ -4138,7 +4150,7 @@ msgstr ""
 #: includes/editor/bricks/class-toc-element.php:103
 #: includes/editor/elementor/class-howto-widget.php:61
 #: includes/editor/elementor/class-toc-widget.php:63
-#: src/admin/components/seo/SEOScoreSummary.js:434
+#: src/admin/components/seo/SEOScoreSummary.js:422
 #: src/metabox/components/SocialTab.js:299
 msgid "Title"
 msgstr ""
@@ -4704,6 +4716,12 @@ msgstr ""
 msgid "Every 45 Minutes"
 msgstr ""
 
+#. translators: %s: comma-separated list of caching plugin names.
+#: includes/seo/class-cache-purger.php:276
+#, php-format
+msgid "%s is active and offers no way to clear a single page from here. Clear its cache to see the change on the front end."
+msgstr ""
+
 #: includes/seo/class-content-type-settings.php:308
 msgid "Blog posts index"
 msgstr ""
@@ -4919,71 +4937,71 @@ msgstr ""
 msgid "The post %1$s first appeared on %2$s."
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:171
+#: includes/seo/class-image-seo-manager.php:196
 msgid "Add Missing Alt Attributes"
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:172
+#: includes/seo/class-image-seo-manager.php:197
 msgid "Automatically add ALT attributes to images if they are missing."
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:177
+#: includes/seo/class-image-seo-manager.php:202
 #: src/admin/components/essential-seo/ImageSEOTab.js:645
 msgid "Alt attribute format"
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:178
+#: includes/seo/class-image-seo-manager.php:203
 msgid "The format to use for automatically generated ALT attributes."
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:183
+#: includes/seo/class-image-seo-manager.php:208
 msgid "Add Missing Title Attributes"
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:184
+#: includes/seo/class-image-seo-manager.php:209
 msgid "Automatically add TITLE attributes to images if they are missing."
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:189
+#: includes/seo/class-image-seo-manager.php:214
 #: src/admin/components/essential-seo/ImageSEOTab.js:736
 msgid "Title attribute format"
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:190
+#: includes/seo/class-image-seo-manager.php:215
 msgid "The format to use for automatically generated TITLE attributes."
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:195
+#: includes/seo/class-image-seo-manager.php:220
 msgid "Alt text source"
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:196
+#: includes/seo/class-image-seo-manager.php:221
 msgid "“Template” builds alt text from the filename and title. “AI” looks at the image itself and describes what is in it — this uses your AI provider key and costs one call per image."
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:202
+#: includes/seo/class-image-seo-manager.php:227
 msgid "Save alt text to the Media Library"
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:203
+#: includes/seo/class-image-seo-manager.php:228
 msgid "Persist generated alt text onto the attachment record so it works everywhere, not just in rendered content."
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:208
+#: includes/seo/class-image-seo-manager.php:233
 #: src/admin/components/essential-seo/ImageSEOTab.js:848
 msgid "Fill alt text on upload"
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:209
+#: includes/seo/class-image-seo-manager.php:234
 msgid "When a new image is uploaded, automatically save generated alt text to the Media Library."
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:214
+#: includes/seo/class-image-seo-manager.php:239
 #: src/admin/components/essential-seo/ImageSEOTab.js:873
 msgid "Overwrite existing alt text"
 msgstr ""
 
-#: includes/seo/class-image-seo-manager.php:215
+#: includes/seo/class-image-seo-manager.php:240
 msgid "Replace alt text that is already set, instead of only filling images that are missing it."
 msgstr ""
 
@@ -5223,44 +5241,44 @@ msgid "No images could be filled automatically. Check your alt text format under
 msgstr ""
 
 #. translators: 1: images updated in this batch, 2: images still to process.
-#: includes/seo/class-seo-analyzer-fixer.php:309
+#: includes/seo/class-seo-analyzer-fixer.php:307
 #, php-format
 msgid "Added alt text to %1$d images. %2$d still to go — run the fix again to continue."
 msgstr ""
 
 #. translators: %d: number of images updated.
-#: includes/seo/class-seo-analyzer-fixer.php:315
+#: includes/seo/class-seo-analyzer-fixer.php:313
 #, php-format
 msgid "Added alt text to %d images. Your media library is done."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:356
+#: includes/seo/class-seo-analyzer-fixer.php:366
 msgid "The AI crawler rules could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer-fixer.php:376
+#: includes/seo/class-seo-analyzer-fixer.php:386
 #, php-format
 msgid "The crawler rules were saved, but your robots.txt still blocks %s. That block comes from your own robots.txt content, a robots.txt file in your site root, or the site-wide search-engine setting — edit it under Essential SEO → Crawling and AI Indexing."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:384
+#: includes/seo/class-seo-analyzer-fixer.php:394
 msgid "AI answer engines can now crawl and cite your site."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:404
+#: includes/seo/class-seo-analyzer-fixer.php:414
 msgid "The llms.txt module is unavailable."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:415
+#: includes/seo/class-seo-analyzer-fixer.php:425
 msgid "llms.txt could not be published because its settings are incomplete. Fill in Website Description, Key Features and Target Audience under Essential SEO → Crawling and AI Indexing → LLMs.txt, then try again."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:427
+#: includes/seo/class-seo-analyzer-fixer.php:437
 msgid "llms.txt could not be written. Check that your site root is writable."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:433
+#: includes/seo/class-seo-analyzer-fixer.php:443
 msgid "Your llms.txt is now published at /llms.txt."
 msgstr ""
 
@@ -5273,7 +5291,7 @@ msgid "Advanced SEO"
 msgstr ""
 
 #: includes/seo/class-seo-analyzer.php:85
-#: src/admin/components/seo/SEOScoreSummary.js:436
+#: src/admin/components/seo/SEOScoreSummary.js:424
 #: src/blocks/faq-block/edit.js:99
 #: src/blocks/howto-block/edit.js:104
 #: src/blocks/toc-block/edit.js:110
@@ -5716,19 +5734,19 @@ msgstr ""
 msgid "Review your most important pages, update what has changed, and save them so their modified date reflects the revision."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:1896
+#: includes/seo/class-site-identity-manager.php:1888
 msgid "Invalid title separator specified."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:3033
+#: includes/seo/class-site-identity-manager.php:3025
 msgid "Select a business type so your local schema describes the right kind of business."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:3042
+#: includes/seo/class-site-identity-manager.php:3034
 msgid "Business type is set to Local Business. A more specific type sharpens your schema, if one fits."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:3048
+#: includes/seo/class-site-identity-manager.php:3040
 msgid "Business type is selected for proper schema markup."
 msgstr ""
 
@@ -5765,7 +5783,7 @@ msgid "The sitemap files could not be written to the site root."
 msgstr ""
 
 #. translators: %s: search query.
-#: includes/seo/class-social-meta-manager.php:2023
+#: includes/seo/class-social-meta-manager.php:2031
 #, php-format
 msgid "Search Results for \"%s\""
 msgstr ""
@@ -7117,7 +7135,7 @@ msgid "Infographic Opportunities"
 msgstr ""
 
 #: src/admin/components/content-brief/ContentStructure.js:1177
-#: src/admin/components/seo/SEOScoreSummary.js:299
+#: src/admin/components/seo/SEOScoreSummary.js:287
 msgid "Content Analysis"
 msgstr ""
 
@@ -12454,12 +12472,12 @@ msgid "Failed to open Rich Results Test. Please try again."
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/api.js:471
-#: src/metabox/components/metabox-schema-tab/api.js:338
+#: src/metabox/components/metabox-schema-tab/api.js:343
 msgid "Schema markup generated successfully!"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/api.js:477
-#: src/metabox/components/metabox-schema-tab/api.js:349
+#: src/metabox/components/metabox-schema-tab/api.js:354
 msgid "Schema generation failed. Please try again."
 msgstr ""
 
@@ -12476,17 +12494,17 @@ msgid "Schema validation failed. Please try again."
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/api.js:636
-#: src/metabox/components/metabox-schema-tab/api.js:425
+#: src/metabox/components/metabox-schema-tab/api.js:430
 msgid "No schema markup to deploy. Please generate schema first."
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/api.js:660
-#: src/metabox/components/metabox-schema-tab/api.js:458
+#: src/metabox/components/metabox-schema-tab/api.js:463
 msgid "Schema markup deployed successfully!"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema-tab/api.js:669
-#: src/metabox/components/metabox-schema-tab/api.js:471
+#: src/metabox/components/metabox-schema-tab/api.js:476
 msgid "Schema deployment failed. Please try again."
 msgstr ""
 
@@ -17985,12 +18003,12 @@ msgid "ThinkRank Pro is installed on this site, but its license has not been act
 msgstr ""
 
 #: src/admin/components/seo/ImprovementSuggestions.js:321
-#: src/admin/components/seo/SEOScoreCalculator.js:1007
+#: src/admin/components/seo/SEOScoreCalculator.js:1003
 msgid "Excellent Work!"
 msgstr ""
 
 #: src/admin/components/seo/ImprovementSuggestions.js:324
-#: src/admin/components/seo/SEOScoreCalculator.js:1010
+#: src/admin/components/seo/SEOScoreCalculator.js:1006
 msgid "No immediate SEO improvements needed. Your content is well optimized!"
 msgstr ""
 
@@ -18284,7 +18302,7 @@ msgid "Poor SEO - requires significant work"
 msgstr ""
 
 #: src/admin/components/seo/ScoreBreakdown.js:466
-#: src/admin/components/seo/SEOScoreCalculator.js:794
+#: src/admin/components/seo/SEOScoreCalculator.js:790
 msgid "Suggestions"
 msgstr ""
 
@@ -18292,268 +18310,268 @@ msgstr ""
 msgid "Details"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:243
+#: src/admin/components/seo/SEOScoreCalculator.js:244
 msgid "No post ID provided"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:314
+#: src/admin/components/seo/SEOScoreCalculator.js:315
 msgid "Failed to calculate SEO score"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:324
+#: src/admin/components/seo/SEOScoreCalculator.js:325
 msgid "An error occurred while calculating SEO score"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:445
-#: src/admin/components/seo/SEOScoreCalculator.js:453
+#: src/admin/components/seo/SEOScoreCalculator.js:441
+#: src/admin/components/seo/SEOScoreCalculator.js:449
 msgid "Failed to generate an explanation"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:493
+#: src/admin/components/seo/SEOScoreCalculator.js:489
 msgid "Applied a new SEO title:"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:494
+#: src/admin/components/seo/SEOScoreCalculator.js:490
 msgid "Failed to generate an improved title"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:514
+#: src/admin/components/seo/SEOScoreCalculator.js:510
 msgid "Applied a new meta description:"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:515
+#: src/admin/components/seo/SEOScoreCalculator.js:511
 msgid "Failed to generate a meta description"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:534
+#: src/admin/components/seo/SEOScoreCalculator.js:530
 msgid "Added an authoritative source link:"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:535
+#: src/admin/components/seo/SEOScoreCalculator.js:531
 msgid "Failed to add a source link"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:563
+#: src/admin/components/seo/SEOScoreCalculator.js:559
 msgid "Added a keyword-rich closing paragraph —"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:567
+#: src/admin/components/seo/SEOScoreCalculator.js:563
 msgid "Failed to add a paragraph"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:570
-#: src/admin/components/seo/SEOScoreCalculator.js:571
+#: src/admin/components/seo/SEOScoreCalculator.js:566
+#: src/admin/components/seo/SEOScoreCalculator.js:567
 msgid "keyword density is now"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:570
+#: src/admin/components/seo/SEOScoreCalculator.js:566
 msgid "within range"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:571
+#: src/admin/components/seo/SEOScoreCalculator.js:567
 msgid "apply again or weave the keyword into the body to reach 0.5%"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:592
+#: src/admin/components/seo/SEOScoreCalculator.js:588
 msgid "Enabled ThinkRank structured data —"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:597
+#: src/admin/components/seo/SEOScoreCalculator.js:593
 msgid "already on; recalculate the score"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:601
+#: src/admin/components/seo/SEOScoreCalculator.js:597
 msgid "schema; recalculate the score"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:608
-#: src/admin/components/seo/SEOScoreCalculator.js:614
+#: src/admin/components/seo/SEOScoreCalculator.js:604
+#: src/admin/components/seo/SEOScoreCalculator.js:610
 msgid "Failed to enable schema"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:637
+#: src/admin/components/seo/SEOScoreCalculator.js:633
 msgid "🔒 This is a server setting, not content. Install an SSL certificate with your host (most offer free Let’s Encrypt SSL) and serve the whole site over HTTPS. It can’t be fixed from the editor."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:642
+#: src/admin/components/seo/SEOScoreCalculator.js:638
 msgid "📱 Mobile-friendliness comes from your theme, not this post. Use a responsive theme and test with Google’s Mobile-Friendly Test. There’s nothing to auto-apply to the content here."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:647
+#: src/admin/components/seo/SEOScoreCalculator.js:643
 msgid "⚡ Core Web Vitals (LCP, INP, CLS) are runtime performance metrics driven by hosting, theme, images and scripts. Measure with PageSpeed Insights and optimize there — they can’t be set from post content."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:655
+#: src/admin/components/seo/SEOScoreCalculator.js:651
 msgid "👤 Reinforce E-E-A-T by adding an author bio with credentials, citing reputable sources in the article, and providing contact/about info on your site. This is editorial work, not an auto-applied change."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:660
+#: src/admin/components/seo/SEOScoreCalculator.js:656
 msgid "📝 Improve readability manually: split long paragraphs, shorten sentences, and add H2/H3 subheadings to break up the content into scannable sections."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:666
+#: src/admin/components/seo/SEOScoreCalculator.js:662
 msgid "💡 Scroll down to the meta description field and update it with compelling, keyword-rich content."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:671
+#: src/admin/components/seo/SEOScoreCalculator.js:667
 msgid "💡 Update your post title or add relevant headings (H2, H3) to your content."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:676
+#: src/admin/components/seo/SEOScoreCalculator.js:672
 msgid "💡 Review your content and naturally incorporate your target keyword in key locations."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:681
+#: src/admin/components/seo/SEOScoreCalculator.js:677
 msgid "💡 Expand your content with more detailed, valuable information for your readers."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:686
+#: src/admin/components/seo/SEOScoreCalculator.js:682
 msgid "💡 Add relevant internal links to other pages on your site or quality external resources."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:691
+#: src/admin/components/seo/SEOScoreCalculator.js:687
 msgid "💡 Add relevant images with descriptive alt text to enhance your content."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:695
+#: src/admin/components/seo/SEOScoreCalculator.js:691
 msgid "💡 Review the suggestion and make the recommended changes to improve your SEO."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:782
+#: src/admin/components/seo/SEOScoreCalculator.js:778
 msgid "Calculate Score"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:784
+#: src/admin/components/seo/SEOScoreCalculator.js:780
 msgid "Calculating…"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:786
+#: src/admin/components/seo/SEOScoreCalculator.js:782
 msgid "Recalculate"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:791
+#: src/admin/components/seo/SEOScoreCalculator.js:787
 msgid "Scoring Factors"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:810
+#: src/admin/components/seo/SEOScoreCalculator.js:806
 msgid "SEO Score Analysis"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:823
+#: src/admin/components/seo/SEOScoreCalculator.js:819
 msgid "Last calculated"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:824
+#: src/admin/components/seo/SEOScoreCalculator.js:820
 msgid "Not analyzed yet"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:834
+#: src/admin/components/seo/SEOScoreCalculator.js:830
 msgid "Add a post title before calculating the SEO score"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:867
+#: src/admin/components/seo/SEOScoreCalculator.js:863
 msgid "Remember to save the post to keep it."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:887
+#: src/admin/components/seo/SEOScoreCalculator.js:883
 msgid "Analyzing your content for SEO optimization…"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:899
+#: src/admin/components/seo/SEOScoreCalculator.js:895
 msgid "No SEO Analysis Yet"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:900
+#: src/admin/components/seo/SEOScoreCalculator.js:896
 msgid "Click \"Calculate SEO Score\" to analyze your content and get optimization recommendations."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:1027
+#: src/admin/components/seo/SEOScoreCalculator.js:1023
 msgid "SEO Improvement Guidance"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:1028
+#: src/admin/components/seo/SEOScoreCalculator.js:1024
 msgid "Dismiss SEO Suggestion"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:1043
+#: src/admin/components/seo/SEOScoreCalculator.js:1039
 msgid "Use this guidance to manually improve your content. The suggestions are recommendations to help you optimize your SEO."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:1053
+#: src/admin/components/seo/SEOScoreCalculator.js:1049
 msgid "Dismiss this suggestion?"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:1063
+#: src/admin/components/seo/SEOScoreCalculator.js:1059
 msgid "You can always recalculate your SEO score to see suggestions again."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreCalculator.js:1078
+#: src/admin/components/seo/SEOScoreCalculator.js:1074
 msgid "Got it"
 msgstr ""
 
 #: src/admin/components/seo/SEOScoreSummary.js:51
-msgid "Good — a little room to improve."
+msgid "Good: a little room to improve."
 msgstr ""
 
 #: src/admin/components/seo/SEOScoreSummary.js:56
-msgid "Fair — needs attention."
+msgid "Fair: needs attention."
 msgstr ""
 
 #: src/admin/components/seo/SEOScoreSummary.js:60
 msgid "Needs significant work."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:271
+#: src/admin/components/seo/SEOScoreSummary.js:259
 msgid "Grade"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:287
+#: src/admin/components/seo/SEOScoreSummary.js:275
 msgid "Keyword Opt."
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:303
+#: src/admin/components/seo/SEOScoreSummary.js:291
 msgid "Word Count"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:307
+#: src/admin/components/seo/SEOScoreSummary.js:295
 msgid "Structure"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:311
+#: src/admin/components/seo/SEOScoreSummary.js:299
 msgid "Keyword Density"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:404
+#: src/admin/components/seo/SEOScoreSummary.js:392
 msgid "Matched"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:407
+#: src/admin/components/seo/SEOScoreSummary.js:395
 msgid "Unmatched"
 msgstr ""
 
 #. translators: 1: number of keywords found in this location, 2: total focus keywords.
-#: src/admin/components/seo/SEOScoreSummary.js:412
+#: src/admin/components/seo/SEOScoreSummary.js:400
 #, js-format
 msgid "%1$d of %2$d matched"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:437
+#: src/admin/components/seo/SEOScoreSummary.js:425
 msgid "Image alt"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:438
+#: src/admin/components/seo/SEOScoreSummary.js:426
 msgid "Slug"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:454
+#: src/admin/components/seo/SEOScoreSummary.js:442
 msgid "Per-Keyword Analysis"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:455
+#: src/admin/components/seo/SEOScoreSummary.js:443
 msgid "Keyword Analysis"
 msgstr ""
 
-#: src/admin/components/seo/SEOScoreSummary.js:469
+#: src/admin/components/seo/SEOScoreSummary.js:457
 msgid "Best"
 msgstr ""
 
@@ -20022,43 +20040,43 @@ msgstr ""
 msgid "Schema activated. Update the deployment to apply changes."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:109
+#: src/metabox/components/metabox-schema-tab/api.js:114
 msgid "Failed to load deployed schemas"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:284
+#: src/metabox/components/metabox-schema-tab/api.js:289
 msgid "Failed to save schema list."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:297
+#: src/metabox/components/metabox-schema-tab/api.js:302
 msgid "Post ID is required for schema generation"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:343
+#: src/metabox/components/metabox-schema-tab/api.js:348
 msgid "Schema generation failed"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:364
+#: src/metabox/components/metabox-schema-tab/api.js:369
 msgid "Post ID is required for schema deployment"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:465
+#: src/metabox/components/metabox-schema-tab/api.js:470
 msgid "Schema deployment failed"
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:486
+#: src/metabox/components/metabox-schema-tab/api.js:491
 msgid "Please enter a URL to import from."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:510
+#: src/metabox/components/metabox-schema-tab/api.js:515
 msgid "Schema imported successfully! Please review and apply the data below."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:518
+#: src/metabox/components/metabox-schema-tab/api.js:523
 msgid "Failed to import schema."
 msgstr ""
 
-#: src/metabox/components/metabox-schema-tab/api.js:525
+#: src/metabox/components/metabox-schema-tab/api.js:530
 msgid "An error occurred while importing schema."
 msgstr ""
 
@@ -20362,35 +20380,35 @@ msgstr ""
 msgid "Analysis"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1507
+#: src/metabox/components/MetaboxApp.js:1496
 msgid "Optimize this content for search & AI"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1513
+#: src/metabox/components/MetaboxApp.js:1502
 msgid "Titles, meta description, focus keywords, schema and social previews."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1523
+#: src/metabox/components/MetaboxApp.js:1512
 msgid "Current SEO score"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1603
+#: src/metabox/components/MetaboxApp.js:1592
 msgid "The General tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1627
+#: src/metabox/components/MetaboxApp.js:1616
 msgid "The Analysis tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1655
+#: src/metabox/components/MetaboxApp.js:1644
 msgid "The Schema tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1672
+#: src/metabox/components/MetaboxApp.js:1661
 msgid "The Social tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1690
+#: src/metabox/components/MetaboxApp.js:1679
 msgid "The Advanced tab encountered an error."
 msgstr ""
 

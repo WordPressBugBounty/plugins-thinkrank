@@ -33,6 +33,48 @@ class Snapshot_Store {
     private const OPTION_PREFIX = 'thinkrank_snapshot_';
 
     /**
+     * Width of `wp_options.option_name`, VARCHAR(191) since WordPress 4.4 cut it
+     * to fit a utf8mb4 index.
+     *
+     * @var int
+     */
+    private const OPTION_NAME_MAX = 191;
+
+    /**
+     * Digits held back for the chunk page number in a key. Ten is far past what
+     * any real snapshot pages to; it costs ten characters of type slug.
+     *
+     * @var int
+     */
+    private const PAGE_DIGITS = 10;
+
+    /**
+     * Longest type slug whose chunk key still fits `option_name`.
+     *
+     * MySQL's default (non-strict) mode truncates an over-long option name on
+     * write instead of refusing it, and the truncated row is then invisible to
+     * the read, which looks the full key up. In-request option caching hides
+     * that until the next request, when read_chunk() starts returning null for
+     * records the manifest still counts — a snapshot that advertises data it
+     * cannot produce. Callers taking a type slug from an uploaded file must
+     * check it against this before storing anything under it.
+     *
+     * @since 2.12.0
+     *
+     * @param string $plugin Plugin slug the chunks are filed under.
+     * @return int Maximum type slug length, in characters.
+     */
+    public static function max_type_length(string $plugin): int {
+        // The key is OPTION_PREFIX . "{$plugin}_{$type}_chunk_{$page}".
+        $overhead = strlen(self::OPTION_PREFIX)
+            + strlen($plugin)
+            + strlen('__chunk_')
+            + self::PAGE_DIGITS;
+
+        return max(1, self::OPTION_NAME_MAX - $overhead);
+    }
+
+    /**
      * Write a chunk of snapshot data
      *
      * @param string $plugin Plugin slug (e.g., 'yoast')

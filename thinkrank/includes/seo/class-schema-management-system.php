@@ -1630,6 +1630,17 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             // Post/page/product data
             $post = get_post($context_id);
             if ($post) {
+                // Resolve the featured image's URL to its ID here, where the ID
+                // is in hand, so the schema builder does not query for an
+                // attachment it was just given (#847). Offered as a hint rather
+                // than asserted: `post_thumbnail_url` can swap the URL for one
+                // the featured image does not own.
+                $thumbnail_url = get_the_post_thumbnail_url($post->ID, 'full');
+
+                if ($thumbnail_url) {
+                    Attachment_Lookup::id_from_url((string) $thumbnail_url, (int) get_post_thumbnail_id($post->ID));
+                }
+
                 $content_data = [
                     'title' => $post->post_title,
                     'url' => get_permalink($post->ID),
@@ -1645,7 +1656,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
                     // and drops the Article rich result (#465).
                     'date' => get_the_date('c', $post),
                     'modified' => get_the_modified_date('c', $post),
-                    'image' => get_the_post_thumbnail_url($post->ID, 'full'),
+                    'image' => $thumbnail_url,
                     'focus_keywords' => Focus_Keywords::get($post->ID),
                     'business_data' => $this->get_business_data_from_local_seo(),
                     'site_data' => $this->get_site_data_for_schema(),
@@ -2040,10 +2051,8 @@ class Schema_Management_System extends Abstract_SEO_Manager {
     /**
      * Get deployed schemas for frontend integration
      *
-     * PERFORMANCE OPTIMIZED: This method now uses:
-     * 1. Schema caching layer (90% reduction in database queries)
-     * 2. Window function approach instead of correlated subquery (80-90% query performance improvement)
-     * 3. Composite index: idx_context_schema_active
+     * Returns the newest active, deployed row of each schema type for the
+     * context. Results are cached per context (see Schema_Cache_Manager).
      *
      * @since 1.0.0
      *
@@ -2068,46 +2077,55 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         // Use existing seo_schema table
         $table_name = $wpdb->prefix . 'thinkrank_seo_schema';
 
-        // OPTIMIZED QUERY: Use window function approach to eliminate correlated subquery
-        // This leverages the new composite index: idx_context_schema_active (context_type, schema_type, is_active, created_at DESC)
+        // The newest row per type used to be picked with ROW_NUMBER() OVER
+        // (PARTITION BY schema_type ...). Window functions need MySQL 8.0 /
+        // MariaDB 10.2, and WordPress still runs on MySQL 5.7, where that is
+        // a syntax error on every page view and no deployed schema is ever
+        // output. A row is the newest of its type when no other row of the
+        // same context and type outranks it, so NOT EXISTS keeps the
+        // greatest-per-group in the database, and schema_data — JSON, and
+        // large — is only transferred for the rows that are output.
+        //
+        // `<=>` is NULL-safe equality: the site context stores context_id
+        // as NULL, and `n.context_id = s.context_id` is never true for it.
+        // schema_id breaks a same-second tie, which the window function
+        // left to chance.
+        $args = [$context_type];
         if (null === $context_id) {
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Schema retrieval requires direct database access
-			$sql = sprintf(
-				'SELECT schema_type, schema_data FROM (SELECT schema_type, schema_data, ROW_NUMBER() OVER (PARTITION BY schema_type ORDER BY created_at DESC) as rn FROM %s WHERE context_type = %%s AND context_id IS NULL AND is_active = 1 AND validation_status IN (\'deployed\', \'valid\')) ranked WHERE rn = 1 ORDER BY schema_type',
-				$table_name
-			);
-					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Schema retrieval requires direct database access
-		$deployed_schemas = $wpdb->get_results(
-			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- SQL is properly prepared with placeholders
-				$sql,
-				$context_type
-			),
-			ARRAY_A
-		);
+            $context_where = 's.context_id IS NULL';
         } else {
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Schema retrieval requires direct database access
-			$sql = sprintf(
-				'SELECT schema_type, schema_data FROM (SELECT schema_type, schema_data, ROW_NUMBER() OVER (PARTITION BY schema_type ORDER BY created_at DESC) as rn FROM %s WHERE context_type = %%s AND context_id = %%d AND is_active = 1 AND validation_status IN (\'deployed\', \'valid\')) ranked WHERE rn = 1 ORDER BY schema_type',
-				$table_name
-			);
-					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Schema retrieval requires direct database access
-		$deployed_schemas = $wpdb->get_results(
-			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- SQL is properly prepared with placeholders
-				$sql,
-				$context_type,
-				$context_id
-			),
-			ARRAY_A
-		);
+            $context_where = 's.context_id = %d';
+            $args[]        = $context_id;
         }
+
+        $sql = sprintf(
+            'SELECT s.schema_type, s.schema_data FROM %1$s s'
+            . ' WHERE s.context_type = %%s AND %2$s AND s.is_active = 1 AND s.validation_status IN (\'deployed\', \'valid\')'
+            . ' AND NOT EXISTS ('
+            . 'SELECT 1 FROM %1$s n'
+            . ' WHERE n.context_type = s.context_type AND n.context_id <=> s.context_id AND n.schema_type = s.schema_type'
+            . ' AND n.is_active = 1 AND n.validation_status IN (\'deployed\', \'valid\')'
+            . ' AND (n.created_at > s.created_at OR (n.created_at = s.created_at AND n.schema_id > s.schema_id))'
+            . ')'
+            . ' ORDER BY s.schema_type',
+            $table_name,
+            $context_where
+        );
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Schema retrieval requires direct database access
+        $deployed_schemas = $wpdb->get_results(
+            $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- SQL is properly prepared with placeholders
+                $sql,
+                ...$args
+            ),
+            ARRAY_A
+        );
 
         // Deliberately no early return on an empty result: it has to reach the
         // cache write below. Most URLs have no deployed schema, so gating the
         // write on a non-empty result made the majority of front-end requests
-        // permanent cache misses, re-running a ROW_NUMBER() OVER (PARTITION BY
-        // ...) query with two filesorts on every pageview (#392).
+        // permanent cache misses, re-running the query on every pageview (#392).
         $deployed_schemas = $deployed_schemas ?: [];
 
         // Process schemas for return

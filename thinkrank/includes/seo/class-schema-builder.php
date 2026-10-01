@@ -840,15 +840,16 @@ class Schema_Builder {
             'url' => $image_url
         ];
 
-        // Try to get image dimensions if it's a WordPress attachment
-        $attachment_id = attachment_url_to_postid($image_url);
+        // Try to get image dimensions if it's a WordPress attachment — those
+        // of the file this URL names, which need not be the original upload.
+        $attachment_id = Attachment_Lookup::id_from_url($image_url);
         if ($attachment_id) {
-            $image_data = wp_get_attachment_image_src($attachment_id, 'full');
+            $image_file = Attachment_Lookup::describe($attachment_id, $image_url);
             // SVGs report 0x0 — omit the dimensions rather than emitting
             // zeroes, which invalidate the ImageObject.
-            if ($image_data && (int) $image_data[1] > 0 && (int) $image_data[2] > 0) {
-                $image_schema['width'] = (int) $image_data[1];
-                $image_schema['height'] = (int) $image_data[2];
+            if ($image_file['width'] > 0 && $image_file['height'] > 0) {
+                $image_schema['width'] = $image_file['width'];
+                $image_schema['height'] = $image_file['height'];
             }
         }
 

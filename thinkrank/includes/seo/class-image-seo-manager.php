@@ -52,6 +52,31 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
     private ?string $separator = null;
 
     /**
+     * Attachment IDs whose cache purge is being held back, or null when not.
+     *
+     * A bulk fill writes alt text onto hundreds of attachments that between
+     * them appear on a handful of pages. Resolving usage per attachment would
+     * run one unindexed postmeta scan per image; holding the IDs and resolving
+     * the whole batch in one query at the end is the same answer for a
+     * fraction of the work.
+     *
+     * @since 2.12.0
+     * @var int[]|null
+     */
+    private ?array $deferred_alt_purge = null;
+
+    /**
+     * What the most recent purge_alt_caches() call did.
+     *
+     * Read by the MCP abilities, which have to report the cache outcome
+     * alongside the write and cannot see inside fill_attachment_alt().
+     *
+     * @since 2.12.0
+     * @var array{posts: int[], warnings: string[]}
+     */
+    private array $last_alt_cache_purge = ['posts' => [], 'warnings' => []];
+
+    /**
      * Constructor
      *
      * @since 1.0.0
@@ -270,7 +295,9 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             $needs_attachment =
                 ($alt_missing && $this->format_uses_attachment($settings['alt_format'] ?? '')) ||
                 ($title_missing && $this->format_uses_attachment($settings['title_format'] ?? ''));
-            $attachment_id = $needs_attachment ? $this->url_to_attachment_id($src) : 0;
+            $attachment_id = $needs_attachment
+                ? $this->url_to_attachment_id($src, (string) ($attributes['class'] ?? ''))
+                : 0;
 
             // Handle ALT attribute
             if ($alt_missing) {
@@ -379,26 +406,21 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
     }
 
     /**
-     * Resolve an attachment ID from a source URL, memoized per request.
+     * Resolve an attachment ID from a source URL.
      *
-     * `attachment_url_to_postid()` issues its own DB query, so repeated identical
-     * URLs on a page (galleries, duplicated images) are cached here.
+     * Body images are almost always inserted at a generated size, which
+     * `attachment_url_to_postid()` cannot match, so %image_title% and
+     * %image_caption% resolved to nothing for them. Attachment_Lookup reads the
+     * `wp-image-{ID}` class the editor wrote first, and caches whatever still
+     * has to be asked of the database (#847).
      *
      * @since 1.19.1
-     * @param string $src Source URL.
+     * @param string $src     Source URL.
+     * @param string $classes The image's class attribute, for its wp-image-{ID}.
      * @return int Attachment ID, or 0 if not a media-library image.
      */
-    private function url_to_attachment_id(string $src): int {
-        if ($src === '') {
-            return 0;
-        }
-
-        static $cache = [];
-        if (!array_key_exists($src, $cache)) {
-            $cache[$src] = attachment_url_to_postid($src);
-        }
-
-        return $cache[$src];
+    private function url_to_attachment_id(string $src, string $classes = ''): int {
+        return Attachment_Lookup::id_from_url($src, Attachment_Lookup::hint_from_markup($classes));
     }
 
     /**
@@ -531,9 +553,11 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
      * @since 1.19.1
      * @param int  $attachment_id The attachment ID.
      * @param bool $overwrite     When false, images that already have alt text are left untouched.
+     * @param bool $purge         Clear the caches that already rendered this image. Pass false only
+     *                            when the attachment cannot yet appear on any page.
      * @return bool True when the attachment now has the generated alt text; false when skipped or on failure.
      */
-    public function fill_attachment_alt(int $attachment_id, bool $overwrite = false): bool {
+    public function fill_attachment_alt(int $attachment_id, bool $overwrite = false, bool $purge = true): bool {
         if (!wp_attachment_is_image($attachment_id)) {
             return false;
         }
@@ -575,7 +599,101 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             return true;
         }
 
-        return update_post_meta($attachment_id, '_wp_attachment_image_alt', $value) !== false;
+        $written = update_post_meta($attachment_id, '_wp_attachment_image_alt', $value) !== false;
+
+        if ($written) {
+            $this->record_alt_write($attachment_id, $purge);
+        }
+
+        return $written;
+    }
+
+    /**
+     * Note that an attachment's alt text changed, and clear what rendered it.
+     *
+     * @since 2.12.0
+     * @param int  $attachment_id Attachment whose alt text was just written.
+     * @param bool $purge         False when nothing can be displaying this attachment yet.
+     * @return void
+     */
+    protected function record_alt_write(int $attachment_id, bool $purge = true): void {
+        // Recorded during a bulk run whatever $purge says: the batch resolves
+        // the whole list at the end, and bulk_fill_missing_alt() counts its
+        // writes from this list.
+        if (null !== $this->deferred_alt_purge) {
+            $this->deferred_alt_purge[] = $attachment_id;
+
+            return;
+        }
+
+        // A fresh upload cannot be on any page, so there is nothing to clear
+        // and nothing for thinkrank_image_alt_updated to report. Listeners
+        // that care about new files already have core's add_attachment.
+        if (!$purge) {
+            return;
+        }
+
+        $this->purge_alt_caches([$attachment_id]);
+    }
+
+    /**
+     * Drop cached renderings of every page that shows these attachments.
+     *
+     * Alt text is written to post meta but read out of HTML that other
+     * software has already rendered and stored, so the write alone changes
+     * nothing a visitor sees. Elementor keeps rendered widgets for 24 hours by
+     * default and page caches keep whole documents, which is how an agent came
+     * to report a successful alt-text write against a page still showing the
+     * old words (#763).
+     *
+     * @since 2.12.0
+     * @param int[] $attachment_ids Attachments whose alt text changed.
+     * @return array{posts: int[], warnings: string[]} Posts purged, and caches left for the user to clear.
+     */
+    public function purge_alt_caches(array $attachment_ids): array {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $attachment_ids))));
+
+        if ([] === $ids) {
+            $this->last_alt_cache_purge = ['posts' => [], 'warnings' => []];
+
+            return $this->last_alt_cache_purge;
+        }
+
+        $posts  = Attachment_Usage::posts_using($ids);
+        $purged = Cache_Purger::purge_posts($posts);
+
+        foreach ($ids as $id) {
+            /**
+             * Fires after ThinkRank writes an image's alt text and clears the
+             * caches it knows about.
+             *
+             * Builders and cache layers ThinkRank does not handle can listen
+             * here to drop their own rendering of the affected posts.
+             *
+             * @since 2.12.0
+             *
+             * @param int   $attachment_id The attachment whose alt text changed.
+             * @param int[] $post_ids      Posts found to display that attachment.
+             */
+            do_action('thinkrank_image_alt_updated', $id, $posts);
+        }
+
+        $this->last_alt_cache_purge = [
+            'posts'    => $purged,
+            'warnings' => Cache_Purger::warnings(),
+        ];
+
+        return $this->last_alt_cache_purge;
+    }
+
+    /**
+     * The outcome of the most recent alt-text cache purge in this request.
+     *
+     * @since 2.12.0
+     * @return array{posts: int[], warnings: string[]}
+     */
+    public function last_alt_cache_purge(): array {
+        return $this->last_alt_cache_purge;
     }
 
     /**
@@ -666,18 +784,32 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             'suppress_filters' => true,
         ]);
 
-        $updated   = 0;
-        $skipped   = 0;
         $processed = 0;
 
-        foreach ($ids as $id) {
-            $processed++;
-            if ($this->fill_attachment_alt((int) $id, $overwrite)) {
-                $updated++;
-            } else {
-                $skipped++;
+        // Hold every purge until the batch is done: see $deferred_alt_purge.
+        $this->deferred_alt_purge = [];
+
+        try {
+            foreach ($ids as $id) {
+                $processed++;
+                $this->fill_attachment_alt((int) $id, $overwrite);
             }
+        } finally {
+            $written                  = array_values(array_unique($this->deferred_alt_purge ?? []));
+            $this->deferred_alt_purge = null;
+            $cache                    = $this->purge_alt_caches($written);
         }
+
+        // Counted from the writes that actually happened, not from what
+        // fill_attachment_alt() returned. It answers true for an image whose
+        // stored alt already equals the generated value, which is the right
+        // answer to "does this image have its alt text?" and the wrong one to
+        // "how many did you change" — a re-run over a correct library reported
+        // every image as updated while writing nothing. `updated` and
+        // `skipped` have documented the write, not the return value, since
+        // this method was added.
+        $updated = count($written);
+        $skipped = max(0, $processed - $updated);
 
         $next_offset = $offset + count($ids);
 
@@ -703,6 +835,10 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             'next_offset' => $next_offset,
             'remaining'   => $remaining,
             'done'        => $exhausted || $next_offset >= $total,
+            'cache'       => [
+                'posts_purged' => count($cache['posts']),
+                'warnings'     => $cache['warnings'],
+            ],
         ];
     }
 
@@ -744,7 +880,10 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             return;
         }
 
-        $this->fill_attachment_alt($attachment_id, !empty($settings['media_alt_overwrite']));
+        // No cache purge: this fires on add_attachment, so the file was created
+        // seconds ago and no page can be displaying it yet. Skipping the lookup
+        // keeps a bulk media import off two unindexed postmeta scans per file.
+        $this->fill_attachment_alt($attachment_id, !empty($settings['media_alt_overwrite']), false);
     }
 
     /**

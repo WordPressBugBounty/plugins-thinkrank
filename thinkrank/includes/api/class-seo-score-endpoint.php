@@ -301,12 +301,23 @@ class SEOScoreEndpoint {
             // run, then persisted by save_score(). That is what put "No content"
             // on the dashboard for a page with a valid score (#778). With nothing
             // measured, the analysis above is the better answer.
+            //
+            // Non-empty `live_content` is not on its own proof that the editor
+            // measured anything: builder markup (Divi 5) is markup the editor
+            // has plenty of and can read no words from, so it sent that same
+            // "No content" pair alongside 450 characters of block comments.
+            // Treat the sentinel itself as "nothing measured" whenever this
+            // request's own analysis did find words, so a stale bundle cannot
+            // overwrite a valid analysis either.
             $editor_measured = '' !== trim((string) $live_content);
+            $server_found_content = ($content_data['word_count'] ?? 0) > 0;
 
-            if ($editor_measured && null !== $readability_score) {
+            if ($editor_measured && null !== $readability_score
+                && !($server_found_content && self::is_no_content_label($readability_score))) {
                 $score_data['readability_score'] = $readability_score;
             }
-            if ($editor_measured && null !== $content_quality) {
+            if ($editor_measured && null !== $content_quality
+                && !($server_found_content && self::is_no_content_label($content_quality))) {
                 $score_data['content_quality'] = $content_quality;
             }
 
@@ -332,6 +343,23 @@ class SEOScoreEndpoint {
                 ['status' => 500]
             );
         }
+    }
+
+    /**
+     * Whether an editor-supplied label means "I could not read the content".
+     *
+     * `calculateReadabilityScore()` and `calculateContentQuality()` both return
+     * this exact untranslated string when handed an empty body, so it is the
+     * editor saying it measured nothing rather than a measurement in its own
+     * right. Every real label carries a level or a grade.
+     *
+     * @since 2.12.0
+     *
+     * @param mixed $label Label sent by the editor.
+     * @return bool True when the label is the empty-content sentinel.
+     */
+    private static function is_no_content_label($label): bool {
+        return is_string($label) && 'no content' === strtolower(trim($label));
     }
 
     /**

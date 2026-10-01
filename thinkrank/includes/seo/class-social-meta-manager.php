@@ -1843,6 +1843,10 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             if ($image_id) {
                 $image_data = wp_get_attachment_image_src($image_id, 'large');
                 if (!empty($image_data[0])) {
+                    // The ID is in hand here and gone once this returns a
+                    // bare URL; say so rather than have the tag builders look
+                    // it up again, twice, with a URL core cannot match (#847).
+                    Attachment_Lookup::remember((string) $image_data[0], (int) $image_id);
                     return $image_data[0];
                 }
             }
@@ -1891,6 +1895,10 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             if ($image_id) {
                 $image_data = wp_get_attachment_image_src($image_id, 'large');
                 if (!empty($image_data[0])) {
+                    // The ID is in hand here and gone once this returns a
+                    // bare URL; say so rather than have the tag builders look
+                    // it up again, twice, with a URL core cannot match (#847).
+                    Attachment_Lookup::remember((string) $image_data[0], (int) $image_id);
                     return $image_data[0];
                 }
             }
@@ -2185,19 +2193,21 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             return $image_data;
         }
 
-        // Get image metadata
-        $attachment_id = attachment_url_to_postid($image_url);
+        // Get image metadata. The dimensions are those of the file this URL
+        // names — usually a generated size — not of the original upload, so
+        // the width and height published beside it describe the same image.
+        $attachment_id = Attachment_Lookup::id_from_url($image_url);
         if ($attachment_id) {
             $image_meta = wp_get_attachment_metadata($attachment_id);
             $image_alt = get_post_meta($attachment_id, '_wp_attachment_image_alt', true);
-            $mime_type = get_post_mime_type($attachment_id);
+            $image_file = Attachment_Lookup::describe($attachment_id, $image_url);
 
             if ($image_meta && isset($image_meta['width'], $image_meta['height'])) {
-                $width  = (int) $image_meta['width'];
-                $height = (int) $image_meta['height'];
+                $width  = $image_file['width'];
+                $height = $image_file['height'];
 
                 $image_data['alt'] = $image_alt ?: '';
-                $image_data['type'] = $mime_type ?: '';
+                $image_data['type'] = $image_file['type'];
 
                 // SVGs and other vector uploads store 0x0 metadata. Dimension
                 // checks are meaningless there and dividing by 0 is fatal.
@@ -2251,6 +2261,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         if ($custom_logo_id) {
             $logo_data = wp_get_attachment_image_src($custom_logo_id, 'large');
             if ($logo_data) {
+                Attachment_Lookup::remember((string) $logo_data[0], (int) $custom_logo_id);
                 return $logo_data[0];
             }
         }
@@ -2260,6 +2271,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         if ($site_icon_id) {
             $icon_data = wp_get_attachment_image_src($site_icon_id, 'large');
             if ($icon_data) {
+                Attachment_Lookup::remember((string) $icon_data[0], (int) $site_icon_id);
                 return $icon_data[0];
             }
         }
@@ -3018,11 +3030,12 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         }
 
         // Get image metadata if it's a local attachment
-        $attachment_id = attachment_url_to_postid($image_url);
+        $attachment_id = Attachment_Lookup::id_from_url($image_url);
         if ($attachment_id) {
             $image_meta = wp_get_attachment_metadata($attachment_id);
-            $meta_width  = isset($image_meta['width']) ? (int) $image_meta['width'] : 0;
-            $meta_height = isset($image_meta['height']) ? (int) $image_meta['height'] : 0;
+            $image_file = Attachment_Lookup::describe($attachment_id, $image_url);
+            $meta_width  = $image_file['width'];
+            $meta_height = $image_file['height'];
 
             // SVGs and other vector uploads store 0x0 metadata — skip the
             // dimension/ratio checks instead of dividing by 0.
