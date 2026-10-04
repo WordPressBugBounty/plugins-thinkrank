@@ -255,6 +255,111 @@ abstract class Abstract_Plugin_Exporter {
     }
 
     /**
+     * Placeholder a mapped token travels as while the rest of a template is
+     * resolved literally. A control character no source vocabulary uses, so
+     * no literal resolver matches, strips or splits on it.
+     */
+    private const TOKEN_MARK = "\x1A";
+
+    /**
+     * Convert a per-object (post or term) SEO value into ThinkRank variable
+     * tags wherever ThinkRank resolves the same thing per request, and into
+     * literal text everywhere else.
+     *
+     * A source title such as "%%title%% %%sep%% %%sitename%%" used to be
+     * resolved to literal text at import, so the site name, separator and
+     * post title were frozen as they stood that day: renaming the site or
+     * switching the separator left every imported title behind, and every
+     * exporter wrote " - " whatever separator the source used. Mapped tokens
+     * now become `%title%`, `%sep%`, `%sitename%`… — the tags the metabox
+     * inserts and Pattern_Resolver resolves on every output path — and only
+     * tokens ThinkRank has no per-object equivalent for are resolved here.
+     *
+     * Mapped tokens are masked before `$resolve_rest` runs, so a literal
+     * resolver that knows them (Rank Math's shares ThinkRank's syntax) never
+     * sees them, and unmasked afterwards. A value with no mapped token is
+     * returned exactly as `$resolve_rest` produces it.
+     *
+     * @param string   $value        Raw source value (already stringified)
+     * @param array    $token_map    Regex matching a source token => ThinkRank tag
+     * @param callable $resolve_rest fn(string): string — the exporter's literal resolver
+     * @return string ThinkRank value
+     */
+    final protected function tokenize_object_template(string $value, array $token_map, callable $resolve_rest): string {
+        $tags = [];
+        $masked = $value;
+
+        if ($value !== '') {
+            foreach ($token_map as $pattern => $tag) {
+                $masked = (string) preg_replace_callback(
+                    $pattern,
+                    static function () use (&$tags, $tag): string {
+                        $index = array_search($tag, $tags, true);
+                        if ($index === false) {
+                            $tags[] = $tag;
+                            $index = count($tags) - 1;
+                        }
+
+                        return self::TOKEN_MARK . $index . self::TOKEN_MARK;
+                    },
+                    $masked
+                );
+            }
+        }
+
+        if (empty($tags)) {
+            return (string) $resolve_rest($value);
+        }
+
+        $resolved = (string) preg_replace_callback(
+            '/' . self::TOKEN_MARK . '(\d+)' . self::TOKEN_MARK . '/',
+            static fn(array $m): string => $tags[(int) $m[1]] ?? '',
+            (string) $resolve_rest($masked)
+        );
+
+        // Tokens resolved to '' (e.g. %%page%%) leave separators with nothing
+        // between or around them; Pattern_Resolver tidies those too, but the
+        // stored value should read cleanly in the metabox.
+        $resolved = trim((string) preg_replace('/\s+/', ' ', $resolved));
+        $resolved = (string) preg_replace('/%sep%(?:\s*%sep%)+/', '%sep%', $resolved);
+        $resolved = (string) preg_replace('/^(?:%sep%\s*)+|(?:\s*%sep%)+$/', '', $resolved);
+
+        return trim($resolved);
+    }
+
+    /**
+     * Token map for tokenize_object_template() from literal source tokens
+     * (`%%title%%`, `%title%`), matched case-insensitively.
+     *
+     * @param array<string,string> $map Source token => ThinkRank tag
+     * @return array<string,string> Regex => ThinkRank tag
+     */
+    final protected static function literal_token_patterns(array $map): array {
+        $patterns = [];
+        foreach ($map as $token => $tag) {
+            $patterns['/' . preg_quote((string) $token, '/') . '/i'] = $tag;
+        }
+
+        return $patterns;
+    }
+
+    /**
+     * Token map for tokenize_object_template() from brace-style variable
+     * names (`title` matches `{{title}}` and `{{ title }}`).
+     *
+     * @param array<string,string> $map Variable name => ThinkRank tag
+     * @return array<string,string> Regex => ThinkRank tag
+     */
+    final protected static function brace_token_patterns(array $map): array {
+        $patterns = [];
+        foreach ($map as $name => $tag) {
+            $patterns['/\{\{\s*' . preg_quote((string) $name, '/') . '\s*\}\}/i'] = $tag;
+        }
+
+        return $patterns;
+    }
+
+    /**
      * Export a chunk of data and write to snapshot
      *
      * This is the main orchestration method. It calls the appropriate

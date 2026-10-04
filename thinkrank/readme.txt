@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.12.0
+Stable tag: 2.13.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,7 +19,7 @@ Two things make ThinkRank different, and both are checkable:
 * **Your assistant runs it directly.** A built-in, self-hosted MCP server connects your AI assistant - no companion plugin, no terminal. No other WordPress SEO plugin ships one.
 * **Every AI feature is included at a flat price, with no credit meter.** Bring your own API key (OpenAI, Anthropic Claude, Google Gemini, OpenRouter): no monthly AI credits to buy, meter, or watch expire - in free and in Pro alike.
 
-Switching? The Setup Wizard **imports your data from Yoast SEO, Rank Math, AIOSEO, SEOPress, and Squirrly SEO**. ThinkRank works where you build - **Gutenberg, Elementor, Divi, Oxygen/Breakdance, and the Classic Editor** - and on multilingual sites running **WPML, Polylang or TranslatePress**.
+Switching? The Setup Wizard **imports your data from Yoast SEO, Rank Math, AIOSEO, SEOPress, Squirrly SEO, and Slim SEO**. ThinkRank works where you build - **Gutenberg, Elementor, Divi, Oxygen/Breakdance, and the Classic Editor** - and on multilingual sites running **WPML, Polylang or TranslatePress**.
 
 = Watch: SEO in the Assistant Era =
 
@@ -36,9 +36,9 @@ ThinkRank's self-contained **Model Context Protocol (MCP) server** turns your AI
 * **35+ SEO tools** exposed over MCP - metadata, schema, site identity, sitemaps, robots.txt and robots meta, image SEO, social meta, instant indexing, llms.txt, SEO scores and opportunities.
 * **Safe by default** - off until an admin enables it, revocable in one click, with a connection health check and dry-run previews of SEO imports.
 
-= Migrate from Rank Math, Yoast SEO, AIOSEO, SEOPress or Squirrly =
+= Migrate from Rank Math, Yoast SEO, AIOSEO, SEOPress, Squirrly or Slim SEO =
 
-The Setup Wizard detects your current SEO plugin and imports metadata, schema, sitemap, image SEO and title-format settings from **Rank Math SEO, Yoast SEO, All in One SEO (AIOSEO), SEOPress, and Squirrly SEO** - then deactivates the old plugin once its data is safely migrated.
+The Setup Wizard detects your current SEO plugin and imports metadata, schema, sitemap, image SEO and title-format settings from **Rank Math SEO, Yoast SEO, All in One SEO (AIOSEO), SEOPress, Squirrly SEO, and Slim SEO** - then deactivates the old plugin once its data is safely migrated.
 
 Looking for a **Rank Math, Yoast SEO, AIOSEO or SEOPress alternative** because of upsell notices, metered AI credits or per-site pricing? This migration path is built for exactly that switch.
 
@@ -137,7 +137,7 @@ Upgrade to **ThinkRank Pro** for advanced SEO automation, also available to your
 * A Site SEO Analyzer that needs no Google connection, and accurate SEO scores on Elementor, Divi and Oxygen/Breakdance pages
 * AEO and GEO groundwork for ChatGPT, Perplexity, Gemini and Google AI Overviews
 * Multilingual SEO with correct hreflang for WPML and Polylang
-* One-click migration from Rank Math, Yoast SEO, AIOSEO, SEOPress and Squirrly SEO
+* One-click migration from Rank Math, Yoast SEO, AIOSEO, SEOPress, Squirrly SEO and Slim SEO
 * Built for bloggers, publishers, agencies, WooCommerce stores and teams that work through an AI assistant
 
 == Installation ==
@@ -155,7 +155,7 @@ Upgrade to **ThinkRank Pro** for advanced SEO automation, also available to your
 
 **Setup Workflow**
 1. Open the ThinkRank Setup Wizard.
-2. Import existing SEO data from Rank Math, Yoast SEO, AIOSEO, SEOPress, or Squirrly SEO if needed.
+2. Import existing SEO data from Rank Math, Yoast SEO, AIOSEO, SEOPress, Squirrly SEO, or Slim SEO if needed.
 3. Choose your AI provider and enter your API key for AI features.
 4. Configure metadata, schema, XML sitemaps, robots meta, canonical URLs, social meta, Search Console, GA4, and llms.txt.
 5. (Optional) Enable the MCP server under ThinkRank → MCP and connect Claude, ChatGPT, or Cursor.
@@ -248,9 +248,9 @@ Yes. ThinkRank includes Open Graph and social meta controls for Facebook, Linked
 
 Yes. ThinkRank covers the core SEO those plugins cover - metadata, schema, XML sitemaps, robots meta, canonical URLs, Search Console and GA4 insights - plus two things they don't sell at any price: an AI-assistant connection that operates the plugin directly, and AI features at a flat price with your own key instead of metered credits. The Setup Wizard imports your existing Rank Math, Yoast, AIOSEO, or SEOPress data and can deactivate the old plugin once migration completes.
 
-= Can I migrate from AIOSEO, SEOPress or Squirrly SEO? =
+= Can I migrate from AIOSEO, SEOPress, Squirrly SEO or Slim SEO? =
 
-Yes. ThinkRank's Setup Wizard imports supported SEO data from All in One SEO (AIOSEO), SEOPress and Squirrly SEO, along with Rank Math and Yoast SEO - including title formats, Knowledge Graph details, role permissions, author archive settings, IndexNow keys, breadcrumb settings, and social defaults.
+Yes. ThinkRank's Setup Wizard imports supported SEO data from All in One SEO (AIOSEO), SEOPress, Squirrly SEO and Slim SEO (including Slim SEO Pro's focus keywords and schemas), along with Rank Math and Yoast SEO - including title formats, Knowledge Graph details, role permissions, author archive settings, IndexNow keys, breadcrumb settings, and social defaults.
 
 = Does ThinkRank include a redirect manager, 404 monitor, or internal linking? =
 
@@ -327,6 +327,17 @@ Content brief competitor analysis and schema import fetch the URLs you type in, 
 
 == Changelog ==
 
+= 2.13.0 =
+Release Date: 2026-10-04
+
+- New: Import your SEO data from Slim SEO, including Slim SEO Pro's focus keywords
+- New: Homepage Meta Description setting in Site Identity
+- Improved: Imported titles keep their variables, so a site rename or new separator still applies
+- Fixed: Organization schema edits now appear on the page without a manual redeploy
+- Fixed: Imported homepage descriptions and social profiles now appear on the site
+- Fixed: Quick Setup now imports 404 logs and names every data type it imports
+- Fixed: Minor migration issues with term titles, separators and cleanup warnings
+
 = 2.12.0 =
 Release Date: 2026-10-01
 
@@ -380,24 +391,12 @@ Release Date: 2026-09-23
 - Fixed: MCP connectors on subdirectory multisite were sent to the main site instead of the subsite
 - Fixed: The AI usage meter turned red when AI was paused rather than when the limit was reached
 
-= 2.8.0 =
-Release Date: 2026-09-21
-
-- New: Import your SEO data from Squirrly SEO
-- Improved: Email reports redesigned, with site traffic and AI assistant cards when connected
-- Changed: Email reports pause until Search Console is connected, and the panel says so
-- Changed: Email report subjects lead with your Google clicks and their change
-- Fixed: Migrations discarded imported title formats and the default social image
-- Fixed: Migrations lost category and tag noindex, focus keywords and social fields
-- Fixed: Re-scan on the Migration screen now finds newly installed SEO plugins
-- Fixed: Minor migration issues with sparse snapshots, deleted content and sitemap exclusions
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.13.0 =
+Adds import from Slim SEO and a Homepage Meta Description setting. Imported titles keep their variables, and Organization schema edits now reach the page without a manual redeploy. Recommended for all sites.
+
 = 2.12.0 =
 Alt text updates now clear Elementor and page caches. Fixes related-posts shortcodes swapping the post in the Classic Editor, FAQ blocks skewing Content Analysis, and deployed schema on MySQL 5.7. Recommended for all sites.
-
-= 2.11.0 =
-Adds a Basic / Advanced mode switch, a placement gauge per focus keyword in the editor, FAQ abilities for MCP agents and WooCommerce product tokens. Fixes sitemap rebuilds that missed scheduled posts or ran out of memory on large sites. Recommended for all sites.

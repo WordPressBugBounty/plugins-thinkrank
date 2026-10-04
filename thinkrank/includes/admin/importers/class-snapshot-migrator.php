@@ -112,6 +112,13 @@ class Snapshot_Migrator {
         'sitemap_settings',
         'analytics_connected',
         'focus_pages',
+        // Applied by migrate_site_identity() (#886).
+        'robots_txt',
+        'feed',
+        // Applied by migrate_markdown_for_ai() into ThinkRank Pro (#886).
+        // Without Pro it has no home, but neither is anything lost: cleanup
+        // removes a feature toggle, not content.
+        'markdown_for_ai',
         // Capture-all raw buckets (whole source option sets stored verbatim).
         // They live in the SNAPSHOT — cleanup never touches the snapshot — and
         // a re-export recreates them, so they never block cleanup.
@@ -372,6 +379,13 @@ class Snapshot_Migrator {
             // VideoObject schema form data (post meta only). Seeds the metabox
             // Video form so an imported video schema renders once deployed.
             if ($object_type === 'post' && $this->migrate_video_schema($object_id, $data, $record)) {
+                $record_had_writes = true;
+            }
+
+            // The post's own schemas as ThinkRank Pro Custom Schema entries
+            // scoped to it (extended.custom_schemas, #886).
+            if ($object_type === 'post' && !empty($record['extended']['custom_schemas']) && is_array($record['extended']['custom_schemas'])
+                && $this->migrate_custom_schemas($source_plugin, $record['extended']['custom_schemas']) > 0) {
                 $record_had_writes = true;
             }
 
@@ -1766,16 +1780,12 @@ class Snapshot_Migrator {
             }
         }
 
-        if (!empty($data['homepage_title']) || !empty($data['homepage_description']) || !empty($data['organization_name']) || !empty($data['organization_logo'])) {
+        if (!empty($data['homepage_title']) || !empty($data['organization_name']) || !empty($data['organization_logo'])) {
             $site_identity = get_option('thinkrank_site_identity_settings', []);
             $updated = false;
 
             if (!empty($data['homepage_title']) && empty($site_identity['homepage_title'])) {
                 $site_identity['homepage_title'] = $data['homepage_title'];
-                $updated = true;
-            }
-            if (!empty($data['homepage_description']) && empty($site_identity['homepage_description'])) {
-                $site_identity['homepage_description'] = $data['homepage_description'];
                 $updated = true;
             }
             if (!empty($data['organization_name']) && empty($site_identity['organization_name'])) {
@@ -1793,19 +1803,8 @@ class Snapshot_Migrator {
             }
         }
 
-        if (!empty($data['social_profiles'])) {
-            $social = get_option('thinkrank_social_media_settings', []);
-            $updated = false;
-
-            foreach ($data['social_profiles'] as $platform => $url) {
-                if (!empty($url) && empty($social[$platform])) {
-                    $social[$platform] = $url;
-                    $updated = true;
-                }
-            }
-
-            if ($updated) {
-                update_option('thinkrank_social_media_settings', $social);
+        if (!empty($data['social_profiles']) && is_array($data['social_profiles'])) {
+            if ($this->migrate_social_profiles($data['social_profiles'])) {
                 $processed++;
             }
         }
@@ -1862,6 +1861,21 @@ class Snapshot_Migrator {
             if ($this->migrate_post_type_settings($extended['post_type_settings'])) {
                 $processed++;
             }
+        }
+
+        // Per-taxonomy and blog-index noindex, into the Content Type Matrix.
+        // The templates beside them have no ThinkRank store and stay preserved.
+        if ($this->migrate_archive_noindex($extended)) {
+            $processed++;
+        }
+
+        // Site-wide custom schemas and Markdown for AI, both ThinkRank Pro.
+        $global_schemas = $extended['custom_schemas']['entries'] ?? [];
+        if (is_array($global_schemas) && $this->migrate_custom_schemas($plugin, $global_schemas) > 0) {
+            $processed++;
+        }
+        if ($this->migrate_markdown_for_ai($extended)) {
+            $processed++;
         }
 
         // Site-identity settings (homepage/org/breadcrumbs/local SEO) are served to
@@ -2001,6 +2015,10 @@ class Snapshot_Migrator {
         // wins when the source provided one.
         $title_formats = is_array($extended['title_formats'] ?? null) ? $extended['title_formats'] : [];
         $set('homepage_title', $title_formats['homepage_title'] ?? ($data['homepage_title'] ?? ''));
+        // The homepage meta description. It used to go to the legacy
+        // thinkrank_site_identity_settings option, which nothing reads, so the
+        // homepage fell back to the tagline (#897).
+        $set('homepage_description', trim((string) ($data['homepage_description'] ?? '')));
         $set('site_name', $data['organization_name'] ?? '');
         $set('alternate_name', $data['alternate_name'] ?? '');
         $set('logo_url', $data['organization_logo'] ?? '');
@@ -2042,6 +2060,21 @@ class Snapshot_Migrator {
             $set('breadcrumb_home_text', $breadcrumbs['home_label'] ?? '');
             $set('breadcrumb_separator', $breadcrumbs['separator'] ?? '');
             $set('breadcrumb_prefix', $breadcrumbs['prefix'] ?? '');
+        }
+
+        // A hand-written robots.txt (extended.robots_txt.content) goes into
+        // ThinkRank's Robots.txt textarea only while that is still empty:
+        // a file the user already wrote here is never replaced (#886).
+        $robots_txt = $extended['robots_txt'] ?? [];
+        if (is_array($robots_txt)) {
+            $set('robots_txt_content', trim((string) ($robots_txt['content'] ?? '')));
+        }
+
+        // The "appeared first on" feed backlink (extended.feed.source_link).
+        // Only switches it on: a source that had it off is no reason to turn
+        // off a signature ThinkRank seeds for new installs.
+        if (!empty($extended['feed']['source_link']) && empty($current['feed_source_link'])) {
+            $updates['feed_source_link'] = true;
         }
 
         // Local SEO (extended.local_seo) — migrate the full NAP + geo when there
@@ -2192,7 +2225,8 @@ class Snapshot_Migrator {
 
         $app_id = trim((string) ($defaults['facebook_app_id'] ?? ''));
         $og_image = trim((string) ($defaults['og_default_image'] ?? ''));
-        if ($app_id === '' && $og_image === '') {
+        $twitter_image = trim((string) ($defaults['twitter_default_image'] ?? ''));
+        if ($app_id === '' && $og_image === '' && $twitter_image === '') {
             return false;
         }
 
@@ -2210,12 +2244,105 @@ class Snapshot_Migrator {
         if ($og_image !== '' && empty($current['default_og_image'])) {
             $updates['default_og_image'] = $og_image;
         }
+        // The Twitter card fallback image (Slim SEO's default_twitter_image).
+        if ($twitter_image !== '' && empty($current['default_twitter_image'])) {
+            $updates['default_twitter_image'] = $twitter_image;
+        }
 
         if (empty($updates)) {
             return false;
         }
 
         return (bool) $manager->save_settings('site', null, $updates);
+    }
+
+    /**
+     * Social profile URLs (data.social_profiles, platform => URL) into the
+     * stores that are read (#898).
+     *
+     * They used to be written as `thinkrank_social_media_settings[<platform>]`,
+     * a key nothing reads: the consumer looks for `<platform>_url`, the
+     * Organization graph reads the Schema Manager's
+     * `organization_social_<platform>`, and `twitter:site` comes from the
+     * Social Meta `twitter_username`. So the profiles never reached `sameAs`
+     * and the X handle stopped printing once the source plugin was off. Each
+     * store is filled only where it is still empty.
+     *
+     * @param array $profiles platform => profile URL
+     * @return bool True if anything was written
+     */
+    private function migrate_social_profiles(array $profiles): bool {
+        $profiles = array_filter(array_map(
+            static fn($url): string => is_scalar($url) ? trim((string) $url) : '',
+            $profiles
+        ));
+        if (empty($profiles)) {
+            return false;
+        }
+
+        $written = false;
+
+        $social = get_option('thinkrank_social_media_settings', []);
+        $social = is_array($social) ? $social : [];
+        $social_updated = false;
+        foreach ($profiles as $platform => $url) {
+            $key = sanitize_key((string) $platform) . '_url';
+            if (empty($social[$key])) {
+                $social[$key] = esc_url_raw($url);
+                $social_updated = true;
+            }
+        }
+        if ($social_updated) {
+            update_option('thinkrank_social_media_settings', $social);
+            $written = true;
+        }
+
+        // The Organization node's sameAs.
+        $schema_platforms = ['facebook', 'twitter', 'linkedin', 'instagram', 'youtube', 'pinterest', 'whatsapp', 'telegram'];
+        $manager = $this->create_schema_manager();
+        if ($manager !== null) {
+            $current = $manager->get_settings('site');
+            $updates = [];
+            foreach ($profiles as $platform => $url) {
+                $field = 'organization_social_' . $platform;
+                if (in_array($platform, $schema_platforms, true) && filter_var($url, FILTER_VALIDATE_URL) && empty($current[$field])) {
+                    $updates[$field] = esc_url_raw($url);
+                }
+            }
+            if (!empty($updates) && $manager->save_settings('site', null, $updates)) {
+                $written = true;
+            }
+        }
+
+        // twitter:site, from an X/Twitter profile URL.
+        $handle = self::twitter_handle_from_url((string) ($profiles['twitter'] ?? ''));
+        if ($handle !== '' && class_exists('ThinkRank\\SEO\\Social_Meta_Manager')) {
+            $social_meta = new \ThinkRank\SEO\Social_Meta_Manager();
+            $current = $social_meta->get_settings('site');
+            if (empty($current['twitter_username']) && $social_meta->save_settings('site', null, ['twitter_username' => $handle])) {
+                $written = true;
+            }
+        }
+
+        return $written;
+    }
+
+    /**
+     * The handle in an x.com / twitter.com profile URL, or '' when the URL is
+     * not one (`https://x.com/arsenal` → `arsenal`). Handles are 1-15 letters,
+     * digits or underscores, which is also what Social Meta accepts.
+     *
+     * @param string $url Profile URL
+     */
+    public static function twitter_handle_from_url(string $url): string {
+        $host = strtolower((string) wp_parse_url($url, PHP_URL_HOST));
+        if (!in_array(preg_replace('/^(www\.|mobile\.)/', '', $host), ['x.com', 'twitter.com'], true)) {
+            return '';
+        }
+        $segment = explode('/', trim((string) wp_parse_url($url, PHP_URL_PATH), '/'))[0] ?? '';
+        $segment = ltrim(rawurldecode($segment), '@');
+
+        return preg_match('/^[A-Za-z0-9_]{1,15}$/', $segment) ? $segment : '';
     }
 
     /**
@@ -3067,15 +3194,244 @@ class Snapshot_Migrator {
                 if (in_array($key, self::HANDLED_EXTENDED_SETTINGS, true) || empty($value)) {
                     continue;
                 }
+                // A bucket the migrator applies part of blocks cleanup only for
+                // the part it does not.
+                if (is_array($value) && empty($this->unapplied_remainder((string) $key, $value))) {
+                    continue;
+                }
+                // Custom schemas have a home only in ThinkRank Pro. Without it
+                // they are preserved, and cleanup would delete the source's
+                // copy, including every post's own schemas.
+                if ($key === 'custom_schemas') {
+                    if ($this->create_custom_schema_repository() !== null) {
+                        continue;
+                    }
+                    $count = count(is_array($value['entries'] ?? null) ? $value['entries'] : []) + (int) ($value['post_count'] ?? 0);
+                    $buckets[] = [
+                        'key'   => 'settings.custom_schemas',
+                        'label' => (string) self::extended_bucket_label('custom_schemas'),
+                        'count' => max(1, $count),
+                    ];
+                    continue;
+                }
+                if ($key === 'schema_templates' && is_array($value)) {
+                    $buckets[] = [
+                        'key'   => 'settings.schema_templates',
+                        'label' => (string) self::extended_bucket_label('schema_templates'),
+                        'count' => count($value),
+                    ];
+                    continue;
+                }
                 $buckets[] = [
                     'key'   => 'settings.' . $key,
-                    'label' => (string) $key,
+                    'label' => self::extended_bucket_label((string) $key) ?? ucfirst(str_replace('_', ' ', (string) $key)),
                     'count' => 1,
                 ];
             }
         }
 
         return $buckets;
+    }
+
+    /**
+     * Save canonical custom schema entries into ThinkRank Pro's Custom Schema.
+     *
+     * Each entry's id is derived from the source and its `key`, so running
+     * the migration again finds the entry it wrote and leaves it — including
+     * any edit made since. An entry the Repository refuses (an invalid
+     * condition, an oversized document) is skipped; the source still holds
+     * it, and the snapshot keeps the rendered JSON.
+     *
+     * @param string $plugin  Source plugin slug
+     * @param array  $entries Canonical entries {key, title, enabled, json, conditions}
+     * @return int Entries written
+     */
+    private function migrate_custom_schemas(string $plugin, array $entries): int {
+        $repository = $this->create_custom_schema_repository();
+        if ($repository === null) {
+            return 0;
+        }
+
+        $written = 0;
+        foreach ($entries as $entry) {
+            if (!is_array($entry) || trim((string) ($entry['json'] ?? '')) === '') {
+                continue;
+            }
+            $id = 'cs_' . substr(md5($plugin . '|' . (string) ($entry['key'] ?? wp_json_encode($entry))), 0, 12);
+            if ($repository->get($id) !== null) {
+                continue;
+            }
+
+            try {
+                $repository->save([
+                    'id'         => $id,
+                    'title'      => (string) ($entry['title'] ?? ''),
+                    'enabled'    => !empty($entry['enabled']),
+                    'json'       => (string) $entry['json'],
+                    'conditions' => is_array($entry['conditions'] ?? null) ? $entry['conditions'] : ['include' => [], 'exclude' => []],
+                ]);
+                $written++;
+            } catch (\Throwable $e) {
+                continue;
+            }
+        }
+
+        return $written;
+    }
+
+    /**
+     * ThinkRank Pro's Custom Schema repository, when Pro is active.
+     *
+     * @return object|null
+     */
+    protected function create_custom_schema_repository(): ?object {
+        return class_exists('ThinkRank\\Pro\\Schema\\Repository') ? new \ThinkRank\Pro\Schema\Repository() : null;
+    }
+
+    /**
+     * Turn on ThinkRank Pro's Markdown for AI with the source's post types
+     * (extended.markdown_for_ai), while its settings were never saved.
+     *
+     * @param array $extended Canonical settings `extended` payload
+     * @return bool True if written
+     */
+    private function migrate_markdown_for_ai(array $extended): bool {
+        $markdown = $extended['markdown_for_ai'] ?? [];
+        if (!is_array($markdown) || empty($markdown['enabled']) || !class_exists('ThinkRank\\Pro\\Markdown_For_AI\\Settings')) {
+            return false;
+        }
+        if (get_option('thinkrank_pro_markdown_for_ai', null) !== null) {
+            return false;
+        }
+
+        $types = array_values(array_filter(
+            array_map('strval', is_array($markdown['post_types'] ?? null) ? $markdown['post_types'] : ['post']),
+            'post_type_exists'
+        ));
+
+        return (bool) (new \ThinkRank\Pro\Markdown_For_AI\Settings())->save([
+            'enabled'    => true,
+            'post_types' => !empty($types) ? $types : ['post'],
+        ]);
+    }
+
+    /**
+     * What a preserved settings bucket holds, as the cleanup warning names it.
+     *
+     * The warning exists so someone can decide whether to delete their old
+     * plugin's data; printing `code_injection` does not help them decide
+     * (#900). Every bucket an exporter can leave unapplied has an entry here,
+     * and a test fails when one is added without.
+     *
+     * @param string $key Extended bucket key
+     * @return string|null Label, or null when the bucket has none
+     */
+    public static function extended_bucket_label(string $key): ?string {
+        $labels = [
+            'code_injection'             => __('Header, body and footer code', 'thinkrank'),
+            'redirect_settings'          => __('Redirect behaviour settings', 'thinkrank'),
+            'taxonomy_settings'          => __('Taxonomy templates and images', 'thinkrank'),
+            'post_type_archive_settings' => __('Post type archive templates and images', 'thinkrank'),
+            'no_category_base'           => __('Removing /category/ from category URLs', 'thinkrank'),
+            'webmaster_tools'            => __('Webmaster tools verification codes', 'thinkrank'),
+            'access_control'             => __('Role access settings', 'thinkrank'),
+            'og_frontpage_title'         => __('Homepage social title', 'thinkrank'),
+            'og_frontpage_desc'          => __('Homepage social description', 'thinkrank'),
+            'og_frontpage_image'         => __('Homepage social image', 'thinkrank'),
+            'custom_schemas'             => __('Custom schemas (need ThinkRank Pro)', 'thinkrank'),
+            'schema_templates'           => __('Schema templates with no ThinkRank equivalent', 'thinkrank'),
+        ];
+
+        return $labels[$key] ?? null;
+    }
+
+    /**
+     * What is left of a partially-applied extended bucket once the keys
+     * migrate_archive_noindex() consumes are removed.
+     *
+     * `taxonomy_settings` and `post_type_archive_settings` carry a `noindex`
+     * per context that is applied, beside templates and images that are not.
+     * Any other bucket is returned whole.
+     *
+     * @param string $key   Extended bucket key
+     * @param array  $value Bucket contents
+     * @return array The unapplied part
+     */
+    private function unapplied_remainder(string $key, array $value): array {
+        if ($key !== 'taxonomy_settings' && $key !== 'post_type_archive_settings') {
+            return $value;
+        }
+
+        $remainder = [];
+        foreach ($value as $context => $settings) {
+            if (!is_array($settings)) {
+                continue;
+            }
+            // Only the blog index has an archive entity to receive a noindex.
+            $applied = $key === 'taxonomy_settings' || (string) $context === 'post';
+            $rest = $applied ? array_diff_key($settings, ['noindex' => true]) : $settings;
+            if (!empty($rest)) {
+                $remainder[$context] = $rest;
+            }
+        }
+
+        return $remainder;
+    }
+
+    /**
+     * Apply per-taxonomy and blog-index noindex through the Content Type
+     * Matrix (`taxonomy:<slug>` / `archive:blog`), the entities the front end
+     * reads robots directives for on those archives.
+     *
+     * Reads `extended.taxonomy_settings[<taxonomy>].noindex` (Yoast's and
+     * Slim SEO's shape) and `extended.post_type_archive_settings.post.noindex`.
+     * An entity whose robots were already customised in ThinkRank is left
+     * alone, and a source that did NOT noindex an archive writes nothing —
+     * "indexed" is the default and restating it would pin the entity.
+     *
+     * @param array $extended Canonical settings `extended` payload
+     * @return bool True if any entity was written
+     */
+    private function migrate_archive_noindex(array $extended): bool {
+        if (!class_exists('ThinkRank\\SEO\\Content_Type_Settings')) {
+            return false;
+        }
+
+        // Only public taxonomies are matrix entities (Content_Type_Settings::get_entities()).
+        $entities = [];
+        $taxonomies = is_array($extended['taxonomy_settings'] ?? null) ? $extended['taxonomy_settings'] : [];
+        foreach ($taxonomies as $taxonomy => $settings) {
+            if (!is_array($settings) || empty($settings['noindex']) || !taxonomy_exists((string) $taxonomy)) {
+                continue;
+            }
+            $object = get_taxonomy((string) $taxonomy);
+            if (is_object($object) && !empty($object->public)) {
+                $entities[] = \ThinkRank\SEO\Content_Type_Settings::PREFIX_TAXONOMY . $taxonomy;
+            }
+        }
+        $archives = is_array($extended['post_type_archive_settings'] ?? null) ? $extended['post_type_archive_settings'] : [];
+        if (!empty($archives['post']['noindex'])) {
+            $entities[] = \ThinkRank\SEO\Content_Type_Settings::ENTITY_BLOG_INDEX;
+        }
+
+        $written = false;
+        foreach ($entities as $entity_key) {
+            $existing = \ThinkRank\SEO\Content_Type_Settings::get_entity_settings($entity_key);
+            if (!empty($existing['robots_meta_enabled'])) {
+                continue;
+            }
+            $robots = \ThinkRank\SEO\Content_Type_Settings::default_robots_meta($entity_key);
+            $robots['index'] = false;
+            $robots['noindex'] = true;
+            if (\ThinkRank\SEO\Content_Type_Settings::update_entity_settings($entity_key, [
+                'robots_meta_enabled' => true,
+                'robots_meta'         => $robots,
+            ])) {
+                $written = true;
+            }
+        }
+
+        return $written;
     }
 
     /**

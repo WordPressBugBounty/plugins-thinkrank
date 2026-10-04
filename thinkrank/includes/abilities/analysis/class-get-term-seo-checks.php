@@ -142,8 +142,11 @@ class Get_Term_Seo_Checks extends Ability_Base {
 		$seo_title   = (string) get_term_meta( $term->term_id, '_thinkrank_seo_title', true );
 		$description = (string) get_term_meta( $term->term_id, '_thinkrank_meta_description', true );
 
-		$title_length = mb_strlen( $seo_title );
-		$desc_length  = mb_strlen( $description );
+		// Measure what the archive prints, not the stored template: a title of
+		// "%term% %sep% %sitename%" is 23 characters as written and however
+		// long the term and site names make it on the page.
+		$title_length = mb_strlen( \ThinkRank\SEO\Pattern_Resolver::resolve_term_value( $seo_title, (int) $term->term_id ) );
+		$desc_length  = mb_strlen( \ThinkRank\SEO\Pattern_Resolver::resolve_term_value( $description, (int) $term->term_id ) );
 
 		$checks = [];
 

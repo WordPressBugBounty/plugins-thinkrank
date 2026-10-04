@@ -143,6 +143,8 @@ class Autoloader {
             'SEOPress_Exporter' => 'seopress-exporter',
             'AIOSEO_Exporter' => 'aioseo-exporter',
             'Squirrly_Exporter' => 'squirrly-exporter',
+            'Slim_SEO_Exporter' => 'slim-seo-exporter',
+            'Slim_SEO_Schema_Converter' => 'slim-seo-schema-converter',
             'Mcp_OAuth' => 'mcp-oauth',
             'Google_OAuth_Proxy' => 'google-oauth-proxy',
         ];

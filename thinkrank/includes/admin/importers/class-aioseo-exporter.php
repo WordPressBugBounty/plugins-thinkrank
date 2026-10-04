@@ -274,8 +274,8 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
                 'object_type'   => 'post',
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
-                    'seo_title'           => $this->convert_template_variables($this->safe_column($row, 'title'), $post_id),
-                    'meta_description'    => $this->convert_template_variables($this->safe_column($row, 'description'), $post_id),
+                    'seo_title'           => $this->convert_post_value($this->safe_column($row, 'title'), $post_id),
+                    'meta_description'    => $this->convert_post_value($this->safe_column($row, 'description'), $post_id),
                     'focus_keyword'       => $focus_keyword,
                     'focus_keywords'      => $focus_keywords,
                     'canonical_url'       => $this->safe_column($row, 'canonical_url'),
@@ -287,11 +287,11 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
                     'max_snippet'         => $robots_default ? null : $this->robots_limit($row, 'robots_max_snippet'),
                     'max_video_preview'   => $robots_default ? null : $this->robots_limit($row, 'robots_max_videopreview'),
                     'max_image_preview'   => $max_image_preview,
-                    'og_title'            => $this->convert_template_variables($this->safe_column($row, 'og_title'), $post_id),
-                    'og_description'      => $this->convert_template_variables($this->safe_column($row, 'og_description'), $post_id),
+                    'og_title'            => $this->convert_post_value($this->safe_column($row, 'og_title'), $post_id),
+                    'og_description'      => $this->convert_post_value($this->safe_column($row, 'og_description'), $post_id),
                     'og_image'            => $this->safe_column($row, 'og_image_custom_url'),
-                    'twitter_title'       => $this->convert_template_variables($this->safe_column($row, 'twitter_title'), $post_id),
-                    'twitter_description' => $this->convert_template_variables($this->safe_column($row, 'twitter_description'), $post_id),
+                    'twitter_title'       => $this->convert_post_value($this->safe_column($row, 'twitter_title'), $post_id),
+                    'twitter_description' => $this->convert_post_value($this->safe_column($row, 'twitter_description'), $post_id),
                     'twitter_image'       => $this->safe_column($row, 'twitter_image_custom_url'),
                     'primary_category'    => $this->extract_primary_category($row),
                     'schema_type'         => $schema_type,
@@ -481,8 +481,8 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
                 'object_type'   => 'term',
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
-                    'seo_title'           => $this->convert_template_variables((string) ($row['title'] ?? '')),
-                    'meta_description'    => $this->convert_template_variables((string) ($row['description'] ?? '')),
+                    'seo_title'           => $this->convert_term_value((string) ($row['title'] ?? '')),
+                    'meta_description'    => $this->convert_term_value((string) ($row['description'] ?? '')),
                     'focus_keyword'       => $focus_keyword,
                     'focus_keywords'      => array_values(array_filter(
                         array_merge([$focus_keyword], $additional),
@@ -491,11 +491,11 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
                     'canonical_url'       => (string) ($row['canonical_url'] ?? ''),
                     'noindex'             => $robots_default ? null : (int) ($row['robots_noindex'] ?? 0),
                     'nofollow'            => $robots_default ? null : (int) ($row['robots_nofollow'] ?? 0),
-                    'og_title'            => $this->convert_template_variables((string) ($row['og_title'] ?? '')),
-                    'og_description'      => $this->convert_template_variables((string) ($row['og_description'] ?? '')),
+                    'og_title'            => $this->convert_term_value((string) ($row['og_title'] ?? '')),
+                    'og_description'      => $this->convert_term_value((string) ($row['og_description'] ?? '')),
                     'og_image'            => (string) ($row['og_image_custom_url'] ?? ''),
-                    'twitter_title'       => $this->convert_template_variables((string) ($row['twitter_title'] ?? '')),
-                    'twitter_description' => $this->convert_template_variables((string) ($row['twitter_description'] ?? '')),
+                    'twitter_title'       => $this->convert_term_value((string) ($row['twitter_title'] ?? '')),
+                    'twitter_description' => $this->convert_term_value((string) ($row['twitter_description'] ?? '')),
                     'twitter_image'       => (string) ($row['twitter_image_custom_url'] ?? ''),
                 ],
                 'extended' => [],
@@ -1214,6 +1214,77 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
         }
 
         return $records;
+    }
+
+    /**
+     * AIOSEO per-post tags ThinkRank resolves per request (#886): kept as
+     * ThinkRank tags rather than frozen into text. Mirrors
+     * convert_aioseo_global_template().
+     */
+    private const POST_TOKENS = [
+        '#post_title'     => '%title%',
+        '#site_title'     => '%sitename%',
+        '#separator_sa'   => '%sep%',
+        '#post_excerpt'   => '%excerpt%',
+        '#post_date'      => '%date%',
+        '#author_name'    => '%author%',
+        '#category_title' => '%category%',
+    ];
+
+    /**
+     * AIOSEO per-term tags ThinkRank resolves on a term archive. The literal
+     * resolver only knows post context, so these were stripped.
+     */
+    private const TERM_TOKENS = [
+        '#taxonomy_title'       => '%term%',
+        '#taxonomy_description' => '%excerpt%',
+        '#site_title'           => '%sitename%',
+        '#separator_sa'         => '%sep%',
+    ];
+
+    /**
+     * A per-post AIOSEO value: mapped tags as ThinkRank tags, the rest literal.
+     *
+     * @param mixed $value   Raw AIOSEO value
+     * @param int   $post_id Post ID
+     * @return string
+     */
+    private function convert_post_value($value, int $post_id): string {
+        return $this->tokenize_object_template(
+            $this->stringify_template_value($value),
+            self::aioseo_token_patterns(self::POST_TOKENS),
+            fn(string $rest): string => $this->convert_template_variables($rest, $post_id)
+        );
+    }
+
+    /**
+     * A per-term AIOSEO value: mapped tags as ThinkRank tags, the rest literal.
+     *
+     * @param mixed $value Raw AIOSEO value
+     * @return string
+     */
+    private function convert_term_value($value): string {
+        return $this->tokenize_object_template(
+            $this->stringify_template_value($value),
+            self::aioseo_token_patterns(self::TERM_TOKENS),
+            fn(string $rest): string => $this->convert_template_variables($rest)
+        );
+    }
+
+    /**
+     * AIOSEO tags have no closing delimiter, so each one must end at a word
+     * boundary — `#post_title` is not the start of `#post_titles`.
+     *
+     * @param array<string,string> $map AIOSEO tag => ThinkRank tag
+     * @return array<string,string> Regex => ThinkRank tag
+     */
+    private static function aioseo_token_patterns(array $map): array {
+        $patterns = [];
+        foreach ($map as $tag => $thinkrank_tag) {
+            $patterns['/' . preg_quote((string) $tag, '/') . '\\b/'] = $thinkrank_tag;
+        }
+
+        return $patterns;
     }
 
     /**

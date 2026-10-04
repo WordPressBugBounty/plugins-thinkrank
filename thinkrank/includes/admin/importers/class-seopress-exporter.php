@@ -141,8 +141,8 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
                 'object_type'   => 'post',
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
-                    'seo_title'           => $this->convert_template_variables($meta['_seopress_titles_title'] ?? '', $post_id),
-                    'meta_description'    => $this->convert_template_variables($meta['_seopress_titles_desc'] ?? '', $post_id),
+                    'seo_title'           => $this->convert_post_value($meta['_seopress_titles_title'] ?? '', $post_id),
+                    'meta_description'    => $this->convert_post_value($meta['_seopress_titles_desc'] ?? '', $post_id),
                     'focus_keyword'       => $primary_keyword,
                     'focus_keywords'      => $focus_keywords,
                     'canonical_url'       => $meta['_seopress_robots_canonical'] ?? '',
@@ -151,11 +151,11 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
                     'noarchive'           => ($meta['_seopress_robots_archive'] ?? '') === 'yes' ? 1 : 0,
                     'noimageindex'        => ($meta['_seopress_robots_imageindex'] ?? '') === 'yes' ? 1 : 0,
                     'nosnippet'           => ($meta['_seopress_robots_snippet'] ?? '') === 'yes' ? 1 : 0,
-                    'og_title'            => $this->convert_template_variables($meta['_seopress_social_fb_title'] ?? '', $post_id),
-                    'og_description'      => $this->convert_template_variables($meta['_seopress_social_fb_desc'] ?? '', $post_id),
+                    'og_title'            => $this->convert_post_value($meta['_seopress_social_fb_title'] ?? '', $post_id),
+                    'og_description'      => $this->convert_post_value($meta['_seopress_social_fb_desc'] ?? '', $post_id),
                     'og_image'            => $meta['_seopress_social_fb_img'] ?? '',
-                    'twitter_title'       => $this->convert_template_variables($meta['_seopress_social_twitter_title'] ?? '', $post_id),
-                    'twitter_description' => $this->convert_template_variables($meta['_seopress_social_twitter_desc'] ?? '', $post_id),
+                    'twitter_title'       => $this->convert_post_value($meta['_seopress_social_twitter_title'] ?? '', $post_id),
+                    'twitter_description' => $this->convert_post_value($meta['_seopress_social_twitter_desc'] ?? '', $post_id),
                     'twitter_image'       => $meta['_seopress_social_twitter_img'] ?? '',
                     'primary_category'    => (int) ($meta['_seopress_robots_primary_cat'] ?? 0),
                     'schema_type'         => '',
@@ -202,13 +202,13 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
                 'object_type'   => 'term',
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
-                    'seo_title'        => $this->convert_template_variables($meta['_seopress_titles_title'] ?? ''),
-                    'meta_description' => $this->convert_template_variables($meta['_seopress_titles_desc'] ?? ''),
+                    'seo_title'        => $this->convert_term_value($meta['_seopress_titles_title'] ?? ''),
+                    'meta_description' => $this->convert_term_value($meta['_seopress_titles_desc'] ?? ''),
                     'canonical_url'    => $meta['_seopress_robots_canonical'] ?? '',
                     'noindex'          => $noindex,
                     'nofollow'         => $nofollow,
-                    'og_title'         => $this->convert_template_variables($meta['_seopress_social_fb_title'] ?? ''),
-                    'og_description'   => $this->convert_template_variables($meta['_seopress_social_fb_desc'] ?? ''),
+                    'og_title'         => $this->convert_term_value($meta['_seopress_social_fb_title'] ?? ''),
+                    'og_description'   => $this->convert_term_value($meta['_seopress_social_fb_desc'] ?? ''),
                 ],
                 'extended' => [
                     'og_image'    => $meta['_seopress_social_fb_img'] ?? '',
@@ -620,6 +620,69 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
         }
 
         return $records;
+    }
+
+    /**
+     * SEOPress per-post tokens ThinkRank resolves per request (#886): kept as
+     * tags rather than frozen into text. Mirrors convert_seopress_global_template().
+     */
+    private const POST_TOKENS = [
+        '%%post_title%%'         => '%title%',
+        '%%title%%'              => '%title%',
+        '%%sitetitle%%'          => '%sitename%',
+        '%%sitename%%'           => '%sitename%',
+        '%%sep%%'                => '%sep%',
+        '%%post_excerpt%%'       => '%excerpt%',
+        '%%excerpt%%'            => '%excerpt%',
+        '%%post_date%%'          => '%date%',
+        '%%post_modified_date%%' => '%modified%',
+        '%%post_author%%'        => '%author%',
+        '%%post_category%%'      => '%category%',
+    ];
+
+    /**
+     * SEOPress per-term tokens ThinkRank resolves on a term archive. The
+     * literal resolver only knows post context, so these were stripped.
+     */
+    private const TERM_TOKENS = [
+        '%%term_title%%'            => '%term%',
+        '%%_category_title%%'       => '%term%',
+        '%%tag_title%%'             => '%term%',
+        '%%term_description%%'      => '%excerpt%',
+        '%%_category_description%%' => '%excerpt%',
+        '%%tag_description%%'       => '%excerpt%',
+        '%%sitetitle%%'             => '%sitename%',
+        '%%sitename%%'              => '%sitename%',
+        '%%sep%%'                   => '%sep%',
+    ];
+
+    /**
+     * A per-post SEOPress value: mapped tokens as ThinkRank tags, the rest literal.
+     *
+     * @param mixed $value   Raw SEOPress value
+     * @param int   $post_id Post ID
+     * @return string
+     */
+    private function convert_post_value($value, int $post_id): string {
+        return $this->tokenize_object_template(
+            $this->stringify_template_value($value),
+            self::literal_token_patterns(self::POST_TOKENS),
+            fn(string $rest): string => $this->convert_template_variables($rest, $post_id)
+        );
+    }
+
+    /**
+     * A per-term SEOPress value: mapped tokens as ThinkRank tags, the rest literal.
+     *
+     * @param mixed $value Raw SEOPress value
+     * @return string
+     */
+    private function convert_term_value($value): string {
+        return $this->tokenize_object_template(
+            $this->stringify_template_value($value),
+            self::literal_token_patterns(self::TERM_TOKENS),
+            fn(string $rest): string => $this->convert_template_variables($rest)
+        );
     }
 
     /**

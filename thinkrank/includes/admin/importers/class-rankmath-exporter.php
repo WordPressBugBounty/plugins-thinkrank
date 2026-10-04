@@ -263,8 +263,8 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                 'object_type'   => 'post',
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
-                    'seo_title'           => $this->convert_template_variables($meta['rank_math_title'] ?? '', $post_id),
-                    'meta_description'    => $this->convert_template_variables($meta['rank_math_description'] ?? '', $post_id),
+                    'seo_title'           => $this->convert_post_value($meta['rank_math_title'] ?? '', $post_id),
+                    'meta_description'    => $this->convert_post_value($meta['rank_math_description'] ?? '', $post_id),
                     'focus_keyword'       => $primary_keyword,
                     // Full keyword list; the migrator dedupes, drops empties and
                     // caps at the ThinkRank maximum via Focus_Keywords.
@@ -278,11 +278,11 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                     'max_snippet'         => $this->advanced_robot_int($advanced_robots, 'max-snippet'),
                     'max_video_preview'   => $this->advanced_robot_int($advanced_robots, 'max-video-preview'),
                     'max_image_preview'   => $this->advanced_robot_string($advanced_robots, 'max-image-preview'),
-                    'og_title'            => $this->convert_template_variables($meta['rank_math_facebook_title'] ?? '', $post_id),
-                    'og_description'      => $this->convert_template_variables($meta['rank_math_facebook_description'] ?? '', $post_id),
+                    'og_title'            => $this->convert_post_value($meta['rank_math_facebook_title'] ?? '', $post_id),
+                    'og_description'      => $this->convert_post_value($meta['rank_math_facebook_description'] ?? '', $post_id),
                     'og_image'            => $meta['rank_math_facebook_image'] ?? '',
-                    'twitter_title'       => $this->convert_template_variables($meta['rank_math_twitter_title'] ?? '', $post_id),
-                    'twitter_description' => $this->convert_template_variables($meta['rank_math_twitter_description'] ?? '', $post_id),
+                    'twitter_title'       => $this->convert_post_value($meta['rank_math_twitter_title'] ?? '', $post_id),
+                    'twitter_description' => $this->convert_post_value($meta['rank_math_twitter_description'] ?? '', $post_id),
                     'twitter_image'       => $meta['rank_math_twitter_image'] ?? '',
                     'primary_category'    => (int) ($meta['rank_math_primary_category'] ?? 0),
                     'schema_type'         => $this->resolve_schema_type($meta),
@@ -350,14 +350,14 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                 'object_type'   => 'term',
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
-                    'seo_title'        => $this->convert_term_template_variables($meta['rank_math_title'] ?? '', $term_id),
-                    'meta_description' => $this->convert_term_template_variables($meta['rank_math_description'] ?? '', $term_id),
+                    'seo_title'        => $this->convert_term_value($meta['rank_math_title'] ?? '', $term_id),
+                    'meta_description' => $this->convert_term_value($meta['rank_math_description'] ?? '', $term_id),
                     'focus_keyword'    => $primary_keyword,
                     'canonical_url'    => $meta['rank_math_canonical_url'] ?? '',
                     'noindex'          => $robots['noindex'],
                     'nofollow'         => $robots['nofollow'],
-                    'og_title'         => $this->convert_term_template_variables($meta['rank_math_facebook_title'] ?? '', $term_id),
-                    'og_description'   => $this->convert_term_template_variables($meta['rank_math_facebook_description'] ?? '', $term_id),
+                    'og_title'         => $this->convert_term_value($meta['rank_math_facebook_title'] ?? '', $term_id),
+                    'og_description'   => $this->convert_term_value($meta['rank_math_facebook_description'] ?? '', $term_id),
                 ],
                 'extended' => [
                     'og_image'    => $meta['rank_math_facebook_image'] ?? '',
@@ -994,6 +994,66 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         }
 
         return self::MODERN_SCHEMA_TYPE_MAP[$key] ?? '';
+    }
+
+    /**
+     * Rank Math per-post tokens ThinkRank resolves per request (#886): kept
+     * as tags rather than frozen into text. Same vocabulary as
+     * convert_template_tokens().
+     */
+    private const POST_TOKENS = [
+        '%title%'         => '%title%',
+        '%sitename%'      => '%sitename%',
+        '%sep%'           => '%sep%',
+        '%excerpt%'       => '%excerpt%',
+        '%date%'          => '%date%',
+        '%modified%'      => '%modified%',
+        '%name%'          => '%author%',
+        '%category%'      => '%category%',
+        '%wc_price%'      => '%price%',
+        '%wc_sku%'        => '%sku%',
+        '%wc_shortdesc%'  => '%short_description%',
+        '%wc_brand%'      => '%brand%',
+    ];
+
+    /**
+     * Rank Math per-term tokens ThinkRank resolves on a term archive.
+     */
+    private const TERM_TOKENS = [
+        '%term%'             => '%term%',
+        '%term_description%' => '%excerpt%',
+        '%sitename%'         => '%sitename%',
+        '%sep%'              => '%sep%',
+    ];
+
+    /**
+     * A per-post Rank Math value: mapped tokens as ThinkRank tags, the rest literal.
+     *
+     * @param mixed $value   Raw Rank Math value
+     * @param int   $post_id Post ID
+     * @return string
+     */
+    private function convert_post_value($value, int $post_id): string {
+        return $this->tokenize_object_template(
+            $this->stringify_template_value($value),
+            self::literal_token_patterns(self::POST_TOKENS),
+            fn(string $rest): string => $this->convert_template_variables($rest, $post_id)
+        );
+    }
+
+    /**
+     * A per-term Rank Math value: mapped tokens as ThinkRank tags, the rest literal.
+     *
+     * @param mixed $value   Raw Rank Math value
+     * @param int   $term_id Term ID
+     * @return string
+     */
+    private function convert_term_value($value, int $term_id): string {
+        return $this->tokenize_object_template(
+            $this->stringify_template_value($value),
+            self::literal_token_patterns(self::TERM_TOKENS),
+            fn(string $rest): string => $this->convert_term_template_variables($rest, $term_id)
+        );
     }
 
     /**

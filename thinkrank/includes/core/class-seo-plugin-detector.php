@@ -72,6 +72,15 @@ class SEO_Plugin_Detector {
             'extra_files' => ['squirrly-seo-pack/index.php'],
             'importable' => true,
         ],
+        'slimseo' => [
+            'name' => 'Slim SEO',
+            'class' => 'SlimSEO\\Activator',
+            'function' => '',
+            'file' => 'slim-seo/slim-seo.php',
+            // Slim SEO Pro runs with or without the free plugin (#886).
+            'extra_files' => ['slim-seo-pro/slim-seo-pro.php'],
+            'importable' => true,
+        ],
         'theseoframework' => [
             'name' => 'The SEO Framework',
             'class' => 'The_SEO_Framework\\Load',
@@ -157,9 +166,14 @@ class SEO_Plugin_Detector {
             return true;
         }
         
-        // Check by plugin file
-        if (!empty($plugin['file']) && function_exists('is_plugin_active') && is_plugin_active($plugin['file'])) {
-            return true;
+        // Check by plugin file, the add-on's included: Slim SEO Pro runs
+        // without the free plugin, and is no less a second SEO plugin then.
+        if (function_exists('is_plugin_active')) {
+            foreach (array_merge([$plugin['file'] ?? ''], $plugin['extra_files'] ?? []) as $file) {
+                if ($file !== '' && is_plugin_active($file)) {
+                    return true;
+                }
+            }
         }
         
         return false;

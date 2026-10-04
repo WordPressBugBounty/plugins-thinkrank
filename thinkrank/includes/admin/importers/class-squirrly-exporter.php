@@ -193,8 +193,8 @@ class Squirrly_Exporter extends Abstract_Plugin_Exporter {
                 'object_type'   => 'post',
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
-                    'seo_title'           => $this->convert_template_variables($this->seo_string($seo, 'title'), $post_id),
-                    'meta_description'    => $this->convert_template_variables($description, $post_id),
+                    'seo_title'           => $this->convert_post_value($this->seo_string($seo, 'title'), $post_id),
+                    'meta_description'    => $this->convert_post_value($description, $post_id),
                     'focus_keyword'       => $focus_keywords[0] ?? '',
                     'focus_keywords'      => $focus_keywords,
                     'canonical_url'       => $this->seo_string($seo, 'canonical'),
@@ -203,11 +203,11 @@ class Squirrly_Exporter extends Abstract_Plugin_Exporter {
                     'noarchive'           => $robots['noarchive'],
                     'noimageindex'        => $robots['noimageindex'],
                     'nosnippet'           => $robots['nosnippet'],
-                    'og_title'            => $this->convert_template_variables($this->seo_string($seo, 'og_title'), $post_id),
-                    'og_description'      => $this->convert_template_variables($this->seo_string($seo, 'og_description'), $post_id),
+                    'og_title'            => $this->convert_post_value($this->seo_string($seo, 'og_title'), $post_id),
+                    'og_description'      => $this->convert_post_value($this->seo_string($seo, 'og_description'), $post_id),
                     'og_image'            => $this->seo_string($seo, 'og_media'),
-                    'twitter_title'       => $this->convert_template_variables($this->seo_string($seo, 'tw_title'), $post_id),
-                    'twitter_description' => $this->convert_template_variables($this->seo_string($seo, 'tw_description'), $post_id),
+                    'twitter_title'       => $this->convert_post_value($this->seo_string($seo, 'tw_title'), $post_id),
+                    'twitter_description' => $this->convert_post_value($this->seo_string($seo, 'tw_description'), $post_id),
                     'twitter_image'       => $this->seo_string($seo, 'tw_media'),
                     'primary_category'    => (int) ($seo['primary_category'] ?? 0),
                     'schema_type'         => $this->map_schema_type($seo['jsonld_types'] ?? null),
@@ -258,13 +258,13 @@ class Squirrly_Exporter extends Abstract_Plugin_Exporter {
                 'object_type'   => 'term',
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
-                    'seo_title'        => $this->convert_term_template($this->seo_string($seo, 'title'), $term),
-                    'meta_description' => $this->convert_term_template($this->seo_string($seo, 'description'), $term),
+                    'seo_title'        => $this->convert_term_value($this->seo_string($seo, 'title'), $term),
+                    'meta_description' => $this->convert_term_value($this->seo_string($seo, 'description'), $term),
                     'canonical_url'    => $this->seo_string($seo, 'canonical'),
                     'noindex'          => $this->seo_flag($seo, 'noindex'),
                     'nofollow'         => $this->seo_flag($seo, 'nofollow'),
-                    'og_title'         => $this->convert_term_template($this->seo_string($seo, 'og_title'), $term),
-                    'og_description'   => $this->convert_term_template($this->seo_string($seo, 'og_description'), $term),
+                    'og_title'         => $this->convert_term_value($this->seo_string($seo, 'og_title'), $term),
+                    'og_description'   => $this->convert_term_value($this->seo_string($seo, 'og_description'), $term),
                 ],
                 'extended' => [
                     'taxonomy'            => $parsed['taxonomy'],
@@ -641,6 +641,65 @@ class Squirrly_Exporter extends Abstract_Plugin_Exporter {
         $value = (string) preg_replace('/\s{2,}/', ' ', $value);
 
         return trim($value);
+    }
+
+    /**
+     * Squirrly per-post variables ThinkRank resolves per request (#886): kept
+     * as tags rather than frozen into text. Mirrors convert_global_pattern().
+     */
+    private const POST_TOKENS = [
+        'title'    => '%title%',
+        'sitename' => '%sitename%',
+        'sep'      => '%sep%',
+        'excerpt'  => '%excerpt%',
+        'date'     => '%date%',
+        'name'     => '%author%',
+        'category' => '%category%',
+    ];
+
+    /**
+     * Squirrly per-term variables ThinkRank resolves on a term archive —
+     * the ones convert_term_template() seeds with the term's own values.
+     */
+    private const TERM_TOKENS = [
+        'term_title'           => '%term%',
+        'title'                => '%term%',
+        'category'             => '%term%',
+        'tag'                  => '%term%',
+        'category_description' => '%excerpt%',
+        'excerpt'              => '%excerpt%',
+        'sitename'             => '%sitename%',
+        'sep'                  => '%sep%',
+    ];
+
+    /**
+     * A per-post Squirrly value: mapped variables as ThinkRank tags, the rest literal.
+     *
+     * @param string $value   Raw Squirrly value
+     * @param int    $post_id Post ID
+     * @return string
+     */
+    private function convert_post_value(string $value, int $post_id): string {
+        return $this->tokenize_object_template(
+            $value,
+            self::brace_token_patterns(self::POST_TOKENS),
+            fn(string $rest): string => $this->convert_template_variables($rest, $post_id)
+        );
+    }
+
+    /**
+     * A per-term Squirrly value: mapped variables as ThinkRank tags, the rest literal.
+     *
+     * @param string        $value Raw Squirrly value
+     * @param \WP_Term|null $term  The term, when it still exists
+     * @return string
+     */
+    private function convert_term_value(string $value, ?\WP_Term $term): string {
+        return $this->tokenize_object_template(
+            $value,
+            self::brace_token_patterns(self::TERM_TOKENS),
+            fn(string $rest): string => $this->convert_term_template($rest, $term)
+        );
     }
 
     /**

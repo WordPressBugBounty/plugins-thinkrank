@@ -2409,10 +2409,11 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             throw new \Error(
                 sprintf(
                     /* translators: 1: memory in use, 2: PHP memory limit. */
-                    __('The sitemap rebuild was stopped at %1$s of the %2$s PHP memory limit, before PHP would have run out of memory. It will be retried by a process with more memory (WP-CLI or a system cron). To let it finish in the admin, raise the PHP memory_limit.', 'thinkrank'),
-                    size_format($usage),
-                    size_format($limit)
+                    esc_html__('The sitemap rebuild was stopped at %1$s of the %2$s PHP memory limit, before PHP would have run out of memory. It will be retried by a process with more memory (WP-CLI or a system cron). To let it finish in the admin, raise the PHP memory_limit.', 'thinkrank'),
+                    esc_html((string) size_format($usage)),
+                    esc_html((string) size_format($limit))
                 ),
+                // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- an integer class constant, not output.
                 self::MEMORY_ABORT_CODE
             );
         }

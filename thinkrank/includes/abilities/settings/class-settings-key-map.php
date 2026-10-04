@@ -91,6 +91,13 @@ final class Settings_Key_Map {
 			'title_template'           => self::string( __( 'Named title layout, e.g. "default", "reverse", "category".', 'thinkrank' ) ),
 			'title_separator'          => self::string( __( 'Separator between title parts, e.g. "pipe", "dash".', 'thinkrank' ) ),
 			'homepage_title'           => self::template( __( 'the homepage', 'thinkrank' ), '' ),
+			'homepage_description'     => self::string(
+				sprintf(
+					/* translators: %s: the list of available variable tags. */
+					__( 'Meta description for the homepage when it lists the latest posts. Available tags: %s. A static front page uses its own page description instead.', 'thinkrank' ),
+					'%site_title%, %site_name%, %site_description%, %tagline%, %sep%'
+				)
+			),
 			'category_title'           => self::template( __( 'category archives', 'thinkrank' ), '%category_title%, %category%' ),
 			'tag_title'                => self::template( __( 'tag archives', 'thinkrank' ), '%tag_title%' ),
 			'author_title'             => self::template( __( 'author archives', 'thinkrank' ), '%author_name%' ),

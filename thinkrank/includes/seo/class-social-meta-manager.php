@@ -1534,7 +1534,19 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             } else {
                 $data['title'] = $blogname;
             }
-            $data['description'] = $settings['og_description'] ?? get_bloginfo('description');
+            // Same rule as the title above: the shipped default (the tagline)
+            // is not a choice, so the homepage's meta description wins over
+            // it. Without this an imported or hand-set homepage description
+            // printed as the meta description while og:/twitter:description
+            // kept the tagline (#897).
+            $og_description = (string) ($settings['og_description'] ?? '');
+            if ($og_description !== '' && $og_description !== get_bloginfo('description')) {
+                $data['description'] = $og_description;
+            } elseif ($fallback_description !== null && $fallback_description !== '') {
+                $data['description'] = $fallback_description;
+            } else {
+                $data['description'] = get_bloginfo('description');
+            }
             // Use home_url('/') so og:url matches the homepage canonical
             // (class-seo-manager.php) and the WebSite schema, which both include
             // the trailing slash. A bare home_url() would key a different URL in

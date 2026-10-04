@@ -42,7 +42,7 @@ class Import_Controller extends \WP_REST_Controller {
      * plugin's live data: the native ThinkRank slug must never reach it, or the
      * endpoint gains a path that wipes our own meta and options.
      */
-    private const SOURCE_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly'];
+    private const SOURCE_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly', 'slimseo'];
 
     /**
      * Snapshot slug for ThinkRank's own data (export / backup / restore).
@@ -53,7 +53,7 @@ class Import_Controller extends \WP_REST_Controller {
      * Allowed plugin slugs for the snapshot endpoints (export, migrate,
      * snapshot delete). Includes the native slug; cleanup uses SOURCE_PLUGINS.
      */
-    private const ALLOWED_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly', 'thinkrank'];
+    private const ALLOWED_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly', 'slimseo', 'thinkrank'];
 
     /**
      * Allowed export/migrate types. Must cover every type the exporters and
@@ -386,6 +386,9 @@ class Import_Controller extends \WP_REST_Controller {
             'seopress' => '_seopress_',
             'aioseo'   => null, // Custom table
             'squirrly' => '_sq_', // Fallback meta only; the SEO is in the qss table below
+            // Slim SEO is cleaned by exact key below: a `slim_seo` prefix also
+            // matches Slim SEO Pro's and its add-ons' own keys (#886).
+            'slimseo'  => null,
         ];
 
         $prefix = $prefix_map[$plugin] ?? null;
@@ -437,6 +440,46 @@ class Import_Controller extends \WP_REST_Controller {
                 if (delete_option($option_name)) {
                     $deleted++;
                 }
+            }
+        }
+
+        if ($plugin === 'slimseo') {
+            // Exactly the keys the exporter reads. A `slim_seo%` prefix would
+            // also take data nothing imported (Slim SEO Link Manager's and
+            // Auto Link's settings), and those stay with their plugin.
+            $deleted += (int) $wpdb->query(
+                $wpdb->prepare(
+                    "DELETE FROM {$wpdb->postmeta} WHERE meta_key IN (%s, %s, %s, %s, %s) OR meta_key LIKE %s",
+                    Slim_SEO_Exporter::META_KEY,
+                    Slim_SEO_Exporter::PRO_META_KEY,
+                    Slim_SEO_Exporter::SCHEMA_META_KEY,
+                    Slim_SEO_Exporter::ALLOW_GLOBAL_META,
+                    Slim_SEO_Exporter::OLD_PERMALINK_META,
+                    $wpdb->esc_like(Slim_SEO_Exporter::PRIMARY_TERM_PREFIX) . '%'
+                )
+            );
+            $deleted += (int) $wpdb->query(
+                $wpdb->prepare("DELETE FROM {$wpdb->termmeta} WHERE meta_key = %s", Slim_SEO_Exporter::META_KEY)
+            );
+            $options = [
+                Slim_SEO_Exporter::OPTION,
+                Slim_SEO_Exporter::REDIRECTS_OPTION,
+                Slim_SEO_Exporter::PRO_OPTION,
+                Slim_SEO_Exporter::SCHEMAS_OPTION,
+                'slim_seo_db_version',
+                'ss_redirection_db_version',
+            ];
+            foreach ($options as $option_name) {
+                if (delete_option($option_name)) {
+                    $deleted++;
+                }
+            }
+            $table = $wpdb->prefix . Slim_SEO_Exporter::LOG_404_TABLE;
+            if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table))) {
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal.
+                $deleted += (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal.
+                $wpdb->query("DROP TABLE {$table}");
             }
         }
 
@@ -587,6 +630,8 @@ class Import_Controller extends \WP_REST_Controller {
                 return new AIOSEO_Exporter();
             case Squirrly_Exporter::SLUG:
                 return new Squirrly_Exporter();
+            case Slim_SEO_Exporter::SLUG:
+                return new Slim_SEO_Exporter();
             case Thinkrank_Exporter::SLUG:
                 return new Thinkrank_Exporter();
             default:

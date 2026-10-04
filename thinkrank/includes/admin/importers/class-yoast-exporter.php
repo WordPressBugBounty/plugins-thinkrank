@@ -129,8 +129,8 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
                 'object_type'   => 'post',
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
-                    'seo_title'           => $this->convert_template_variables($meta['_yoast_wpseo_title'] ?? '', $post_id),
-                    'meta_description'    => $this->convert_template_variables($meta['_yoast_wpseo_metadesc'] ?? '', $post_id),
+                    'seo_title'           => $this->convert_post_value($meta['_yoast_wpseo_title'] ?? '', $post_id),
+                    'meta_description'    => $this->convert_post_value($meta['_yoast_wpseo_metadesc'] ?? '', $post_id),
                     'focus_keyword'       => $meta['_yoast_wpseo_focuskw'] ?? '',
                     // Full keyword list (primary + Yoast Premium's additional
                     // keyphrases) for ThinkRank's keyword array — without this
@@ -149,11 +149,11 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
                     'noarchive'           => $advanced_robots['noarchive'],
                     'noimageindex'        => $advanced_robots['noimageindex'],
                     'nosnippet'           => $advanced_robots['nosnippet'],
-                    'og_title'            => $this->convert_template_variables($meta['_yoast_wpseo_opengraph-title'] ?? '', $post_id),
-                    'og_description'      => $this->convert_template_variables($meta['_yoast_wpseo_opengraph-description'] ?? '', $post_id),
+                    'og_title'            => $this->convert_post_value($meta['_yoast_wpseo_opengraph-title'] ?? '', $post_id),
+                    'og_description'      => $this->convert_post_value($meta['_yoast_wpseo_opengraph-description'] ?? '', $post_id),
                     'og_image'            => $meta['_yoast_wpseo_opengraph-image'] ?? '',
-                    'twitter_title'       => $this->convert_template_variables($meta['_yoast_wpseo_twitter-title'] ?? '', $post_id),
-                    'twitter_description' => $this->convert_template_variables($meta['_yoast_wpseo_twitter-description'] ?? '', $post_id),
+                    'twitter_title'       => $this->convert_post_value($meta['_yoast_wpseo_twitter-title'] ?? '', $post_id),
+                    'twitter_description' => $this->convert_post_value($meta['_yoast_wpseo_twitter-description'] ?? '', $post_id),
                     'twitter_image'       => $meta['_yoast_wpseo_twitter-image'] ?? '',
                     'primary_category'    => (int) ($meta['_yoast_wpseo_primary_category'] ?? 0),
                     'product_identifier'  => $this->extract_product_identifier($meta),
@@ -210,14 +210,14 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
                 'object_type'   => 'term',
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
-                    'seo_title'        => $this->convert_template_variables($meta['wpseo_title'] ?? ''),
-                    'meta_description' => $this->convert_template_variables($meta['wpseo_desc'] ?? ''),
+                    'seo_title'        => $this->convert_term_value($meta['wpseo_title'] ?? ''),
+                    'meta_description' => $this->convert_term_value($meta['wpseo_desc'] ?? ''),
                     'focus_keyword'    => $meta['wpseo_focuskw'] ?? '',
                     'canonical_url'    => $meta['wpseo_canonical'] ?? '',
                     'noindex'          => $noindex,
                     'nofollow'         => 0,
-                    'og_title'         => $this->convert_template_variables($meta['wpseo_opengraph-title'] ?? ''),
-                    'og_description'   => $this->convert_template_variables($meta['wpseo_opengraph-description'] ?? ''),
+                    'og_title'         => $this->convert_term_value($meta['wpseo_opengraph-title'] ?? ''),
+                    'og_description'   => $this->convert_term_value($meta['wpseo_opengraph-description'] ?? ''),
                 ],
                 'extended' => [
                     'breadcrumb_title'    => $meta['wpseo_bctitle'] ?? '',
@@ -512,6 +512,69 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
         $value = preg_replace('/%%[a-z0-9_-]+%%/i', '', $value);
 
         return trim($value);
+    }
+
+    /**
+     * Yoast per-post tokens ThinkRank resolves per request (#886): kept as
+     * tags rather than frozen into text. Mirrors convert_template_pattern().
+     */
+    private const POST_TOKENS = [
+        '%%title%%'            => '%title%',
+        '%%sitename%%'         => '%sitename%',
+        '%%sep%%'              => '%sep%',
+        '%%excerpt%%'          => '%excerpt%',
+        '%%date%%'             => '%date%',
+        '%%modified%%'         => '%modified%',
+        '%%name%%'             => '%author%',
+        '%%category%%'         => '%category%',
+        '%%primary_category%%' => '%category%',
+        '%%wc_price%%'         => '%price%',
+        '%%wc_sku%%'           => '%sku%',
+        '%%wc_shortdesc%%'     => '%short_description%',
+        '%%wc_brand%%'         => '%brand%',
+    ];
+
+    /**
+     * Yoast per-term tokens ThinkRank resolves on a term archive. The term's
+     * own name and description used to be stripped outright, since the
+     * literal resolver only knows post context.
+     */
+    private const TERM_TOKENS = [
+        '%%term_title%%'           => '%term%',
+        '%%term_description%%'     => '%excerpt%',
+        '%%category_description%%' => '%excerpt%',
+        '%%tag_description%%'      => '%excerpt%',
+        '%%sitename%%'             => '%sitename%',
+        '%%sep%%'                  => '%sep%',
+    ];
+
+    /**
+     * A per-post Yoast value: mapped tokens as ThinkRank tags, the rest literal.
+     *
+     * @param mixed $value   Raw Yoast value
+     * @param int   $post_id Post ID
+     * @return string
+     */
+    private function convert_post_value($value, int $post_id): string {
+        return $this->tokenize_object_template(
+            $this->stringify_template_value($value),
+            self::literal_token_patterns(self::POST_TOKENS),
+            fn(string $rest): string => $this->convert_template_variables($rest, $post_id)
+        );
+    }
+
+    /**
+     * A per-term Yoast value: mapped tokens as ThinkRank tags, the rest literal.
+     *
+     * @param mixed $value Raw Yoast value
+     * @return string
+     */
+    private function convert_term_value($value): string {
+        return $this->tokenize_object_template(
+            $this->stringify_template_value($value),
+            self::literal_token_patterns(self::TERM_TOKENS),
+            fn(string $rest): string => $this->convert_template_variables($rest)
+        );
     }
 
     /**

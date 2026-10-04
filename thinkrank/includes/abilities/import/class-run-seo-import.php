@@ -14,6 +14,7 @@ use ThinkRank\Admin\Importers\AIOSEO_Exporter;
 use ThinkRank\Admin\Importers\Rankmath_Exporter;
 use ThinkRank\Admin\Importers\SEOPress_Exporter;
 use ThinkRank\Admin\Importers\Snapshot_Migrator;
+use ThinkRank\Admin\Importers\Slim_SEO_Exporter;
 use ThinkRank\Admin\Importers\Squirrly_Exporter;
 use ThinkRank\Admin\Importers\Yoast_Exporter;
 
@@ -40,7 +41,7 @@ class Run_Seo_Import extends Ability_Base {
 	 *
 	 * @var string[]
 	 */
-	private const ALLOWED_PLUGINS = [ 'yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly' ];
+	private const ALLOWED_PLUGINS = [ 'yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly', 'slimseo' ];
 
 	/**
 	 * Data types processed, in pipeline order.
@@ -60,7 +61,7 @@ class Run_Seo_Import extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/run-seo-import';
 		$this->label       = __( 'Run SEO Data Import', 'thinkrank' );
-		$this->description = __( 'Import SEO data from another plugin (Yoast, RankMath, SEOPress, AIOSEO, or Squirrly) into ThinkRank. Exports the source to a snapshot then migrates it; existing ThinkRank values are never overwritten and the source plugin\'s own meta and settings are left intact. The content_blocks type (RankMath only) edits post content: it rewrites RankMath FAQ and HowTo blocks into ThinkRank blocks. Each converted post gets a revision, or a restorable backup where revisions are disabled. Pass types to limit the run, for example to leave content_blocks out. Posts with malformed block markup are left unchanged and listed in errors. Returns aggregate export/migration counters. Run preview-seo-import first to see what would change; get-import-status reports on the snapshot afterwards.', 'thinkrank' );
+		$this->description = __( 'Import SEO data from another plugin (Yoast, RankMath, SEOPress, AIOSEO, Squirrly, or Slim SEO) into ThinkRank. Exports the source to a snapshot then migrates it; existing ThinkRank values are never overwritten and the source plugin\'s own meta and settings are left intact. The content_blocks type (RankMath only) edits post content: it rewrites RankMath FAQ and HowTo blocks into ThinkRank blocks. Each converted post gets a revision, or a restorable backup where revisions are disabled. Pass types to limit the run, for example to leave content_blocks out. Posts with malformed block markup are left unchanged and listed in errors. Returns aggregate export/migration counters. Run preview-seo-import first to see what would change; get-import-status reports on the snapshot afterwards.', 'thinkrank' );
 	}
 
 	/**
@@ -159,7 +160,7 @@ class Run_Seo_Import extends Ability_Base {
 		if ( ! in_array( $plugin, self::ALLOWED_PLUGINS, true ) ) {
 			return new \WP_Error(
 				'thinkrank_invalid_import_plugin',
-				__( 'A supported source plugin is required (yoast, rankmath, seopress, aioseo, squirrly).', 'thinkrank' ),
+				__( 'A supported source plugin is required (yoast, rankmath, seopress, aioseo, squirrly, slimseo).', 'thinkrank' ),
 				[ 'status' => 400 ]
 			);
 		}
@@ -267,6 +268,8 @@ class Run_Seo_Import extends Ability_Base {
 				return new AIOSEO_Exporter();
 			case 'squirrly':
 				return new Squirrly_Exporter();
+			case 'slimseo':
+				return new Slim_SEO_Exporter();
 			default:
 				return null;
 		}

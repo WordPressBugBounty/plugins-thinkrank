@@ -2907,6 +2907,8 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             // Title formats, one per context.
             'homepage_title', 'post_title', 'page_title', 'category_title',
             'tag_title', 'author_title', 'search_title', 'archive_title',
+            // The blog-index homepage's meta description (#897).
+            'homepage_description',
             // Breadcrumbs.
             'breadcrumb_prefix', 'show_current_page', 'breadcrumb_use_seo_title',
             // Identity, as written by the setup wizard and the importers.

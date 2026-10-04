@@ -77,6 +77,14 @@ class Import_Detector {
             'option_keys'  => ['sq_options'],
             'plugin_files' => ['squirrly-seo/squirrly.php'],
         ],
+        'slimseo' => [
+            'name'         => 'Slim SEO',
+            // One `slim_seo` meta array per post/term, plus primary-term keys
+            // and option-stored redirects (#886) — counted by the exporter.
+            'meta_prefix'  => 'slim_seo',
+            'option_keys'  => ['slim_seo', 'ss_redirects', 'slim_seo_pro', 'slim_seo_schemas'],
+            'plugin_files' => ['slim-seo/slim-seo.php', 'slim-seo-pro/slim-seo-pro.php'],
+        ],
     ];
 
     /**
@@ -188,6 +196,10 @@ class Import_Detector {
         } elseif ($slug === 'squirrly') {
             // Squirrly uses a custom table too; the exporter classifies rows.
             $counts = $this->detect_squirrly();
+        } elseif ($slug === 'slimseo') {
+            // Slim SEO's redirects and 404 log live outside postmeta, and its
+            // primary terms under a second key; the exporter counts all of it.
+            $counts = $this->detect_slimseo();
         } else {
             // Standard postmeta-based plugins
             $prefix = $config['meta_prefix'];
@@ -382,6 +394,19 @@ class Import_Detector {
     private function detect_squirrly(): array {
         $exporter = new Squirrly_Exporter();
         $counts = $exporter->get_available_types();
+        // Settings are added by the caller from option_keys.
+        unset($counts['settings']);
+
+        return $counts;
+    }
+
+    /**
+     * Detect Slim SEO data: per-object meta, redirects and the 404 log.
+     *
+     * @return array Counts array
+     */
+    private function detect_slimseo(): array {
+        $counts = (new Slim_SEO_Exporter())->get_available_types();
         // Settings are added by the caller from option_keys.
         unset($counts['settings']);
 

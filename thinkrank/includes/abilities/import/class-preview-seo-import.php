@@ -13,7 +13,9 @@ use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\Admin\Importers\AIOSEO_Exporter;
 use ThinkRank\Admin\Importers\Rankmath_Exporter;
 use ThinkRank\Admin\Importers\SEOPress_Exporter;
+use ThinkRank\Admin\Importers\Slim_SEO_Exporter;
 use ThinkRank\Admin\Importers\Snapshot_Migrator;
+use ThinkRank\Admin\Importers\Squirrly_Exporter;
 use ThinkRank\Admin\Importers\Yoast_Exporter;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -37,7 +39,7 @@ class Preview_Seo_Import extends Ability_Base {
 	 *
 	 * @var string[]
 	 */
-	private const ALLOWED_PLUGINS = [ 'yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly' ];
+	private const ALLOWED_PLUGINS = [ 'yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly', 'slimseo' ];
 
 	/**
 	 * Data types exported before previewing, in pipeline order.
@@ -65,7 +67,7 @@ class Preview_Seo_Import extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/preview-seo-import';
 		$this->label       = __( 'Preview SEO Import (Dry Run)', 'thinkrank' );
-		$this->description = __( 'Dry-run an SEO import from another plugin (Yoast, RankMath, SEOPress, or AIOSEO) and report what it would do without writing anything to ThinkRank: counts of records that would be written, records that conflict with existing ThinkRank values (which are never overwritten), and records whose post/term/user no longer exists. Returns totals plus small samples. Run before run-seo-import.', 'thinkrank' );
+		$this->description = __( 'Dry-run an SEO import from another plugin (Yoast, RankMath, SEOPress, AIOSEO, Squirrly, or Slim SEO) and report what it would do without writing anything to ThinkRank: counts of records that would be written, records that conflict with existing ThinkRank values (which are never overwritten), and records whose post/term/user no longer exists. Returns totals plus small samples. Run before run-seo-import.', 'thinkrank' );
 	}
 
 	/**
@@ -146,7 +148,7 @@ class Preview_Seo_Import extends Ability_Base {
 		if ( ! in_array( $plugin, self::ALLOWED_PLUGINS, true ) ) {
 			return new \WP_Error(
 				'thinkrank_invalid_import_plugin',
-				__( 'A supported source plugin is required (yoast, rankmath, seopress, aioseo, squirrly).', 'thinkrank' ),
+				__( 'A supported source plugin is required (yoast, rankmath, seopress, aioseo, squirrly, slimseo).', 'thinkrank' ),
 				[ 'status' => 400 ]
 			);
 		}
@@ -282,6 +284,8 @@ class Preview_Seo_Import extends Ability_Base {
 				return new AIOSEO_Exporter();
 			case 'squirrly':
 				return new Squirrly_Exporter();
+			case 'slimseo':
+				return new Slim_SEO_Exporter();
 			default:
 				return null;
 		}

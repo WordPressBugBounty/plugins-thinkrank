@@ -2753,6 +2753,20 @@ class SEO_Manager {
             return $archive_description;
         }
 
+        // The blog-index homepage's own description (Site Identity
+        // homepage_description, #897), in the same vocabulary as its title. A
+        // static front page is a page, and its description is set on it.
+        if (is_front_page() && is_home() && $this->site_identity_data && $this->site_identity_data['enabled']) {
+            $identity = $this->site_identity_manager->get_settings('site');
+            $template = trim((string) ($identity['homepage_description'] ?? ''));
+            if ($template !== '') {
+                $homepage_description = trim($this->process_title_template($template, $this->get_title_placeholders()));
+                if ($homepage_description !== '') {
+                    return $homepage_description;
+                }
+            }
+        }
+
         // Third priority: Site Identity default meta description
         if ($this->site_identity_data && $this->site_identity_data['enabled']) {
             $settings = $this->site_identity_manager->get_settings('site');

@@ -1326,11 +1326,37 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         }
 
         // AUTO-DEPLOY: Automatically regenerate and deploy schema when settings change
-        if ($success && !empty($settings['auto_deploy'])) {
+        if ($success && self::should_auto_deploy($settings, $this->get_settings($context_type, $context_id))) {
             $this->auto_deploy_schema_on_settings_change($context_type, $context_id, $settings);
         }
 
         return $success;
+    }
+
+
+    /**
+     * Whether a save should redeploy the schema it changed.
+     *
+     * `auto_deploy` is a stored setting (on by default), not something a save
+     * restates. Reading it off the incoming patch meant a partial save — which
+     * is what the admin screen sends, one field at a time — skipped
+     * auto-deploy on a site that had it switched on, and the deployed snapshot
+     * the front end serves kept the name, logo and sameAs it was deployed
+     * with, however often the user saved (#904, the gate #12 left in place).
+     *
+     * A patch that does carry the key still wins, so a caller can deploy or
+     * hold deliberately.
+     *
+     * @param array $patch  Settings being saved
+     * @param array $stored Settings as stored, after the save
+     * @return bool
+     */
+    public static function should_auto_deploy(array $patch, array $stored): bool {
+        if (array_key_exists('auto_deploy', $patch)) {
+            return !empty($patch['auto_deploy']);
+        }
+
+        return !empty($stored['auto_deploy']);
     }
 
     /**

@@ -2,14 +2,14 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 2.12.0\n"
+"Project-Id-Version: ThinkRank 2.13.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-01T10:40:20+00:00\n"
+"POT-Creation-Date: 2026-10-04T07:12:57+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
@@ -241,8 +241,8 @@ msgstr ""
 msgid "Term SEO checks generated."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:153
-#: includes/abilities/analysis/class-get-term-seo-checks.php:160
+#: includes/abilities/analysis/class-get-term-seo-checks.php:156
+#: includes/abilities/analysis/class-get-term-seo-checks.php:163
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:366
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:795
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1386
@@ -250,29 +250,29 @@ msgstr ""
 msgid "SEO title"
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:155
+#: includes/abilities/analysis/class-get-term-seo-checks.php:158
 msgid "No SEO title is set for this term."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:162
+#: includes/abilities/analysis/class-get-term-seo-checks.php:165
 msgid "An SEO title is set."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:168
-#: includes/abilities/analysis/class-get-term-seo-checks.php:175
+#: includes/abilities/analysis/class-get-term-seo-checks.php:171
+#: includes/abilities/analysis/class-get-term-seo-checks.php:178
 msgid "SEO title length"
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:170
+#: includes/abilities/analysis/class-get-term-seo-checks.php:173
 msgid "The SEO title should be between 30 and 60 characters."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:177
+#: includes/abilities/analysis/class-get-term-seo-checks.php:180
 msgid "The SEO title length is within the recommended range."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:185
-#: includes/abilities/analysis/class-get-term-seo-checks.php:192
+#: includes/abilities/analysis/class-get-term-seo-checks.php:188
+#: includes/abilities/analysis/class-get-term-seo-checks.php:195
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:411
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:798
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1406
@@ -281,37 +281,37 @@ msgstr ""
 msgid "Meta description"
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:187
+#: includes/abilities/analysis/class-get-term-seo-checks.php:190
 msgid "No meta description is set for this term."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:194
+#: includes/abilities/analysis/class-get-term-seo-checks.php:197
 msgid "A meta description is set."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:200
-#: includes/abilities/analysis/class-get-term-seo-checks.php:207
+#: includes/abilities/analysis/class-get-term-seo-checks.php:203
+#: includes/abilities/analysis/class-get-term-seo-checks.php:210
 msgid "Meta description length"
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:202
+#: includes/abilities/analysis/class-get-term-seo-checks.php:205
 msgid "The meta description should be between 70 and 160 characters."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:209
+#: includes/abilities/analysis/class-get-term-seo-checks.php:212
 msgid "The meta description length is within the recommended range."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:217
-#: includes/abilities/analysis/class-get-term-seo-checks.php:223
+#: includes/abilities/analysis/class-get-term-seo-checks.php:220
+#: includes/abilities/analysis/class-get-term-seo-checks.php:226
 msgid "Term description"
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:219
+#: includes/abilities/analysis/class-get-term-seo-checks.php:222
 msgid "This term has no description."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-term-seo-checks.php:225
+#: includes/abilities/analysis/class-get-term-seo-checks.php:228
 msgid "This term has a description."
 msgstr ""
 
@@ -906,7 +906,7 @@ msgid "Detect SEO Import Sources"
 msgstr ""
 
 #: includes/abilities/import/class-detect-import-sources.php:34
-msgid "Detect installed SEO plugins (Yoast, RankMath, SEOPress, AIOSEO, Squirrly) whose metadata can be imported into ThinkRank, with per-type available counts, plus any snapshots already captured. Start here: pass a detected source to preview-seo-import to see what an import would change, then run-seo-import to perform it."
+msgid "Detect installed SEO plugins (Yoast, RankMath, SEOPress, AIOSEO, Squirrly, Slim SEO) whose metadata can be imported into ThinkRank, with per-type available counts, plus any snapshots already captured. Start here: pass a detected source to preview-seo-import to see what an import would change, then run-seo-import to perform it."
 msgstr ""
 
 #: includes/abilities/import/class-get-import-status.php:40
@@ -921,50 +921,50 @@ msgstr ""
 msgid "Optional source plugin to scope the status to."
 msgstr ""
 
-#: includes/abilities/import/class-preview-seo-import.php:67
+#: includes/abilities/import/class-preview-seo-import.php:69
 msgid "Preview SEO Import (Dry Run)"
 msgstr ""
 
-#: includes/abilities/import/class-preview-seo-import.php:68
-msgid "Dry-run an SEO import from another plugin (Yoast, RankMath, SEOPress, or AIOSEO) and report what it would do without writing anything to ThinkRank: counts of records that would be written, records that conflict with existing ThinkRank values (which are never overwritten), and records whose post/term/user no longer exists. Returns totals plus small samples. Run before run-seo-import."
+#: includes/abilities/import/class-preview-seo-import.php:70
+msgid "Dry-run an SEO import from another plugin (Yoast, RankMath, SEOPress, AIOSEO, Squirrly, or Slim SEO) and report what it would do without writing anything to ThinkRank: counts of records that would be written, records that conflict with existing ThinkRank values (which are never overwritten), and records whose post/term/user no longer exists. Returns totals plus small samples. Run before run-seo-import."
 msgstr ""
 
-#: includes/abilities/import/class-preview-seo-import.php:98
+#: includes/abilities/import/class-preview-seo-import.php:100
 msgid "The source SEO plugin to preview an import from."
 msgstr ""
 
-#: includes/abilities/import/class-preview-seo-import.php:149
-#: includes/abilities/import/class-run-seo-import.php:162
-msgid "A supported source plugin is required (yoast, rankmath, seopress, aioseo, squirrly)."
+#: includes/abilities/import/class-preview-seo-import.php:151
+#: includes/abilities/import/class-run-seo-import.php:163
+msgid "A supported source plugin is required (yoast, rankmath, seopress, aioseo, squirrly, slimseo)."
 msgstr ""
 
-#: includes/abilities/import/class-preview-seo-import.php:158
-#: includes/abilities/import/class-run-seo-import.php:178
+#: includes/abilities/import/class-preview-seo-import.php:160
+#: includes/abilities/import/class-run-seo-import.php:179
 msgid "Could not resolve an exporter for the selected plugin."
 msgstr ""
 
-#: includes/abilities/import/class-run-seo-import.php:62
+#: includes/abilities/import/class-run-seo-import.php:63
 msgid "Run SEO Data Import"
 msgstr ""
 
-#: includes/abilities/import/class-run-seo-import.php:63
-msgid "Import SEO data from another plugin (Yoast, RankMath, SEOPress, AIOSEO, or Squirrly) into ThinkRank. Exports the source to a snapshot then migrates it; existing ThinkRank values are never overwritten and the source plugin's own meta and settings are left intact. The content_blocks type (RankMath only) edits post content: it rewrites RankMath FAQ and HowTo blocks into ThinkRank blocks. Each converted post gets a revision, or a restorable backup where revisions are disabled. Pass types to limit the run, for example to leave content_blocks out. Posts with malformed block markup are left unchanged and listed in errors. Returns aggregate export/migration counters. Run preview-seo-import first to see what would change; get-import-status reports on the snapshot afterwards."
+#: includes/abilities/import/class-run-seo-import.php:64
+msgid "Import SEO data from another plugin (Yoast, RankMath, SEOPress, AIOSEO, Squirrly, or Slim SEO) into ThinkRank. Exports the source to a snapshot then migrates it; existing ThinkRank values are never overwritten and the source plugin's own meta and settings are left intact. The content_blocks type (RankMath only) edits post content: it rewrites RankMath FAQ and HowTo blocks into ThinkRank blocks. Each converted post gets a revision, or a restorable backup where revisions are disabled. Pass types to limit the run, for example to leave content_blocks out. Posts with malformed block markup are left unchanged and listed in errors. Returns aggregate export/migration counters. Run preview-seo-import first to see what would change; get-import-status reports on the snapshot afterwards."
 msgstr ""
 
-#: includes/abilities/import/class-run-seo-import.php:101
+#: includes/abilities/import/class-run-seo-import.php:102
 msgid "The source SEO plugin to import from."
 msgstr ""
 
-#: includes/abilities/import/class-run-seo-import.php:106
+#: includes/abilities/import/class-run-seo-import.php:107
 msgid "Data types to import. Defaults to all of them. Omit content_blocks to leave post content untouched."
 msgstr ""
 
-#: includes/abilities/import/class-run-seo-import.php:228
+#: includes/abilities/import/class-run-seo-import.php:229
 msgid "types must be a non-empty list of data types."
 msgstr ""
 
 #. translators: 1: unknown type slugs, 2: allowed type slugs.
-#: includes/abilities/import/class-run-seo-import.php:241
+#: includes/abilities/import/class-run-seo-import.php:242
 #, php-format
 msgid "Unknown import types: %1$s. Allowed: %2$s."
 msgstr ""
@@ -1487,292 +1487,298 @@ msgstr ""
 msgid "the homepage"
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:94
-msgid "category archives"
-msgstr ""
-
-#: includes/abilities/settings/class-settings-key-map.php:95
-msgid "tag archives"
-msgstr ""
-
-#: includes/abilities/settings/class-settings-key-map.php:96
-msgid "author archives"
-msgstr ""
-
+#. translators: %s: the list of available variable tags.
 #: includes/abilities/settings/class-settings-key-map.php:97
-msgid "search results pages"
-msgstr ""
-
-#: includes/abilities/settings/class-settings-key-map.php:98
-msgid "date and other archives"
+#, php-format
+msgid "Meta description for the homepage when it lists the latest posts. Available tags: %s. A static front page uses its own page description instead."
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:101
-msgid "Whether breadcrumb markup is generated."
+msgid "category archives"
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:102
-msgid "Breadcrumb structure, e.g. \"hierarchical\"."
+msgid "tag archives"
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:103
-msgid "Label for the home link in breadcrumbs."
+msgid "author archives"
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:104
-msgid "Separator drawn between breadcrumb items."
+msgid "search results pages"
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:105
-msgid "Text shown before the breadcrumb trail."
+msgid "date and other archives"
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:106
-msgid "Whether the current page appears in its own breadcrumb trail."
+#: includes/abilities/settings/class-settings-key-map.php:108
+msgid "Whether breadcrumb markup is generated."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:107
-msgid "Whether breadcrumb labels use the SEO title of a post or term when one is set, instead of its raw title."
+#: includes/abilities/settings/class-settings-key-map.php:109
+msgid "Breadcrumb structure, e.g. \"hierarchical\"."
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:110
-msgid "URL of the site logo."
+msgid "Label for the home link in breadcrumbs."
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:111
-msgid "URL of the site favicon."
+msgid "Separator drawn between breadcrumb items."
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:112
-msgid "URL of the Apple touch icon."
+msgid "Text shown before the breadcrumb trail."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:115
-msgid "Homepage hero heading."
+#: includes/abilities/settings/class-settings-key-map.php:113
+msgid "Whether the current page appears in its own breadcrumb trail."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:116
-msgid "Homepage hero subheading."
+#: includes/abilities/settings/class-settings-key-map.php:114
+msgid "Whether breadcrumb labels use the SEO title of a post or term when one is set, instead of its raw title."
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:117
-msgid "Label on the homepage hero call to action."
+msgid "URL of the site logo."
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:118
-msgid "URL the homepage hero call to action points at."
+msgid "URL of the site favicon."
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:119
-msgid "URL of the homepage hero background image."
+msgid "URL of the Apple touch icon."
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:122
-msgid "Whether Local SEO output and LocalBusiness schema are enabled."
+msgid "Homepage hero heading."
 msgstr ""
 
 #: includes/abilities/settings/class-settings-key-map.php:123
+msgid "Homepage hero subheading."
+msgstr ""
+
+#: includes/abilities/settings/class-settings-key-map.php:124
+msgid "Label on the homepage hero call to action."
+msgstr ""
+
+#: includes/abilities/settings/class-settings-key-map.php:125
+msgid "URL the homepage hero call to action points at."
+msgstr ""
+
+#: includes/abilities/settings/class-settings-key-map.php:126
+msgid "URL of the homepage hero background image."
+msgstr ""
+
+#: includes/abilities/settings/class-settings-key-map.php:129
+msgid "Whether Local SEO output and LocalBusiness schema are enabled."
+msgstr ""
+
+#: includes/abilities/settings/class-settings-key-map.php:130
 msgid "Registered business name."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:136
+#: includes/abilities/settings/class-settings-key-map.php:143
 msgid "schema.org LocalBusiness type, e.g. \"Restaurant\", \"HealthAndBeautyBusiness\". \"LocalBusiness\" is the general-purpose default and is always valid. An empty string means not set, and is published as LocalBusiness."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:138
+#: includes/abilities/settings/class-settings-key-map.php:145
 msgid "Public contact email address."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:139
+#: includes/abilities/settings/class-settings-key-map.php:146
 msgid "Public contact telephone number."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:140
+#: includes/abilities/settings/class-settings-key-map.php:147
 msgid "Street address."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:141
+#: includes/abilities/settings/class-settings-key-map.php:148
 msgid "City or locality."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:142
+#: includes/abilities/settings/class-settings-key-map.php:149
 msgid "State, province or region."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:143
+#: includes/abilities/settings/class-settings-key-map.php:150
 msgid "Country."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:144
+#: includes/abilities/settings/class-settings-key-map.php:151
 msgid "Postal or ZIP code."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:145
+#: includes/abilities/settings/class-settings-key-map.php:152
 msgid "Latitude of the business location, in decimal degrees."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:146
+#: includes/abilities/settings/class-settings-key-map.php:153
 msgid "Longitude of the business location, in decimal degrees."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:147
+#: includes/abilities/settings/class-settings-key-map.php:154
 msgid "Price range indicator, e.g. \"$$\"."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:151
+#: includes/abilities/settings/class-settings-key-map.php:158
 msgid "Whether search engines are allowed to index the site."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:152
+#: includes/abilities/settings/class-settings-key-map.php:159
 msgid "Whether a URL whose content selector resolved to nothing (for example ?post_type=nosuchtype) answers 404 instead of serving the blog listing at 200."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:155
+#: includes/abilities/settings/class-settings-key-map.php:162
 msgid "Scheme for canonical URLs, og:url, schema @ids and sitemap entries. \"automatic\" follows WordPress; the other two override it, for a site behind a proxy that terminates TLS and leaves WordPress reporting the wrong scheme."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:158
+#: includes/abilities/settings/class-settings-key-map.php:165
 msgid "Whether ThinkRank manages robots.txt. Its contents are set with thinkrank/update-robots-txt."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:161
+#: includes/abilities/settings/class-settings-key-map.php:168
 msgid "Whether feed entries are shortened to an excerpt instead of carrying the full post."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:162
+#: includes/abilities/settings/class-settings-key-map.php:169
 msgid "Whether each feed entry is signed with a link back to the original post and the site."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:163
+#: includes/abilities/settings/class-settings-key-map.php:170
 msgid "Whether feeds are served with X-Robots-Tag: noindex. Leave off for a podcast feed, which needs to be indexable."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:175
+#: includes/abilities/settings/class-settings-key-map.php:182
 msgid "Whether XML sitemap generation is active."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:179
+#: includes/abilities/settings/class-settings-key-map.php:186
 msgid "How the sitemap reaches crawlers. \"auto\" writes files when the WordPress root is writable and serves the sitemap from WordPress when it is not. \"static\" always writes files, and fails where that is not possible. \"dynamic\" always serves from WordPress and writes nothing."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:181
+#: includes/abilities/settings/class-settings-key-map.php:188
 msgid "Whether the sitemap regenerates automatically when content changes."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:182
+#: includes/abilities/settings/class-settings-key-map.php:189
 msgid "Whether to publish a sitemap index that links per-type sitemaps, rather than one flat file."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:185
+#: includes/abilities/settings/class-settings-key-map.php:192
 msgid "Maximum URLs per sitemap file before it is split."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:189
+#: includes/abilities/settings/class-settings-key-map.php:196
 msgid "Filename pattern for generated sitemaps, e.g. \"sitemap-{type}.xml\"."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:190
+#: includes/abilities/settings/class-settings-key-map.php:197
 msgid "Whether an XSL stylesheet is attached so the sitemap is readable in a browser."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:191
+#: includes/abilities/settings/class-settings-key-map.php:198
 msgid "Whether search engines are notified after the sitemap is regenerated."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:194
+#: includes/abilities/settings/class-settings-key-map.php:201
 msgid "Whether a logo is shown above the sitemap heading. Requires enable_styling."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:195
+#: includes/abilities/settings/class-settings-key-map.php:202
 msgid "URL of the sitemap logo image. Empty falls back to the site icon."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:196
+#: includes/abilities/settings/class-settings-key-map.php:203
 msgid "Hex colour (\"#rrggbb\") for the sitemap header, links and table head. Empty keeps the stock palette."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:197
+#: includes/abilities/settings/class-settings-key-map.php:204
 msgid "Hex colour (\"#rrggbb\") for the header gradient end and link hovers. Empty keeps the stock palette."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:200
+#: includes/abilities/settings/class-settings-key-map.php:207
 msgid "Whether posts are included."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:201
+#: includes/abilities/settings/class-settings-key-map.php:208
 msgid "Whether pages are included."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:202
+#: includes/abilities/settings/class-settings-key-map.php:209
 msgid "Whether category archives are included."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:203
+#: includes/abilities/settings/class-settings-key-map.php:210
 msgid "Whether tag archives are included."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:204
+#: includes/abilities/settings/class-settings-key-map.php:211
 msgid "Whether image entries are included for each URL."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:205
+#: includes/abilities/settings/class-settings-key-map.php:212
 msgid "Whether featured images are included as image entries."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:208
+#: includes/abilities/settings/class-settings-key-map.php:215
 msgid "Comma-separated post IDs to leave out."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:209
+#: includes/abilities/settings/class-settings-key-map.php:216
 msgid "Comma-separated term IDs to leave out."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:210
+#: includes/abilities/settings/class-settings-key-map.php:217
 msgid "Whether privately published posts are left out."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:211
+#: includes/abilities/settings/class-settings-key-map.php:218
 msgid "Whether password-protected posts are left out."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:402
+#: includes/abilities/settings/class-settings-key-map.php:409
 msgid "Opening time as 24-hour HH:MM, or \"\" when closed."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:406
+#: includes/abilities/settings/class-settings-key-map.php:413
 msgid "Closing time as 24-hour HH:MM, or \"\" when closed."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:410
+#: includes/abilities/settings/class-settings-key-map.php:417
 msgid "Whether the business is closed all day."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:422
+#: includes/abilities/settings/class-settings-key-map.php:429
 msgid "Opening hours per day of the week."
 msgstr ""
 
 #. translators: 1: crawler user-agent token, e.g. GPTBot. 2: what that crawler is for.
-#: includes/abilities/settings/class-settings-key-map.php:447
+#: includes/abilities/settings/class-settings-key-map.php:454
 #, php-format
 msgid "%1$s — %2$s"
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:453
+#: includes/abilities/settings/class-settings-key-map.php:460
 msgid "Per-agent AI crawler rules. \"block\" writes a User-agent/Disallow pair for that crawler into robots.txt; \"allow\" (the default for any crawler not listed) writes nothing. Blocking Google-Extended does not affect normal Google Search indexing."
 msgstr ""
 
-#: includes/abilities/settings/class-settings-key-map.php:483
+#: includes/abilities/settings/class-settings-key-map.php:490
 msgid "Alternate or former name of the site, published as schema alternateName on the homepage WebSite node. Send a string for one name, or an array for several. Blank entries and duplicates are dropped, and a single surviving name is published as a string."
 msgstr ""
 
 #. translators: 1: the pages a title template applies to. 2: the list of available variable tags.
-#: includes/abilities/settings/class-settings-key-map.php:524
+#: includes/abilities/settings/class-settings-key-map.php:531
 #, php-format
 msgid "Title template for %1$s. Available tags: %2$s."
 msgstr ""
 
 #. translators: 1: the pages a title template applies to. 2: tags available everywhere. 3: tags available only on those pages.
-#: includes/abilities/settings/class-settings-key-map.php:526
+#: includes/abilities/settings/class-settings-key-map.php:533
 #, php-format
 msgid "Title template for %1$s. Available tags: %2$s, and on these pages also %3$s."
 msgstr ""
@@ -2308,10 +2314,10 @@ msgstr ""
 #: src/admin/components/import-export/ExportProgress.js:20
 #: src/admin/components/import-export/MigrateProgress.js:17
 #: src/admin/components/import-export/NativeExportCard.js:29
-#: src/admin/components/import-export/PluginImportCard.js:40
+#: src/admin/components/import-export/PluginImportCard.js:41
 #: src/admin/components/import-export/SnapshotInfo.js:23
 #: src/admin/components/layout/TopNav.js:575
-#: src/admin/components/pages/Settings.js:117
+#: src/admin/components/pages/Settings.js:124
 msgid "Settings"
 msgstr ""
 
@@ -2319,8 +2325,8 @@ msgstr ""
 #: includes/admin/class-manager.php:305
 #: includes/admin/class-manager.php:620
 #: src/admin/components/App.js:149
-#: src/admin/components/pages/Settings.js:375
-#: src/admin/components/pages/Settings.js:3008
+#: src/admin/components/pages/Settings.js:382
+#: src/admin/components/pages/Settings.js:3015
 msgid "Import / Export"
 msgstr ""
 
@@ -2392,11 +2398,11 @@ msgstr ""
 #: includes/admin/class-webroot-writable-notice.php:416
 #: src/admin/components/essential-seo/SearchConsoleSettings.js:410
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:320
-#: src/admin/components/essential-seo/SiteIdentityTab.js:1057
+#: src/admin/components/essential-seo/SiteIdentityTab.js:1058
 #: src/admin/components/import-export/NativeExportCard.js:315
 #: src/admin/components/seo/ImprovementSuggestions.js:547
 #: src/admin/components/seo/SEOScoreCalculator.js:1091
-#: src/admin/setup-wizard/steps/Step2Migration.js:147
+#: src/admin/setup-wizard/steps/Step2Migration.js:149
 msgid "Dismiss"
 msgstr ""
 
@@ -2455,7 +2461,7 @@ msgstr ""
 #: src/admin/components/dashboard/QuickAccess.js:251
 #: src/admin/components/layout/TopNav.js:687
 #: src/admin/components/layout/TopNav.js:688
-#: src/admin/components/pages/Settings.js:431
+#: src/admin/components/pages/Settings.js:438
 msgid "Documentation"
 msgstr ""
 
@@ -2635,12 +2641,12 @@ msgstr ""
 #: src/admin/components/essential-seo/schema-tab/SchemaTab.js:503
 #: src/admin/components/essential-seo/site-identity/BreadcrumbSettings.js:78
 #: src/admin/components/essential-seo/site-identity/LocalSEO.js:204
-#: src/admin/components/essential-seo/SiteIdentityTab.js:1073
+#: src/admin/components/essential-seo/SiteIdentityTab.js:1074
 #: src/admin/components/essential-seo/SocialMediaTab.js:1807
 #: src/admin/components/pages/MCP.js:219
-#: src/admin/components/pages/Settings.js:2533
-#: src/admin/components/pages/Settings.js:3057
-#: src/admin/components/pages/Settings.js:3247
+#: src/admin/components/pages/Settings.js:2540
+#: src/admin/components/pages/Settings.js:3064
+#: src/admin/components/pages/Settings.js:3254
 #: src/metabox/components/MetaboxDrawer.js:249
 msgid "Saving…"
 msgstr ""
@@ -2906,22 +2912,69 @@ msgstr ""
 msgid "The snapshot still holds data ThinkRank has not applied yet: %s. It stays preserved in the snapshot (cleanup never deletes the snapshot), but the source plugin's copy will be removed. Pass force=true to proceed."
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3048
+#: includes/admin/importers/class-snapshot-migrator.php:3175
 #: includes/core/class-capability-manager.php:122
 #: src/admin/components/essential-seo/SidebarNavigation.js:322
 #: src/admin/components/import-export/ExportProgress.js:17
-#: src/admin/components/import-export/PluginImportCard.js:37
-#: src/admin/components/import-export/PluginImportCard.js:48
+#: src/admin/components/import-export/importTypes.js:27
+#: src/admin/components/import-export/PluginImportCard.js:38
 #: src/admin/components/import-export/SnapshotInfo.js:20
 msgid "Redirections"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3057
+#: includes/admin/importers/class-snapshot-migrator.php:3184
 #: src/admin/components/import-export/ExportProgress.js:18
-#: src/admin/components/import-export/PluginImportCard.js:38
-#: src/admin/components/import-export/PluginImportCard.js:49
+#: src/admin/components/import-export/PluginImportCard.js:39
 #: src/admin/components/import-export/SnapshotInfo.js:21
 msgid "404 Logs"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3331
+msgid "Header, body and footer code"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3332
+msgid "Redirect behaviour settings"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3333
+msgid "Taxonomy templates and images"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3334
+msgid "Post type archive templates and images"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3335
+msgid "Removing /category/ from category URLs"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3336
+msgid "Webmaster tools verification codes"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3337
+msgid "Role access settings"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3338
+msgid "Homepage social title"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3339
+msgid "Homepage social description"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3340
+msgid "Homepage social image"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3341
+msgid "Custom schemas (need ThinkRank Pro)"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3342
+msgid "Schema templates with no ThinkRank equivalent"
 msgstr ""
 
 #: includes/ai/class-endpoint-url-validator.php:90
@@ -3849,7 +3902,7 @@ msgstr ""
 msgid "You do not have permission to access this ThinkRank section."
 msgstr ""
 
-#: includes/core/class-seo-plugin-detector.php:178
+#: includes/core/class-seo-plugin-detector.php:192
 msgid "Running more than one SEO plugin can create conflicts — duplicate meta tags, sitemaps, and schema markup that may hurt your search rankings. To avoid any SEO-related conflicts, we recommend deactivating third-party SEO plugins."
 msgstr ""
 
@@ -5738,15 +5791,15 @@ msgstr ""
 msgid "Invalid title separator specified."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:3025
+#: includes/seo/class-site-identity-manager.php:3027
 msgid "Select a business type so your local schema describes the right kind of business."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:3034
+#: includes/seo/class-site-identity-manager.php:3036
 msgid "Business type is set to Local Business. A more specific type sharpens your schema, if one fits."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:3040
+#: includes/seo/class-site-identity-manager.php:3042
 msgid "Business type is selected for proper schema markup."
 msgstr ""
 
@@ -5761,29 +5814,29 @@ msgid "The sitemap rebuild was stopped at %1$s of the %2$s PHP memory limit, bef
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:2940
+#: includes/seo/class-sitemap-generator.php:2941
 #, php-format
 msgid "The sitemap is disabled, but these files are still in the site root and your web server is still serving them: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:2948
+#: includes/seo/class-sitemap-generator.php:2949
 #, php-format
 msgid "The sitemap is being served from WordPress, but these files are still in the site root and your web server will keep serving them instead: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: %s: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:2970
+#: includes/seo/class-sitemap-generator.php:2971
 #, php-format
 msgid "The sitemap could not be written because the folder %s is not writable by PHP. Ask your host to make the WordPress root writable, or set Sitemap Delivery to Dynamic to serve the sitemap without writing files."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:2975
+#: includes/seo/class-sitemap-generator.php:2976
 msgid "The sitemap files could not be written to the site root."
 msgstr ""
 
 #. translators: %s: search query.
-#: includes/seo/class-social-meta-manager.php:2031
+#: includes/seo/class-social-meta-manager.php:2043
 #, php-format
 msgid "Search Results for \"%s\""
 msgstr ""
@@ -6278,7 +6331,7 @@ msgstr ""
 
 #: src/admin/components/ai/MetadataGenerator.js:591
 #: src/admin/components/essential-seo/SidebarNavigation.js:305
-#: src/admin/components/essential-seo/SiteIdentityTab.js:956
+#: src/admin/components/essential-seo/SiteIdentityTab.js:957
 msgid "AI Suggestions"
 msgstr ""
 
@@ -6371,7 +6424,7 @@ msgid "Download your ThinkRank data as a file, or restore it from one"
 msgstr ""
 
 #: src/admin/components/App.js:158
-msgid "Import SEO data from Yoast, Rank Math, SEOPress, All in One SEO or Squirrly SEO"
+msgid "Import SEO data from Yoast, Rank Math, SEOPress, All in One SEO, Squirrly SEO or Slim SEO"
 msgstr ""
 
 #: src/admin/components/App.js:197
@@ -6588,7 +6641,7 @@ msgid "Selected media"
 msgstr ""
 
 #: src/admin/components/common/MediaPicker.js:578
-#: src/admin/components/pages/Settings.js:2078
+#: src/admin/components/pages/Settings.js:2085
 msgid "Replace"
 msgstr ""
 
@@ -6622,15 +6675,15 @@ msgstr ""
 
 #: src/admin/components/common/OptimizationButton.js:17
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:790
-#: src/admin/components/essential-seo/SiteIdentityTab.js:693
+#: src/admin/components/essential-seo/SiteIdentityTab.js:694
 msgid "AI Optimize"
 msgstr ""
 
 #: src/admin/components/common/OptimizationButton.js:18
 #: src/admin/components/common/OptimizationButton.js:23
-#: src/admin/components/essential-seo/SiteIdentityTab.js:708
-#: src/admin/components/essential-seo/SiteIdentityTab.js:717
-#: src/admin/components/essential-seo/SiteIdentityTab.js:744
+#: src/admin/components/essential-seo/SiteIdentityTab.js:709
+#: src/admin/components/essential-seo/SiteIdentityTab.js:718
+#: src/admin/components/essential-seo/SiteIdentityTab.js:745
 msgid "Optimizing…"
 msgstr ""
 
@@ -6647,7 +6700,7 @@ msgstr ""
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:782
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsTxtValidation.js:340
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:1217
-#: src/admin/components/essential-seo/SiteIdentityTab.js:735
+#: src/admin/components/essential-seo/SiteIdentityTab.js:736
 #: src/admin/components/essential-seo/SocialMediaTab.js:1036
 #: src/admin/components/essential-seo/SocialMediaTab.js:1064
 msgid "Validating…"
@@ -6655,7 +6708,7 @@ msgstr ""
 
 #: src/admin/components/common/OptimizationButton.js:32
 #: src/admin/components/essential-seo/SearchConsoleSettings.js:332
-#: src/admin/components/pages/Settings.js:2474
+#: src/admin/components/pages/Settings.js:2481
 msgid "Test Connection"
 msgstr ""
 
@@ -7848,10 +7901,10 @@ msgstr ""
 #: src/admin/components/essential-seo/ImageSEOTab.js:346
 #: src/admin/components/essential-seo/ImageSEOTab.js:380
 #: src/admin/components/essential-seo/SearchConsoleSettings.js:213
-#: src/admin/components/essential-seo/SiteIdentityTab.js:350
+#: src/admin/components/essential-seo/SiteIdentityTab.js:351
 #: src/admin/components/essential-seo/SocialMediaTab.js:297
-#: src/admin/components/pages/Settings.js:1266
-#: src/admin/components/pages/Settings.js:1410
+#: src/admin/components/pages/Settings.js:1273
+#: src/admin/components/pages/Settings.js:1417
 msgid "Failed to save settings."
 msgstr ""
 
@@ -7961,10 +8014,10 @@ msgstr ""
 #: src/admin/components/essential-seo/ImageSEOTab.js:1001
 #: src/admin/components/essential-seo/schema-tab/SchemaTab.js:504
 #: src/admin/components/essential-seo/SearchConsoleSettings.js:457
-#: src/admin/components/essential-seo/SiteIdentityTab.js:1074
+#: src/admin/components/essential-seo/SiteIdentityTab.js:1075
 #: src/admin/components/essential-seo/SocialMediaTab.js:1808
-#: src/admin/components/pages/Settings.js:2460
-#: src/admin/components/pages/Settings.js:2985
+#: src/admin/components/pages/Settings.js:2467
+#: src/admin/components/pages/Settings.js:2992
 msgid "Save Settings"
 msgstr ""
 
@@ -8213,7 +8266,7 @@ msgstr ""
 
 #: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:171
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:163
-#: src/admin/components/essential-seo/SiteIdentityTab.js:934
+#: src/admin/components/essential-seo/SiteIdentityTab.js:935
 msgid "Score:"
 msgstr ""
 
@@ -8366,8 +8419,8 @@ msgstr ""
 #: src/admin/components/essential-seo/GlobalSEOTab.js:289
 #: src/admin/components/essential-seo/instant-indexing/Settings.js:246
 #: src/admin/components/essential-seo/IntegrationsTab.js:497
-#: src/admin/components/pages/Settings.js:1275
-#: src/admin/components/pages/Settings.js:1421
+#: src/admin/components/pages/Settings.js:1282
+#: src/admin/components/pages/Settings.js:1428
 msgid "Failed to save settings. Please try again."
 msgstr ""
 
@@ -8668,7 +8721,7 @@ msgstr[1] ""
 #: src/admin/components/essential-seo/thin-content/ThinContentTab.js:445
 #: src/admin/components/import-export/ImportExportTab.js:205
 #: src/admin/dashboard-widget/components/ErrorState.js:164
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:288
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:269
 msgid "Try again"
 msgstr ""
 
@@ -8958,9 +9011,9 @@ msgstr ""
 
 #: src/admin/components/essential-seo/ContentTypeMatrix.js:57
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:333
-#: src/admin/components/pages/Settings.js:2807
-#: src/admin/components/pages/Settings.js:3018
-#: src/admin/components/pages/Settings.js:3223
+#: src/admin/components/pages/Settings.js:2814
+#: src/admin/components/pages/Settings.js:3025
+#: src/admin/components/pages/Settings.js:3230
 msgid "On"
 msgstr ""
 
@@ -8968,9 +9021,9 @@ msgstr ""
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:203
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:334
 #: src/admin/components/pages/MCP.js:172
-#: src/admin/components/pages/Settings.js:2808
-#: src/admin/components/pages/Settings.js:3019
-#: src/admin/components/pages/Settings.js:3224
+#: src/admin/components/pages/Settings.js:2815
+#: src/admin/components/pages/Settings.js:3026
+#: src/admin/components/pages/Settings.js:3231
 #: src/admin/setup-wizard/steps/StepMcpServer.js:307
 msgid "Off"
 msgstr ""
@@ -9341,8 +9394,8 @@ msgid "Validation completed successfully!"
 msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:791
-#: src/admin/components/essential-seo/SiteIdentityTab.js:694
-#: src/admin/components/essential-seo/SiteIdentityTab.js:726
+#: src/admin/components/essential-seo/SiteIdentityTab.js:695
+#: src/admin/components/essential-seo/SiteIdentityTab.js:727
 msgid "AI Optimizing…"
 msgstr ""
 
@@ -10184,8 +10237,8 @@ msgstr ""
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:277
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:207
 #: src/admin/components/pages/MCP.js:174
-#: src/admin/components/pages/Settings.js:1965
-#: src/admin/components/pages/Settings.js:2513
+#: src/admin/components/pages/Settings.js:1972
+#: src/admin/components/pages/Settings.js:2520
 #: src/admin/setup-wizard/steps/Step5Ecosystem.js:134
 #: src/admin/setup-wizard/steps/StepMcpServer.js:306
 msgid "Active"
@@ -10196,7 +10249,7 @@ msgid "Not Found"
 msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:279
-#: src/admin/components/import-export/PluginImportCard.js:62
+#: src/admin/components/import-export/PluginImportCard.js:53
 msgid "Error"
 msgstr ""
 
@@ -10666,7 +10719,7 @@ msgid "Failed to load email report settings."
 msgstr ""
 
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:205
-#: src/admin/components/pages/Settings.js:2512
+#: src/admin/components/pages/Settings.js:2519
 msgid "Paused"
 msgstr ""
 
@@ -11513,7 +11566,7 @@ msgid "Could not load Instant Indexing settings. Please reload to try again."
 msgstr ""
 
 #: src/admin/components/essential-seo/instant-indexing/Settings.js:171
-#: src/admin/components/pages/Settings.js:1046
+#: src/admin/components/pages/Settings.js:1053
 msgid "Failed to load settings."
 msgstr ""
 
@@ -11572,7 +11625,7 @@ msgstr ""
 
 #: src/admin/components/essential-seo/instant-indexing/Settings.js:417
 #: src/admin/components/essential-seo/instant-indexing/Settings.js:436
-#: src/admin/components/pages/Settings.js:1700
+#: src/admin/components/pages/Settings.js:1707
 msgid "API Key"
 msgstr ""
 
@@ -11790,7 +11843,7 @@ msgstr ""
 #. translators: %s: social platform name.
 #. translators: %s: settings section name.
 #: src/admin/components/essential-seo/IntegrationsTab.js:337
-#: src/admin/components/essential-seo/SiteIdentityTab.js:286
+#: src/admin/components/essential-seo/SiteIdentityTab.js:287
 #, js-format
 msgid "%s settings saved successfully!"
 msgstr ""
@@ -11798,7 +11851,7 @@ msgstr ""
 #. translators: %s: social platform name.
 #. translators: %s: settings section name.
 #: src/admin/components/essential-seo/IntegrationsTab.js:349
-#: src/admin/components/essential-seo/SiteIdentityTab.js:318
+#: src/admin/components/essential-seo/SiteIdentityTab.js:319
 #, js-format
 msgid "Failed to save %s settings. Please try again."
 msgstr ""
@@ -12153,7 +12206,7 @@ msgstr ""
 #: src/admin/components/essential-seo/performance/HistoricalSection.js:171
 #: src/admin/components/essential-seo/performance/OpportunitiesSection.js:262
 #: src/admin/components/essential-seo/performance/PerformanceErrorNotice.js:89
-#: src/admin/components/import-export/PluginImportCard.js:386
+#: src/admin/components/import-export/PluginImportCard.js:375
 #: src/admin/components/ui/SettingsLoadError.js:48
 msgid "Retry"
 msgstr ""
@@ -13216,7 +13269,7 @@ msgid "Logo"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:353
-#: src/admin/components/pages/Settings.js:3393
+#: src/admin/components/pages/Settings.js:3400
 msgid "Configured"
 msgstr ""
 
@@ -14491,7 +14544,7 @@ msgid "Failed to refresh the property list."
 msgstr ""
 
 #: src/admin/components/essential-seo/SearchConsoleSettings.js:303
-#: src/admin/components/pages/Settings.js:2056
+#: src/admin/components/pages/Settings.js:2063
 #: src/admin/setup-wizard/steps/Step4Analytics.js:31
 msgid "Connected"
 msgstr ""
@@ -14931,7 +14984,7 @@ msgid "Official name of your business"
 msgstr ""
 
 #: src/admin/components/essential-seo/site-identity/LocalSEO.js:271
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:120
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:121
 msgid "e.g., Acme Coffee Roasters"
 msgstr ""
 
@@ -15098,7 +15151,7 @@ msgid "Section Optimization Results"
 msgstr ""
 
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:153
-#: src/admin/components/essential-seo/SiteIdentityTab.js:919
+#: src/admin/components/essential-seo/SiteIdentityTab.js:920
 msgid "Generated by:"
 msgstr ""
 
@@ -15115,7 +15168,7 @@ msgid "Suggested Changes"
 msgstr ""
 
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:309
-#: src/admin/components/essential-seo/SiteIdentityTab.js:1045
+#: src/admin/components/essential-seo/SiteIdentityTab.js:1046
 msgid "Apply AI Suggestions"
 msgstr ""
 
@@ -15179,71 +15232,85 @@ msgstr ""
 msgid "Recommendations"
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:91
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:92
 msgid "Site Information"
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:92
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:93
 msgid "The core identity fields used as defaults across your site."
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:104
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:105
 #: src/admin/components/essential-seo/SocialMediaTab.js:1139
 msgid "Site Name"
 msgstr ""
 
 #. translators: %sitename% is a literal template variable token, not a printf placeholder.
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:107
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:108
 #, js-format
 msgid "The name of your website. Used wherever %sitename% appears."
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:130
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:131
 msgid "Site Description"
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:131
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:132
 msgid "A brief description of your website. Aim for 120–160 characters."
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:148
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:149
 msgid "e.g., Small-batch specialty coffee roasted in Brooklyn."
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:158
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:159
 msgid "Alternate Name"
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:159
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:160
 msgid "Another name your site is known by, published as schema alternateName. Separate several with commas."
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:175
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:176
 msgid "e.g., TR, ThinkRank SEO"
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:185
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:186
 msgid "Tagline"
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:186
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:187
 msgid "Your site tagline or slogan."
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:199
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:200
 msgid "e.g., Coffee, crafted with care."
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:209
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:210
 msgid "Default Meta Description"
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:210
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:211
 msgid "Used for pages that do not set their own meta description. Aim for 120–160 characters."
 msgstr ""
 
-#: src/admin/components/essential-seo/site-identity/SiteInformation.js:227
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:228
 msgid "e.g., Discover small-batch specialty coffee, freshly roasted and shipped from Brooklyn."
+msgstr ""
+
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:239
+msgid "Homepage Meta Description"
+msgstr ""
+
+#. translators: %s: the list of available variable tags.
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:242
+#, js-format
+msgid "Used on the homepage when it shows your latest posts. A static front page uses that page’s own description. Available tags: %s."
+msgstr ""
+
+#: src/admin/components/essential-seo/site-identity/SiteInformation.js:261
+msgid "Leave empty to use the default meta description."
 msgstr ""
 
 #: src/admin/components/essential-seo/site-identity/TitleFormats.js:31
@@ -15344,144 +15411,144 @@ msgstr ""
 msgid "Character used to separate title elements."
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:194
+#: src/admin/components/essential-seo/SiteIdentityTab.js:195
 msgid "Could not load your Site Identity settings. Nothing has been changed — retry before editing."
 msgstr ""
 
 #. translators: 1: settings section name, 2: reason the save failed.
-#: src/admin/components/essential-seo/SiteIdentityTab.js:309
+#: src/admin/components/essential-seo/SiteIdentityTab.js:310
 #, js-format
 msgid "Failed to save %1$s settings. %2$s"
 msgstr ""
 
 #. translators: %s: settings section name.
-#: src/admin/components/essential-seo/SiteIdentityTab.js:399
+#: src/admin/components/essential-seo/SiteIdentityTab.js:400
 #, js-format
 msgid "%s validation completed successfully!"
 msgstr ""
 
 #. translators: %s: settings section name.
-#: src/admin/components/essential-seo/SiteIdentityTab.js:407
+#: src/admin/components/essential-seo/SiteIdentityTab.js:408
 #, js-format
 msgid "%s validation found errors that need to be fixed."
 msgstr ""
 
 #. translators: %s: settings section name.
-#: src/admin/components/essential-seo/SiteIdentityTab.js:417
+#: src/admin/components/essential-seo/SiteIdentityTab.js:418
 #, js-format
 msgid "%s validation completed with warnings."
 msgstr ""
 
 #. translators: %s: settings section name.
-#: src/admin/components/essential-seo/SiteIdentityTab.js:432
+#: src/admin/components/essential-seo/SiteIdentityTab.js:433
 #, js-format
 msgid "Failed to validate %s settings."
 msgstr ""
 
 #. translators: %s: settings section name.
-#: src/admin/components/essential-seo/SiteIdentityTab.js:466
+#: src/admin/components/essential-seo/SiteIdentityTab.js:467
 #, js-format
 msgid "%s optimization completed successfully!"
 msgstr ""
 
 #. translators: %s: settings section name.
-#: src/admin/components/essential-seo/SiteIdentityTab.js:482
+#: src/admin/components/essential-seo/SiteIdentityTab.js:483
 #, js-format
 msgid "Failed to optimize %s. Please try again."
 msgstr ""
 
 #. translators: %s: settings section name.
-#: src/admin/components/essential-seo/SiteIdentityTab.js:520
-#: src/admin/components/essential-seo/SiteIdentityTab.js:640
+#: src/admin/components/essential-seo/SiteIdentityTab.js:521
+#: src/admin/components/essential-seo/SiteIdentityTab.js:641
 #, js-format
 msgid "%s AI optimization completed!"
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:530
-#: src/admin/components/essential-seo/SiteIdentityTab.js:650
+#: src/admin/components/essential-seo/SiteIdentityTab.js:531
+#: src/admin/components/essential-seo/SiteIdentityTab.js:651
 msgid "suggestions generated."
 msgstr ""
 
 #. translators: %s: settings section name.
-#: src/admin/components/essential-seo/SiteIdentityTab.js:544
+#: src/admin/components/essential-seo/SiteIdentityTab.js:545
 #, js-format
 msgid "Failed to optimize %s information."
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:548
-#: src/admin/components/essential-seo/SiteIdentityTab.js:668
+#: src/admin/components/essential-seo/SiteIdentityTab.js:549
+#: src/admin/components/essential-seo/SiteIdentityTab.js:669
 msgid "AI optimization requires an API key. Please configure your OpenAI or Claude API key in ThinkRank settings."
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:553
-#: src/admin/components/essential-seo/SiteIdentityTab.js:673
+#: src/admin/components/essential-seo/SiteIdentityTab.js:554
+#: src/admin/components/essential-seo/SiteIdentityTab.js:674
 msgid "AI service rate limit reached. Please try again in a few minutes."
 msgstr ""
 
 #. translators: %s: settings section name.
-#: src/admin/components/essential-seo/SiteIdentityTab.js:664
+#: src/admin/components/essential-seo/SiteIdentityTab.js:665
 #, js-format
 msgid "Failed to optimize %s content."
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:707
+#: src/admin/components/essential-seo/SiteIdentityTab.js:708
 msgid "Validate & Optimize Titles"
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:716
+#: src/admin/components/essential-seo/SiteIdentityTab.js:717
 msgid "Validate & Optimize Breadcrumbs"
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:725
+#: src/admin/components/essential-seo/SiteIdentityTab.js:726
 msgid "AI Optimize Hero"
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:734
+#: src/admin/components/essential-seo/SiteIdentityTab.js:735
 msgid "Validate Business Info"
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:743
+#: src/admin/components/essential-seo/SiteIdentityTab.js:744
 msgid "Validate & Optimize"
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:765
+#: src/admin/components/essential-seo/SiteIdentityTab.js:766
 msgid "Your Site Identity settings could not be read, so this screen has nothing to edit yet. Nothing has changed — retry to load them."
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:776
+#: src/admin/components/essential-seo/SiteIdentityTab.js:777
 msgid "Site Identity Settings"
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:782
+#: src/admin/components/essential-seo/SiteIdentityTab.js:783
 msgid "Site Identity is on."
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:783
+#: src/admin/components/essential-seo/SiteIdentityTab.js:784
 msgid "Site Identity is off."
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:786
+#: src/admin/components/essential-seo/SiteIdentityTab.js:787
 msgid "Enable Site Identity"
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:822
+#: src/admin/components/essential-seo/SiteIdentityTab.js:823
 msgid "Site identity features are disabled. Enable to configure title formats, breadcrumbs, and robots.txt."
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:912
+#: src/admin/components/essential-seo/SiteIdentityTab.js:913
 msgid "AI Site Information Optimization"
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:943
+#: src/admin/components/essential-seo/SiteIdentityTab.js:944
 msgid "AI Analysis"
 msgstr ""
 
-#: src/admin/components/essential-seo/SiteIdentityTab.js:979
+#: src/admin/components/essential-seo/SiteIdentityTab.js:980
 msgid "AI-Generated Content"
 msgstr ""
 
 #. translators: %s: settings section name.
-#: src/admin/components/essential-seo/SiteIdentityTab.js:1035
+#: src/admin/components/essential-seo/SiteIdentityTab.js:1036
 #, js-format
 msgid "%s AI optimization suggestions applied successfully!"
 msgstr ""
@@ -16222,27 +16289,27 @@ msgstr ""
 
 #: src/admin/components/import-export/ExportProgress.js:14
 #: src/admin/components/import-export/MigrateProgress.js:14
-#: src/admin/components/import-export/PluginImportCard.js:34
+#: src/admin/components/import-export/PluginImportCard.js:35
 #: src/admin/components/import-export/SnapshotInfo.js:17
 msgid "Post Meta"
 msgstr ""
 
 #: src/admin/components/import-export/ExportProgress.js:15
 #: src/admin/components/import-export/MigrateProgress.js:15
-#: src/admin/components/import-export/PluginImportCard.js:35
+#: src/admin/components/import-export/PluginImportCard.js:36
 #: src/admin/components/import-export/SnapshotInfo.js:18
 msgid "Term Meta"
 msgstr ""
 
 #: src/admin/components/import-export/ExportProgress.js:16
-#: src/admin/components/import-export/PluginImportCard.js:36
+#: src/admin/components/import-export/PluginImportCard.js:37
 #: src/admin/components/import-export/SnapshotInfo.js:19
 msgid "User Meta"
 msgstr ""
 
 #: src/admin/components/import-export/ExportProgress.js:19
 #: src/admin/components/import-export/MigrateProgress.js:16
-#: src/admin/components/import-export/PluginImportCard.js:39
+#: src/admin/components/import-export/PluginImportCard.js:40
 #: src/admin/components/import-export/SnapshotInfo.js:22
 msgid "FAQ & HowTo Blocks"
 msgstr ""
@@ -16300,7 +16367,7 @@ msgid "Re-scan"
 msgstr ""
 
 #: src/admin/components/import-export/ImportExportTab.js:281
-#: src/admin/components/pages/Settings.js:3325
+#: src/admin/components/pages/Settings.js:3332
 msgid "Before you re-import"
 msgstr ""
 
@@ -16318,6 +16385,30 @@ msgstr ""
 
 #: src/admin/components/import-export/ImportExportTab.js:339
 msgid "Re-scan for SEO plugins"
+msgstr ""
+
+#: src/admin/components/import-export/importTypes.js:23
+msgid "Global"
+msgstr ""
+
+#: src/admin/components/import-export/importTypes.js:24
+msgid "Post meta"
+msgstr ""
+
+#: src/admin/components/import-export/importTypes.js:25
+msgid "Term meta"
+msgstr ""
+
+#: src/admin/components/import-export/importTypes.js:26
+msgid "Author meta"
+msgstr ""
+
+#: src/admin/components/import-export/importTypes.js:28
+msgid "404 logs"
+msgstr ""
+
+#: src/admin/components/import-export/importTypes.js:29
+msgid "FAQ & HowTo blocks"
 msgstr ""
 
 #: src/admin/components/import-export/MigrateProgress.js:39
@@ -16345,37 +16436,37 @@ msgid "Chunk"
 msgstr ""
 
 #: src/admin/components/import-export/NativeExportCard.js:26
-#: src/admin/components/pages/Settings.js:99
+#: src/admin/components/pages/Settings.js:106
 msgid "Post SEO data"
 msgstr ""
 
 #: src/admin/components/import-export/NativeExportCard.js:27
-#: src/admin/components/pages/Settings.js:107
+#: src/admin/components/pages/Settings.js:114
 msgid "Category & tag SEO data"
 msgstr ""
 
 #: src/admin/components/import-export/NativeExportCard.js:28
-#: src/admin/components/pages/Settings.js:112
+#: src/admin/components/pages/Settings.js:119
 msgid "Author SEO data"
 msgstr ""
 
 #: src/admin/components/import-export/NativeExportCard.js:33
-#: src/admin/components/pages/Settings.js:100
+#: src/admin/components/pages/Settings.js:107
 msgid "Titles, descriptions, keywords, robots, social"
 msgstr ""
 
 #: src/admin/components/import-export/NativeExportCard.js:34
-#: src/admin/components/pages/Settings.js:108
+#: src/admin/components/pages/Settings.js:115
 msgid "Titles and descriptions for terms"
 msgstr ""
 
 #: src/admin/components/import-export/NativeExportCard.js:35
-#: src/admin/components/pages/Settings.js:113
+#: src/admin/components/pages/Settings.js:120
 msgid "Author archive titles and descriptions"
 msgstr ""
 
 #: src/admin/components/import-export/NativeExportCard.js:36
-#: src/admin/components/pages/Settings.js:118
+#: src/admin/components/pages/Settings.js:125
 msgid "Every ThinkRank setting except API keys"
 msgstr ""
 
@@ -16409,7 +16500,7 @@ msgstr ""
 
 #. translators: %s: formatted record count.
 #: src/admin/components/import-export/NativeExportCard.js:292
-#: src/admin/components/pages/Settings.js:3026
+#: src/admin/components/pages/Settings.js:3033
 #, js-format
 msgid "%s records"
 msgstr ""
@@ -16562,139 +16653,115 @@ msgstr ""
 msgid "Only fills in fields that are currently empty."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:44
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:66
-msgid "Global"
-msgstr ""
-
-#: src/admin/components/import-export/PluginImportCard.js:45
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:69
-msgid "Post meta"
-msgstr ""
-
-#: src/admin/components/import-export/PluginImportCard.js:46
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:72
-msgid "Term meta"
-msgstr ""
-
-#: src/admin/components/import-export/PluginImportCard.js:47
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:75
-msgid "Author meta"
-msgstr ""
-
-#: src/admin/components/import-export/PluginImportCard.js:50
-msgid "FAQ & HowTo blocks"
-msgstr ""
-
-#: src/admin/components/import-export/PluginImportCard.js:64
+#: src/admin/components/import-export/PluginImportCard.js:55
 #: src/admin/components/import-export/SnapshotInfo.js:37
 msgid "Migrated"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:68
+#: src/admin/components/import-export/PluginImportCard.js:59
 msgid "Snapshot ready"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:73
+#: src/admin/components/import-export/PluginImportCard.js:64
 #: src/admin/components/import-export/SnapshotInfo.js:41
 msgid "Exporting…"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:78
+#: src/admin/components/import-export/PluginImportCard.js:69
 msgid "Restoring…"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:81
+#: src/admin/components/import-export/PluginImportCard.js:72
 msgid "Detected"
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:151
+#: src/admin/components/import-export/PluginImportCard.js:142
 #, js-format
 msgid "%s snapshot exported."
 msgstr ""
 
 #. translators: %d: number of posts left unchanged.
-#: src/admin/components/import-export/PluginImportCard.js:166
+#: src/admin/components/import-export/PluginImportCard.js:157
 #, js-format
 msgid "Migration complete, but the FAQ & HowTo blocks in %d post have broken markup and were left unchanged. Fix that post in the editor."
 msgid_plural "Migration complete, but the FAQ & HowTo blocks in %d posts have broken markup and were left unchanged. Fix those posts in the editor."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/admin/components/import-export/PluginImportCard.js:180
+#: src/admin/components/import-export/PluginImportCard.js:171
 msgid "Migration complete — ThinkRank is now using the imported data."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:190
+#: src/admin/components/import-export/PluginImportCard.js:181
 msgid "The import operation failed."
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:236
+#: src/admin/components/import-export/PluginImportCard.js:227
 #, js-format
 msgid "%s data removed from the database."
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:244
+#: src/admin/components/import-export/PluginImportCard.js:235
 #, js-format
 msgid "Couldn’t remove %s data."
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:302
+#: src/admin/components/import-export/PluginImportCard.js:293
 #, js-format
 msgid "%s snapshot deleted."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:308
+#: src/admin/components/import-export/PluginImportCard.js:299
 msgid "Couldn’t delete the snapshot."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:334
+#: src/admin/components/import-export/PluginImportCard.js:323
 msgid "Snapshot available"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:377
+#: src/admin/components/import-export/PluginImportCard.js:366
 msgid "Import failed"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:394
+#: src/admin/components/import-export/PluginImportCard.js:383
 msgid "Migration complete"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:396
+#: src/admin/components/import-export/PluginImportCard.js:385
 msgid "ThinkRank is now using the imported SEO data."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:411
+#: src/admin/components/import-export/PluginImportCard.js:400
 msgid "Export snapshot"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:439
+#: src/admin/components/import-export/PluginImportCard.js:428
 msgid "Export selected data"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:455
+#: src/admin/components/import-export/PluginImportCard.js:444
 msgid "Restore to ThinkRank"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:468
+#: src/admin/components/import-export/PluginImportCard.js:457
 msgid "Complete step 1 first to enable restore."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:482
+#: src/admin/components/import-export/PluginImportCard.js:471
 msgid "Start migration"
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:501
+#: src/admin/components/import-export/PluginImportCard.js:490
 #, js-format
 msgid "Clean up %s data"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:511
+#: src/admin/components/import-export/PluginImportCard.js:500
 msgid "Delete snapshot"
 msgstr ""
 
@@ -17230,655 +17297,659 @@ msgstr ""
 msgid "ThinkRank (free) is active."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:61
+#: src/admin/components/pages/Settings.js:62
 msgid "Titles, meta, canonicals, social & redirects"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:67
+#: src/admin/components/pages/Settings.js:68
 msgid "Titles, meta, schema, redirects & 404 logs"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:73
+#: src/admin/components/pages/Settings.js:74
 msgid "Titles, meta, social & redirects"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:79
+#: src/admin/components/pages/Settings.js:80
 msgid "Titles, meta, settings & redirects"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:85
+#: src/admin/components/pages/Settings.js:86
 msgid "Titles, meta, social, patterns & redirects"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:291
+#: src/admin/components/pages/Settings.js:92
+msgid "Titles, meta, social, redirects & 404 logs"
+msgstr ""
+
+#: src/admin/components/pages/Settings.js:298
 msgid "OpenAI-compatible endpoint"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:370
+#: src/admin/components/pages/Settings.js:377
 msgid "AI Provider"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:371
-#: src/admin/components/pages/Settings.js:2797
+#: src/admin/components/pages/Settings.js:378
+#: src/admin/components/pages/Settings.js:2804
 msgid "Data Management"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:376
-#: src/admin/components/pages/Settings.js:3213
+#: src/admin/components/pages/Settings.js:383
+#: src/admin/components/pages/Settings.js:3220
 msgid "Migration Tools"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:399
-#: src/admin/components/pages/Settings.js:3484
+#: src/admin/components/pages/Settings.js:406
+#: src/admin/components/pages/Settings.js:3491
 msgid "Encrypted at rest and stored only on your site."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:400
+#: src/admin/components/pages/Settings.js:407
 msgid "Sent directly to your chosen AI provider."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:401
+#: src/admin/components/pages/Settings.js:408
 msgid "Never routed through or seen by ThinkRank's servers."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:402
+#: src/admin/components/pages/Settings.js:409
 msgid "Remove or swap your key anytime, no lock-in."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:409
+#: src/admin/components/pages/Settings.js:416
 msgid "Choose a provider"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:410
+#: src/admin/components/pages/Settings.js:417
 msgid "Pick OpenAI, Anthropic, Gemini, OpenRouter, or your own OpenAI-compatible endpoint."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:416
+#: src/admin/components/pages/Settings.js:423
 msgid "Add your API key"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:417
+#: src/admin/components/pages/Settings.js:424
 msgid "Paste a key from your provider dashboard. A custom endpoint takes its base URL instead, and often no key at all."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:423
+#: src/admin/components/pages/Settings.js:430
 msgid "Test & save"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:424
+#: src/admin/components/pages/Settings.js:431
 msgid "Verify the connection, then save settings."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:432
+#: src/admin/components/pages/Settings.js:439
 msgid "Setup guides and provider walkthroughs."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:436
+#: src/admin/components/pages/Settings.js:443
 msgid "Open a support ticket"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:437
+#: src/admin/components/pages/Settings.js:444
 msgid "Stuck connecting? Our team can help."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:794
+#: src/admin/components/pages/Settings.js:801
 msgid "OpenAI API keys should start with \"sk-\""
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:803
+#: src/admin/components/pages/Settings.js:810
 msgid "OpenAI API key appears too short"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:813
+#: src/admin/components/pages/Settings.js:820
 msgid "Claude API keys should start with \"sk-ant-\""
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:822
+#: src/admin/components/pages/Settings.js:829
 msgid "Claude API key appears too short"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:834
+#: src/admin/components/pages/Settings.js:841
 msgid "Gemini API keys should start with \"AIza\" or \"AQ.\""
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:843
+#: src/admin/components/pages/Settings.js:850
 msgid "Gemini API key appears too short"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:853
+#: src/admin/components/pages/Settings.js:860
 msgid "OpenRouter API keys should start with \"sk-or-\""
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:862
+#: src/admin/components/pages/Settings.js:869
 msgid "OpenRouter API key appears too short"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1016
+#: src/admin/components/pages/Settings.js:1023
 msgid "Add the base URL and model id of your OpenAI-compatible endpoint to enable AI features."
 msgstr ""
 
 #. translators: %s: AI provider name (e.g. OpenAI, Claude).
-#: src/admin/components/pages/Settings.js:1030
+#: src/admin/components/pages/Settings.js:1037
 #, js-format
 msgid "No %s API key found. Please enter your API key to use this provider."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1070
-#: src/admin/components/pages/Settings.js:1091
+#: src/admin/components/pages/Settings.js:1077
+#: src/admin/components/pages/Settings.js:1098
 msgid "Failed to save the Import / Export setting."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1078
+#: src/admin/components/pages/Settings.js:1085
 msgid "Import / Export enabled. Reload the page to see the menu item."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1082
+#: src/admin/components/pages/Settings.js:1089
 msgid "Import / Export disabled. Your data is untouched — turn it back on any time to export it."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1119
-#: src/admin/components/pages/Settings.js:1138
+#: src/admin/components/pages/Settings.js:1126
+#: src/admin/components/pages/Settings.js:1145
 msgid "Failed to save the Migration Tools setting."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1127
+#: src/admin/components/pages/Settings.js:1134
 msgid "Migration Tools enabled. Reload the page to see the Migration menu."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1131
+#: src/admin/components/pages/Settings.js:1138
 msgid "Migration Tools disabled."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1184
-#: src/admin/components/pages/Settings.js:1200
+#: src/admin/components/pages/Settings.js:1191
+#: src/admin/components/pages/Settings.js:1207
 msgid "Failed to save the AI pause setting."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1189
+#: src/admin/components/pages/Settings.js:1196
 msgid "AI paused. ThinkRank will not send any requests to your AI provider until you turn this back off."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1193
+#: src/admin/components/pages/Settings.js:1200
 msgid "AI resumed."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1233
-#: src/admin/components/pages/Settings.js:1243
+#: src/admin/components/pages/Settings.js:1240
+#: src/admin/components/pages/Settings.js:1250
 msgid "Failed to save the AI limits."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1237
+#: src/admin/components/pages/Settings.js:1244
 msgid "AI limits saved."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1270
-#: src/admin/components/pages/Settings.js:1383
+#: src/admin/components/pages/Settings.js:1277
+#: src/admin/components/pages/Settings.js:1390
 msgid "Settings saved successfully!"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1289
+#: src/admin/components/pages/Settings.js:1296
 msgid "Choose an AI provider first."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1298
+#: src/admin/components/pages/Settings.js:1305
 msgid "Enter the base URL of your endpoint, for example http://localhost:11434/v1"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1308
+#: src/admin/components/pages/Settings.js:1315
 msgid "Enter the model id your endpoint should use, for example llama3.1"
 msgstr ""
 
 #. translators: %s: AI provider name (e.g. OpenAI, Claude).
-#: src/admin/components/pages/Settings.js:1320
+#: src/admin/components/pages/Settings.js:1327
 #, js-format
 msgid "Enter your %s API key for the selected provider."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1439
-#: src/admin/components/pages/Settings.js:1518
+#: src/admin/components/pages/Settings.js:1446
+#: src/admin/components/pages/Settings.js:1525
 msgid "Enter your endpoint base URL first."
 msgstr ""
 
 #. translators: %d: number of models listed, after the plugin's cap.
-#: src/admin/components/pages/Settings.js:1469
+#: src/admin/components/pages/Settings.js:1476
 #, js-format
 msgid "Showing the first %d models this endpoint lists."
 msgstr ""
 
 #. translators: %d: number of models the endpoint listed.
-#: src/admin/components/pages/Settings.js:1477
+#: src/admin/components/pages/Settings.js:1484
 #, js-format
 msgid "%d models available on this endpoint."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1498
+#: src/admin/components/pages/Settings.js:1505
 msgid "Could not list models. Type the model id by hand instead."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1528
+#: src/admin/components/pages/Settings.js:1535
 msgid "Please enter an API key first."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1588
+#: src/admin/components/pages/Settings.js:1595
 msgid "API connection successful!"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1593
+#: src/admin/components/pages/Settings.js:1600
 msgid "API connection failed. Please check your API key and try again."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1603
+#: src/admin/components/pages/Settings.js:1610
 msgid "Failed to test API connection."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1610
+#: src/admin/components/pages/Settings.js:1617
 msgid "Network error. Please check your internet connection."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1618
+#: src/admin/components/pages/Settings.js:1625
 msgid "Invalid API key. Please check your credentials."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1623
+#: src/admin/components/pages/Settings.js:1630
 msgid "Rate limit exceeded. Please try again later."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1628
+#: src/admin/components/pages/Settings.js:1635
 msgid "Connection failed:"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1640
+#: src/admin/components/pages/Settings.js:1647
 msgid "No API key is currently saved."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1646
+#: src/admin/components/pages/Settings.js:1653
 msgid "Are you sure you want to clear the saved API key? This action cannot be undone."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1669
+#: src/admin/components/pages/Settings.js:1676
 msgid "API key cleared successfully."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1679
+#: src/admin/components/pages/Settings.js:1686
 msgid "Failed to clear API key."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1685
+#: src/admin/components/pages/Settings.js:1692
 msgid "Failed to clear API key. Please try again."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1699
+#: src/admin/components/pages/Settings.js:1706
 msgid "API key (optional)"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1708
+#: src/admin/components/pages/Settings.js:1715
 msgid "Enter new API key to update…"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1738
+#: src/admin/components/pages/Settings.js:1745
 msgid "Custom endpoint"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1739
+#: src/admin/components/pages/Settings.js:1746
 msgid "Ollama, LM Studio, Azure…"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1749
+#: src/admin/components/pages/Settings.js:1756
 msgid "Custom model…"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1836
+#: src/admin/components/pages/Settings.js:1843
 msgid "ollama.com: run a model locally"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1878
+#: src/admin/components/pages/Settings.js:1885
 msgid "Choose provider"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1882
+#: src/admin/components/pages/Settings.js:1889
 msgid "AI provider"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1983
+#: src/admin/components/pages/Settings.js:1990
 msgid "Choose an AI provider to get started"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:1989
+#: src/admin/components/pages/Settings.js:1996
 msgid "Select a provider above, then add its API key to enable AI features."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2001
+#: src/admin/components/pages/Settings.js:2008
 msgid "Endpoint base URL"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2025
+#: src/admin/components/pages/Settings.js:2032
 msgid "The OpenAI-compatible base URL, ending in /v1. Plain http:// is accepted for localhost and private addresses; anything public must use https:// so your key is never sent in the clear."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2085
+#: src/admin/components/pages/Settings.js:2092
 msgid "Masked preview of your saved key. Choose Replace to enter a new one."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2145
+#: src/admin/components/pages/Settings.js:2152
 msgid "Hide API key"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2149
+#: src/admin/components/pages/Settings.js:2156
 msgid "Show API key"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2205
+#: src/admin/components/pages/Settings.js:2212
 msgid "Enter a new key to replace the saved one."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2211
+#: src/admin/components/pages/Settings.js:2218
 msgid "Leave empty for a local server that needs no key. Anything you enter is encrypted and sent only to the URL above."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2215
+#: src/admin/components/pages/Settings.js:2222
 msgid "Encrypted and stored securely. You pay the provider directly."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2235
+#: src/admin/components/pages/Settings.js:2242
 msgid "Cancel and keep current key"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2252
+#: src/admin/components/pages/Settings.js:2259
 msgid "Model id"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2266
+#: src/admin/components/pages/Settings.js:2273
 msgid "The exact model id this server serves, as it appears in its own model list."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2300
+#: src/admin/components/pages/Settings.js:2307
 msgid "Load models"
 msgstr ""
 
 #. translators: %s: comma-separated model ids.
-#: src/admin/components/pages/Settings.js:2310
+#: src/admin/components/pages/Settings.js:2317
 #, js-format
 msgid "Available: %s"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2324
+#: src/admin/components/pages/Settings.js:2331
 msgid "Request timeout (seconds)"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2336
+#: src/admin/components/pages/Settings.js:2343
 msgid "A local model on CPU can take minutes for a content brief. Raise this if generation times out."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2350
+#: src/admin/components/pages/Settings.js:2357
 msgid "This model can describe images"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2354
+#: src/admin/components/pages/Settings.js:2361
 msgid "Turn on only for a vision model (llava, gpt-4o, a Gemini deployment). AI alt text stays hidden while this is off, because a text-only model answers a vision request with an error."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2366
+#: src/admin/components/pages/Settings.js:2373
 msgid "Force valid JSON answers"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2370
+#: src/admin/components/pages/Settings.js:2377
 msgid "Sends response_format json_object, which Ollama, vLLM and llama.cpp use to stop a small model breaking the JSON of a content brief or metadata. Leave off for a server that rejects it (LM Studio accepts only json_schema)."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2378
+#: src/admin/components/pages/Settings.js:2385
 msgid "Price per 1M tokens (optional)"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2391
+#: src/admin/components/pages/Settings.js:2398
 msgid "Only for cost estimates. Leave empty when the model is free or you do not want estimates. Usage is then reported without a cost rather than as zero."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2400
-#: src/admin/components/pages/Settings.js:3379
+#: src/admin/components/pages/Settings.js:2407
+#: src/admin/components/pages/Settings.js:3386
 msgid "Model"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2414
+#: src/admin/components/pages/Settings.js:2421
 msgid "Model used for all AI content generation."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2422
+#: src/admin/components/pages/Settings.js:2429
 msgid "Custom model"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2440
+#: src/admin/components/pages/Settings.js:2447
 msgid "Enter the exact model id from your provider. Use this to run a newly released or unlisted model."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2482
+#: src/admin/components/pages/Settings.js:2489
 msgid "Clear API Key"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2504
+#: src/admin/components/pages/Settings.js:2511
 msgid "AI usage limits"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2517
+#: src/admin/components/pages/Settings.js:2524
 msgid "Cap what ThinkRank may spend on your AI provider key, or stop it outright. Both limits apply to every AI feature, including the ones that run on a schedule."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2529
+#: src/admin/components/pages/Settings.js:2536
 msgid "Pause all AI"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2541
+#: src/admin/components/pages/Settings.js:2548
 msgid "AI is paused. No requests are being sent to your provider, so AI features will report that they are unavailable until you turn this back off. Your API key is untouched."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2552
+#: src/admin/components/pages/Settings.js:2559
 msgid "Used today"
 msgstr ""
 
 #. translators: 1: requests used today, 2: daily request limit.
-#: src/admin/components/pages/Settings.js:2558
+#: src/admin/components/pages/Settings.js:2565
 #, js-format
 msgid "%1$s of %2$s requests"
 msgstr ""
 
 #. translators: %s: requests used today.
-#: src/admin/components/pages/Settings.js:2567
+#: src/admin/components/pages/Settings.js:2574
 #, js-format
 msgid "%s requests, no daily limit set"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2619
+#: src/admin/components/pages/Settings.js:2626
 msgid "The count covers every AI request this site sends and resets at midnight, site time."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2639
+#: src/admin/components/pages/Settings.js:2646
 msgid "Daily request limit"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2643
+#: src/admin/components/pages/Settings.js:2650
 msgid "Most AI requests this site may send in a day. 0 means no daily limit."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2659
+#: src/admin/components/pages/Settings.js:2666
 msgid "Requests per minute"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2663
+#: src/admin/components/pages/Settings.js:2670
 msgid "Most AI requests one user may send in a minute. 0 means no per-minute limit."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2676
+#: src/admin/components/pages/Settings.js:2683
 msgid "Save limits"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2686
+#: src/admin/components/pages/Settings.js:2693
 msgid "Getting started"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2732
+#: src/admin/components/pages/Settings.js:2739
 msgid "Your key stays private"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2738
+#: src/admin/components/pages/Settings.js:2745
 msgid "You bring your own key, so you stay in control."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2812
+#: src/admin/components/pages/Settings.js:2819
 msgid "Control what happens to your data when the plugin is removed. When enabled, all plugin data including API keys, content briefs, and configuration will be permanently erased on uninstall."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2823
+#: src/admin/components/pages/Settings.js:2830
 msgid "Delete all data on uninstall"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2835
+#: src/admin/components/pages/Settings.js:2842
 msgid "Data deletion is enabled. Uninstalling ThinkRank will permanently erase all settings and content briefs. This cannot be undone."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2864
+#: src/admin/components/pages/Settings.js:2871
 msgid "Preserved by default"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2870
+#: src/admin/components/pages/Settings.js:2877
 msgid "Kept after uninstall"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2879
+#: src/admin/components/pages/Settings.js:2886
 msgid "API keys & provider settings"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2883
+#: src/admin/components/pages/Settings.js:2890
 msgid "Generated content briefs"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2887
+#: src/admin/components/pages/Settings.js:2894
 msgid "Plugin configuration"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2932
+#: src/admin/components/pages/Settings.js:2939
 msgid "Always cleaned up"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2938
+#: src/admin/components/pages/Settings.js:2945
 msgid "Removed on uninstall"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2947
+#: src/admin/components/pages/Settings.js:2954
 msgid "Temporary cache data"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2948
+#: src/admin/components/pages/Settings.js:2955
 msgid "Usage analytics"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:2949
+#: src/admin/components/pages/Settings.js:2956
 msgid "Plugin activation flags"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3038
+#: src/admin/components/pages/Settings.js:3045
 msgid "Download everything ThinkRank stores as a single file, and load it back on this site or any other. Useful as a backup before big changes, for moving a site, or simply so your SEO data is never locked in here."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3050
+#: src/admin/components/pages/Settings.js:3057
 msgid "Enable Import / Export"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3067
+#: src/admin/components/pages/Settings.js:3074
 msgid "What an export includes"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3070
+#: src/admin/components/pages/Settings.js:3077
 msgid "Everything below travels in one JSON file. A CSV view of your post SEO data is available too, for spreadsheets or another plugin’s importer."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3085
+#: src/admin/components/pages/Settings.js:3092
 msgid "Could not read your data counts just now. The export itself is unaffected — open Import / Export to run one."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3130
+#: src/admin/components/pages/Settings.js:3137
 msgid "Included"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3137
+#: src/admin/components/pages/Settings.js:3144
 msgid "Nothing yet"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3164
+#: src/admin/components/pages/Settings.js:3171
 msgid "Open Import / Export"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3173
+#: src/admin/components/pages/Settings.js:3180
 msgid "Turned off the Import / Export screen is hidden. Nothing has been deleted; switch this on whenever you want to export or restore."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3188
+#: src/admin/components/pages/Settings.js:3195
 msgid "Your API keys stay here"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3190
+#: src/admin/components/pages/Settings.js:3197
 msgid "Provider API keys and verification tokens are excluded from every export, so a file is safe to hand to a teammate or keep as a backup. Re-enter them after restoring onto a new site."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3228
+#: src/admin/components/pages/Settings.js:3235
 msgid "Bring your existing SEO data into ThinkRank. Turning this on adds a \"Migration\" menu item so you can import titles, descriptions, canonicals, robots rules, social meta, redirects, and settings from another SEO plugin handy if you skipped migration during setup or need to re-import updated data."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3240
+#: src/admin/components/pages/Settings.js:3247
 msgid "Enable Migration Tools"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3257
+#: src/admin/components/pages/Settings.js:3264
 msgid "Platforms you can migrate from"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3263
+#: src/admin/components/pages/Settings.js:3270
 msgid "ThinkRank imports SEO data directly from these plugins even after your initial setup."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3295
+#: src/admin/components/pages/Settings.js:3302
 msgid "Supported"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3313
+#: src/admin/components/pages/Settings.js:3320
 msgid "Open Migration"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3327
+#: src/admin/components/pages/Settings.js:3334
 msgid "Running a migration again may overwrite existing ThinkRank settings and metadata where applicable. We recommend creating a database backup before re-importing."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3359
+#: src/admin/components/pages/Settings.js:3366
 msgid "Active configuration"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3389
+#: src/admin/components/pages/Settings.js:3396
 msgid "API key"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3404
+#: src/admin/components/pages/Settings.js:3411
 msgid "Get an API key"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3407
+#: src/admin/components/pages/Settings.js:3414
 msgid "Sign in to your provider and create a key."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3474
+#: src/admin/components/pages/Settings.js:3481
 msgid "Why your own key?"
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3479
+#: src/admin/components/pages/Settings.js:3486
 msgid "Pay your AI provider directly, with no markup."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3483
+#: src/admin/components/pages/Settings.js:3490
 msgid "Unlimited generations at provider rates."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3488
+#: src/admin/components/pages/Settings.js:3495
 msgid "Switch providers anytime without losing data."
 msgstr ""
 
-#: src/admin/components/pages/Settings.js:3520
+#: src/admin/components/pages/Settings.js:3527
 msgid "Need help?"
 msgstr ""
 
@@ -18900,56 +18971,56 @@ msgstr ""
 msgid "Something went wrong while saving. Please try again."
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:60
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:54
 msgid "Not detected"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:80
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:61
 msgid "SEO data detected"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:235
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:216
 msgid "Creating migration snapshot"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:240
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:221
 msgid "Restoring imported data"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:247
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:228
 msgid "Migration completed successfully"
 msgstr ""
 
 #. translators: %1$d: overall progress percentage.
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:251
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:232
 #, js-format
 msgid "Step 2 of 2: Restoring imported data… %1$d%%"
 msgstr ""
 
 #. translators: %1$d: overall progress percentage.
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:257
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:238
 #, js-format
 msgid "Step 1 of 2: Creating migration snapshot… %1$d%%"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:264
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:245
 msgid "Imported"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:266
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:247
 msgid "Imported — deactivating…"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:268
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:249
 msgid "Imported & deactivated"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:300
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:281
 #: src/metabox/components/metabox-schema-tab/ImportSection.js:186
 msgid "Import"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:378
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:359
 msgid "Import failed. Please try again."
 msgstr ""
 
@@ -18978,26 +19049,26 @@ msgid "Get Started"
 msgstr ""
 
 #. translators: %s: source SEO plugin name.
-#: src/admin/setup-wizard/steps/Step2Migration.js:73
+#: src/admin/setup-wizard/steps/Step2Migration.js:75
 #, js-format
 msgid "%s has been deactivated successfully to prevent conflicts with ThinkRank."
 msgstr ""
 
 #. translators: %s: source SEO plugin name.
-#: src/admin/setup-wizard/steps/Step2Migration.js:87
+#: src/admin/setup-wizard/steps/Step2Migration.js:89
 #, js-format
 msgid "%s data was migrated successfully, but it couldn’t be deactivated automatically. Please deactivate it manually to avoid conflicts with ThinkRank."
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step2Migration.js:119
+#: src/admin/setup-wizard/steps/Step2Migration.js:121
 msgid "Scanning for existing SEO data…"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step2Migration.js:156
+#: src/admin/setup-wizard/steps/Step2Migration.js:158
 msgid "We couldn’t scan for existing SEO data. You can still continue and import later."
 msgstr ""
 
-#: src/admin/setup-wizard/steps/Step2Migration.js:164
+#: src/admin/setup-wizard/steps/Step2Migration.js:166
 msgid "No active SEO plugins with data to migrate were found. You’re all set — continue to the next step."
 msgstr ""
 
