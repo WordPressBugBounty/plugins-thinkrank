@@ -126,7 +126,7 @@ class Search_Visibility_Notice {
                 <div class="thinkrank-notice__body">
                     <p class="thinkrank-notice__title"><?php esc_html_e('Your site is hidden from search engines', 'thinkrank'); ?></p>
                     <p class="thinkrank-notice__text">
-                        <?php esc_html_e('WordPress is set to discourage search engines from indexing this site, so your pages will not appear in search results — no matter how well they are optimized.', 'thinkrank'); ?>
+                        <?php esc_html_e('WordPress is set to discourage search engines from indexing this site, so your pages will not appear in search results, no matter how well they are optimized.', 'thinkrank'); ?>
                     </p>
                     <p class="thinkrank-notice__actions">
                         <a href="<?php echo esc_url($reading_url); ?>" class="button button-primary">

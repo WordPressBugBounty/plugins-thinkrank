@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.13.0
+Stable tag: 2.14.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -327,6 +327,20 @@ Content brief competitor analysis and schema import fetch the URLs you type in, 
 
 == Changelog ==
 
+= 2.14.0 =
+Release Date: 2026-10-06
+
+- New: Optional FAQ schema from Oxygen and Breakdance accordions, switched on in Schema Settings
+- Improved: Role Manager keeps role and capability names in view, with a card layout on phones
+- Improved: Clearer screen reader labels in Bulk Snippets, Thin Content and Advanced Robots Meta
+- Fixed: The editor SEO score now updates when you edit the title, description or keywords on any tab
+- Fixed: Content Analysis word count, readability and content quality now match the calculated score
+- Fixed: Content Type Matrix No-index can be set back to Inherit, and pinned rows are counted
+- Fixed: robots.txt now lists exactly the sitemaps your site currently publishes
+- Fixed: Alt text updates now clear five more page caches, including Cache Enabler and SiteGround
+- Fixed: Media no longer appears in Bulk SEO Optimization when attachment pages are turned off
+- Fixed: MCP connection check catches more host blocks, and FAQ tools no longer write to Oxygen pages
+
 = 2.13.0 =
 Release Date: 2026-10-04
 
@@ -377,26 +391,12 @@ Release Date: 2026-09-27
 - Fixed: The unwritable WordPress folder notice no longer warns when nothing is affected
 - Fixed: Minor migration, MCP, sitemap and Local SEO validation issues
 
-= 2.9.0 =
-Release Date: 2026-09-23
-
-- New: Custom AI provider: connect any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, Azure)
-- New: AI spend controls: a daily request limit, a pause-all-AI switch and a per-minute limit
-- New: Bulk Snippets: every post's title, description and keyword in one table, with AI drafts
-- New: Sitemaps are served dynamically when the WordPress folder cannot be written to
-- New: Site Health warns when another plugin publishes schema markup on the same pages
-- New: Site Health and an admin notice flag a WordPress folder ThinkRank cannot write to
-- Changed: AI requests are no longer throttled to 10 per minute by default
-- Changed: The usage tracking prompt waits a week and appears only on ThinkRank screens
-- Fixed: MCP connectors on subdirectory multisite were sent to the main site instead of the subsite
-- Fixed: The AI usage meter turned red when AI was paused rather than when the limit was reached
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.14.0 =
+Adds optional FAQ schema from Oxygen and Breakdance accordions. The editor score now stays live on every tab, Content Analysis matches the calculated score, and robots.txt lists only live sitemaps. Recommended for all sites.
+
 = 2.13.0 =
 Adds import from Slim SEO and a Homepage Meta Description setting. Imported titles keep their variables, and Organization schema edits now reach the page without a manual redeploy. Recommended for all sites.
-
-= 2.12.0 =
-Alt text updates now clear Elementor and page caches. Fixes related-posts shortcodes swapping the post in the Classic Editor, FAQ blocks skewing Content Analysis, and deployed schema on MySQL 5.7. Recommended for all sites.

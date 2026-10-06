@@ -1015,6 +1015,7 @@ class Schema_Input_Validator {
             'enable_product_schema' => 'boolean',
             'enable_local_business' => 'boolean',
             'enable_breadcrumbs_schema' => 'boolean',
+            'enable_accordion_faq_schema' => 'boolean',
         ];
 
         foreach ($options as $key => $value) {

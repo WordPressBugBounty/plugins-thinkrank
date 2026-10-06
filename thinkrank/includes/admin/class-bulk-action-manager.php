@@ -79,7 +79,7 @@ class Bulk_Action_Manager {
         }
 
         // Add separator at the top of our group
-        $new_actions['thinkrank_separator'] = '— ' . __('ThinkRank', 'thinkrank') . ' —';
+        $new_actions['thinkrank_separator'] = "\u{2500}\u{2500} " . __('ThinkRank', 'thinkrank') . " \u{2500}\u{2500}";
 
         // Merge module actions
         $new_actions = array_merge($new_actions, $thinkrank_actions);

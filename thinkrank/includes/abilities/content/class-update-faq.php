@@ -34,6 +34,16 @@ if ( ! defined( 'ABSPATH' ) ) {
  * exactly the violation above. Those surfaces have their own FAQ modules, which
  * `get-faq` reads and a human edits in the builder.
  *
+ * Oxygen and Breakdance replace `post_content` just as thoroughly and have no
+ * ThinkRank FAQ module, and until #831 the detection did not know them at all:
+ * the refusal never fired, the block was stored, and `will_emit_faqpage()` then
+ * published a FAQPage for questions that are on no page. They are refused for
+ * the same reason as the other three, with a message that sends the author to
+ * the builder's own accordion rather than to a ThinkRank module that does not
+ * exist. `FAQ_Content` now reads that accordion, so the refusal is no longer a
+ * dead end: the questions it holds are reported, and the author edits them where
+ * they live.
+ *
  * Two properties of the write matter:
  *
  * - **Byte-level editing.** Blocks are located with core's tokenizer and
@@ -63,7 +73,7 @@ class Update_FAQ extends FAQ_Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-faq';
 		$this->label       = __( 'Update ThinkRank FAQ', 'thinkrank' );
-		$this->description = __( 'Add FAQ questions and answers to a post as a visible ThinkRank FAQ block, which also produces FAQPage schema. Use mode "append" to add a block alongside anything already there, or "replace" to remove every ThinkRank FAQ block on the post first. Only posts built with the block editor can be written: a post rendered by Elementor, Bricks or Beaver is refused with unsupported_builder, because a block stored in its content would never be shown and marking up invisible content breaks Google\'s structured data policy. Call get-faq first to see which builder a post uses and what it already asks. Note that Google shows FAQ rich results only for well-known, authoritative government and health websites, so for most sites the value is being quotable by answer engines rather than a rich result.', 'thinkrank' );
+		$this->description = __( 'Add FAQ questions and answers to a post as a visible ThinkRank FAQ block, which also produces FAQPage schema. Use mode "append" to add a block alongside anything already there, or "replace" to remove every ThinkRank FAQ block on the post first. Only posts built with the block editor can be written: a post rendered by Elementor, Bricks, Beaver, Oxygen or Breakdance is refused with unsupported_builder, because a block stored in its content would never be shown and marking up invisible content breaks Google\'s structured data policy. Call get-faq first to see which builder a post uses and what it already asks. Note that Google shows FAQ rich results only for well-known, authoritative government and health websites, so for most sites the value is being quotable by answer engines rather than a rich result.', 'thinkrank' );
 	}
 
 	/**
@@ -201,13 +211,14 @@ class Update_FAQ extends FAQ_Ability_Base {
 			return new \WP_Error(
 				'thinkrank_unsupported_builder',
 				sprintf(
-					/* translators: %s: page builder name. */
-					__( 'This post is rendered by %s, which replaces the post content, so a FAQ block written here would never be shown. Add the questions with that builder\'s own ThinkRank FAQ module instead. Marking up content a reader cannot see breaks Google\'s structured data policy.', 'thinkrank' ),
-					$this->builder_label( $builder )
+					/* translators: %s: why the post cannot be written, naming the builder. */
+					__( '%s Marking up content a reader cannot see breaks Google\'s structured data policy.', 'thinkrank' ),
+					$this->writable_reason( $builder )
 				),
 				[
-					'status'  => 422,
-					'builder' => $builder,
+					'status'             => 422,
+					'builder'            => $builder,
+					'builder_has_reader' => FAQ_Content::builder_is_readable( $builder ),
 				]
 			);
 		}
@@ -378,22 +389,6 @@ class Update_FAQ extends FAQ_Ability_Base {
 			'content' => $out . substr( $content, $cursor ),
 			'removed' => count( $spans ),
 		];
-	}
-
-	/**
-	 * A readable name for a builder, for the refusal message.
-	 *
-	 * @param string $builder Builder key.
-	 * @return string
-	 */
-	private function builder_label( string $builder ): string {
-		$labels = [
-			FAQ_Content::SOURCE_ELEMENTOR => __( 'Elementor', 'thinkrank' ),
-			FAQ_Content::SOURCE_BRICKS    => __( 'Bricks', 'thinkrank' ),
-			FAQ_Content::SOURCE_BEAVER    => __( 'Beaver Builder', 'thinkrank' ),
-		];
-
-		return $labels[ $builder ] ?? $builder;
 	}
 
 	/**

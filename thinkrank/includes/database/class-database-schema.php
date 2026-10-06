@@ -344,7 +344,7 @@ class Database_Schema {
                 } else {
                     $results['tables_failed'][] = $full_table_name;
                     $results['errors'][] = "Failed to create table: {$full_table_name}"
-                        . ('' !== $db_error ? ' — ' . $db_error : '');
+                        . ('' !== $db_error ? ': ' . $db_error : '');
                     $results['success'] = false;
                 }
             } catch (\Exception $e) {

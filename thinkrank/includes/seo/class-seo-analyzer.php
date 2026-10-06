@@ -552,7 +552,7 @@ class SEO_Analyzer {
             return [
                 'label'      => __('Site is visible to search engines', 'thinkrank'),
                 'status'     => self::FAILED,
-                'message'    => __('Your site is telling search engines not to index it — it will not appear in search results.', 'thinkrank'),
+                'message'    => __('Your site is telling search engines not to index it, so it will not appear in search results.', 'thinkrank'),
                 'how_to_fix' => __('Untick "Discourage search engines from indexing this site" under Settings → Reading.', 'thinkrank'),
             ];
         }
@@ -875,7 +875,7 @@ class SEO_Analyzer {
             'status'     => $coverage >= self::COVERAGE_WARN ? self::WARNING : self::FAILED,
             /* translators: 1: posts missing a meta description, 2: sampled posts. */
             'message'    => sprintf(__('%1$d of your %2$d most recent posts are missing a meta description. Search engines fall back to arbitrary page text for their snippets.', 'thinkrank'), $missing, $total),
-            'how_to_fix'     => __('Add meta descriptions in the ThinkRank SEO panel when editing a post — or use Bulk SEO Optimization to generate them with AI.', 'thinkrank'),
+            'how_to_fix'     => __('Add meta descriptions in the ThinkRank SEO panel when editing a post, or use Bulk SEO Optimization to generate them with AI.', 'thinkrank'),
             'value'          => $value,
             'affected_posts' => $this->affected_posts($without),
         ];
@@ -2241,7 +2241,7 @@ class SEO_Analyzer {
             __('%1$d of your %2$d most recent pages use question-style headings.', 'thinkrank'),
             /* translators: 1: posts without one, 2: sampled posts. */
             __('%1$d of your %2$d most recent pages have no question-style heading. Assistants match a user\'s question against your headings first.', 'thinkrank'),
-            __('Phrase at least one H2 or H3 per page as the question it answers — "How does X work?" rather than "Overview".', 'thinkrank'),
+            __('Phrase at least one H2 or H3 per page as the question it answers: "How does X work?" rather than "Overview".', 'thinkrank'),
             __('No published content to check yet.', 'thinkrank')
         );
     }

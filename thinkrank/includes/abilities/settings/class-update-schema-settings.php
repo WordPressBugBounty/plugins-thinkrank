@@ -37,6 +37,7 @@ class Update_Schema_Settings extends Ability_Base {
 		'website_enable_search',
 		'enable_breadcrumbs_schema',
 		'enable_local_business',
+		'enable_accordion_faq_schema',
 	];
 
 	/**

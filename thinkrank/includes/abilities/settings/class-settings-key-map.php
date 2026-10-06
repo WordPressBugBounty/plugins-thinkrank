@@ -451,7 +451,7 @@ final class Settings_Key_Map {
 				'type'        => 'string',
 				'enum'        => [ 'allow', 'block' ],
 				/* translators: 1: crawler user-agent token, e.g. GPTBot. 2: what that crawler is for. */
-				'description' => sprintf( __( '%1$s — %2$s', 'thinkrank' ), $agent['token'], $agent['purpose'] ),
+				'description' => sprintf( __( '%1$s: %2$s', 'thinkrank' ), $agent['token'], $agent['purpose'] ),
 			];
 		}
 

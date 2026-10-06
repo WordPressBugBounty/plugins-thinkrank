@@ -70,13 +70,11 @@ abstract class FAQ_Ability_Base extends Ability_Base {
 			],
 			'source'         => [
 				'type'        => 'string',
-				'enum'        => [
-					FAQ_Content::SOURCE_BLOCK,
-					FAQ_Content::SOURCE_ELEMENTOR,
-					FAQ_Content::SOURCE_BRICKS,
-					FAQ_Content::SOURCE_BEAVER,
-				],
-				'description' => __( 'Which editor surface holds this question. Only block items can be written by update-faq.', 'thinkrank' ),
+				'enum'        => array_merge(
+					[ FAQ_Content::SOURCE_BLOCK ],
+					FAQ_Content::builders()
+				),
+				'description' => __( 'Which editor surface holds this question. Only block items can be written by update-faq. An oxygen or breakdance item comes from that builder\'s own accordion rather than a ThinkRank module, so it contributes to FAQPage only while the accordion setting is on.', 'thinkrank' ),
 			],
 			'schema_enabled' => [
 				'type'        => 'boolean',
@@ -89,28 +87,93 @@ abstract class FAQ_Ability_Base extends Ability_Base {
 	}
 
 	/**
-	 * Which builder renders this post, in the shape the schema reports.
+	 * A builder name in the shape the output schema reports.
 	 *
-	 * @param int $post_id Post ID.
+	 * Takes the detected value rather than a post ID so a caller detects once
+	 * and reports, instead of asking twice and risking two answers.
+	 *
+	 * @since 2.14.0 Takes the builder, not the post ID.
+	 * @param string $builder Builder name from {@see FAQ_Content::builder()}.
 	 * @return string One of the builder names, or 'none' for the block editor.
 	 */
-	protected function builder_name( int $post_id ): string {
-		$builder = FAQ_Content::builder( $post_id );
-
+	protected function builder_name( string $builder ): string {
 		return '' === $builder ? 'none' : $builder;
 	}
 
 	/**
 	 * The builder names a post can report.
 	 *
+	 * Derived from `FAQ_Content` rather than listed here. The list was written
+	 * out by hand and then fell behind the detection it describes, so Oxygen had
+	 * no member to report even once it was detected (#831).
+	 *
 	 * @return string[]
 	 */
 	protected function builder_enum(): array {
-		return [
-			'none',
-			FAQ_Content::SOURCE_ELEMENTOR,
-			FAQ_Content::SOURCE_BRICKS,
-			FAQ_Content::SOURCE_BEAVER,
+		return array_merge( [ 'none' ], FAQ_Content::builders() );
+	}
+
+	/**
+	 * A readable name for a builder, for the messages an agent reads.
+	 *
+	 * @since 2.14.0
+	 * @param string $builder Builder key.
+	 * @return string
+	 */
+	protected function builder_label( string $builder ): string {
+		$labels = [
+			FAQ_Content::SOURCE_ELEMENTOR   => __( 'Elementor', 'thinkrank' ),
+			FAQ_Content::SOURCE_BRICKS      => __( 'Bricks', 'thinkrank' ),
+			FAQ_Content::SOURCE_BEAVER      => __( 'Beaver Builder', 'thinkrank' ),
+			FAQ_Content::BUILDER_OXYGEN     => __( 'Oxygen', 'thinkrank' ),
+			FAQ_Content::BUILDER_BREAKDANCE => __( 'Breakdance', 'thinkrank' ),
 		];
+
+		return $labels[ $builder ] ?? $builder;
+	}
+
+	/**
+	 * Why `update-faq` will or will not write this post.
+	 *
+	 * Four answers, because an agent that cannot tell them apart gives bad
+	 * advice. The block editor renders `post_content`, so the write is safe. A
+	 * builder with a ThinkRank FAQ module renders something else, and the
+	 * questions belong in that module. Oxygen and Breakdance have no module, but
+	 * their own accordion is read, so the questions are real and editable in the
+	 * builder — and whether they reach the FAQPage is a site setting rather than
+	 * a per-element toggle, which the caller has to be told. A builder that is
+	 * recognised and not readable at all is the fourth, where a question count of
+	 * zero means "nothing readable here" rather than "no FAQ" (#831).
+	 *
+	 * @since 2.14.0
+	 * @param string $builder Builder name, or '' for the block editor.
+	 * @return string
+	 */
+	protected function writable_reason( string $builder ): string {
+		if ( '' === $builder ) {
+			return __( 'The block editor renders this post, so update-faq can write a FAQ block into its content.', 'thinkrank' );
+		}
+
+		if ( FAQ_Content::builder_has_module( $builder ) ) {
+			return sprintf(
+				/* translators: %s: page builder name. */
+				__( '%s renders this post and replaces its content, so a FAQ block written here would never be shown. Add the questions with the ThinkRank FAQ module for that builder; get-faq reads the questions already stored there, and they reach the FAQPage.', 'thinkrank' ),
+				$this->builder_label( $builder )
+			);
+		}
+
+		if ( FAQ_Content::builder_is_readable( $builder ) ) {
+			return sprintf(
+				/* translators: %s: page builder name. */
+				__( '%s renders this post and replaces its content, so a FAQ block written here would never be shown, and ThinkRank has no FAQ module for it. Its own accordion is read instead, and the questions above are what that accordion holds. Edit them in the builder. They reach the FAQPage only while Publish FAQ schema from page-builder accordions is on in Schema Settings, which is off by default.', 'thinkrank' ),
+				$this->builder_label( $builder )
+			);
+		}
+
+		return sprintf(
+			/* translators: %s: page builder name. */
+			__( '%s renders this post and replaces its content, so a FAQ block written here would never be shown. ThinkRank has no FAQ module for it and cannot read its stored questions either, so this post is recognised but unsupported: add the questions with the builder\'s own accordion, and read a question count of zero as "not readable" rather than "no FAQ".', 'thinkrank' ),
+			$this->builder_label( $builder )
+		);
 	}
 }

@@ -80,7 +80,7 @@ class SEO_Notice {
                     <?php if ($migrate_url) : ?>
                         <p class="thinkrank-notice__hint">
                             <?php echo self::get_shield_icon(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static, trusted SVG markup ?>
-                            <span><?php esc_html_e('Your existing SEO data is safe — migrate titles, descriptions, and other metadata into ThinkRank before deactivating.', 'thinkrank'); ?></span>
+                            <span><?php esc_html_e('Your existing SEO data is safe. Migrate titles, descriptions, and other metadata into ThinkRank before deactivating.', 'thinkrank'); ?></span>
                         </p>
                     <?php endif; ?>
                     <p class="thinkrank-notice__actions">

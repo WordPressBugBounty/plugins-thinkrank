@@ -218,7 +218,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             'alt_source' => [
                 'type' => 'string',
                 'title' => __('Alt text source', 'thinkrank'),
-                'description' => __('“Template” builds alt text from the filename and title. “AI” looks at the image itself and describes what is in it — this uses your AI provider key and costs one call per image.', 'thinkrank'),
+                'description' => __('“Template” builds alt text from the filename and title. “AI” looks at the image itself and describes what is in it. This uses your AI provider key and costs one call per image.', 'thinkrank'),
                 'default' => 'template',
                 'enum' => self::ALT_SOURCES
             ],

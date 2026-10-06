@@ -19,6 +19,7 @@ declare(strict_types=1);
 namespace ThinkRank\API;
 
 use ThinkRank\API\Traits\CSRF_Protection;
+use ThinkRank\Core\Capability_Manager;
 use ThinkRank\SEO\Email_Report_Manager;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -165,7 +166,9 @@ final class Email_Report_Endpoint extends WP_REST_Controller {
         if (!is_user_logged_in()) {
             return new WP_Error('rest_forbidden', __('Not logged in.', 'thinkrank'), ['status' => 401]);
         }
-        if (!current_user_can('manage_options')) {
+        // route_map() maps the email-report prefix to thinkrank_analytics,
+        // which is what an Analytics grant in the Role Manager gives (#844).
+        if (!Capability_Manager::current_user_can('thinkrank_analytics')) {
             return new WP_Error('rest_forbidden', __('Insufficient permissions.', 'thinkrank'), ['status' => 403]);
         }
         return true;
@@ -184,7 +187,9 @@ final class Email_Report_Endpoint extends WP_REST_Controller {
         if (!is_user_logged_in()) {
             return new WP_Error('rest_forbidden', __('Not logged in.', 'thinkrank'), ['status' => 401]);
         }
-        if (!current_user_can('manage_options')) {
+        // route_map() maps the email-report prefix to thinkrank_analytics,
+        // which is what an Analytics grant in the Role Manager gives (#844).
+        if (!Capability_Manager::current_user_can('thinkrank_analytics')) {
             return new WP_Error('rest_forbidden', __('Insufficient permissions.', 'thinkrank'), ['status' => 403]);
         }
         if (!$this->verify_request_nonce($request)) {

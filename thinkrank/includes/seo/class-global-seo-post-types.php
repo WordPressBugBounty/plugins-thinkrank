@@ -35,7 +35,8 @@ class Global_SEO_Post_Types {
      *
      * Policy: the type must be public; a non-built-in type must also be
      * front-end viewable (excludes builder/utility CPTs that register
-     * `public => true` only for previews); and it must not be on the filterable
+     * `public => true` only for previews); WordPress must actually render a page
+     * for it; and it must not be on the filterable
      * `thinkrank_global_seo_excluded_post_types` deny list.
      *
      * @param \WP_Post_Type|string $post_type Post type object or name.
@@ -50,12 +51,68 @@ class Global_SEO_Post_Types {
 
         // Builder/utility CPTs that register public => true for preview purposes
         // but aren't front-end viewable content (e.g. Elementor's "Floating
-        // Elements"). Built-in types (post/page/attachment) are always kept.
+        // Elements"). Built-in types (post/page) are always kept.
         if ($object->_builtin === false && !is_post_type_viewable($object)) {
             return false;
         }
 
+        // Attachment is built-in and public, so the rule above keeps it, but on
+        // a site that does not serve attachment pages there is no document for
+        // any of these settings to reach (#843).
+        if ('attachment' === $object->name && !self::renders_a_page($object)) {
+            return false;
+        }
+
         return !in_array($object->name, self::excluded_post_types($object), true);
+    }
+
+    /**
+     * Whether WordPress renders an HTML page for this post type on this site.
+     *
+     * Only `attachment` can answer no. Core has redirected attachment URLs
+     * straight to the file since WordPress 6.4, and does so by default on a new
+     * install: the request 301s to the uploads path, so there is no <head> for a
+     * title, a robots meta, a canonical or JSON-LD to appear in. Every Global
+     * SEO control for the type is therefore inert, while the screen presents
+     * itself exactly like the ones that work.
+     *
+     * Read from the option core itself consults rather than hardcoded, and kept
+     * in one place so the admin nav, the REST validator and the ability
+     * validators cannot disagree about it. A site with attachment pages enabled
+     * is unaffected and keeps every setting it has.
+     *
+     * Deliberately not applied to any other type: `is_post_type_viewable()`
+     * already covers the general case, and this is a core quirk specific to
+     * attachments.
+     *
+     * @since 2.14.0
+     *
+     * @param \WP_Post_Type|string $post_type Post type object or name.
+     * @return bool
+     */
+    public static function renders_a_page($post_type): bool {
+        $object = is_string($post_type) ? get_post_type_object($post_type) : $post_type;
+
+        if (!$object instanceof \WP_Post_Type) {
+            return false;
+        }
+
+        if ('attachment' !== $object->name) {
+            return true;
+        }
+
+        // The same test core's own redirect makes, in wp-includes/canonical.php:
+        //     if ( is_attachment() && ! get_option( 'wp_attachment_pages_enabled' ) )
+        // so this agrees with what actually happens to the request. Core has no
+        // accessor for it; several core files read the option directly, and two
+        // of them compare against '1' rather than testing truthiness. The
+        // redirect uses the truthy form, and the redirect is what decides
+        // whether a document exists, so that is the form matched here.
+        //
+        // The default is false because core's is: schema.php seeds a fresh
+        // install with 0, while upgrade.php sets 1 for a site upgrading from
+        // before 6.4, which keeps its attachment pages and is unaffected.
+        return (bool) get_option('wp_attachment_pages_enabled', false);
     }
 
     /**

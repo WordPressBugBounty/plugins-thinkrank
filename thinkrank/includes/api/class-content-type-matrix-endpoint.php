@@ -131,6 +131,12 @@ class Content_Type_Matrix_Endpoint extends WP_REST_Controller {
             $entity['values']              = $values;
             $entity['robots_meta_enabled'] = !empty($stored['robots_meta_enabled']);
             $entity['robots_meta']         = Content_Type_Settings::resolve_robots_meta($entity['key']);
+            // What the row falls back to with the pin off, so the matrix can
+            // label its Inherit option per row rather than guessing. It is not
+            // the same for every row: search and 404 default to noindex (#838).
+            $entity['default_noindex']     = !empty(
+                Content_Type_Settings::default_robots_meta($entity['key'])['noindex']
+            );
             $entity['sitemap_include']     = $entity['supports_sitemap']
                 ? Content_Type_Settings::is_included_in_sitemap($entity['group'], $entity['object'], $sitemap_settings)
                 : null;
@@ -221,6 +227,7 @@ class Content_Type_Matrix_Endpoint extends WP_REST_Controller {
                 ),
                 'robots_meta_enabled' => !empty(Content_Type_Settings::get_entity_settings($entity_key)['robots_meta_enabled']),
                 'robots_meta'         => Content_Type_Settings::resolve_robots_meta($entity_key),
+                'default_noindex'     => !empty(Content_Type_Settings::default_robots_meta($entity_key)['noindex']),
                 'sitemap_include'     => $descriptor['supports_sitemap']
                     ? Content_Type_Settings::is_included_in_sitemap($descriptor['group'], $descriptor['object'], $sitemap_settings)
                     : null,

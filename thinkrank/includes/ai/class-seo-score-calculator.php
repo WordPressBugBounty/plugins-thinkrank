@@ -1621,7 +1621,22 @@ class SEOScoreCalculator {
             require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-builder-content.php';
         }
 
-        return \ThinkRank\SEO\Builder_Content::resolve_markup($live_content, $post);
+        // Bind the live markup to the post the render makes current. Since #862
+        // the resolver runs setup_postdata() on this post, so a shortcode that
+        // builds its output from the current post's content — get_the_content(),
+        // get_post()->post_content, as a table of contents or a reading-time
+        // shortcode does — otherwise read the last saved body while the unsaved
+        // markup rendered around it, and lagged a save behind (#864).
+        //
+        // A clone, not the caller's object: the post is current only for the
+        // duration of the render and the caller's $post must come back
+        // unchanged. `thinkrank_analyzable_content` receives the clone too,
+        // which is what makes $post->post_content there agree with the markup
+        // being analyzed on the live path.
+        $bound               = clone $post;
+        $bound->post_content = $live_content;
+
+        return \ThinkRank\SEO\Builder_Content::resolve_markup($live_content, $bound);
     }
 
     public function analyze_post_content(int $post_id): array {

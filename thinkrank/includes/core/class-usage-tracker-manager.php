@@ -105,7 +105,7 @@ class Usage_Tracker_Manager {
         $this->tracker->set_notice_options([
             'notice_title' => __('Want to help make ThinkRank even better?', 'thinkrank'),
             'notice'       => __('Allow us to collect non-sensitive diagnostic data and usage information.', 'thinkrank'),
-            'extra_notice' => __('We collect non-sensitive diagnostic data and plugin usage information — your site URL, WordPress &amp; PHP version, active plugins &amp; theme, and admin email. This lets us keep ThinkRank compatible with the most popular plugins and themes. No spam, we promise.', 'thinkrank'),
+            'extra_notice' => __('We collect non-sensitive diagnostic data and plugin usage information: your site URL, WordPress &amp; PHP version, active plugins &amp; theme, and admin email. This lets us keep ThinkRank compatible with the most popular plugins and themes. No spam, we promise.', 'thinkrank'),
         ]);
 
         $this->tracker->init();

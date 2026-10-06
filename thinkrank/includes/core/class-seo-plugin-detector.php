@@ -189,7 +189,7 @@ class SEO_Plugin_Detector {
             return '';
         }
 
-        return __('Running more than one SEO plugin can create conflicts — duplicate meta tags, sitemaps, and schema markup that may hurt your search rankings. To avoid any SEO-related conflicts, we recommend deactivating third-party SEO plugins.', 'thinkrank');
+        return __('Running more than one SEO plugin can create conflicts: duplicate meta tags, sitemaps, and schema markup that may hurt your search rankings. To avoid any SEO-related conflicts, we recommend deactivating third-party SEO plugins.', 'thinkrank');
     }
 
     /**

@@ -58,7 +58,7 @@ class Purge_Caches extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/purge-caches';
 		$this->label       = __( 'Purge ThinkRank Caches', 'thinkrank' );
-		$this->description = __( 'Clear ThinkRank\'s cached data when it is showing something stale — the site audit, schema output, AI responses, Google integration responses, or all of them. Pass scopes to clear only what you need; omit it to clear everything. Nothing is deleted except caches: settings and content are untouched, and each cache rebuilds on the next request. After clearing the analyzer scope, use run-seo-analyzer to rebuild the audit immediately rather than waiting for the next request. The "sitemap" scope is the exception to "rebuilds on the next request": the sitemap is a published file, so that scope rebuilds it there and then and reports whether it succeeded.', 'thinkrank' );
+		$this->description = __( 'Clear ThinkRank\'s cached data when it is showing something stale: the site audit, schema output, AI responses, Google integration responses, or all of them. Pass scopes to clear only what you need; omit it to clear everything. Nothing is deleted except caches: settings and content are untouched, and each cache rebuilds on the next request. After clearing the analyzer scope, use run-seo-analyzer to rebuild the audit immediately rather than waiting for the next request. The "sitemap" scope is the exception to "rebuilds on the next request": the sitemap is a published file, so that scope rebuilds it there and then and reports whether it succeeded.', 'thinkrank' );
 	}
 
 	/**

@@ -287,39 +287,33 @@ class SEOScoreEndpoint {
                 $score_options
             );
 
-            // Add readability_score and content_quality from frontend if
-            // provided. `!== null`, not `!empty()`: 0 is a legitimate score and
-            // empty() discarded it, so a post the editor scored as 0 kept
-            // whatever the calculator had produced instead (#394). Both params
-            // already default to null above, so null means "not sent".
+            // The browser's own readability_score and content_quality are no
+            // longer applied. They used to be written over the labels this
+            // request had just computed, and then persisted, so the saved
+            // Readability and Content Quality described the editor text alone
+            // (#829).
             //
-            // Only when the editor actually measured something, though. Inside a
-            // page builder there is no editor content to read, so Refresh sent an
-            // empty `live_content` along with the two labels derived from that
-            // empty string — the literal words "No content" — and they were
-            // applied over the correct server-side analysis this request had just
-            // run, then persisted by save_score(). That is what put "No content"
-            // on the dashboard for a page with a valid score (#778). With nothing
-            // measured, the analysis above is the better answer.
+            // That is wrong whenever the two see different content, which is
+            // exactly when it matters: `analyze_live_content()` resolves what
+            // the editor sent AND whatever `thinkrank_analyzable_content`
+            // contributes on top, so a post with 2 words in the editor and 615
+            // added by a filter scored 617 words server-side and saved
+            // "Too short" / "Needs improvement" from the browser's 2.
             //
-            // Non-empty `live_content` is not on its own proof that the editor
-            // measured anything: builder markup (Divi 5) is markup the editor
-            // has plenty of and can read no words from, so it sent that same
-            // "No content" pair alongside 450 characters of block comments.
-            // Treat the sentinel itself as "nothing measured" whenever this
-            // request's own analysis did find words, so a stale bundle cannot
-            // overwrite a valid analysis either.
-            $editor_measured = '' !== trim((string) $live_content);
-            $server_found_content = ($content_data['word_count'] ?? 0) > 0;
+            // Nothing is lost by ignoring them: when `live_content` is non-empty
+            // the server analysed the very text the editor measured, so its
+            // labels cover the live case too. The parameters stay accepted so an
+            // older cached bundle still gets a successful response, and they
+            // stay documented in the route args; they simply no longer win.
+            //
+            // The panel keeps computing them in the browser for instant feedback
+            // between calculations. What it must not do is persist them.
+            unset($readability_score, $content_quality);
 
-            if ($editor_measured && null !== $readability_score
-                && !($server_found_content && self::is_no_content_label($readability_score))) {
-                $score_data['readability_score'] = $readability_score;
-            }
-            if ($editor_measured && null !== $content_quality
-                && !($server_found_content && self::is_no_content_label($content_quality))) {
-                $score_data['content_quality'] = $content_quality;
-            }
+            // The resolved word count, so the panel can show the number this
+            // score was actually calculated from rather than its own count of
+            // the editor text (#829).
+            $score_data['word_count'] = (int) ($content_data['word_count'] ?? 0);
 
             // Save score if requested
             if ($save_score) {
@@ -343,23 +337,6 @@ class SEOScoreEndpoint {
                 ['status' => 500]
             );
         }
-    }
-
-    /**
-     * Whether an editor-supplied label means "I could not read the content".
-     *
-     * `calculateReadabilityScore()` and `calculateContentQuality()` both return
-     * this exact untranslated string when handed an empty body, so it is the
-     * editor saying it measured nothing rather than a measurement in its own
-     * right. Every real label carries a level or a grade.
-     *
-     * @since 2.12.0
-     *
-     * @param mixed $label Label sent by the editor.
-     * @return bool True when the label is the empty-content sentinel.
-     */
-    private static function is_no_content_label($label): bool {
-        return is_string($label) && 'no content' === strtolower(trim($label));
     }
 
     /**

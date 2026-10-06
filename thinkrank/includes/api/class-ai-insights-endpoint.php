@@ -20,6 +20,7 @@ declare(strict_types=1);
 
 namespace ThinkRank\API;
 
+use ThinkRank\Core\Capability_Manager;
 use ThinkRank\SEO\Ai_Traffic_Tracker;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -77,7 +78,11 @@ class Ai_Insights_Endpoint extends WP_REST_Controller {
      * @return bool
      */
     public function check_admin_permissions(): bool {
-        return current_user_can('manage_options');
+        // The capability the Role Manager actually writes against, not
+        // manage_options: `route_map()` maps this prefix to
+        // thinkrank_ai_insights and the matrix offers an "AI Insights" row, so
+        // demanding manage_options here made that grant do nothing (#844).
+        return Capability_Manager::current_user_can('thinkrank_ai_insights');
     }
 
     /**

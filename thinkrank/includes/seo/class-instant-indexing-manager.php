@@ -250,7 +250,7 @@ class Instant_Indexing_Manager {
 
         return sprintf(
             /* translators: %d: HTTP status code returned by the key URL. */
-            __('The key file could not be verified (HTTP %d). Open it in a browser — it should show the key and nothing else.', 'thinkrank'),
+            __('The key file could not be verified (HTTP %d). Open it in a browser: it should show the key and nothing else.', 'thinkrank'),
             $code
         );
     }
@@ -588,7 +588,7 @@ class Instant_Indexing_Manager {
             if ($response_code === 403) {
                 $response_message = sprintf(
                     /* translators: %s: public URL of the IndexNow key file. */
-                    __('Key file could not be verified. Search engines must be able to read your key at %s — open it in a browser: it should show the key and nothing else.', 'thinkrank'),
+                    __('Key file could not be verified. Search engines must be able to read your key at %s. Open it in a browser: it should show the key and nothing else.', 'thinkrank'),
                     $key_location
                 );
             }

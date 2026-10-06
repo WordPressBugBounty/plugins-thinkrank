@@ -521,7 +521,7 @@ class Manager {
         register_rest_route(self::NAMESPACE, '/schema/enable-for-post', [
             'methods' => 'POST',
             'callback' => [$this, 'enable_schema_for_post'],
-            'permission_callback' => [$this, 'check_admin_permissions'],
+            'permission_callback' => [$this, 'check_schema_permissions'],
             'args' => [
                 'post_id' => [
                     'type' => 'integer',
@@ -534,7 +534,7 @@ class Manager {
         register_rest_route(self::NAMESPACE, '/ai/test-connection', [
             'methods' => 'POST',
             'callback' => [$this, 'test_ai_connection'],
-            'permission_callback' => [$this, 'check_admin_permissions'],
+            'permission_callback' => [$this, 'check_ai_tools_permissions'],
             'args' => [
                 'api_key' => [
                     'type' => 'string',
@@ -574,7 +574,7 @@ class Manager {
         register_rest_route(self::NAMESPACE, '/ai/models', [
             'methods' => 'POST',
             'callback' => [$this, 'list_endpoint_models'],
-            'permission_callback' => [$this, 'check_admin_permissions'],
+            'permission_callback' => [$this, 'check_ai_tools_permissions'],
             'args' => [
                 'base_url' => [
                     'type' => 'string',
@@ -837,6 +837,68 @@ class Manager {
             return new \WP_Error(
                 'rest_forbidden',
                 __('You do not have permission to manage ThinkRank settings.', 'thinkrank'),
+                ['status' => 403]
+            );
+        }
+
+        return true;
+    }
+
+    /**
+     * Check Schema Manager section permissions.
+     *
+     * Delegable via Role Manager: route_map() maps the `schema` prefix to
+     * thinkrank_schema. /schema/enable-for-post is what the editor's "enable
+     * structured data" suggestion posts to, so gating it on manage_options made
+     * that button fail for exactly the roles the Schema grant was meant to
+     * serve (#844).
+     *
+     * @param \WP_REST_Request $request Request object
+     * @return bool|\WP_Error Permission status
+     */
+    public function check_schema_permissions(\WP_REST_Request $request) {
+        return $this->check_mapped_capability('thinkrank_schema');
+    }
+
+    /**
+     * Check AI Tools section permissions.
+     *
+     * Delegable via Role Manager: route_map() maps the `ai` prefix to
+     * thinkrank_content_tools. Testing a provider and listing its models are
+     * configuration reads that report whether the stored key works; neither
+     * returns the key.
+     *
+     * @param \WP_REST_Request $request Request object
+     * @return bool|\WP_Error Permission status
+     */
+    public function check_ai_tools_permissions(\WP_REST_Request $request) {
+        return $this->check_mapped_capability('thinkrank_content_tools');
+    }
+
+    /**
+     * Logged in, and holding a ThinkRank capability from the map.
+     *
+     * One body for the per-section callbacks above so they cannot drift apart
+     * the way the hardcoded manage_options checks drifted from the map.
+     * Administrators are unaffected: Role_Manager grants every ThinkRank
+     * capability to manage_options holders through `user_has_cap`.
+     *
+     * @param string $capability ThinkRank capability slug.
+     * @return bool|\WP_Error Permission status
+     */
+    private function check_mapped_capability(string $capability) {
+        if (!is_user_logged_in()) {
+            return new \WP_Error(
+                'rest_forbidden',
+                __('You must be logged in to access this endpoint.', 'thinkrank'),
+                ['status' => 401]
+            );
+        }
+
+        if (!\ThinkRank\Core\Capability_Manager::current_user_can($capability)) {
+            return new \WP_Error(
+                'rest_forbidden',
+                __('You do not have permission to access this ThinkRank feature.', 'thinkrank'),
                 ['status' => 403]
             );
         }
@@ -2141,7 +2203,7 @@ class Manager {
                     'model_available' => $model !== '',
                     'message' => $model !== ''
                         /* translators: %s: the model id that was tested. */
-                        ? sprintf(__('OpenAI API connection successful — model "%s" is available.', 'thinkrank'), $model)
+                        ? sprintf(__('OpenAI API connection successful. Model "%s" is available.', 'thinkrank'), $model)
                         : __('OpenAI API connection successful!', 'thinkrank'),
                     'models_count' => count($data['data']),
                 ];
@@ -2219,7 +2281,7 @@ class Manager {
                     'model_available' => $model !== '',
                     'message' => $model !== ''
                         /* translators: %s: the model id that was tested. */
-                        ? sprintf(__('OpenRouter API connection successful — model "%s" is available.', 'thinkrank'), $model)
+                        ? sprintf(__('OpenRouter API connection successful. Model "%s" is available.', 'thinkrank'), $model)
                         : __('OpenRouter API connection successful!', 'thinkrank'),
                 ];
             }
@@ -2345,7 +2407,7 @@ class Manager {
                 'model' => $claude_model,
                 'model_available' => true,
                 /* translators: %s: the model id that was tested. */
-                'message' => sprintf(__('Claude API connection successful — model "%s" is available.', 'thinkrank'), $claude_model),
+                'message' => sprintf(__('Claude API connection successful. Model "%s" is available.', 'thinkrank'), $claude_model),
             ];
         } else {
             $error_data = json_decode($response_body, true);
@@ -2432,7 +2494,7 @@ class Manager {
                 'model' => $gemini_model,
                 'model_available' => true,
                 /* translators: %s: the model id that was tested. */
-                'message' => sprintf(__('Gemini API connection successful — model "%s" is available.', 'thinkrank'), $gemini_model),
+                'message' => sprintf(__('Gemini API connection successful. Model "%s" is available.', 'thinkrank'), $gemini_model),
             ];
         } else {
             $error_data = json_decode($response_body, true);

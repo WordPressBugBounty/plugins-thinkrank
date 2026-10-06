@@ -45,7 +45,7 @@ class Get_Post_Content extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-post-content';
 		$this->label       = __( 'Get ThinkRank Post Content', 'thinkrank' );
-		$this->description = __( 'Read a post or page\'s body content so you can judge what it is about before changing its SEO fields. Returns the text the page actually renders — resolved from the page builder when one owns the page — plus the raw stored post_content and which builder is in use. Read-only: use update-post-seo to change SEO fields. Use list-content-items to find ids.', 'thinkrank' );
+		$this->description = __( 'Read a post or page\'s body content so you can judge what it is about before changing its SEO fields. Returns the text the page actually renders, resolved from the page builder when one owns the page, plus the raw stored post_content and which builder is in use. Read-only: use update-post-seo to change SEO fields. Use list-content-items to find ids.', 'thinkrank' );
 	}
 
 	/**

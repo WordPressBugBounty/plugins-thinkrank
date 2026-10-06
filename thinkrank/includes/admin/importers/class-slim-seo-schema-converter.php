@@ -292,7 +292,7 @@ class Slim_SEO_Schema_Converter {
                     continue;
                 }
                 $entry = $this->global_entry($key . ':' . $post_id, $schema, $json, [['target' => 'singular', 'value' => (string) $post_id]], $exclude);
-                $entry['title'] .= ' — ' . (string) get_the_title($post_id);
+                $entry['title'] .= ': ' . (string) get_the_title($post_id);
                 $entries[] = $entry;
             }
         }

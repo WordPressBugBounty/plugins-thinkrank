@@ -304,7 +304,7 @@ class SEO_Analyzer_Fixer {
         $message = $remaining > 0
             ? sprintf(
                 /* translators: 1: images updated in this batch, 2: images still to process. */
-                __('Added alt text to %1$d images. %2$d still to go — run the fix again to continue.', 'thinkrank'),
+                __('Added alt text to %1$d images. %2$d still to go. Run the fix again to continue.', 'thinkrank'),
                 $updated,
                 $remaining
             )
@@ -383,7 +383,7 @@ class SEO_Analyzer_Fixer {
             throw new \Exception(
                 sprintf(
                     /* translators: %s: comma-separated crawler names. */
-                    esc_html__('The crawler rules were saved, but your robots.txt still blocks %s. That block comes from your own robots.txt content, a robots.txt file in your site root, or the site-wide search-engine setting — edit it under Essential SEO → Crawling and AI Indexing.', 'thinkrank'),
+                    esc_html__('The crawler rules were saved, but your robots.txt still blocks %s. That block comes from your own robots.txt content, a robots.txt file in your site root, or the site-wide search-engine setting. Edit it under Essential SEO → Crawling and AI Indexing.', 'thinkrank'),
                     esc_html(implode(', ', $still_blocked))
                 )
             );

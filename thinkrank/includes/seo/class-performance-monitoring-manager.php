@@ -1931,7 +1931,7 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
         return [
             'success' => true,
             'data'    => $data,
-            'message' => __('Collecting performance data. This can take a minute — please refresh shortly.', 'thinkrank'),
+            'message' => __('Collecting performance data. This can take a minute. Please refresh shortly.', 'thinkrank'),
         ];
     }
 
@@ -2784,14 +2784,14 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
                 'code'    => self::ERROR_QUOTA_EXHAUSTED,
                 'message' => Google_PageSpeed_Client::site_has_credentials()
                     ? __('Your Google PageSpeed daily quota is used up. It resets at midnight Pacific time, or you can raise the limit in Google Cloud.', 'thinkrank')
-                    : __('This site has no PageSpeed credential, so it is sharing Google\'s free anonymous quota — and that is used up for today. Add a PageSpeed API key or connect your Google account to get a quota of your own.', 'thinkrank'),
+                    : __('This site has no PageSpeed credential, so it is sharing Google\'s free anonymous quota, and that is used up for today. Add a PageSpeed API key or connect your Google account to get a quota of your own.', 'thinkrank'),
             ];
         }
 
         if ((int) $e->getCode() === 429 || stripos($raw, 'rate limit') !== false) {
             return [
                 'code'    => self::ERROR_RATE_LIMITED,
-                'message' => __('Too many PageSpeed requests in a short time. This clears on its own — try again in a few minutes.', 'thinkrank'),
+                'message' => __('Too many PageSpeed requests in a short time. This clears on its own. Try again in a few minutes.', 'thinkrank'),
             ];
         }
 

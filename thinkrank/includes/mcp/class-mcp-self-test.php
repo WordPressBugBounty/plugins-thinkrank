@@ -63,8 +63,31 @@ final class Mcp_Self_Test {
 	 */
 	private const CLIENT_USER_AGENTS = [
 		'python-requests/2.32.3',
+		// aiohttp's default, `Python/{major}.{minor} aiohttp/{version}`. A
+		// large share of real MCP backends send this shape, and it is the one
+		// an nginx "block bad bots" rule matches first because it leads with
+		// `Python/`. Its absence here is half of #884: a customer's host was
+		// refusing it while this check reported green.
+		'Python/3.11 aiohttp/3.9.5',
 		'node-fetch/3.3.2',
+		// No User-Agent header at all, which is what a Cloudflare managed
+		// challenge refuses. probe_status() sends this as an absent header
+		// rather than an empty one: measured, `'user-agent' => ''` makes
+		// WP_Http omit the header instead of falling back to WordPress's own
+		// agent, so this probe tests what it says it tests.
+		self::NO_USER_AGENT,
 	];
+
+	/**
+	 * Stands for "send no User-Agent header" in CLIENT_USER_AGENTS.
+	 *
+	 * Distinct from the `null` probe_status() takes for WordPress's own agent:
+	 * that one is the baseline every probe is compared against.
+	 *
+	 * @since 2.14.0
+	 * @var string
+	 */
+	private const NO_USER_AGENT = '';
 
 	/**
 	 * Where an affected site owner is sent for the workaround list. The plugin
@@ -117,7 +140,7 @@ final class Mcp_Self_Test {
 			// present. Probing with '' would report an authentication failure
 			// and point support at entirely the wrong thing.
 			$result['stage']   = 'token_sealed';
-			$result['message'] = __( 'A connection token exists but can no longer be read on this site — the security keys in wp-config.php changed after it was minted. Clients already set up with it keep working. Use Reset token to mint one this site can show, then run the test again.', 'thinkrank' );
+			$result['message'] = __( 'A connection token exists but can no longer be read on this site: the security keys in wp-config.php changed after it was minted. Clients already set up with it keep working. Use Reset token to mint one this site can show, then run the test again.', 'thinkrank' );
 			return $result;
 		}
 
@@ -148,7 +171,7 @@ final class Mcp_Self_Test {
 
 		// Only reported when it could actually run — claiming a pass we did
 		// not measure is the failure mode this whole test exists to avoid.
-		$user_agent = self::probe_user_agent( $endpoint );
+		$user_agent = self::probe_user_agent( $endpoint, $fallback );
 		if ( null !== $user_agent ) {
 			$result['checks'][] = self::check( 'user_agent', __( 'Client access', 'thinkrank' ), $user_agent['stage'], $user_agent['detail'], $user_agent['doc_url'] ?? '' );
 		}
@@ -167,8 +190,8 @@ final class Mcp_Self_Test {
 				sprintf(
 					/* translators: %d: number of currently locked-out clients. */
 					_n(
-						'%d client is currently locked out after repeated failed authentications — typically a connector still holding a rotated-away token. Remove and re-add the connector in the AI client; the lockout clears itself within 15 minutes of the retries stopping.',
-						'%d clients are currently locked out after repeated failed authentications — typically connectors still holding a rotated-away token. Remove and re-add the connector in the AI client; lockouts clear within 15 minutes of the retries stopping.',
+						'%d client is currently locked out after repeated failed authentications, typically a connector still holding a rotated-away token. Remove and re-add the connector in the AI client; the lockout clears itself within 15 minutes of the retries stopping.',
+						'%d clients are currently locked out after repeated failed authentications, typically connectors still holding a rotated-away token. Remove and re-add the connector in the AI client; lockouts clear within 15 minutes of the retries stopping.',
 						$lockouts,
 						'thinkrank'
 					),
@@ -287,7 +310,7 @@ final class Mcp_Self_Test {
 			$out['stage']  = 'rewrite';
 			$out['detail'] = sprintf(
 				/* translators: %s: endpoint URL. */
-				__( '%s returned 404 — WordPress does not know this URL. Re-save Settings → Permalinks to rebuild the rewrite rules.', 'thinkrank' ),
+				__( '%s returned 404. WordPress does not know this URL. Re-save Settings → Permalinks to rebuild the rewrite rules.', 'thinkrank' ),
 				$url
 			);
 			return $out;
@@ -330,7 +353,7 @@ final class Mcp_Self_Test {
 			$out['tools']  = is_array( $tools ) ? count( $tools ) : 0;
 			$out['detail'] = sprintf(
 				/* translators: 1: endpoint URL, 2: abilities-registry diagnostic summary. */
-				__( '%1$s answered but returned no tool catalog. Confirm the MCP runtime is built and abilities are registered. Diagnostics — %2$s', 'thinkrank' ),
+				__( '%1$s answered but returned no tool catalog. Confirm the MCP runtime is built and abilities are registered. Diagnostics: %2$s', 'thinkrank' ),
 				$url,
 				Abilities_Registrar::summary()
 			);
@@ -380,7 +403,7 @@ final class Mcp_Self_Test {
 					'documents' => $documents,
 					'detail'    => sprintf(
 						/* translators: 1: file path relative to the site root, 2: identifier name, 3: value found in the file, 4: value it should carry. */
-						__( 'The static discovery file %1$s advertises %2$s as %3$s, but this site is %4$s. It was written before the site URL changed, the host serves it ahead of WordPress, and it could not be rewritten or removed — so clients read the old identity and refuse to connect. Delete that file from the site root, or restore write access there and run this test again.', 'thinkrank' ),
+						__( 'The static discovery file %1$s advertises %2$s as %3$s, but this site is %4$s. It was written before the site URL changed, the host serves it ahead of WordPress, and it could not be rewritten or removed, so clients read the old identity and refuse to connect. Delete that file from the site root, or restore write access there and run this test again.', 'thinkrank' ),
 						$still_stale['file'],
 						$still_stale['key'],
 						'' === $still_stale['found'] ? __( 'nothing', 'thinkrank' ) : $still_stale['found'],
@@ -489,7 +512,7 @@ final class Mcp_Self_Test {
 				return [
 					'stage'     => 'ok',
 					'documents' => $documents,
-					'detail'    => __( 'The primary discovery documents are served and correct, but the host intercepts the site root\'s /.well-known/ directory before WordPress runs (common on SiteGround shared hosting), and static files could not be published there. Clients that follow the challenge — ChatGPT, Claude — still connect; a client that only derives the root /.well-known/ URL itself may not. If write access to the site root is possible, granting it lets ThinkRank publish static discovery files that fix this completely.', 'thinkrank' ),
+					'detail'    => __( 'The primary discovery documents are served and correct, but the host intercepts the site root\'s /.well-known/ directory before WordPress runs (common on SiteGround shared hosting), and static files could not be published there. Clients that follow the challenge, such as ChatGPT and Claude, still connect; a client that only derives the root /.well-known/ URL itself may not. If write access to the site root is possible, granting it lets ThinkRank publish static discovery files that fix this completely.', 'thinkrank' ),
 				];
 			}
 		}
@@ -607,7 +630,7 @@ final class Mcp_Self_Test {
 			'stage'  => 'discovery',
 			'detail' => sprintf(
 				/* translators: 1: http endpoint URL advertised, 2: https endpoint URL that also answers. */
-				__( 'The discovery documents advertise %1$s, but %2$s answers as well — WordPress is storing an http:// site address behind a proxy that terminates TLS. AI clients connect over https and reject the http identifier as a mismatch. Fix the Site Address in Settings → General, or have the proxy send X-Forwarded-Proto.', 'thinkrank' ),
+				__( 'The discovery documents advertise %1$s, but %2$s answers as well. WordPress is storing an http:// site address behind a proxy that terminates TLS. AI clients connect over https and reject the http identifier as a mismatch. Fix the Site Address in Settings → General, or have the proxy send X-Forwarded-Proto.', 'thinkrank' ),
 				$endpoint,
 				$secure
 			),
@@ -671,7 +694,7 @@ final class Mcp_Self_Test {
 					'stage'  => 'challenge',
 					'detail' => sprintf(
 						/* translators: %s: endpoint URL. */
-						__( '%s answered 401 but sent no WWW-Authenticate header — a security plugin or proxy is likely stripping it. Clients that connect by URL alone will report that this server does not implement OAuth.', 'thinkrank' ),
+						__( '%s answered 401 but sent no WWW-Authenticate header. A security plugin or proxy is likely stripping it. Clients that connect by URL alone will report that this server does not implement OAuth.', 'thinkrank' ),
 						$url
 					),
 				];
@@ -744,42 +767,78 @@ final class Mcp_Self_Test {
 	 * an IP-range block of the AI vendor. A green result here does not prove
 	 * an external client can connect.
 	 *
+	 * Both URLs are probed, not just the pretty one. A rule scoped to a path
+	 * blocks one and not the other, and reporting "REST fallback URL ✓" for a
+	 * path that was only ever reached under WordPress's own agent is the pass
+	 * this test was written to avoid (#884).
+	 *
 	 * @param string $endpoint Pretty endpoint URL.
+	 * @param string $fallback REST endpoint URL.
 	 * @return array{stage:string,detail:string}|null Null when it could not run.
 	 */
-	private static function probe_user_agent( string $endpoint ): ?array {
-		$baseline = self::probe_status( $endpoint, null );
-		if ( null === $baseline ) {
-			return null; // Endpoint unreachable — the other checks own that.
+	private static function probe_user_agent( string $endpoint, string $fallback ): ?array {
+		$probed = 0;
+
+		foreach ( [ $endpoint, $fallback ] as $url ) {
+			$baseline = self::probe_status( $url, null );
+			if ( null === $baseline ) {
+				continue; // This URL is unreachable — the other checks own that.
+			}
+
+			++$probed;
+
+			foreach ( self::CLIENT_USER_AGENTS as $agent ) {
+				$status = self::probe_status( $url, $agent );
+				if ( null === $status || $status === $baseline ) {
+					continue;
+				}
+				// A different status is only damning when it is a refusal. An
+				// MCP answer (401 challenge / 200 / 202) under any UA is fine.
+				if ( in_array( $status, [ 200, 202, 401 ], true ) ) {
+					continue;
+				}
+				return [
+					'stage'   => 'ua_filter',
+					'doc_url' => self::HOSTING_DOC_URL,
+					'detail'  => sprintf(
+						/* translators: 1: endpoint URL that refused the probe, 2: user agent description, 3: HTTP status returned for it, 4: HTTP status returned for WordPress's own user agent. */
+						__( 'Ask the host to exempt %1$s from its bot filtering, along with the /.well-known/ documents. That URL answered %4$d for WordPress and %3$d for %2$s, so a security plugin, firewall or host-level "block bad bots" rule is refusing AI clients on it. Allowlisting the User-Agents ThinkRank probes with is not enough on its own: a real client sends whichever agent its own backend uses, and the next one will be refused in the same way.', 'thinkrank' ),
+						$url,
+						self::describe_agent( $agent ),
+						$status,
+						$baseline
+					),
+				];
+			}
 		}
 
-		foreach ( self::CLIENT_USER_AGENTS as $agent ) {
-			$status = self::probe_status( $endpoint, $agent );
-			if ( null === $status || $status === $baseline ) {
-				continue;
-			}
-			// A different status is only damning when it is a refusal. An MCP
-			// answer (401 challenge / 200 / 202) under any UA is fine.
-			if ( in_array( $status, [ 200, 202, 401 ], true ) ) {
-				continue;
-			}
-			return [
-				'stage'   => 'ua_filter',
-				'doc_url' => self::HOSTING_DOC_URL,
-				'detail'  => sprintf(
-					/* translators: 1: user agent string, 2: HTTP status returned for it, 3: HTTP status returned for WordPress's own user agent. */
-					__( 'The endpoint answered %3$d for WordPress but %2$d for an AI client\'s User-Agent (%1$s). ThinkRank deliberately tests with the generic agents real MCP backends send; this refusal means a security plugin, firewall or host-level "block bad bots" rule (SiteGround\'s edge protection does this) will also refuse the real AI client. Ask the host to exempt the MCP and /.well-known/ paths, or allowlist these User-Agents.', 'thinkrank' ),
-					$agent,
-					$status,
-					$baseline
-				),
-			];
+		if ( 0 === $probed ) {
+			return null; // Neither URL answered at all.
 		}
 
 		return [
 			'stage'  => 'ok',
-			'detail' => __( 'The endpoint answers AI-client User-Agents the same way it answers WordPress, so no bot filter is blocking them. This cannot see an IP-level block of the AI vendor.', 'thinkrank' ),
+			'detail' => __( 'Both the connection URL and the REST fallback answer AI-client User-Agents, including a request with no User-Agent at all, the same way they answer WordPress. No bot filter is blocking them. This cannot see an IP-level block of the AI vendor.', 'thinkrank' ),
 		];
+	}
+
+	/**
+	 * How one probed User-Agent reads in the failure message.
+	 *
+	 * The empty agent is a request with no header at all, so printing it as a
+	 * quoted empty string would read as though nothing was tested.
+	 *
+	 * @since 2.14.0
+	 * @param string $agent Probed agent, or NO_USER_AGENT.
+	 * @return string
+	 */
+	private static function describe_agent( string $agent ): string {
+		if ( self::NO_USER_AGENT === $agent ) {
+			return __( 'a request with no User-Agent header', 'thinkrank' );
+		}
+
+		/* translators: %s: user agent string an AI client sends. */
+		return sprintf( __( 'an AI client\'s User-Agent (%s)', 'thinkrank' ), $agent );
 	}
 
 	// -- Helpers -----------------------------------------------------------
@@ -787,8 +846,16 @@ final class Mcp_Self_Test {
 	/**
 	 * Status code of one unauthenticated probe, or null if it never answered.
 	 *
+	 * Three agent values, all distinct: `null` sends WordPress's own agent and
+	 * is the baseline; a string sends that agent; and the empty string sends no
+	 * User-Agent header at all. The last one was measured rather than assumed,
+	 * because a fallback to WordPress's agent there would mean the empty-UA
+	 * probe silently tested nothing while reporting a pass (#884). Against this
+	 * site, `'user-agent' => ''` arrived with HTTP_USER_AGENT unset.
+	 *
 	 * @param string      $url   Endpoint to call.
-	 * @param string|null $agent User-Agent to send, or null for WordPress's own.
+	 * @param string|null $agent User-Agent to send, null for WordPress's own,
+	 *                           or '' to send no User-Agent header.
 	 * @return int|null
 	 */
 	private static function probe_status( string $url, ?string $agent ): ?int {

@@ -333,7 +333,7 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
             if (false === $result) {
                 $this->log_save_failure(
                     "insert failed for key '{$sanitized_key}'" .
-                    ('' !== (string) $this->wpdb->last_error ? ' — ' . $this->wpdb->last_error : ''),
+                    ('' !== (string) $this->wpdb->last_error ? ': ' . $this->wpdb->last_error : ''),
                     'db_insert_failed'
                 );
                 $success = false;

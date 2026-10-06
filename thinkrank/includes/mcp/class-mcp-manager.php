@@ -157,7 +157,7 @@ final class Mcp_Manager {
 		printf(
 			'<div class="notice notice-error"><p><strong>%s</strong> %s</p></div>',
 			esc_html__( 'ThinkRank MCP: AI assistants will connect but see no tools.', 'thinkrank' ),
-			esc_html__( 'MCP access is enabled, but the bundled Abilities runtime (dependencies/vendor) is missing from this installation — usually a plugin package built without it. Reinstall ThinkRank from wordpress.org or an official build; until then, connected AI clients get an empty tool list.', 'thinkrank' )
+			esc_html__( 'MCP access is enabled, but the bundled Abilities runtime (dependencies/vendor) is missing from this installation, usually a plugin package built without it. Reinstall ThinkRank from wordpress.org or an official build; until then, connected AI clients get an empty tool list.', 'thinkrank' )
 		);
 	}
 

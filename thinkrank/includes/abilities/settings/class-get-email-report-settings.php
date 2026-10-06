@@ -31,7 +31,7 @@ class Get_Email_Report_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-email-report-settings';
 		$this->label       = __( 'Get ThinkRank Email Report Settings', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank Email Reporting settings: whether the scheduled SEO report is on, how often it is sent (days), who receives it, which sections it includes, the next scheduled send, the section catalog, and readiness — whether Google Search Console is connected (required; scheduled reports are paused and config.last_skip says why while it is not), and whether Google Analytics 4 and AI-assistant traffic data are available to add their sections. Use update-email-report-settings to switch it on or off, and send-email-report-test to send one now.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank Email Reporting settings: whether the scheduled SEO report is on, how often it is sent (days), who receives it, which sections it includes, the next scheduled send, the section catalog, and readiness: whether Google Search Console is connected (required; scheduled reports are paused and config.last_skip says why while it is not), and whether Google Analytics 4 and AI-assistant traffic data are available to add their sections. Use update-email-report-settings to switch it on or off, and send-email-report-test to send one now.', 'thinkrank' );
 	}
 
 	/**
@@ -73,12 +73,12 @@ class Get_Email_Report_Settings extends Ability_Base {
 			'properties' => [
 				'config'    => [
 					'type'                 => 'object',
-					'description'          => __( 'The resolved Email Reporting config: enabled, frequency_days, recipients, sections_enabled, the schedule timestamps, and last_skip ({reason, at} or null) — why the last scheduled run sent nothing: search_console_not_connected or no_data.', 'thinkrank' ),
+					'description'          => __( 'The resolved Email Reporting config: enabled, frequency_days, recipients, sections_enabled, the schedule timestamps, and last_skip ({reason, at} or null), which says why the last scheduled run sent nothing: search_console_not_connected or no_data.', 'thinkrank' ),
 					'additionalProperties' => true,
 				],
 				'readiness' => [
 					'type'        => 'object',
-					'description' => __( 'Data-source readiness: ready (bool — a report can be built), search_console (bool, required), analytics (bool — Google Analytics 4 connected, adds the site-traffic section), ai_traffic (bool — AI-assistant referrals recorded, adds that section), reason (string|null — search_console_not_connected when not ready).', 'thinkrank' ),
+					'description' => __( 'Data-source readiness: ready (bool: a report can be built), search_console (bool, required), analytics (bool: Google Analytics 4 connected, adds the site-traffic section), ai_traffic (bool: AI-assistant referrals recorded, adds that section), reason (string|null: search_console_not_connected when not ready).', 'thinkrank' ),
 					'properties'  => [
 						'ready'          => [ 'type' => 'boolean' ],
 						'search_console' => [ 'type' => 'boolean' ],

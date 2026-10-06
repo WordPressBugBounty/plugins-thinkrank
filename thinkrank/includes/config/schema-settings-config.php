@@ -89,6 +89,15 @@ class Schema_Settings_Config {
             'enable_breadcrumbs_schema' => true,
             'enable_local_business' => false,
 
+            // Read an Oxygen or Breakdance accordion as FAQ content. Off, and it
+            // has to stay off by default: those are the builders' own elements
+            // rather than a ThinkRank FAQ module, so an accordion may hold
+            // questions or may hold product specifications, and turning this on
+            // for every existing site would publish FAQPage markup nobody asked
+            // for. ThinkRank reads and reports the accordion either way; this
+            // switch only decides whether it reaches the schema graph (#831).
+            'enable_accordion_faq_schema' => false,
+
             // Removed post/page-specific schema settings (Product, Event, Article, Software Application, HowTo, FAQ)
             // These are now handled only at the post/page level via metabox
 
@@ -272,7 +281,8 @@ class Schema_Settings_Config {
             'enable_product_schema',
             'enable_local_business',
             'enable_faq_schema',
-            'enable_howto_schema'
+            'enable_howto_schema',
+            'enable_accordion_faq_schema'
         ];
     }
 

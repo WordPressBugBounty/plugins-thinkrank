@@ -319,6 +319,22 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      */
     private static bool $icon_sizes_listener_registered = false;
 
+    /**
+     * Whether the robots.txt resync listener is registered for this request.
+     *
+     * @since 2.14.0
+     * @var bool
+     */
+    private static bool $robots_sync_listener_registered = false;
+
+    /**
+     * Flag set when a plugin change may have altered the sitemap set.
+     *
+     * @since 2.14.0
+     * @var string
+     */
+    public const ROBOTS_RESYNC_OPTION = 'thinkrank_robots_txt_resync_pending';
+
     public function __construct() {
         parent::__construct('site_identity');
 
@@ -329,6 +345,67 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             // enough to run a one-time backfill promptly.
             add_action('admin_init', [self::class, 'maybe_backfill_icon_sizes']);
         }
+
+        if (!self::$robots_sync_listener_registered) {
+            self::$robots_sync_listener_registered = true;
+
+            // A physical robots.txt bypasses PHP entirely, so composing the
+            // Sitemap block at render time fixes the served output only on
+            // sites with no file. Activating or deactivating a sitemap
+            // contributor changes the set, and until #835 nothing rewrote the
+            // file: the deactivated plugin's sitemap stayed advertised, serving
+            // HTML to anything that followed it.
+            add_action('activated_plugin', [self::class, 'flag_robots_txt_resync']);
+            add_action('deactivated_plugin', [self::class, 'flag_robots_txt_resync']);
+            add_action('init', [self::class, 'maybe_resync_robots_txt'], 99);
+        }
+    }
+
+    /**
+     * Note that the set of sitemap contributors may have changed.
+     *
+     * Deliberately unconditional about which plugin: a contributor is anything
+     * hooking `thinkrank_additional_sitemaps`, which is resolved at runtime and
+     * cannot be inspected for a plugin that is on its way out.
+     *
+     * The rewrite is not done here. `deactivated_plugin` fires inside the
+     * request that deactivated it, while that plugin's filters are still
+     * attached, so rendering now still sees the sitemap that is going away —
+     * measured, not assumed: the first version of this fix wrote the
+     * deactivated plugin's sitemap straight back into the file. The next
+     * request has the real plugin set loaded, so the work waits for it.
+     *
+     * @since 2.14.0
+     * @return void
+     */
+    public static function flag_robots_txt_resync(): void {
+        if (!file_exists(ABSPATH . 'robots.txt')) {
+            return;
+        }
+
+        update_option(self::ROBOTS_RESYNC_OPTION, 1, false);
+    }
+
+    /**
+     * Rewrite the physical robots.txt once, on the request after a change.
+     *
+     * @since 2.14.0
+     * @return void
+     */
+    public static function maybe_resync_robots_txt(): void {
+        if (!get_option(self::ROBOTS_RESYNC_OPTION)) {
+            return;
+        }
+
+        // Cleared first, so a render that fatals cannot retry on every request
+        // for the rest of the site's life.
+        delete_option(self::ROBOTS_RESYNC_OPTION);
+
+        if (!file_exists(ABSPATH . 'robots.txt')) {
+            return;
+        }
+
+        (new self())->sync_robots_txt_file();
     }
 
     /**
@@ -815,6 +892,17 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         // the fenced block stripped out of every read and re-applied on every
         // render. A site-wide block already disallows everyone, so adding the
         // per-agent group there would be noise restating the same refusal.
+        // Composed here rather than read from storage, for the same reason as
+        // the AI block below: the set of sitemaps an install publishes is a
+        // runtime fact. `robots_txt_content` is a snapshot of it taken at the
+        // last save, and nothing invalidated that snapshot, so deactivating a
+        // sitemap provider left its URL advertised and serving HTML (#835).
+        // Composing it on every render means the advertisement agrees with what
+        // the install publishes, in both directions, with no cache to expire.
+        if (!$fully_blocked) {
+            $body = $this->apply_sitemap_block($body);
+        }
+
         if (!$fully_blocked) {
             $body = $this->apply_ai_crawler_block($body, $settings);
         }
@@ -824,6 +912,85 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         }
 
         return $this->robots_txt_header() . $body . "\n";
+    }
+
+    /**
+     * Replace the generated Sitemap block with the one this install publishes.
+     *
+     * @since 2.14.0
+     * @param string $body Robots.txt body, without the header.
+     * @return string
+     */
+    private function apply_sitemap_block(string $body): string {
+        $stripped = $this->strip_generated_sitemap_block($body);
+        $urls     = $this->get_sitemap_urls_for_robots();
+
+        if (empty($urls)) {
+            return $stripped;
+        }
+
+        $block = '';
+        foreach ($urls as $url) {
+            $block .= 'Sitemap: ' . $url . "\n";
+        }
+
+        if ('' === trim($stripped)) {
+            return trim($block);
+        }
+
+        // The grammar build_robots_txt_content() writes: one blank line before
+        // the block, none inside it. A blank line terminates a record in the
+        // robots.txt grammar, so a line between every directive is invalid.
+        return rtrim($stripped) . "\n\n" . trim($block);
+    }
+
+    /**
+     * Remove the plugin-written Sitemap block from a stored body.
+     *
+     * Only the trailing run of `Sitemap:` lines is removed, which is the exact
+     * shape `build_robots_txt_content()` writes: a blank line, then nothing but
+     * `Sitemap:` lines to the end of the body. A `Sitemap:` line anywhere else
+     * was typed by the site owner and is left exactly where they put it, which
+     * is why this cannot simply strip every matching line.
+     *
+     * @since 2.14.0
+     * @param string $body Robots.txt body.
+     * @return string
+     */
+    private function strip_generated_sitemap_block(string $body): string {
+        $lines = preg_split('/\R/', $body);
+
+        if (!is_array($lines)) {
+            return $body;
+        }
+
+        $cut = count($lines);
+
+        // Walk back over the trailing block: sitemap lines, and the blank lines
+        // that separate or pad it. Anything else ends the block.
+        for ($i = count($lines) - 1; $i >= 0; $i--) {
+            $line = trim($lines[$i]);
+
+            if ('' === $line) {
+                $cut = $i;
+                continue;
+            }
+
+            if (0 === stripos($line, 'sitemap:')) {
+                $cut = $i;
+                continue;
+            }
+
+            break;
+        }
+
+        if ($cut >= count($lines)) {
+            return $body;
+        }
+
+        // Nothing but sitemap lines in the whole body means there is no owner
+        // content to keep.
+        return rtrim(implode("\n", array_slice($lines, 0, $cut)));
     }
 
     /**
@@ -3754,9 +3921,27 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             }
 
             if ($index_url !== '') {
-                // The index alone — it covers the children and, on a segmented
-                // install, the local business sitemap too.
-                return [$index_url];
+                // The index covers the children and, on a segmented install,
+                // the local business sitemap too.
+                //
+                // It does not cover a sitemap contributed through
+                // `thinkrank_additional_sitemaps`: the index is built by this
+                // plugin's own generator and never lists them. Returning the
+                // index alone therefore left a contributed sitemap with no
+                // discovery path at all — absent from robots.txt and absent
+                // from the index — so Pro's News sitemap was unreachable on any
+                // install with the index enabled, which is the default (#835).
+                $contributed = [];
+
+                foreach (\ThinkRank\SEO\Sitemap_Generator::additional_sitemaps() as $path) {
+                    $url = home_url($path);
+
+                    if ($url !== $index_url && !in_array($url, $contributed, true)) {
+                        $contributed[] = $url;
+                    }
+                }
+
+                return array_merge([$index_url], $contributed);
             }
 
             // Fallback to default if no URLs found
