@@ -872,6 +872,15 @@ class Schema_Endpoint extends WP_REST_Controller {
             // deliberately and must come off the page (#464).
             $options['authoritative'] = true;
 
+            // A skipped entry was sent, so the user still wants it on the page;
+            // it only failed validation. Retiring it as "missing from the
+            // payload" took a live Organization down behind a success toast
+            // (#949) — leave whatever is deployed for it in place.
+            $options['retain_types'] = array_values(array_unique(array_merge(
+                wp_list_pluck($skipped_schemas, 'key'),
+                wp_list_pluck($skipped_schemas, 'type')
+            )));
+
             // Deploy schema markup with sanitized data
             $deployment_results = $this->schema_manager->deploy_schema_markup(
                 $context_type,
@@ -890,6 +899,7 @@ class Schema_Endpoint extends WP_REST_Controller {
             // rather than silently dropping entries (#468).
             if (!empty($skipped_schemas)) {
                 $response['skipped'] = $skipped_schemas;
+                $response['partial'] = true;
                 $response['message'] = sprintf(
                     /* translators: 1: number deployed, 2: number skipped. */
                     __('Deployed %1$d schema(s); skipped %2$d that failed validation.', 'thinkrank'),

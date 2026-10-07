@@ -335,6 +335,18 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      */
     public const ROBOTS_RESYNC_OPTION = 'thinkrank_robots_txt_resync_pending';
 
+    /**
+     * Flag set when a plugin change may have altered the sitemap index.
+     *
+     * Separate from ROBOTS_RESYNC_OPTION because the two files exist
+     * independently: that flag is only set when a physical robots.txt exists,
+     * and the sitemap index needs rebuilding whether or not it does.
+     *
+     * @since 2.15.0
+     * @var string
+     */
+    public const SITEMAP_RESYNC_OPTION = 'thinkrank_sitemap_contributors_changed';
+
     public function __construct() {
         parent::__construct('site_identity');
 
@@ -358,6 +370,15 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             add_action('activated_plugin', [self::class, 'flag_robots_txt_resync']);
             add_action('deactivated_plugin', [self::class, 'flag_robots_txt_resync']);
             add_action('init', [self::class, 'maybe_resync_robots_txt'], 99);
+
+            // The sitemap index is a second static file listing the same
+            // contributors, with its own rebuild path. #835 / #859 resynced
+            // robots.txt only, so after Pro was deactivated the index kept
+            // advertising news-sitemap.xml, which then served the home page
+            // as HTML (#920).
+            add_action('activated_plugin', [self::class, 'flag_sitemap_resync']);
+            add_action('deactivated_plugin', [self::class, 'flag_sitemap_resync']);
+            add_action('init', [self::class, 'maybe_resync_sitemap'], 99);
         }
     }
 
@@ -406,6 +427,55 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         }
 
         (new self())->sync_robots_txt_file();
+    }
+
+    /**
+     * Note that the set of sitemap contributors may have changed.
+     *
+     * Unconditional, unlike flag_robots_txt_resync(): the sitemap files exist
+     * whether or not robots.txt does. The rebuild waits for the next request
+     * for the same reason as the robots.txt one, since `deactivated_plugin`
+     * still runs with the outgoing plugin's `thinkrank_additional_sitemaps`
+     * callback attached.
+     *
+     * @since 2.15.0
+     * @return void
+     */
+    public static function flag_sitemap_resync(): void {
+        update_option(self::SITEMAP_RESYNC_OPTION, 1, false);
+    }
+
+    /**
+     * Queue a sitemap rebuild once, on the request after a contributor change.
+     *
+     * Goes through schedule_regeneration(), the debounced and lock-protected
+     * path a sitemap settings save uses, so a burst of plugin changes (a bulk
+     * deactivate, say) still produces one rebuild. That path also drops the
+     * cached dynamic documents, so sites serving the sitemap from PHP drop the
+     * entry as well.
+     *
+     * @since 2.15.0
+     * @return void
+     */
+    public static function maybe_resync_sitemap(): void {
+        if (!get_option(self::SITEMAP_RESYNC_OPTION)) {
+            return;
+        }
+
+        // Cleared first, so a rebuild that fatals cannot be retried on every
+        // request for the rest of the site's life.
+        delete_option(self::SITEMAP_RESYNC_OPTION);
+
+        $generator = new Sitemap_Generator(false);
+        $settings  = $generator->get_settings('site');
+
+        // A disabled sitemap has no files to correct. Enabling it later builds
+        // from the contributors present at that time.
+        if (empty($settings['enabled'])) {
+            return;
+        }
+
+        $generator->schedule_regeneration();
     }
 
     /**

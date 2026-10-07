@@ -59,9 +59,10 @@ class Foreign_Schema_Detector {
      * `class` matches a token in the script tag's class attribute, which is the
      * strongest signal available — the big four each tag their own block. `comment`
      * matches the HTML comment wrapper a plugin prints around its head output,
-     * for the ones that carry no class.
+     * for the ones that carry no class. `id`, where present, matches the script
+     * tag's id attribute exactly, for a plugin that labels its block that way.
      *
-     * @var array<string, array{name:string, class:string[], comment:string[]}>
+     * @var array<string, array{name:string, class:string[], comment:string[], id?:string[]}>
      */
     private const SIGNATURES = [
         'yoast' => [
@@ -98,6 +99,14 @@ class Foreign_Schema_Detector {
             'name'    => 'WooCommerce',
             'class'   => [],
             'comment' => ['woocommerce json-ld'],
+        ],
+        // SureRank tags its block by id, not class, and prints it outside
+        // its "SureRank Meta Data" comment pair (#916).
+        'surerank' => [
+            'name'    => 'SureRank',
+            'class'   => [],
+            'comment' => [],
+            'id'      => ['surerank-schema'],
         ],
     ];
 
@@ -357,9 +366,14 @@ class Foreign_Schema_Detector {
      */
     private function attribute(array $block): array {
         $classes = $this->class_tokens($block['tag']);
+        $tag_id  = $this->tag_id($block['tag']);
         $comment = strtolower($block['preceding']);
 
         foreach (self::SIGNATURES as $slug => $signature) {
+            if ($tag_id !== '' && in_array($tag_id, $signature['id'] ?? [], true)) {
+                return ['slug' => $slug, 'name' => $signature['name'], 'guess' => false];
+            }
+
             foreach ($signature['class'] as $class) {
                 if (in_array($class, $classes, true)) {
                     return ['slug' => $slug, 'name' => $signature['name'], 'guess' => false];
@@ -400,6 +414,23 @@ class Foreign_Schema_Detector {
         }
 
         return $names;
+    }
+
+    /**
+     * The id attribute of a script tag, lowercased.
+     *
+     * @since 2.15.0
+     *
+     * @param string $attributes Attribute text from the opening script tag.
+     * @return string Id, or an empty string when the tag has none.
+     */
+    private function tag_id(string $attributes): string {
+        // Whitespace before the name, so `data-id` is not read as `id`.
+        if (!preg_match('#(?:^|\s)id\s*=\s*["\']([^"\']*)["\']#i', $attributes, $match)) {
+            return '';
+        }
+
+        return strtolower(trim($match[1]));
     }
 
     /**

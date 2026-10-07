@@ -177,6 +177,20 @@ class Object_Redirect {
             );
         }
 
+        /**
+         * Fires after an object's redirect was set or cleared.
+         *
+         * A redirected object is left out of the sitemap, so the published
+         * files have to be rebuilt when one changes.
+         *
+         * @since 2.15.0
+         *
+         * @param string $object_type 'post' or 'term'.
+         * @param int    $object_id   Object ID.
+         * @param string $url         Destination; '' when the redirect was cleared.
+         */
+        do_action('thinkrank_object_redirect_saved', $object_type, $object_id, $url);
+
         return true;
     }
 

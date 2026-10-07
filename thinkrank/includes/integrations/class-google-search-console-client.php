@@ -249,10 +249,13 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
      * @param string $start_date Start date (Y-m-d)
      * @param string $end_date   End date (Y-m-d)
      * @param int    $row_limit  Maximum rows to return
+     * @param array  $dimensions Dimensions to group by
+     * @param array  $filters    Optional dimension filters (ANDed), each
+     *                           {dimension, operator, expression}. @since 2.15.0
      * @return array Raw rows from GSC API
      * @throws \Exception If API request fails
      */
-    public function get_search_performance_by_dates(string $site_url, string $start_date, string $end_date, int $row_limit = 500, array $dimensions = ['query']): array {
+    public function get_search_performance_by_dates(string $site_url, string $start_date, string $end_date, int $row_limit = 500, array $dimensions = ['query'], array $filters = []): array {
         $endpoint = '/sites/' . rawurlencode($site_url) . '/searchAnalytics/query';
 
         $request_body = [
@@ -265,6 +268,12 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
             // last 2-4 days aren't missing.
             'dataState'  => 'all',
         ];
+
+        // Optional dimension filters, ANDed, e.g. one page's queries:
+        // [['dimension' => 'page', 'operator' => 'equals', 'expression' => $url]].
+        if (!empty($filters)) {
+            $request_body['dimensionFilterGroups'] = [['filters' => array_values($filters)]];
+        }
 
         $full_url = self::API_BASE_URL . $endpoint;
         $response = $this->make_request($full_url, $request_body, 'POST');

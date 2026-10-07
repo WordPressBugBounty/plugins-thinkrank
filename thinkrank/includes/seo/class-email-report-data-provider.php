@@ -39,6 +39,30 @@ if (!defined('ABSPATH')) {
 final class Email_Report_Data_Provider {
 
     /**
+     * Rows fetched per window for the query and page comparisons.
+     *
+     * Search Console orders rows by clicks and stops here, so a list that
+     * comes back this long may be truncated: a row missing from it may sit
+     * just below the cut rather than have no traffic (#906).
+     */
+    private const COMPARISON_ROW_LIMIT = 1000;
+
+    /**
+     * How many apparent drop-outs are confirmed against the current window.
+     *
+     * The losing cards show five rows, so the biggest previous-period
+     * candidates are all that can reach them. Anything past this cap is left
+     * out of the comparison rather than presumed lost.
+     */
+    private const DROPOUT_CONFIRM_LIMIT = 25;
+
+    /**
+     * Longest regular expression sent in one confirmation request. Search
+     * Console rejects longer expressions, so candidates are batched under it.
+     */
+    private const DROPOUT_REGEX_MAX_LENGTH = 3500;
+
+    /**
      * Which data sources the report can draw on right now.
      *
      * Cheap on purpose — no dashboard fetch, no Search Console query. It
@@ -274,10 +298,17 @@ final class Email_Report_Data_Provider {
         $prev_end   = gmdate('Y-m-d', strtotime('-1 day', strtotime($cur_start)));
         $prev_start = gmdate('Y-m-d', strtotime('-' . ($frequency_days - 1) . ' days', strtotime($prev_end)));
 
-        $cur_q  = $sc->get_search_performance_by_dates($site_url, $cur_start, $cur_end, 1000, ['query']);
-        $prev_q = $sc->get_search_performance_by_dates($site_url, $prev_start, $prev_end, 1000, ['query']);
-        $cur_p  = $sc->get_search_performance_by_dates($site_url, $cur_start, $cur_end, 1000, ['page']);
-        $prev_p = $sc->get_search_performance_by_dates($site_url, $prev_start, $prev_end, 1000, ['page']);
+        $limit  = self::COMPARISON_ROW_LIMIT;
+        $cur_q  = $sc->get_search_performance_by_dates($site_url, $cur_start, $cur_end, $limit, ['query']);
+        $prev_q = $sc->get_search_performance_by_dates($site_url, $prev_start, $prev_end, $limit, ['query']);
+        $cur_p  = $sc->get_search_performance_by_dates($site_url, $cur_start, $cur_end, $limit, ['page']);
+        $prev_p = $sc->get_search_performance_by_dates($site_url, $prev_start, $prev_end, $limit, ['page']);
+
+        // A row missing from a full current list may only have fallen below
+        // the cut. Ask Search Console about the likely losers directly before
+        // any of them is reported as having lost everything (#906).
+        [$found_q, $dropouts_q] = $this->confirm_dropouts($sc, $site_url, $cur_start, $cur_end, $cur_q, $prev_q, 'query');
+        [$found_p, $dropouts_p] = $this->confirm_dropouts($sc, $site_url, $cur_start, $cur_end, $cur_p, $prev_p, 'page');
 
         // Whole-property totals for both windows. A query with no
         // dimensions returns one aggregated row, so the hero's clicks,
@@ -288,13 +319,154 @@ final class Email_Report_Data_Provider {
 
         return [
             'available' => true,
-            'queries'   => $this->merge_periods($cur_q, $prev_q, true),
-            'pages'     => $this->merge_periods($cur_p, $prev_p, false),
+            'queries'   => $this->merge_periods(array_merge($cur_q, $found_q), $prev_q, true, $dropouts_q),
+            'pages'     => $this->merge_periods(array_merge($cur_p, $found_p), $prev_p, false, $dropouts_p),
             'totals'    => [
                 'current'  => $this->totals_row($cur_t),
                 'previous' => $this->totals_row($prev_t),
             ],
         ];
+    }
+
+    /**
+     * Sort out which previous-window rows missing from the current list
+     * really lost all their traffic.
+     *
+     * Both windows are capped lists ordered by clicks. Absence from a
+     * current list shorter than the cap is real: Search Console returned
+     * everything it has. Absence from a full list is not evidence of
+     * anything, because growth elsewhere pushes unchanged rows below the
+     * cut. Those were synthesised as total losses and led the losing cards,
+     * labelled "No impressions this period", with the same clicks in both
+     * windows (#906).
+     *
+     * So when the current list is full, the biggest candidates by previous
+     * clicks are looked up in the current window by exact key. A candidate
+     * that comes back has its real current row returned, so its change is
+     * measured rather than presumed. Only one that comes back empty is a
+     * drop-out. Candidates past DROPOUT_CONFIRM_LIMIT, or in a batch whose
+     * request failed, are neither: they are left out of the comparison,
+     * since saying nothing is better than reporting a loss nobody measured.
+     *
+     * @since 2.15.0
+     *
+     * @param object $sc         Search Console client.
+     * @param string $site_url   Property URL.
+     * @param string $cur_start  Current window start (Y-m-d).
+     * @param string $cur_end    Current window end (Y-m-d).
+     * @param array  $current    Current-window rows, as fetched.
+     * @param array  $previous   Previous-window rows, as fetched.
+     * @param string $dimension  'query' or 'page'.
+     * @return array{0: array, 1: ?array<string,bool>} Current rows found
+     *         below the cut, and the confirmed drop-out keys, or null when
+     *         the current list is complete and every absence is real.
+     */
+    private function confirm_dropouts($sc, string $site_url, string $cur_start, string $cur_end, array $current, array $previous, string $dimension): array {
+        if (count($current) < self::COMPARISON_ROW_LIMIT) {
+            return [[], null];
+        }
+
+        $is_query = 'query' === $dimension;
+
+        $present = [];
+        foreach ($current as $row) {
+            $raw = (string) ($row['keys'][0] ?? '');
+            if ('' !== $raw) {
+                $present[$this->normalize_key($raw, $is_query)] = true;
+            }
+        }
+
+        $candidates = [];
+        foreach ($previous as $row) {
+            $raw = (string) ($row['keys'][0] ?? '');
+            if ('' === $raw) {
+                continue;
+            }
+            $key = $this->normalize_key($raw, $is_query);
+            if (!isset($present[$key]) && !isset($candidates[$key])) {
+                $candidates[$key] = ['raw' => $raw, 'clicks' => (int) ($row['clicks'] ?? 0)];
+            }
+        }
+
+        if ([] === $candidates) {
+            return [[], []];
+        }
+
+        uasort($candidates, static fn($a, $b) => $b['clicks'] <=> $a['clicks']);
+        $candidates = array_slice($candidates, 0, self::DROPOUT_CONFIRM_LIMIT, true);
+
+        // Batch the exact-match lookups into as few requests as the
+        // expression length allows: one per dimension in practice.
+        $batches = [];
+        $batch   = [];
+        $length  = 0;
+        foreach ($candidates as $key => $candidate) {
+            $part = $this->re2_quote($candidate['raw']);
+            if ([] !== $batch && $length + strlen($part) + 1 > self::DROPOUT_REGEX_MAX_LENGTH) {
+                $batches[] = $batch;
+                $batch     = [];
+                $length    = 0;
+            }
+            $batch[$key] = $part;
+            $length     += strlen($part) + 1;
+        }
+        $batches[] = $batch;
+
+        $found    = [];
+        $dropouts = [];
+        foreach ($batches as $batch) {
+            try {
+                $rows = $sc->get_search_performance_by_dates(
+                    $site_url,
+                    $cur_start,
+                    $cur_end,
+                    count($batch),
+                    [$dimension],
+                    [[
+                        'dimension'  => $dimension,
+                        'operator'   => 'includingRegex',
+                        'expression' => '^(?:' . implode('|', $batch) . ')$',
+                    ]]
+                );
+            } catch (Throwable $e) {
+                // Unconfirmed: leave these out rather than call them lost.
+                continue;
+            }
+
+            $seen = [];
+            foreach ((array) $rows as $row) {
+                $raw = (string) ($row['keys'][0] ?? '');
+                $key = '' === $raw ? '' : $this->normalize_key($raw, $is_query);
+                if (isset($batch[$key])) {
+                    $seen[$key] = true;
+                    $found[]    = $row;
+                }
+            }
+
+            foreach (array_keys($batch) as $key) {
+                if (!isset($seen[$key])) {
+                    $dropouts[$key] = true;
+                }
+            }
+        }
+
+        return [$found, $dropouts];
+    }
+
+    /**
+     * Escape a literal for a Search Console (RE2) regular expression.
+     *
+     * RE2 accepts a backslash before any ASCII punctuation as that literal,
+     * so every punctuation character is escaped, not only the ones that are
+     * special today.
+     *
+     * @since 2.15.0
+     *
+     * @param string $literal Text to match exactly.
+     * @return string
+     */
+    private function re2_quote(string $literal): string {
+        return (string) preg_replace('/[[:punct:]]/', '\\\\$0', $literal);
     }
 
     /**
@@ -381,12 +553,19 @@ final class Email_Report_Data_Provider {
      * silently discard exactly the biggest losers the losing sections exist
      * to surface.
      *
-     * @param array $current  Current-window rows.
-     * @param array $previous Previous-window rows.
-     * @param bool  $is_query True for query rows, false for page rows.
+     * Which absent rows count as drop-outs is up to the caller. Absence from
+     * a truncated list proves nothing, so build_comparison() passes the keys
+     * it confirmed with Search Console; any other absent row is left out
+     * (#906). Null means the current list was complete and every absence is
+     * a drop-out.
+     *
+     * @param array                    $current      Current-window rows.
+     * @param array                    $previous     Previous-window rows.
+     * @param bool                     $is_query     True for query rows, false for page rows.
+     * @param array<string,bool>|null  $dropout_keys Confirmed drop-out keys, or null for all.
      * @return array<string,array>
      */
-    private function merge_periods(array $current, array $previous, bool $is_query): array {
+    private function merge_periods(array $current, array $previous, bool $is_query, ?array $dropout_keys = null): array {
         $prev_map = [];
         foreach ($previous as $row) {
             $key = (string) ($row['keys'][0] ?? '');
@@ -424,6 +603,9 @@ final class Email_Report_Data_Provider {
         // stays null rather than 0 — "no data" is not "ranked first".
         foreach ($prev_map as $key => $prev_row) {
             if (isset($merged[$key])) {
+                continue;
+            }
+            if (null !== $dropout_keys && !isset($dropout_keys[$key])) {
                 continue;
             }
             $raw = (string) ($prev_row['keys'][0] ?? '');

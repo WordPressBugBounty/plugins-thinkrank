@@ -54,6 +54,14 @@ class Instant_Indexing_Manager {
     public const MAX_URLS_PER_SUBMISSION = 100;
 
     /**
+     * Posts that transitioned to publish in this request and await the end of
+     * their save, keyed by ID, with what was true of them before it.
+     *
+     * @var array<int, array{was_published: bool, was_excluded: bool}>
+     */
+    private array $pending_transitions = [];
+
+    /**
      * Initialize the component
      *
      * @since 1.1.0
@@ -61,6 +69,7 @@ class Instant_Indexing_Manager {
      */
     public function init(): void {
         add_action('transition_post_status', [$this, 'handle_post_transition'], 10, 3);
+        add_action('wp_after_insert_post', [$this, 'handle_after_insert_post'], 10, 4);
         add_action('delete_post', [$this, 'handle_post_deletion'], 10, 2);
 
         // Serve the IndexNow key file from PHP when no physical file exists.
@@ -382,21 +391,82 @@ class Instant_Indexing_Manager {
             return;
         }
 
-        // We only care if the new status is publish (created or updated)
-        // OR if we are unpublishing (publish -> something else), we might want to update (though IndexNow is mostly for crawling new/updated content)
-        // For now, let's focus on published content.
-        if ($new_status === 'publish') {
-            $url = get_permalink($post->ID);
-
-            // Check for duplicate submission using short-lived cache (15 seconds)
-            if ($this->is_recently_submitted_cache($url)) {
-                return;
-            }
-
-            // Defer the outbound IndexNow call to WP-Cron so publishing doesn't
-            // block on a third-party HTTP request.
-            $this->schedule_url_submission([$url]);
+        // Only content that is (still) published is submitted.
+        if ($new_status !== 'publish') {
+            return;
         }
+
+        // Whether to submit is decided in handle_after_insert_post(), not
+        // here. This hook fires inside wp_insert_post() before the post's meta
+        // is written: the block editor saves the robots override through
+        // REST after the insert, the classic metabox on save_post. Deciding
+        // here read the previous robots value, so a post published with
+        // noindex was submitted (#911).
+        //
+        // What this hook can still see is the previous state, which the
+        // decision needs: a post that was an indexable destination and is no
+        // longer one is submitted once more, so engines recrawl it and drop it.
+        $this->pending_transitions[(int) $post->ID] = [
+            'was_published' => $old_status === 'publish',
+            'was_excluded'  => Indexability::is_post_noindexed($post) || Indexability::is_post_redirected($post),
+        ];
+    }
+
+    /**
+     * Submit a published post once its save is complete.
+     *
+     * Runs on `wp_after_insert_post`, which fires after meta and terms are
+     * saved on every path (classic editor, REST, Quick Edit, WP-CLI, and the
+     * scheduled-post publish in wp_publish_post()).
+     *
+     * A post that is not an indexable destination (noindexed by its own
+     * override or its type, password-protected, or redirected) is skipped,
+     * unless it was one before this save: that transition is submitted so
+     * engines recrawl the page and drop it.
+     *
+     * @since 2.15.0
+     *
+     * @param int           $post_id     Post ID.
+     * @param \WP_Post      $post        Post object after the save.
+     * @param bool          $update      Whether this was an update.
+     * @param \WP_Post|null $post_before Post object before the save, null for a new post.
+     * @return void
+     */
+    public function handle_after_insert_post(int $post_id, \WP_Post $post, bool $update, ?\WP_Post $post_before): void {
+        if (!isset($this->pending_transitions[$post_id])) {
+            return;
+        }
+
+        $before = $this->pending_transitions[$post_id];
+        unset($this->pending_transitions[$post_id]);
+
+        if ($post->post_status !== 'publish') {
+            return;
+        }
+
+        $was_indexable = $before['was_published']
+            && !$before['was_excluded']
+            && !($post_before instanceof \WP_Post && Indexability::is_password_protected($post_before));
+
+        // Decided before the dedupe check below, which claims its 15-second
+        // slot as a side effect: a skipped post must not occupy it.
+        if (!Indexability::is_indexable_post($post) && !$was_indexable) {
+            return;
+        }
+
+        $url = get_permalink($post->ID);
+        if (!$url) {
+            return;
+        }
+
+        // Check for duplicate submission using short-lived cache (15 seconds)
+        if ($this->is_recently_submitted_cache($url)) {
+            return;
+        }
+
+        // Defer the outbound IndexNow call to WP-Cron so publishing doesn't
+        // block on a third-party HTTP request.
+        $this->schedule_url_submission([$url]);
     }
 
     /**
@@ -470,7 +540,7 @@ class Instant_Indexing_Manager {
         }
 
         // 3. Check autosave/revision
-        if (wp_is_post_autosave($post) || wp_is_post_revision($post)) {
+        if (wp_is_post_autosave((int) $post->ID) || wp_is_post_revision((int) $post->ID)) {
             return false;
         }
 

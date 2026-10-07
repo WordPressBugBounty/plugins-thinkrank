@@ -267,7 +267,7 @@ class Schema_Input_Validator {
             }
 
             // 6. Validate data types and formats
-            $format_validation = $this->validate_data_formats($sanitized_data, $schema_type);
+            $format_validation = $this->validate_data_formats($sanitized_data, $schema_type, $schema_data);
             if (!$format_validation['valid']) {
                 $result['errors'] = array_merge($result['errors'], $format_validation['errors']);
             }
@@ -583,9 +583,10 @@ class Schema_Input_Validator {
      *
      * @param array  $schema_data Schema data
      * @param string $schema_type Schema type
+     * @param array  $raw_data    Schema data as submitted, before sanitization.
      * @return array Validation result
      */
-    private function validate_data_formats(array $schema_data, string $schema_type): array {
+    private function validate_data_formats(array $schema_data, string $schema_type, array $raw_data = []): array {
         $result = ['valid' => true, 'errors' => [], 'warnings' => []];
 
         foreach ($schema_data as $field => $value) {
@@ -593,13 +594,25 @@ class Schema_Input_Validator {
             // below and free text entered in a social-profile field saved
             // cleanly, then shipped as invalid structured data (#480).
             if (is_array($value) && in_array($field, ['url', 'sameAs', 'logo', 'image'], true)) {
-                foreach ($value as $item) {
-                    if (!is_string($item) || '' === trim($item)) {
+                // Validated after sanitization, but reported as entered:
+                // esc_url_raw() turns "not a url" into "http://not%20a%20url",
+                // which the user never typed (#949 review).
+                $items     = $this->url_candidates($value);
+                $raw_items = is_array($raw_data[$field] ?? null) ? $this->url_candidates($raw_data[$field]) : [];
+                if (count($raw_items) !== count($items)) {
+                    // A non-string member sanitized into a string would shift
+                    // the positions; fall back rather than name the wrong one.
+                    $raw_items = [];
+                }
+
+                foreach ($items as $index => $item) {
+                    if ('' === trim($item)) {
                         continue;
                     }
 
                     if (!$this->is_valid_url($item)) {
-                        $result['errors'][] = "Invalid URL format for field: {$field} ({$item})";
+                        $shown = $raw_items[$index] ?? $item;
+                        $result['errors'][] = "Invalid URL format for field: {$field} ({$shown})";
                         $result['valid'] = false;
                     }
                 }
@@ -634,6 +647,45 @@ class Schema_Input_Validator {
         }
 
         return $result;
+    }
+
+    /**
+     * The URL strings inside an array-valued URL field.
+     *
+     * The field is either a list (`sameAs`, several `image` URLs) or a single
+     * node such as the `ImageObject` Schema_Builder emits for a configured
+     * logo. Checking every member of a node URL-checked its `@type` and
+     * `width`, so "ImageObject" failed as an invalid URL and the deploy route
+     * skipped — then retired — the site's Organization (#949). Only a node's
+     * `url` / `contentUrl` are URLs; a list may hold strings or such nodes.
+     *
+     * @since 2.14.1
+     *
+     * @param array $value Array-valued URL field.
+     * @return string[] URL strings to validate.
+     */
+    private function url_candidates(array $value): array {
+        $node_urls = static function (array $node): array {
+            return array_values(array_filter(
+                [$node['url'] ?? null, $node['contentUrl'] ?? null],
+                'is_string'
+            ));
+        };
+
+        if (array_values($value) !== $value) {
+            return $node_urls($value);
+        }
+
+        $urls = [];
+        foreach ($value as $item) {
+            if (is_string($item)) {
+                $urls[] = $item;
+            } elseif (is_array($item)) {
+                $urls = array_merge($urls, $node_urls($item));
+            }
+        }
+
+        return $urls;
     }
 
     /**

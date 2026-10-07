@@ -196,14 +196,22 @@ final class Email_Report_Config {
      * it has already pushed the schedule out a period. Either way the panel
      * shows the reason and when it was last seen.
      *
-     * @param string $reason Machine-readable reason.
+     * `fetch_failed` (#912) is recorded by the generator when Search Console
+     * answered with an error; it carries the API's message so the panel can
+     * say what went wrong, and the schedule was moved to a retry.
+     *
+     * @param string $reason  Machine-readable reason.
+     * @param string $message Optional plain-text detail, e.g. the API error.
      */
-    public function record_skip(string $reason): void {
+    public function record_skip(string $reason, string $message = ''): void {
         $stored = $this->stored();
         $stored['last_skip'] = [
             'reason' => sanitize_key($reason),
             'at'     => current_time('mysql'),
         ];
+        if ($message !== '') {
+            $stored['last_skip']['message'] = sanitize_text_field($message);
+        }
         update_option(self::OPTION_KEY, $stored, false);
     }
 

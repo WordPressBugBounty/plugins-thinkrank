@@ -73,7 +73,7 @@ class Get_Email_Report_Settings extends Ability_Base {
 			'properties' => [
 				'config'    => [
 					'type'                 => 'object',
-					'description'          => __( 'The resolved Email Reporting config: enabled, frequency_days, recipients, sections_enabled, the schedule timestamps, and last_skip ({reason, at} or null), which says why the last scheduled run sent nothing: search_console_not_connected or no_data.', 'thinkrank' ),
+					'description'          => __( 'The resolved Email Reporting config: enabled, frequency_days, recipients, sections_enabled, the schedule timestamps, and last_skip ({reason, at} or null), which says why the last scheduled run sent nothing: search_console_not_connected, no_data, or fetch_failed (Search Console returned an error, given in last_skip.message; the send is retried after a few hours).', 'thinkrank' ),
 					'additionalProperties' => true,
 				],
 				'readiness' => [

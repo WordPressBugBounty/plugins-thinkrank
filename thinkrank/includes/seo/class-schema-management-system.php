@@ -731,6 +731,25 @@ class Schema_Management_System extends Abstract_SEO_Manager {
     }
 
     /**
+     * Deployed types an authoritative deploy takes off the page.
+     *
+     * Everything deployed that the payload left out, except the types the
+     * caller sent but could not deploy: those failed validation, they were not
+     * removed by the user, so their live copy stays. Retiring them took the
+     * site's Organization down behind a success toast (#949).
+     *
+     * @since 2.14.1
+     *
+     * @param string[] $deployed     Types deployed for the context now.
+     * @param string[] $payload      Types in this deploy.
+     * @param string[] $retain_types Types sent but skipped by validation.
+     * @return string[] Types to retire.
+     */
+    public static function types_to_retire(array $deployed, array $payload, array $retain_types = []): array {
+        return array_values(array_diff($deployed, $payload, $retain_types));
+    }
+
+    /**
      * Deploy schema markup with automated implementation
      *
      * @since 1.0.0
@@ -766,9 +785,10 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             $deployment['retired_schemas'] = $this->retire_schema_types(
                 $context_type,
                 $context_id,
-                array_diff(
+                self::types_to_retire(
                     array_keys($this->get_deployed_schemas($context_type, $context_id)),
-                    array_keys($schema_data)
+                    array_keys($schema_data),
+                    (array) ($options['retain_types'] ?? [])
                 )
             );
         }

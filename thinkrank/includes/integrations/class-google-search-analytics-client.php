@@ -43,11 +43,14 @@ class Google_Search_Analytics_Client extends Google_API_Base_Client {
      * @param string $start_date Start date in YYYY-MM-DD format.
      * @param string $end_date   End date in YYYY-MM-DD format.
      * @param array  $dimensions Dimensions to group by (e.g., 'query', 'page', 'country', 'device').
-     * @param int    $row_limit  Maximum number of rows to return.
+     * @param int    $row_limit  Maximum number of rows to return (the API
+     *                           accepts up to 25,000).
+     * @param int    $start_row  Zero-based offset of the first row, for
+     *                           paging past $row_limit. @since 2.15.0
      * @return array Analytical data including rows and totals.
      * @throws \Exception If the API request fails.
      */
-    public function get_search_analytics_data(string $site_url, string $start_date, string $end_date, array $dimensions = [], int $row_limit = 1000): array {
+    public function get_search_analytics_data(string $site_url, string $start_date, string $end_date, array $dimensions = [], int $row_limit = 1000, int $start_row = 0): array {
         $endpoint = '/sites/' . rawurlencode($site_url) . '/searchAnalytics/query';
 
         $request_body = [
@@ -59,6 +62,10 @@ class Google_Search_Analytics_Client extends Google_API_Base_Client {
             // aren't missing — matches the GSC web UI default.
             'dataState'  => 'all',
         ];
+
+        if ($start_row > 0) {
+            $request_body['startRow'] = $start_row;
+        }
 
         // Construct full URL. The API key is sent by make_request() in the
         // x-goog-api-key header, not the query string (which proxies/logs capture).

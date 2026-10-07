@@ -41,16 +41,20 @@ class Builder_Content {
     /**
      * Post meta keys that hold builder data, in priority order.
      *
-     * Several generations of the same builder are listed on purpose: Oxygen 6
-     * is Breakdance under the hood (`_breakdance_data`), while earlier Oxygen
-     * releases used `_oxygen_data` or the shortcode-based
-     * `ct_builder_shortcodes`. A site can only have one of them.
+     * Several generations of the same builder are listed on purpose. Oxygen 6
+     * is Breakdance under the hood and writes the same tree, under its own
+     * prefix: Breakdance keeps it in `_breakdance_data`, Oxygen 6 in
+     * `_oxygen_data` (the key is `__bdox('_meta_prefix') . 'data'`, and the
+     * prefix is `_oxygen_` under Oxygen). Both store it inside a
+     * `tree_json_string` envelope, see unwrap_tree_envelope(). Earlier Oxygen
+     * releases used the shortcode-based `ct_builder_shortcodes` and its JSON
+     * sibling. A site can only have one of them.
      *
      * @var string[]
      */
     private const BUILDER_META_KEYS = [
-        '_breakdance_data',        // Oxygen 6+ / Breakdance
-        '_oxygen_data',            // Oxygen (earlier releases)
+        '_breakdance_data',        // Breakdance
+        '_oxygen_data',            // Oxygen 6+ (Breakdance engine, Oxygen prefix)
         // Oxygen classic. 4.x writes the tree as JSON to `ct_builder_json`
         // while still keeping `ct_builder_shortcodes`. A post carrying only
         // the JSON key used to match no key at all and fall through to an
@@ -130,6 +134,40 @@ class Builder_Content {
      * @var string
      */
     private const BRICKS_POST_CONTENT_ELEMENT = 'post-content';
+
+    /**
+     * Bricks' Heading element, and the tag it renders when none is stored.
+     *
+     * Bricks leaves a setting out of storage while it equals its default, so a
+     * Heading left on its default tag is stored with no `tag` at all. Bricks
+     * 2.4.1 renders it as `h3` (`Element_Heading::$tag`, overridable by the
+     * active theme style's `tag`), and the walker, which only wraps text whose
+     * node names a tag, read it as body copy (#908).
+     *
+     * @since 2.15.0
+     * @var string
+     */
+    private const BRICKS_HEADING_ELEMENT = 'heading';
+
+    /**
+     * Tag a Bricks Heading renders when neither it nor a theme style sets one.
+     *
+     * @since 2.15.0
+     * @var string
+     */
+    private const BRICKS_HEADING_DEFAULT_TAG = 'h3';
+
+    /**
+     * Tag an Elementor Heading widget renders when `header_size` is not stored.
+     *
+     * Elementor saves `settings.toJSON({ remove: ['default'] })`, so a heading
+     * left on its default size has no `header_size` in `_elementor_data`, and
+     * that default is `h2` (#908).
+     *
+     * @since 2.15.0
+     * @var string
+     */
+    private const ELEMENTOR_HEADING_DEFAULT_TAG = 'h2';
 
     /**
      * Resolved Bricks trees for this request, keyed by post ID.
@@ -543,7 +581,77 @@ class Builder_Content {
             return [];
         }
 
-        return self::expand_bricks_components($stored);
+        return self::expand_bricks_components(self::bricks_render_order($stored));
+    }
+
+    /**
+     * A flat Bricks element list, in the order Bricks renders it.
+     *
+     * Bricks stores one flat list and links it with `parent` and `children`
+     * ids. `Frontend::render_data()` renders the root elements in list order
+     * and each element's children in the order of its `children` array, so a
+     * child's position in the list says nothing about where it appears on the
+     * page. Walking the list as stored put a section's contents wherever they
+     * happened to be saved (#907).
+     *
+     * Anything the walk does not reach (an orphan, a cycle) keeps its stored
+     * position after the rest, so no copy is dropped.
+     *
+     * @since 2.15.0
+     *
+     * @param array $elements Flat Bricks element list.
+     * @return array The same elements, in render order.
+     */
+    private static function bricks_render_order(array $elements): array {
+        $by_id = [];
+        foreach ($elements as $index => $element) {
+            $id = is_array($element) ? ($element['id'] ?? null) : null;
+            if (is_scalar($id) && '' !== (string) $id && !isset($by_id[(string) $id])) {
+                $by_id[(string) $id] = $index;
+            }
+        }
+
+        if (empty($by_id)) {
+            return $elements;
+        }
+
+        $ordered = [];
+        $placed = [];
+
+        $place = static function ($index) use (&$place, &$ordered, &$placed, $elements, $by_id): void {
+            if (isset($placed[$index])) {
+                return;
+            }
+
+            $placed[$index] = true;
+            $ordered[] = $elements[$index];
+
+            $children = is_array($elements[$index]) ? ($elements[$index]['children'] ?? []) : [];
+            if (!is_array($children)) {
+                return;
+            }
+
+            foreach ($children as $child_id) {
+                if (is_scalar($child_id) && isset($by_id[(string) $child_id])) {
+                    $place($by_id[(string) $child_id]);
+                }
+            }
+        };
+
+        foreach ($elements as $index => $element) {
+            $parent = is_array($element) ? ($element['parent'] ?? null) : null;
+            if (empty($parent) || !is_scalar($parent) || !isset($by_id[(string) $parent])) {
+                $place($index);
+            }
+        }
+
+        foreach ($elements as $index => $element) {
+            if (!isset($placed[$index])) {
+                $ordered[] = $element;
+            }
+        }
+
+        return $ordered;
     }
 
     /**
@@ -777,7 +885,7 @@ class Builder_Content {
         }
 
         return self::strip_bricks_dynamic_tags(
-            self::text_from_tree(self::without_bricks_element_labels($tree))
+            self::text_from_tree(self::with_bricks_heading_tags(self::without_bricks_element_labels($tree)))
         );
     }
 
@@ -977,7 +1085,7 @@ class Builder_Content {
             }
 
             if (isset($component['id']) && $component['id'] === $cid && !empty($component['elements'])) {
-                return is_array($component['elements']) ? $component['elements'] : [];
+                return is_array($component['elements']) ? self::bricks_render_order($component['elements']) : [];
             }
         }
 
@@ -1009,6 +1117,114 @@ class Builder_Content {
         }
 
         return $tree;
+    }
+
+    /**
+     * Give each Bricks Heading the tag it renders with when none is stored.
+     *
+     * Applied on the Bricks path only. Most other builders' text nodes carry no
+     * tag because they are not headings, so a generic "text without a tag is a
+     * heading" rule in heading_tag_from() would turn every paragraph into one.
+     *
+     * A `tag` of `custom` is left alone: the element then renders its
+     * `customTag`, which is not necessarily a heading.
+     *
+     * @since 2.15.0
+     *
+     * @param array $tree Bricks content area.
+     * @return array Tree with each untagged Heading's default tag filled in.
+     */
+    private static function with_bricks_heading_tags(array $tree): array {
+        $default = null;
+
+        foreach ($tree as $index => $element) {
+            if (!is_array($element) || self::BRICKS_HEADING_ELEMENT !== ($element['name'] ?? null)) {
+                continue;
+            }
+
+            $settings = $element['settings'] ?? [];
+            if (!is_array($settings)) {
+                continue;
+            }
+
+            $tag = $settings['tag'] ?? '';
+            if (is_string($tag) && '' !== trim($tag)) {
+                continue;
+            }
+
+            if (null === $default) {
+                $default = self::bricks_default_heading_tag();
+            }
+
+            $settings['tag'] = $default;
+            $tree[$index]['settings'] = $settings;
+        }
+
+        return $tree;
+    }
+
+    /**
+     * The tag Bricks gives a Heading that does not set one.
+     *
+     * The active theme style can change it. Bricks only loads theme styles for
+     * a front-end render, so in admin, REST and CLI requests this is the
+     * element's own default.
+     *
+     * @since 2.15.0
+     *
+     * @return string Heading tag, h1 to h6.
+     */
+    private static function bricks_default_heading_tag(): string {
+        if (class_exists('\\Bricks\\Theme_Styles')
+            && method_exists('\\Bricks\\Theme_Styles', 'get_setting_by_key')
+        ) {
+            try {
+                $styled = \Bricks\Theme_Styles::get_setting_by_key(self::BRICKS_HEADING_ELEMENT, 'tag');
+            } catch (\Throwable $e) {
+                $styled = null;
+            }
+
+            if (is_string($styled) && preg_match('/^h[1-6]$/i', trim($styled))) {
+                return strtolower(trim($styled));
+            }
+        }
+
+        return self::BRICKS_HEADING_DEFAULT_TAG;
+    }
+
+    /**
+     * Give each Elementor Heading widget its default `header_size` if unstored.
+     *
+     * @since 2.15.0
+     *
+     * @param array $elements Decoded `_elementor_data`.
+     * @return array The same tree, with untagged Heading widgets tagged.
+     */
+    private static function with_elementor_heading_tags(array $elements): array {
+        foreach ($elements as $index => $element) {
+            if (!is_array($element)) {
+                continue;
+            }
+
+            if ('heading' === ($element['widgetType'] ?? null)) {
+                $settings = $element['settings'] ?? [];
+                if (is_array($settings)) {
+                    $size = $settings['header_size'] ?? '';
+                    if (!is_string($size) || '' === trim($size)) {
+                        $settings['header_size'] = self::ELEMENTOR_HEADING_DEFAULT_TAG;
+                        $element['settings'] = $settings;
+                    }
+                }
+            }
+
+            if (!empty($element['elements']) && is_array($element['elements'])) {
+                $element['elements'] = self::with_elementor_heading_tags($element['elements']);
+            }
+
+            $elements[$index] = $element;
+        }
+
+        return $elements;
     }
 
     /**
@@ -1121,10 +1337,13 @@ class Builder_Content {
 
             if (is_string($stored) && '' !== trim($stored)) {
                 $decoded = json_decode($stored, true);
+                if ('_elementor_data' === $key && is_array($decoded)) {
+                    $decoded = self::with_elementor_heading_tags($decoded);
+                }
 
                 // JSON node tree (Breakdance/Oxygen 6, Elementor).
                 if (is_array($decoded)) {
-                    $text = self::text_from_tree($decoded);
+                    $text = self::text_from_tree(self::unwrap_tree_envelope($decoded));
                     if (!self::is_blank($text)) {
                         return $text;
                     }
@@ -1138,6 +1357,7 @@ class Builder_Content {
             // an array of objects for Beaver Builder (#449).
             $tree = self::as_children($stored);
             if (null !== $tree) {
+                $tree = self::unwrap_tree_envelope($tree);
                 $text = self::text_from_tree($tree);
                 if (!self::is_blank($text)) {
                     return $text;
@@ -1146,6 +1366,46 @@ class Builder_Content {
         }
 
         return '';
+    }
+
+    /**
+     * The node tree inside a Breakdance / Oxygen 6 storage envelope.
+     *
+     * Neither builder stores its tree directly. The meta value is
+     * `{"tree_json_string": "<the tree, JSON-encoded again>"}`, so one
+     * json_decode() yields the envelope, not the tree. Walked as a tree, the
+     * envelope is a single string leaf: kept whole as "content" when any
+     * element held rich text (the encoded JSON then reached scoring, the
+     * get-post-content ability and Markdown for AI), dropped when none did,
+     * leaving the page empty (#905).
+     *
+     * An envelope whose inner string does not decode returns an empty tree,
+     * never the string: handing the raw JSON back to the walker would bring
+     * the JSON-as-content failure back on corrupt data. Anything that is not
+     * an envelope is returned unchanged, so a bare tree still resolves.
+     *
+     * @since 2.15.0
+     *
+     * @param array $decoded Decoded meta value.
+     * @return array The node tree.
+     */
+    private static function unwrap_tree_envelope(array $decoded): array {
+        if (!array_key_exists('tree_json_string', $decoded)) {
+            return $decoded;
+        }
+
+        $inner = is_string($decoded['tree_json_string'])
+            ? json_decode($decoded['tree_json_string'], true)
+            : $decoded['tree_json_string'];
+
+        if (is_array($inner)) {
+            return $inner;
+        }
+
+        // Re-serialised envelopes can carry the tree as an object.
+        $inner = self::as_children($inner);
+
+        return null !== $inner ? $inner : [];
     }
 
     /**
@@ -1439,88 +1699,115 @@ class Builder_Content {
      * Values are joined with block-level markup so downstream heading, link and
      * image detection keeps working on the result.
      *
+     * One depth-first walk, so the output follows the tree's own order, which
+     * is the order the builders read here render in. This used to be two
+     * passes over the whole tree, one for the reconstructed headings, links and
+     * images and one for the remaining text, and the output followed pass
+     * order: every heading and button on the page first, every paragraph after
+     * them. That order became the meta description, og:description, the schema
+     * description and Pro's Markdown for AI document (#907).
+     *
      * @param array $tree Decoded builder tree.
      * @return string Collected HTML.
      */
     private static function text_from_tree(array $tree): string {
-        $collected = [];
+        // Each entry is [value, is_markup], in tree order.
+        $entries = [];
 
         // Strings already represented inside reconstructed markup, so the plain
-        // sweep below doesn't emit a link label or heading a second time and
-        // double it in the word count.
+        // text doesn't emit a link label or heading a second time and double it
+        // in the word count. Applied after the walk, against the whole tree:
+        // a string folded into markup anywhere is dropped everywhere, exactly
+        // as it was when the markup pass ran over the whole tree first. Checking
+        // it during the walk instead would let a bare copy that appears before
+        // its heading through.
         $consumed = [];
 
-        // Pass 1 — rebuild <a>, <img> and <hN> from node *shape*. This has to
-        // happen per node rather than per leaf: a link's label and its
-        // destination are separate sibling fields, so once the tree is
-        // flattened to leaves the pairing is gone.
-        $reconstruct = static function ($node) use (&$reconstruct, &$collected, &$consumed): void {
-            $node = self::as_children($node);
-            if (null === $node) {
-                return;
-            }
-
-            $markup = self::markup_for_node($node, $consumed);
-            if ('' !== $markup) {
-                $collected[] = $markup;
-            }
-
-            foreach ($node as $child_key => $child) {
-                // A `link` / `image` sub-object is a destination descriptor the
-                // parent has already folded into its markup. Descending into it
-                // would emit the same URL a second time as a bare link, and
-                // would turn an image's own `url` field into a spurious <a>.
-                if (is_string($child_key)
-                    && (in_array(strtolower($child_key), self::URL_KEYS, true)
-                        || in_array(strtolower($child_key), self::IMAGE_KEYS, true)
-                        || in_array(strtolower($child_key), self::VIDEO_KEYS, true))
-                ) {
-                    continue;
-                }
-
-                $reconstruct($child);
-            }
-        };
-        $reconstruct($tree);
-
-        // Pass 2 — remaining visible text.
-        $walk = static function ($node, $key = null) use (&$walk, &$collected, &$consumed): void {
-            $children = self::as_children($node);
-            if (null !== $children) {
-                foreach ($children as $child_key => $child) {
-                    $walk($child, is_string($child_key) ? $child_key : $key);
-                }
-                return;
-            }
-
-            if (!is_string($node) || '' === trim($node)) {
-                return;
-            }
-
-            // Already inside a reconstructed tag.
-            if (in_array($node, $consumed, true)) {
+        // Markup is content wherever it appears; bare strings only count when
+        // their key says they are content, so slugs and class names stay out of
+        // the word count.
+        $leaf = static function ($value, $key) use (&$entries): void {
+            if (!is_string($value) || '' === trim($value)) {
                 return;
             }
 
             $is_content_key = is_string($key)
                 && in_array(strtolower($key), self::CONTENT_KEYS, true);
 
-            // Markup is content wherever it appears; bare strings only count
-            // when their key says they are content, so slugs and class names
-            // stay out of the word count.
-            if ($is_content_key || strpos($node, '<') !== false) {
-                $collected[] = $node;
+            if ($is_content_key || strpos($value, '<') !== false) {
+                $entries[] = [$value, false];
+            }
+        };
+
+        // Text only, no reconstruction. Used for a `link` / `image` / video
+        // sub-object: a destination descriptor the parent has already folded
+        // into its markup. Rebuilding inside it would emit the same URL a second
+        // time as a bare link and turn an image's own `url` field into a
+        // spurious <a>, but any copy it carries still counts.
+        $sweep = static function ($node, $key) use (&$sweep, $leaf): void {
+            $children = self::as_children($node);
+            if (null === $children) {
+                $leaf($node, $key);
+                return;
+            }
+
+            foreach ($children as $child_key => $child) {
+                $sweep($child, is_string($child_key) ? $child_key : $key);
+            }
+        };
+
+        // Rebuild <a>, <img> and <hN> from node *shape*, then carry on through
+        // the node's own fields in order. This has to happen per node rather
+        // than per leaf: a link's label and its destination are separate
+        // sibling fields, so once the tree is flattened to leaves the pairing
+        // is gone.
+        $walk = static function ($node, $key = null) use (&$walk, $sweep, $leaf, &$entries, &$consumed): void {
+            $children = self::as_children($node);
+            if (null === $children) {
+                $leaf($node, $key);
+                return;
+            }
+
+            $markup = self::markup_for_node($children, $consumed);
+            if ('' !== $markup) {
+                $entries[] = [$markup, true];
+            }
+
+            foreach ($children as $child_key => $child) {
+                $next_key = is_string($child_key) ? $child_key : $key;
+
+                if (is_string($child_key)
+                    && (in_array(strtolower($child_key), self::URL_KEYS, true)
+                        || in_array(strtolower($child_key), self::IMAGE_KEYS, true)
+                        || in_array(strtolower($child_key), self::VIDEO_KEYS, true))
+                ) {
+                    $sweep($child, $next_key);
+                    continue;
+                }
+
+                $walk($child, $next_key);
             }
         };
 
         $walk($tree);
+
+        $collected = [];
+        foreach ($entries as [$value, $is_markup]) {
+            // Already inside a reconstructed tag.
+            if (!$is_markup && in_array($value, $consumed, true)) {
+                continue;
+            }
+
+            $collected[] = $value;
+        }
 
         if (empty($collected)) {
             return '';
         }
 
         // De-duplicate: builder trees often repeat a value across responsive
-        // breakpoints, which would otherwise multiply the word count.
+        // breakpoints, which would otherwise multiply the word count. Keeps the
+        // first occurrence, so a repeat never moves a value later in the page.
         $collected = array_unique($collected);
 
         return implode("\n", $collected);

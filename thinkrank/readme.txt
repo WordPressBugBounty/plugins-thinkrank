@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.14.0
+Stable tag: 2.14.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -327,6 +327,20 @@ Content brief competitor analysis and schema import fetch the URLs you type in, 
 
 == Changelog ==
 
+= 2.14.1 =
+Release Date: 2026-10-07
+
+- Improved: AI Provider settings no longer repeat the sidebar's setup and privacy cards
+- Fixed: Redeploying schema no longer removes your Organization when a logo is set
+- Fixed: Sitemaps and IndexNow no longer submit noindexed or redirected URLs
+- Fixed: The sitemap index drops sitemaps from a plugin that was just deactivated
+- Fixed: Breakdance and Oxygen 6 pages are read as page text, not raw data
+- Fixed: Page builder content keeps its page order in descriptions and scoring
+- Fixed: Bricks and Elementor headings on their default tag now count as subheadings
+- Fixed: SEO Analyzer AI Search checks now read pages built with a page builder
+- Fixed: Email reports flag Search Console errors and stay accurate on large sites
+- Fixed: SureRank is now detected as a second SEO plugin
+
 = 2.14.0 =
 Release Date: 2026-10-06
 
@@ -377,26 +391,13 @@ Release Date: 2026-09-29
 - Fixed: Unresolved template tokens no longer print literally in titles and descriptions
 - Fixed: A keyword ending a heading or paragraph now counts as placed there
 
-= 2.10.0 =
-Release Date: 2026-09-27
-
-- New: Thin Content report: find short published pages sitewide, with a threshold per post type
-- New: Bulk Snippets flags duplicate titles and meta descriptions across every post type
-- New: About Page, Contact Page and Profile Page schema types for individual pages
-- New: Rank Math FAQ and HowTo blocks are converted to ThinkRank blocks when you migrate
-- Improved: Local SEO offers every schema.org LocalBusiness type, with search
-- Fixed: Content Analysis in page builders now measures the whole page, including Oxygen Classic
-- Fixed: Schema descriptions now match your meta description, without stray "&amp;" or "[...]"
-- Fixed: llms.txt no longer splits a key feature that contains a comma
-- Fixed: The unwritable WordPress folder notice no longer warns when nothing is affected
-- Fixed: Minor migration, MCP, sitemap and Local SEO validation issues
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.14.1 =
+Sitemaps and IndexNow now skip noindexed and redirected URLs, page builder content is read in page order, and email reports flag Search Console errors and count large sites correctly. Recommended for all sites.
+
 = 2.14.0 =
 Adds optional FAQ schema from Oxygen and Breakdance accordions. The editor score now stays live on every tab, Content Analysis matches the calculated score, and robots.txt lists only live sitemaps. Recommended for all sites.
 
-= 2.13.0 =
-Adds import from Slim SEO and a Homepage Meta Description setting. Imported titles keep their variables, and Organization schema edits now reach the page without a manual redeploy. Recommended for all sites.

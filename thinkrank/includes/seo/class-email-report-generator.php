@@ -118,6 +118,20 @@ final class Email_Report_Generator {
                 'shared'       => $shared,
             ];
 
+            // Search Console answered with an error rather than with data.
+            // Every section is about to come back empty, and the no-data gate
+            // further down would read that as a property with no traffic: it
+            // would skip the period and tell the user Search Console "returned
+            // no data". Record it as the failure it is and retry soon, the way
+            // a failed send already is. Checked before the hook below so Pro
+            // does not build an AI summary for a report that cannot go out.
+            //
+            // A test send still goes out: it exists to prove delivery.
+            $fetch_error = self::fetch_error($shared);
+            if (!$is_test && $fetch_error !== '') {
+                return $this->handle_fetch_failure($config, $context, $fetch_error);
+            }
+
             /**
              * Fires before the report is rendered/sent. Pro plugin uses
              * this to fetch + attach the AI Highlights summary.
@@ -283,6 +297,98 @@ final class Email_Report_Generator {
             'not_connected' => true,
             'reason'        => $reason,
         ];
+    }
+
+    /**
+     * The error behind a failed data fetch, or '' when the fetch worked.
+     *
+     * A fetch fails in two shapes. Email_Report_Data_Provider::fetch()
+     * catches a thrown API error and returns `available: false` with the
+     * message in `error`. Analytics_Manager::get_dashboard_data() catches
+     * its own and returns normally, with the message in `current.error`.
+     * `available: false` without an `error` is not a failure, so it is not
+     * reported as one.
+     *
+     * @since 2.15.0
+     *
+     * @param array $shared The data provider's fetch() result.
+     * @return string The error message, or '' when nothing failed.
+     */
+    private static function fetch_error(array $shared): string {
+        if (empty($shared['available']) && !empty($shared['error']) && is_scalar($shared['error'])) {
+            return (string) $shared['error'];
+        }
+
+        $current = is_array($shared['current'] ?? null) ? $shared['current'] : [];
+        if (!empty($current['error']) && is_scalar($current['error'])) {
+            return (string) $current['error'];
+        }
+
+        return '';
+    }
+
+    /**
+     * A scheduled run whose Search Console fetch failed.
+     *
+     * Treated like a failed send, not like a period with no data: the
+     * period's log row is claimed and closed as `failed` with the API's
+     * message, the next attempt is booked RETRY_DELAY_HOURS out, and once
+     * MAX_SEND_ATTEMPTS are spent the schedule rejoins the normal cadence.
+     * The reason and the message are recorded for the panel.
+     *
+     * @since 2.15.0
+     *
+     * @param array  $config  Per-site config.
+     * @param array  $context Render context (period bounds).
+     * @param string $error   The fetch error.
+     * @return array{success:bool,skipped:string,error?:string}
+     */
+    private function handle_fetch_failure(array $config, array $context, string $error): array {
+        $frequency = (int) ($config['frequency_days'] ?? 30);
+        $message   = self::short_error($error);
+
+        $dedupe = $this->record_attempt($config, $context);
+        if (!$dedupe['inserted']) {
+            if (!empty($dedupe['exhausted'])) {
+                $this->config->update_schedule(
+                    $this->config->get()['last_sent_at'] ?? null,
+                    $this->compute_next_run($frequency)
+                );
+                $this->config->record_skip('fetch_failed', $message);
+                return ['success' => false, 'skipped' => 'retry_limit', 'error' => $message];
+            }
+            return [
+                'success' => false,
+                'skipped' => empty($dedupe['write_failed']) ? 'duplicate' : 'log_write_failed',
+            ];
+        }
+
+        $this->finalize_log($config, $context, ['success' => false, 'error' => $message]);
+
+        $attempts = (int) ($dedupe['attempts'] ?? 1);
+        $this->config->update_schedule(
+            $this->config->get()['last_sent_at'] ?? null,
+            $attempts >= self::MAX_SEND_ATTEMPTS
+                ? $this->compute_next_run($frequency)
+                : $this->compute_retry_run()
+        );
+        $this->config->record_skip('fetch_failed', $message);
+
+        return ['success' => false, 'skipped' => 'fetch_failed', 'error' => $message];
+    }
+
+    /**
+     * An error message fit for the log row and the panel: plain text, one
+     * line, at most 300 characters.
+     *
+     * @since 2.15.0
+     *
+     * @param string $error Raw error message.
+     * @return string
+     */
+    private static function short_error(string $error): string {
+        $error = trim((string) preg_replace('/\s+/', ' ', wp_strip_all_tags($error)));
+        return mb_strlen($error) > 300 ? rtrim(mb_substr($error, 0, 299)) . '…' : $error;
     }
 
     /**

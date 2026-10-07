@@ -1246,6 +1246,11 @@ class SEO_Analyzer {
      * The structural signals these checks look for (headings, lists, tables,
      * the opening passage) survive in the stored markup.
      *
+     * Except on a builder page, where they do not: the words and headings are
+     * in builder meta and `post_content` is empty, or, on a Bricks page, holds
+     * blocks Bricks never renders. Those rows read from builder_content(), so
+     * a builder-built site is graded on its pages rather than skipped (#892).
+     *
      * @since 2.5.0
      * @return array<int,array{id: int, content: string, text: string, modified: int}>
      */
@@ -1256,8 +1261,10 @@ class SEO_Analyzer {
 
         $post_ids = $this->sample_post_ids();
 
+        // Meta too: builder_content() asks every sampled post whether Bricks
+        // owns it, and one query beats a hundred.
         if (function_exists('_prime_post_caches')) {
-            _prime_post_caches($post_ids, false, false);
+            _prime_post_caches($post_ids, false, true);
         }
 
         $sample = [];
@@ -1270,7 +1277,7 @@ class SEO_Analyzer {
 
             $modified = isset($post->post_modified_gmt) ? strtotime((string) $post->post_modified_gmt . ' UTC') : false;
 
-            $content = (string) $post->post_content;
+            $content = $this->builder_content($post) ?? (string) $post->post_content;
 
             $sample[] = [
                 'id'       => (int) $post->ID,
@@ -1283,6 +1290,43 @@ class SEO_Analyzer {
         $this->content_sample = $sample;
 
         return $sample;
+    }
+
+    /**
+     * A sampled post's content from its page builder, when that is where it is.
+     *
+     * Null for every post whose `post_content` is what the visitor reads, so
+     * those keep the raw-markup path and never pay for rendering. A post with
+     * an empty `post_content`, or a Bricks page that discards it, resolves
+     * through Builder_Content, the extractor every other server-side scoring
+     * path reads through (#617). With nothing in `post_content` to render, the
+     * resolution only reads stored builder meta: no shortcode or block
+     * renderer runs.
+     *
+     * Guarded like builder_meta_keys(), so a partial checkout degrades to the
+     * raw markup instead of fataling mid-audit.
+     *
+     * @since 2.15.0
+     *
+     * @param \WP_Post $post Sampled post.
+     * @return string|null Resolved content, or null to use `post_content`.
+     */
+    private function builder_content(\WP_Post $post): ?string {
+        if ([] === self::builder_meta_keys()) {
+            return null;
+        }
+
+        if ('' !== trim((string) $post->post_content)
+            && !Builder_Content::bricks_supersedes_post_content((int) $post->ID)
+        ) {
+            return null;
+        }
+
+        try {
+            return Builder_Content::resolve($post);
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /**
@@ -1308,25 +1352,56 @@ class SEO_Analyzer {
         string $how_to_fix,
         string $empty_text
     ): array {
-        // A page whose body is a shortcode or a builder layout leaves no
-        // extractable text, so every prose-shaped question here answers "no"
-        // for it — Cart, Checkout, My account and Shop would drag the category
-        // down over content nobody wants quoted in an AI answer. Skipping them
-        // is deliberate: this grades the pages that could be cited.
-        $sample = [];
-        foreach ($this->get_content_sample() as $row) {
+        // A page whose body is only a shortcode or a commerce block (Checkout,
+        // My account, Shop) leaves no extractable text, so every prose-shaped
+        // question here answers "no" for it and would drag the category down
+        // over content nobody wants quoted in an AI answer. Skipping them is
+        // deliberate: this grades the pages that could be cited. Builder pages
+        // are not in this group: get_content_sample() reads their builder
+        // storage, so they have text and are graded (#892).
+        $sampled  = $this->get_content_sample();
+        $sample   = [];
+        $textless = [];
+        foreach ($sampled as $row) {
             if ('' !== $row['text']) {
                 $sample[] = $row;
+            } else {
+                $textless[] = $row['id'];
             }
         }
 
         $total = count($sample);
 
-        if (0 === $total) {
+        // Nothing published: nothing to report.
+        if ([] === $sampled) {
             return [
                 'label'   => $label,
                 'status'  => self::PASSED,
                 'message' => $empty_text,
+            ];
+        }
+
+        // Pages exist, but none yielded text. That is a sample this check
+        // could not read, not an empty site, and it used to pass with "No
+        // published content to check yet", awarding the weight for content
+        // nobody examined (#892). Say so instead.
+        if (0 === $total) {
+            return [
+                'label'          => $label,
+                'status'         => self::WARNING,
+                'message'        => sprintf(
+                    /* translators: %d: number of sampled pages. */
+                    _n(
+                        'ThinkRank found no readable text on the %d page it sampled, so this could not be checked.',
+                        'ThinkRank found no readable text on any of the %d pages it sampled, so this could not be checked.',
+                        count($textless),
+                        'thinkrank'
+                    ),
+                    count($textless)
+                ),
+                'how_to_fix'     => __('Pages built only from shortcodes, or with a page builder ThinkRank does not support, have no text it can read. Publish pages with written content, or check that your page builder is supported.', 'thinkrank'),
+                'value'          => sprintf('0/%d', count($textless)),
+                'affected_posts' => $this->affected_posts($textless),
             ];
         }
 

@@ -410,6 +410,100 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 self::listener()->handle_taxonomy_change($term_id, $tt_id, $taxonomy);
             }, 20, 3);
         }
+
+        // The sitemap leaves out what the robots tag noindexes and what
+        // ThinkRank redirects (#911), so a change to either decides what the
+        // published files should list. Neither is a post or term save, and
+        // without these the files kept the old answer until unrelated content
+        // changed.
+        foreach (self::ROBOTS_SETTINGS_OPTIONS as $option) {
+            add_action('update_option_' . $option, static function ($old_value, $value): void {
+                self::handle_robots_settings_change($old_value, $value);
+            }, 20, 2);
+            add_action('add_option_' . $option, static function ($name, $value): void {
+                self::handle_robots_settings_change([], $value);
+            }, 20, 2);
+        }
+
+        add_action('thinkrank_object_redirect_saved', static function (): void {
+            self::listener()->schedule_regeneration();
+        }, 20, 0);
+    }
+
+    /**
+     * Options holding robots directives the sitemap's item filter reads.
+     *
+     * @since 2.15.0
+     * @var string[]
+     */
+    private const ROBOTS_SETTINGS_OPTIONS = [
+        'thinkrank_global_seo_settings',
+        'thinkrank_global_robot_meta_settings',
+    ];
+
+    /**
+     * Queue a rebuild when a saved robots setting changes a noindex decision.
+     *
+     * Both options carry far more than robots directives (titles, schema,
+     * feature switches), so only a change to a noindex outcome rebuilds.
+     *
+     * @since 2.15.0
+     *
+     * @param mixed $old_value Previous option value.
+     * @param mixed $value     New option value.
+     * @return void
+     */
+    public static function handle_robots_settings_change($old_value, $value): void {
+        if (self::noindex_fingerprint($old_value) === self::noindex_fingerprint($value)) {
+            return;
+        }
+
+        // The matrix memoises the option for the request, and a rebuild that
+        // runs in this request must read the value just saved.
+        Content_Type_Settings::flush_cache();
+
+        self::listener()->schedule_regeneration();
+    }
+
+    /**
+     * The noindex decisions a robots option makes, keyed by what they apply to.
+     *
+     * Reads both shapes: the flat site-wide directives, and the per-entity
+     * rows, where a row's directives apply only while its robots switch is on.
+     * A row that is on but stores no `noindex` key changes nothing, matching
+     * the array_merge() the robots tag does.
+     *
+     * @since 2.15.0
+     *
+     * @param mixed $value Option value.
+     * @return array<string, bool|null>
+     */
+    private static function noindex_fingerprint($value): array {
+        if (!is_array($value)) {
+            return [];
+        }
+
+        $decisions = [];
+
+        if (array_key_exists('noindex', $value) && !is_array($value['noindex'])) {
+            $decisions['*'] = !empty($value['noindex']);
+        }
+
+        foreach ($value as $key => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $robots = $row['robots_meta'] ?? null;
+
+            $decisions[(string) $key] = !empty($row['robots_meta_enabled']) && is_array($robots) && array_key_exists('noindex', $robots)
+                ? !empty($robots['noindex'])
+                : null;
+        }
+
+        ksort($decisions);
+
+        return $decisions;
     }
 
     /**
@@ -1064,10 +1158,10 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
 
             foreach ($terms as $term) {
-                // A term the user marked noindex must not be advertised in the
-                // sitemap: the robots tag now honours term meta, so listing it
-                // here would have the sitemap contradict the page's own tag.
-                if ($this->term_is_noindexed((int) $term->term_id)) {
+                // A term whose archive says noindex (its own override or its
+                // taxonomy's), or that redirects, must not be advertised: the
+                // sitemap would contradict the page's own signal (#911).
+                if (!Indexability::is_indexable_term($term)) {
                     continue;
                 }
 
@@ -1374,12 +1468,13 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             return [];
         }
 
-        // Drop terms the user marked noindex. This path feeds the single general
-        // sitemap while collect_taxonomy_entries_iter() feeds the segmented ones,
-        // so both need the filter or the two disagree about the same term.
+        // Drop terms that are not indexable destinations. This path feeds the
+        // single general sitemap while collect_taxonomy_entries_iter() feeds
+        // the segmented ones, so both need the filter or the two disagree about
+        // the same term.
         $all_terms = array_values(array_filter(
             $all_terms,
-            fn($term) => !$this->term_is_noindexed((int) $term->term_id)
+            static fn($term) => $term instanceof \WP_Term && Indexability::is_indexable_term($term)
         ));
 
         // Group terms by taxonomy
@@ -1563,15 +1658,14 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             return false;
         }
 
-        // Check if post overrides robots and sets noindex.
-        if ((bool) get_post_meta($post->ID, '_thinkrank_robots_meta_enabled', true)) {
-            $raw = get_post_meta($post->ID, '_thinkrank_robots_meta', true);
-            if (is_string($raw) && $raw !== '') {
-                $robots = json_decode($raw, true);
-                if (is_array($robots) && !empty($robots['noindex'])) {
-                    return false;
-                }
-            }
+        // A URL whose page says noindex, or that ThinkRank redirects, is not a
+        // destination. Only the per-post noindex used to be read here, so a
+        // post type set to No-index still had every item listed, and redirected
+        // posts were submitted as "Page with redirect" (#911). The password
+        // check stays with the setting above: listing protected posts is a
+        // choice this sitemap has always offered.
+        if (Indexability::is_post_noindexed($post) || Indexability::is_post_redirected($post)) {
+            return false;
         }
 
         return true;
@@ -1609,33 +1703,6 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $this->woocommerce_excluded_page_ids = $ids;
 
         return $ids;
-    }
-
-    /**
-     * Whether a term carries an explicit noindex override.
-     *
-     * Mirrors the post-side check in should_include_post(); terms store the same
-     * `_thinkrank_robots_meta_enabled` / `_thinkrank_robots_meta` keys, written
-     * by the update-term-seo ability and by the SEO importer.
-     *
-     * @since 1.31.0
-     *
-     * @param int $term_id Term to test.
-     * @return bool True when the term is marked noindex.
-     */
-    private function term_is_noindexed(int $term_id): bool {
-        if (!(bool) get_term_meta($term_id, '_thinkrank_robots_meta_enabled', true)) {
-            return false;
-        }
-
-        $raw = get_term_meta($term_id, '_thinkrank_robots_meta', true);
-        if (!is_string($raw) || $raw === '') {
-            return false;
-        }
-
-        $robots = json_decode($raw, true);
-
-        return is_array($robots) && !empty($robots['noindex']);
     }
 
     /**

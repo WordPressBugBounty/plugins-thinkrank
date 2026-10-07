@@ -751,26 +751,14 @@ class Analytics_Manager {
                         $search_performance = $this->search_console_client->get_search_performance($site_url, $date_range, ['query'], 1000);
                     }
 
-                    // Calculate position distribution
-                    $position_distribution = [
-                        'top_3' => 0,
-                        '4_10' => 0,
-                        '10_50' => 0,
-                        '51_100' => 0
-                    ];
-
-                    foreach ($search_performance['rows'] ?? [] as $row) {
-                        $position = $row['position'] ?? 0;
-                        if ($position <= 3) {
-                            $position_distribution['top_3']++;
-                        } elseif ($position <= 10) {
-                            $position_distribution['4_10']++;
-                        } elseif ($position <= 50) {
-                            $position_distribution['10_50']++;
-                        } elseif ($position <= 100) {
-                            $position_distribution['51_100']++;
-                        }
-                    }
+                    // Position distribution over every query with an
+                    // impression, not over the 1,000-row list above (#913).
+                    $position_distribution = $this->search_analytics_client
+                        ? $this->count_position_distribution($site_url, $start_date, $end_date, $search_performance['rows'] ?? [])
+                        : self::bucket_positions(
+                            $search_performance['rows'] ?? [],
+                            count($search_performance['rows'] ?? []) < 1000
+                        );
 
                     $dashboard_data['search_performance'] = array_merge($search_performance, [
                         'totals' => $totals,
@@ -812,6 +800,130 @@ class Analytics_Manager {
         $dashboard_data['core_web_vitals'] = $this->get_dashboard_core_web_vitals();
 
         return $dashboard_data;
+    }
+
+    /**
+     * Rows per page when counting the position distribution. The most the
+     * Search Analytics API returns in one request.
+     *
+     * @since 2.15.0
+     */
+    private const POSITION_PAGE_SIZE = 25000;
+
+    /**
+     * Pages read before the count stops: 200,000 queries. A property past
+     * that is counted over its top 200,000 by clicks and flagged incomplete.
+     *
+     * @since 2.15.0
+     */
+    private const POSITION_MAX_PAGES = 8;
+
+    /**
+     * Count the period's queries into position buckets across the whole
+     * property (#913).
+     *
+     * The dashboard's query list is capped at 1,000 rows ordered by clicks,
+     * so counting it told any larger site it had exactly 1,000 queries and
+     * dropped the long tail, which is where positions 51-100 live. When that
+     * list came back short it already holds every query and is counted as
+     * is, with no extra request. Otherwise the property is paged with
+     * `startRow` at POSITION_PAGE_SIZE rows until a short page, counting as
+     * rows arrive rather than keeping them.
+     *
+     * A page that fails (other than a 401, which is re-thrown so the token
+     * refresh runs) leaves the count at what was read so far, flagged
+     * `complete: false`, rather than failing the whole dashboard.
+     *
+     * @since 2.15.0
+     *
+     * @param string $site_url   Search Console property.
+     * @param string $start_date Window start (Y-m-d).
+     * @param string $end_date   Window end (Y-m-d).
+     * @param array  $first_rows The capped query list already fetched.
+     * @return array{top_3:int,4_10:int,10_50:int,51_100:int,over_100:int,complete:bool}
+     * @throws \Exception On a 401, so get_dashboard_data() can refresh the token.
+     */
+    private function count_position_distribution(string $site_url, string $start_date, string $end_date, array $first_rows): array {
+        if (count($first_rows) < 1000) {
+            return self::bucket_positions($first_rows, true);
+        }
+
+        $distribution = self::bucket_positions([], true);
+        $start_row    = 0;
+
+        for ($page = 0; $page < self::POSITION_MAX_PAGES; $page++) {
+            try {
+                $rows = $this->search_analytics_client->get_search_analytics_data(
+                    $site_url,
+                    $start_date,
+                    $end_date,
+                    ['query'],
+                    self::POSITION_PAGE_SIZE,
+                    $start_row
+                )['rows'] ?? [];
+            } catch (\Exception $e) {
+                if ($e->getCode() === 401) {
+                    throw $e;
+                }
+                // Nothing read yet: the capped list is the best there is.
+                $partial = $start_row === 0 ? self::bucket_positions($first_rows, false) : $distribution;
+                $partial['complete'] = false;
+                return $partial;
+            }
+
+            $page_counts = self::bucket_positions($rows, true);
+            foreach (['top_3', '4_10', '10_50', '51_100', 'over_100'] as $bucket) {
+                $distribution[$bucket] += $page_counts[$bucket];
+            }
+
+            if (count($rows) < self::POSITION_PAGE_SIZE) {
+                return $distribution;
+            }
+            $start_row += self::POSITION_PAGE_SIZE;
+        }
+
+        $distribution['complete'] = false;
+        return $distribution;
+    }
+
+    /**
+     * Bucket Search Console rows by average position.
+     *
+     * `10_50` is the historical key for positions 11-50. Rows past 100 are
+     * counted in `over_100`: they still had impressions.
+     *
+     * @since 2.15.0
+     *
+     * @param array $rows     Search Console rows.
+     * @param bool  $complete Whether $rows is every query in the window.
+     * @return array{top_3:int,4_10:int,10_50:int,51_100:int,over_100:int,complete:bool}
+     */
+    private static function bucket_positions(array $rows, bool $complete): array {
+        $distribution = [
+            'top_3'    => 0,
+            '4_10'     => 0,
+            '10_50'    => 0,
+            '51_100'   => 0,
+            'over_100' => 0,
+            'complete' => $complete,
+        ];
+
+        foreach ($rows as $row) {
+            $position = (float) ($row['position'] ?? 0);
+            if ($position <= 3) {
+                $distribution['top_3']++;
+            } elseif ($position <= 10) {
+                $distribution['4_10']++;
+            } elseif ($position <= 50) {
+                $distribution['10_50']++;
+            } elseif ($position <= 100) {
+                $distribution['51_100']++;
+            } else {
+                $distribution['over_100']++;
+            }
+        }
+
+        return $distribution;
     }
 
     /**

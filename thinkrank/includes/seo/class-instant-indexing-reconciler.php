@@ -230,6 +230,15 @@ class Instant_Indexing_Reconciler {
         $log = $this->get_submission_index();
 
         foreach ($rows as $row) {
+            // A post that is not an indexable destination is not owed a
+            // submission. Counting it as "never submitted" made reconcile()
+            // send every noindexed, password-protected and redirected post the
+            // automatic path had rightly skipped (#911).
+            $post = get_post((int) $row['ID']);
+            if ($post instanceof \WP_Post && !Indexability::is_indexable_post($post)) {
+                continue;
+            }
+
             $url = get_permalink((int) $row['ID']);
             if (!$url) {
                 continue;
@@ -436,9 +445,10 @@ class Instant_Indexing_Reconciler {
         $rows = (array) $rows;
 
         // Prime the cache in one query so the get_permalink() calls that follow
-        // don't each fetch their post row separately.
+        // don't each fetch their post row separately. Meta too: build_report()
+        // reads each post's robots override to decide indexability.
         if (!empty($rows)) {
-            _prime_post_caches(array_map(static fn($r) => (int) $r['ID'], $rows), false, false);
+            _prime_post_caches(array_map(static fn($r) => (int) $r['ID'], $rows), false, true);
         }
 
         return $rows;
