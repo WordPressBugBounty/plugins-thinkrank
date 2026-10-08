@@ -2305,7 +2305,7 @@ class Snapshot_Migrator {
             $updates = [];
             foreach ($profiles as $platform => $url) {
                 $field = 'organization_social_' . $platform;
-                if (in_array($platform, $schema_platforms, true) && filter_var($url, FILTER_VALIDATE_URL) && empty($current[$field])) {
+                if (in_array($platform, $schema_platforms, true) && \ThinkRank\Core\Url_Validator::is_valid($url) && empty($current[$field])) {
                     $updates[$field] = esc_url_raw($url);
                 }
             }

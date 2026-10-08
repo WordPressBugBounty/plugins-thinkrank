@@ -125,6 +125,43 @@ class Analytics_Manager {
     private const REFRESH_TIMEOUT = 10;
 
     /**
+     * Transient prefix for the cached dashboard payload, suffixed with the
+     * date range ("30d"). Carries the plugin prefix so uninstall's
+     * `_transient_thinkrank_%` sweep removes it; the payload holds up to
+     * 1,000 of the site's search queries (#918).
+     *
+     * @since 2.14.2
+     * @var string
+     */
+    public const DASHBOARD_CACHE_PREFIX = 'thinkrank_analytics_dashboard_v5_';
+
+    /**
+     * Transient prefix for the cached SEO opportunities payload, suffixed
+     * with the date range. Prefixed for the same reason as the dashboard's.
+     *
+     * @since 2.14.2
+     * @var string
+     */
+    public const OPPORTUNITIES_CACHE_PREFIX = 'thinkrank_seo_opportunities_';
+
+    /**
+     * Every date range the dashboard cache is written under: the three the
+     * UI offers plus the doubled previous-period ranges used for trends.
+     *
+     * @since 2.14.2
+     * @var string[]
+     */
+    public const CACHED_DASHBOARD_RANGES = ['7d', '30d', '90d', '14d', '60d', '180d'];
+
+    /**
+     * Every date range the opportunities cache is written under.
+     *
+     * @since 2.14.2
+     * @var string[]
+     */
+    public const CACHED_OPPORTUNITY_RANGES = ['7d', '30d', '90d'];
+
+    /**
      * Constructor
      *
      * @param Settings_Manager|null $settings_manager Settings manager instance
@@ -678,7 +715,7 @@ class Analytics_Manager {
      * @throws \Exception On failure.
      */
     public function get_dashboard_data(string $date_range = '30d'): array {
-        $cache_key = "analytics_dashboard_v5_{$date_range}";
+        $cache_key = self::DASHBOARD_CACHE_PREFIX . $date_range;
         $cached_data = get_transient($cache_key);
 
         if ($cached_data !== false) {
@@ -971,7 +1008,7 @@ class Analytics_Manager {
      * @return array SEO opportunities
      */
     public function get_seo_opportunities(string $date_range = '30d'): array {
-        $cache_key = "seo_opportunities_{$date_range}";
+        $cache_key = self::OPPORTUNITIES_CACHE_PREFIX . $date_range;
         $cached_data = get_transient($cache_key);
 
         if ($cached_data !== false) {
@@ -1087,6 +1124,25 @@ class Analytics_Manager {
     }
 
     /**
+     * Every transient the dashboard and opportunities caches are written
+     * under. One list, so "Refresh data", the settings save and any later
+     * caller clear the same keys the readers use.
+     *
+     * @since 2.14.2
+     * @return string[]
+     */
+    public static function dashboard_cache_keys(): array {
+        $keys = [];
+        foreach (self::CACHED_DASHBOARD_RANGES as $range) {
+            $keys[] = self::DASHBOARD_CACHE_PREFIX . $range;
+        }
+        foreach (self::CACHED_OPPORTUNITY_RANGES as $range) {
+            $keys[] = self::OPPORTUNITIES_CACHE_PREFIX . $range;
+        }
+        return $keys;
+    }
+
+    /**
      * Force refresh of all cached data
      *
      * @return array Refresh results
@@ -1095,19 +1151,10 @@ class Analytics_Manager {
         // Clear all analytics-related transients, including the previous-period
         // ranges used for trend comparison (14d/60d/180d) and the separately
         // cached Core Web Vitals payload.
-        $cache_keys = [
-            'analytics_dashboard_v5_7d',
-            'analytics_dashboard_v5_30d',
-            'analytics_dashboard_v5_90d',
-            'analytics_dashboard_v5_14d',
-            'analytics_dashboard_v5_60d',
-            'analytics_dashboard_v5_180d',
-            'seo_opportunities_7d',
-            'seo_opportunities_30d',
-            'seo_opportunities_90d',
-            'indexing_status',
-            'thinkrank_dashboard_cwv'
-        ];
+        $cache_keys = array_merge(
+            self::dashboard_cache_keys(),
+            ['indexing_status', 'thinkrank_dashboard_cwv']
+        );
 
         // Also clear PageSpeed-derived caches. Their keys are md5-derived from
         // URL + device, so compute them for the URL/device combinations the

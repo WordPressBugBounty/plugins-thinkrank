@@ -725,7 +725,7 @@ class Schema_Input_Validator {
      */
     private function is_valid_url(string $url): bool {
         // Basic URL validation
-        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+        if (!\ThinkRank\Core\Url_Validator::is_valid($url)) {
             return false;
         }
 

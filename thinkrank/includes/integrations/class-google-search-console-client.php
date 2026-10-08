@@ -102,8 +102,13 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
             $sites = $this->list_sites();
             $site_verified = false;
 
+            // A domain property is compared in its punycode form, so an IDN
+            // matches whichever form the account lists it in.
+            $wanted = \ThinkRank\Core\Url_Validator::search_console_domain_property($site_url) ?? $site_url;
+
             foreach ($sites['siteEntry'] ?? [] as $site) {
-                if ($site['siteUrl'] === $site_url) {
+                $listed = (string) ($site['siteUrl'] ?? '');
+                if ($listed === $site_url || (\ThinkRank\Core\Url_Validator::search_console_domain_property($listed) ?? $listed) === $wanted) {
                     $site_verified = true;
                     break;
                 }

@@ -524,10 +524,27 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             }
         }
 
+        // The default Open Graph and Twitter images are checked in the field
+        // details above only while their feature is switched on, but they are
+        // stored (and shown in the admin preview's src) either way.
+        $flagged = [];
+        foreach ($field_details as $field) {
+            if ('error' === ($field['status'] ?? '')) {
+                $flagged[] = $field['field'] ?? '';
+            }
+        }
+        foreach (['default_og_image' => 'Default Open Graph image', 'default_twitter_image' => 'Default Twitter Card image'] as $key => $label) {
+            if (!empty($settings[$key]) && !in_array($key, $flagged, true)
+                && !\ThinkRank\Core\Url_Validator::is_http_url($settings[$key])) {
+                $validation['errors'][] = $label . ' must be an http or https URL.';
+                $validation['valid'] = false;
+            }
+        }
+
         // Validate default image
         if (isset($settings['default_image']) && !empty($settings['default_image'])) {
-            if (!filter_var($settings['default_image'], FILTER_VALIDATE_URL)) {
-                $validation['errors'][] = 'default_image must be a valid URL';
+            if (!\ThinkRank\Core\Url_Validator::is_http_url($settings['default_image'])) {
+                $validation['errors'][] = 'default_image must be an http or https URL';
                 $validation['valid'] = false;
             } else {
                 // Check image dimensions and format
@@ -767,7 +784,10 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
 
             // Default Image validation
             if (!empty($settings['default_og_image'])) {
-                if (filter_var($settings['default_og_image'], FILTER_VALIDATE_URL)) {
+                // http(s) only, and refused rather than warned about: the
+                // value becomes og:image and the admin preview's src, and a
+                // javascript: URL passed is_valid().
+                if (\ThinkRank\Core\Url_Validator::is_http_url($settings['default_og_image'])) {
                     $field_details[] = [
                         'field' => 'default_og_image',
                         'label' => 'Default Open Graph image is configured.',
@@ -777,9 +797,9 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 } else {
                     $field_details[] = [
                         'field' => 'default_og_image',
-                        'label' => 'Default Open Graph image URL appears invalid.',
-                        'status' => 'warning',
-                        'icon' => '⚠'
+                        'label' => 'Default Open Graph image must be an http or https URL.',
+                        'status' => 'error',
+                        'icon' => '✗'
                     ];
                 }
             } else {
@@ -901,7 +921,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
 
             // Default Twitter Image validation
             if (!empty($settings['default_twitter_image'])) {
-                if (filter_var($settings['default_twitter_image'], FILTER_VALIDATE_URL)) {
+                if (\ThinkRank\Core\Url_Validator::is_http_url($settings['default_twitter_image'])) {
                     $field_details[] = [
                         'field' => 'default_twitter_image',
                         'label' => 'Default Twitter Card image is configured.',
@@ -911,9 +931,9 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 } else {
                     $field_details[] = [
                         'field' => 'default_twitter_image',
-                        'label' => 'Default Twitter Card image URL appears invalid.',
-                        'status' => 'warning',
-                        'icon' => '⚠'
+                        'label' => 'Default Twitter Card image must be an http or https URL.',
+                        'status' => 'error',
+                        'icon' => '✗'
                     ];
                 }
             } else {
@@ -3036,7 +3056,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         }
 
         // Check if URL is valid
-        if (!filter_var($image_url, FILTER_VALIDATE_URL)) {
+        if (!\ThinkRank\Core\Url_Validator::is_http_url($image_url)) {
             $validation['warnings'][] = 'Invalid image URL';
             return $validation;
         }

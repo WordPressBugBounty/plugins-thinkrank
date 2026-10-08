@@ -432,7 +432,7 @@ class SEO_Settings_Manager extends Abstract_SEO_Manager {
         // Validate URL fields
         foreach ($this->validation_rules['url_fields'] as $field) {
             if (isset($settings[$field]) && !empty($settings[$field])) {
-                if (!filter_var($settings[$field], FILTER_VALIDATE_URL)) {
+                if (!\ThinkRank\Core\Url_Validator::is_valid($settings[$field])) {
                     $validation['errors'][] = "{$field} must be a valid URL";
                     $validation['valid'] = false;
                 }

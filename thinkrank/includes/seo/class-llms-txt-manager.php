@@ -1538,7 +1538,7 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
                         $description = trim($matches[3]);
 
                         if (!empty($title) && !empty($url) && !empty($description)) {
-                            if (filter_var($url, FILTER_VALIDATE_URL)) {
+                            if (\ThinkRank\Core\Url_Validator::is_valid($url)) {
                                 $valid_links++;
                             } else {
                                 $validation['warnings'][] = "Invalid URL in {$label}: {$url}";

@@ -11,6 +11,7 @@ namespace ThinkRank\Abilities\Content;
 
 use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\SEO\Builder_Content;
+use ThinkRank\SEO\Word_Count_Index;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -159,8 +160,15 @@ class Get_Post_Content extends Ability_Base {
 			);
 		}
 
-		$resolved = trim( wp_strip_all_tags( Builder_Content::resolve( $post ) ) );
-		$builder  = $this->builder_for( $post_id );
+		$source   = Builder_Content::resolve( $post );
+		$resolved = trim( wp_strip_all_tags( $source ) );
+		// Counted over the reading text rather than the body returned, so shortcode
+		// syntax is not counted as words and two words split only by a tag stay
+		// two (#893), and a token of punctuation alone is not a word. Words,
+		// whatever the locale: the field says words.
+		$reading = Word_Count_Index::reading_text( $source );
+
+		$builder = $this->builder_for( $post_id );
 
 		$body      = $resolved;
 		$truncated = false;
@@ -186,7 +194,7 @@ class Get_Post_Content extends Ability_Base {
 			'post_content'   => (string) $post->post_content,
 			'content_source' => null === $builder ? 'post_content' : 'builder',
 			'builder'        => $builder,
-			'word_count'     => '' === $resolved ? 0 : count( preg_split( '/\s+/u', $resolved ) ?: [] ),
+			'word_count'     => Word_Count_Index::count_words( $reading ),
 			'truncated'      => $truncated,
 		];
 	}

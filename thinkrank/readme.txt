@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.14.1
+Stable tag: 2.14.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -327,6 +327,20 @@ Content brief competitor analysis and schema import fetch the URLs you type in, 
 
 == Changelog ==
 
+= 2.14.2 =
+Release Date: 2026-10-08
+
+- Fixed: Word count skips shortcode syntax and stray punctuation in the score and thin content report
+- Fixed: Readability and keyword density on page builder posts no longer read shortcode text
+- Fixed: The AI crawler check now treats "Disallow: *" and "Disallow: /*$" as a full block
+- Fixed: The answer-ready schema check ignores unpublished Elementor and Beaver Builder layouts
+- Fixed: Content analysis no longer pulls drafts or the wrong post into related-posts shortcodes
+- Fixed: Google Analytics figures now cover exactly the number of days selected
+- Fixed: Images, logos and links with non-Latin characters or international domains are accepted
+- Fixed: Search Console setup accepts domain properties (sc-domain:)
+- Fixed: Uninstall now also removes cached Search Console data
+- Fixed: Minor content brief and admin date range issues
+
 = 2.14.1 =
 Release Date: 2026-10-07
 
@@ -378,26 +392,12 @@ Release Date: 2026-10-01
 - Fixed: The sitemap index no longer lists sitemaps that contain no URLs
 - Fixed: Re-downloading an uploaded export file now keeps the Pro data it carried
 
-= 2.11.0 =
-Release Date: 2026-09-29
-
-- New: Basic / Advanced mode: keep only the everyday SEO sections in the menu, and switch any time
-- New: A gauge per focus keyword in the editor shows where it is placed and re-scores as you type
-- New: MCP agents can read and write a post's FAQ, published as the FAQ block and FAQPage schema
-- New: Product tokens for titles and descriptions (price, SKU, stock status, brand), kept on migration
-- Changed: MCP agents can set a post's search and archive visibility, not only read it
-- Fixed: Scheduled posts, Quick Edit and classic editor saves now queue a sitemap rebuild
-- Fixed: Sitemap rebuilds on large sites no longer run out of memory or stall until a manual rebuild
-- Fixed: Unresolved template tokens no longer print literally in titles and descriptions
-- Fixed: A keyword ending a heading or paragraph now counts as placed there
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.14.2 =
+Word counts and readability now ignore shortcode syntax, the AI crawler check catches Disallow: * blocks, and non-Latin URLs and Search Console domain properties are accepted. Recommended for all sites.
+
 = 2.14.1 =
 Sitemaps and IndexNow now skip noindexed and redirected URLs, page builder content is read in page order, and email reports flag Search Console errors and count large sites correctly. Recommended for all sites.
-
-= 2.14.0 =
-Adds optional FAQ schema from Oxygen and Breakdance accordions. The editor score now stays live on every tab, Content Analysis matches the calculated score, and robots.txt lists only live sitemaps. Recommended for all sites.
-

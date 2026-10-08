@@ -925,7 +925,7 @@ class Schema_Builder {
         ];
 
         foreach ($social_fields as $field) {
-            if (!empty($settings[$field]) && filter_var($settings[$field], FILTER_VALIDATE_URL)) {
+            if (!empty($settings[$field]) && \ThinkRank\Core\Url_Validator::is_valid($settings[$field])) {
                 $social_profiles[] = $settings[$field];
             }
         }
@@ -1599,12 +1599,7 @@ class Schema_Builder {
             static function ($url) {
                 return is_string($url)
                     && '' !== trim($url)
-                    && filter_var($url, FILTER_VALIDATE_URL)
-                    && in_array(
-                        strtolower((string) wp_parse_url($url, PHP_URL_SCHEME)),
-                        ['http', 'https'],
-                        true
-                    );
+                    && \ThinkRank\Core\Url_Validator::is_http_url($url);
             }
         )));
 

@@ -415,7 +415,7 @@ class Social_Media_Endpoint extends WP_REST_Controller {
             $platform = $request->get_param('platform') ?? 'facebook';
 
             // Validate image URL
-            if (!filter_var($image_url, FILTER_VALIDATE_URL)) {
+            if (!\ThinkRank\Core\Url_Validator::is_http_url($image_url)) {
                 return new WP_Error(
                     'invalid_image_url',
                     'Invalid image URL provided',

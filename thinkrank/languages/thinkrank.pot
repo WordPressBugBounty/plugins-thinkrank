@@ -2,14 +2,14 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 2.14.1\n"
+"Project-Id-Version: ThinkRank 2.14.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-07T07:03:12+00:00\n"
+"POT-Creation-Date: 2026-10-08T12:13:51+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
@@ -538,45 +538,45 @@ msgstr ""
 msgid "The post to inspect."
 msgstr ""
 
-#: includes/abilities/content/class-get-post-content.php:47
+#: includes/abilities/content/class-get-post-content.php:48
 msgid "Get ThinkRank Post Content"
 msgstr ""
 
-#: includes/abilities/content/class-get-post-content.php:48
+#: includes/abilities/content/class-get-post-content.php:49
 msgid "Read a post or page's body content so you can judge what it is about before changing its SEO fields. Returns the text the page actually renders, resolved from the page builder when one owns the page, plus the raw stored post_content and which builder is in use. Read-only: use update-post-seo to change SEO fields. Use list-content-items to find ids."
 msgstr ""
 
-#: includes/abilities/content/class-get-post-content.php:79
+#: includes/abilities/content/class-get-post-content.php:80
 msgid "Post or page ID from list-content-items."
 msgstr ""
 
-#: includes/abilities/content/class-get-post-content.php:83
+#: includes/abilities/content/class-get-post-content.php:84
 msgid "Truncate the returned body to this many characters. Omit for the whole thing."
 msgstr ""
 
-#: includes/abilities/content/class-get-post-content.php:107
+#: includes/abilities/content/class-get-post-content.php:108
 msgid "Plain-text body as the page renders it, resolved from the page builder where one owns the page."
 msgstr ""
 
-#: includes/abilities/content/class-get-post-content.php:111
+#: includes/abilities/content/class-get-post-content.php:112
 msgid "The raw stored post_content column. Empty or stale on builder pages, which is why it is reported separately."
 msgstr ""
 
-#: includes/abilities/content/class-get-post-content.php:116
+#: includes/abilities/content/class-get-post-content.php:117
 msgid "Where the rendered body came from."
 msgstr ""
 
-#: includes/abilities/content/class-get-post-content.php:120
+#: includes/abilities/content/class-get-post-content.php:121
 msgid "The page builder that owns this post, or null for the block/classic editor."
 msgstr ""
 
 #. translators: %d: post ID that was sent.
-#: includes/abilities/content/class-get-post-content.php:144
+#: includes/abilities/content/class-get-post-content.php:145
 #, php-format
 msgid "No post with id %d. Use list-content-items to find valid ids."
 msgstr ""
 
-#: includes/abilities/content/class-get-post-content.php:157
+#: includes/abilities/content/class-get-post-content.php:158
 msgid "This post is password protected, so its body is not returned."
 msgstr ""
 
@@ -3202,7 +3202,7 @@ msgstr ""
 #: includes/api/class-setup-wizard-endpoint.php:601
 #: includes/api/class-setup-wizard-endpoint.php:629
 #: includes/api/class-setup-wizard-endpoint.php:676
-#: includes/api/class-sitemap-endpoint.php:800
+#: includes/api/class-sitemap-endpoint.php:807
 #: includes/api/traits/trait-csrf-protection.php:100
 #: includes/api/traits/trait-csrf-protection.php:142
 msgid "Invalid security token. Please refresh the page and try again."
@@ -3535,39 +3535,39 @@ msgstr ""
 msgid "Deployed %1$d schema(s); skipped %2$d that failed validation."
 msgstr ""
 
-#: includes/api/class-seo-analytics-endpoint.php:757
+#: includes/api/class-seo-analytics-endpoint.php:800
 msgid "Google Search Console is not connected yet. Connect your Google account to see search data here."
 msgstr ""
 
-#: includes/api/class-seo-analytics-endpoint.php:771
+#: includes/api/class-seo-analytics-endpoint.php:814
 msgid "No Search Console property is selected for this site. Choose your verified property to start loading search data."
 msgstr ""
 
-#: includes/api/class-seo-analytics-endpoint.php:802
+#: includes/api/class-seo-analytics-endpoint.php:845
 msgid "The Search Console property for this site is missing or no longer valid. Select your verified property again to restore search data."
 msgstr ""
 
-#: includes/api/class-seo-analytics-endpoint.php:806
+#: includes/api/class-seo-analytics-endpoint.php:849
 msgid "Your Google connection has expired. Reconnect your Google account to load Search Console data."
 msgstr ""
 
-#: includes/api/class-seo-analytics-endpoint.php:810
+#: includes/api/class-seo-analytics-endpoint.php:853
 msgid "Your Google account does not have access to this Search Console property. Verify ownership in Search Console, or select a property you own."
 msgstr ""
 
-#: includes/api/class-seo-analytics-endpoint.php:814
+#: includes/api/class-seo-analytics-endpoint.php:857
 msgid "Google is rate limiting requests right now. Search data will load again shortly."
 msgstr ""
 
-#: includes/api/class-seo-analytics-endpoint.php:818
+#: includes/api/class-seo-analytics-endpoint.php:861
 msgid "Google Search Console is temporarily unavailable. Please try again in a few minutes."
 msgstr ""
 
-#: includes/api/class-seo-analytics-endpoint.php:822
+#: includes/api/class-seo-analytics-endpoint.php:865
 msgid "Search Console data could not be loaded right now. Please try again."
 msgstr ""
 
-#: includes/api/class-seo-analytics-endpoint.php:866
+#: includes/api/class-seo-analytics-endpoint.php:909
 msgid "SEO Analytics is disabled. Enable it in the SEO Analytics settings to load data."
 msgstr ""
 
@@ -3615,16 +3615,16 @@ msgstr ""
 msgid "Sitemap refreshed. WordPress serves it directly, so no files were written."
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:792
+#: includes/api/class-sitemap-endpoint.php:799
 msgid "You do not have permission to manage sitemaps."
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1317
+#: includes/api/class-sitemap-endpoint.php:1324
 msgid "Sitemap generation is disabled"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1345
-#: includes/api/class-sitemap-endpoint.php:1377
+#: includes/api/class-sitemap-endpoint.php:1352
+#: includes/api/class-sitemap-endpoint.php:1384
 #: includes/editor/beaver/faq/faq.php:314
 #: includes/editor/beaver/howto/howto.php:326
 #: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:385
@@ -3638,44 +3638,44 @@ msgstr ""
 msgid "General"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1376
+#: includes/api/class-sitemap-endpoint.php:1383
 #: src/admin/components/essential-seo/crawling-ai-indexing/GlobalRobotMeta.js:219
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:259
 #: src/admin/components/essential-seo/RobotMetaSettings.js:90
 msgid "Index"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1378
+#: includes/api/class-sitemap-endpoint.php:1385
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:261
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:233
 msgid "Posts"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1379
+#: includes/api/class-sitemap-endpoint.php:1386
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:262
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:243
 msgid "Pages"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1380
+#: includes/api/class-sitemap-endpoint.php:1387
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:263
 msgid "Categories"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1381
+#: includes/api/class-sitemap-endpoint.php:1388
 msgid "Tags"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1382
+#: includes/api/class-sitemap-endpoint.php:1389
 msgid "Products"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1383
+#: includes/api/class-sitemap-endpoint.php:1390
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:239
 msgid "WordPress Core"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1384
+#: includes/api/class-sitemap-endpoint.php:1391
 #: src/admin/components/essential-seo/site-identity/BreadcrumbSettings.js:24
 #: src/metabox/components/metabox-schema-tab/PreviewSection.js:81
 msgid "Custom"
@@ -4820,7 +4820,7 @@ msgstr ""
 msgid "This MCP connection is read-only; the \"%s\" tool changes state and is not permitted. Reconnect with write access to use it."
 msgstr ""
 
-#: includes/seo/class-analytics-manager.php:178
+#: includes/seo/class-analytics-manager.php:215
 msgid "Every 45 Minutes"
 msgstr ""
 
@@ -5392,15 +5392,15 @@ msgstr ""
 msgid "Your llms.txt is now published at /llms.txt."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:83
+#: includes/seo/class-seo-analyzer.php:112
 msgid "Basic SEO"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:84
+#: includes/seo/class-seo-analyzer.php:113
 msgid "Advanced SEO"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:85
+#: includes/seo/class-seo-analyzer.php:114
 #: src/admin/components/seo/SEOScoreSummary.js:538
 #: src/blocks/faq-block/edit.js:99
 #: src/blocks/howto-block/edit.js:104
@@ -5408,282 +5408,282 @@ msgstr ""
 msgid "Content"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:86
+#: includes/seo/class-seo-analyzer.php:115
 msgid "Performance & Technical"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:87
+#: includes/seo/class-seo-analyzer.php:116
 msgid "Security"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:91
+#: includes/seo/class-seo-analyzer.php:120
 msgid "AI Search (GEO)"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:457
-#: includes/seo/class-seo-analyzer.php:465
+#: includes/seo/class-seo-analyzer.php:486
+#: includes/seo/class-seo-analyzer.php:494
 msgid "Site title is set"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:459
+#: includes/seo/class-seo-analyzer.php:488
 msgid "Your site has no title. Search engines and browsers use it as your brand name."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:460
+#: includes/seo/class-seo-analyzer.php:489
 msgid "Set a site title under Settings → General → Site Title."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:467
+#: includes/seo/class-seo-analyzer.php:496
 msgid "Your site title is configured."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:484
-#: includes/seo/class-seo-analyzer.php:492
+#: includes/seo/class-seo-analyzer.php:513
+#: includes/seo/class-seo-analyzer.php:521
 msgid "Tagline is customized"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:486
+#: includes/seo/class-seo-analyzer.php:515
 msgid "Your tagline is blank or still the WordPress default. Search engines may use it as your homepage description."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:487
+#: includes/seo/class-seo-analyzer.php:516
 msgid "Write a descriptive tagline under Settings → General → Tagline."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:494
+#: includes/seo/class-seo-analyzer.php:523
 msgid "Your tagline is set and ready to describe your site."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:553
-#: includes/seo/class-seo-analyzer.php:561
+#: includes/seo/class-seo-analyzer.php:582
+#: includes/seo/class-seo-analyzer.php:590
 msgid "Site is visible to search engines"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:555
+#: includes/seo/class-seo-analyzer.php:584
 msgid "Your site is telling search engines not to index it, so it will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:556
+#: includes/seo/class-seo-analyzer.php:585
 msgid "Untick \"Discourage search engines from indexing this site\" under Settings → Reading."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:563
+#: includes/seo/class-seo-analyzer.php:592
 msgid "Your site allows search engines to index it."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:577
-#: includes/seo/class-seo-analyzer.php:585
+#: includes/seo/class-seo-analyzer.php:606
+#: includes/seo/class-seo-analyzer.php:614
 msgid "Search-friendly permalinks"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:579
+#: includes/seo/class-seo-analyzer.php:608
 msgid "Your site uses plain, numeric URLs (e.g. ?p=123). Descriptive URLs are easier for search engines and users."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:580
+#: includes/seo/class-seo-analyzer.php:609
 msgid "Choose a pretty permalink structure (e.g. Post name) under Settings → Permalinks."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:587
+#: includes/seo/class-seo-analyzer.php:616
 msgid "Your permalinks are search-friendly."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:617
-#: includes/seo/class-seo-analyzer.php:625
+#: includes/seo/class-seo-analyzer.php:646
+#: includes/seo/class-seo-analyzer.php:654
 msgid "XML sitemap is enabled"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:619
+#: includes/seo/class-seo-analyzer.php:648
 msgid "Your XML sitemap is turned off. Search engines rely on it to discover new pages quickly."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:620
+#: includes/seo/class-seo-analyzer.php:649
 msgid "Enable the XML sitemap under Essential SEO → Crawling & AI Indexing → XML Sitemap."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:627
+#: includes/seo/class-seo-analyzer.php:656
 msgid "Your XML sitemap is enabled and pointing crawlers to your content."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:637
+#: includes/seo/class-seo-analyzer.php:666
 msgid "Structured data configured"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:643
+#: includes/seo/class-seo-analyzer.php:672
 msgid "Structured data is configured for your content."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:654
+#: includes/seo/class-seo-analyzer.php:683
 msgid "Structured data is running on ThinkRank's built-in defaults. Reviewing the schema type for each post type gives you control over how rich results appear."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:655
+#: includes/seo/class-seo-analyzer.php:684
 msgid "Choose a schema type for each post type under Essential SEO → Bulk SEO Optimization."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:662
+#: includes/seo/class-seo-analyzer.php:691
 msgid "No schema/structured data is configured or emitted. Schema powers rich results in search."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:663
+#: includes/seo/class-seo-analyzer.php:692
 msgid "Turn on automatic structured data, or choose a schema type for each post type under Essential SEO → Bulk SEO Optimization."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:822
+#: includes/seo/class-seo-analyzer.php:851
 msgid "Posts have meta descriptions"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:831
-#: includes/seo/class-seo-analyzer.php:2233
-#: includes/seo/class-seo-analyzer.php:2320
-#: includes/seo/class-seo-analyzer.php:2377
-#: includes/seo/class-seo-analyzer.php:2398
-#: includes/seo/class-seo-analyzer.php:2421
+#: includes/seo/class-seo-analyzer.php:860
+#: includes/seo/class-seo-analyzer.php:2390
+#: includes/seo/class-seo-analyzer.php:2477
+#: includes/seo/class-seo-analyzer.php:2534
+#: includes/seo/class-seo-analyzer.php:2555
+#: includes/seo/class-seo-analyzer.php:2578
 msgid "No published content to check yet."
 msgstr ""
 
 #. translators: 1: posts with meta description, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:868
+#: includes/seo/class-seo-analyzer.php:897
 #, php-format
 msgid "%1$d of your %2$d most recent posts have a meta description."
 msgstr ""
 
 #. translators: 1: posts missing a meta description, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:877
+#: includes/seo/class-seo-analyzer.php:906
 #, php-format
 msgid "%1$d of your %2$d most recent posts are missing a meta description. Search engines fall back to arbitrary page text for their snippets."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:878
+#: includes/seo/class-seo-analyzer.php:907
 msgid "Add meta descriptions in the ThinkRank SEO panel when editing a post, or use Bulk SEO Optimization to generate them with AI."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:891
+#: includes/seo/class-seo-analyzer.php:920
 msgid "Images have alt text"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:906
+#: includes/seo/class-seo-analyzer.php:935
 msgid "No images in your media library to check yet."
 msgstr ""
 
 #. translators: 1: images with alt text, 2: total images.
-#: includes/seo/class-seo-analyzer.php:931
+#: includes/seo/class-seo-analyzer.php:960
 #, php-format
 msgid "%1$d of your %2$d images have alt text."
 msgstr ""
 
 #. translators: 1: images missing alt text, 2: total images.
-#: includes/seo/class-seo-analyzer.php:940
+#: includes/seo/class-seo-analyzer.php:969
 #, php-format
 msgid "%1$d of your %2$d images are missing alt text. Alt text drives image search rankings and is an accessibility requirement."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:941
+#: includes/seo/class-seo-analyzer.php:970
 msgid "Under Essential SEO → Image SEO, turn on \"Save alt text to the Media Library\" and run \"Fill missing alt text\" to populate them from your format, or add alt text manually in the Media Library."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1001
-#: includes/seo/class-seo-analyzer.php:1011
+#: includes/seo/class-seo-analyzer.php:1030
+#: includes/seo/class-seo-analyzer.php:1040
 msgid "Supported PHP version"
 msgstr ""
 
 #. translators: %s: current PHP version.
-#: includes/seo/class-seo-analyzer.php:1004
+#: includes/seo/class-seo-analyzer.php:1033
 #, php-format
 msgid "You are running PHP %s, which no longer receives active support. Newer PHP is faster and more secure."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1005
+#: includes/seo/class-seo-analyzer.php:1034
 msgid "Ask your host to upgrade to PHP 8.1 or newer."
 msgstr ""
 
 #. translators: %s: current PHP version.
-#: includes/seo/class-seo-analyzer.php:1014
+#: includes/seo/class-seo-analyzer.php:1043
 #, php-format
 msgid "You are running a supported PHP version (%s)."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1028
-#: includes/seo/class-seo-analyzer.php:1035
+#: includes/seo/class-seo-analyzer.php:1057
+#: includes/seo/class-seo-analyzer.php:1064
 msgid "Persistent object cache"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1030
+#: includes/seo/class-seo-analyzer.php:1059
 msgid "A persistent object cache is active, reducing database load."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1037
+#: includes/seo/class-seo-analyzer.php:1066
 msgid "No persistent object cache is active. On busier sites this means more database queries per request."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1038
+#: includes/seo/class-seo-analyzer.php:1067
 msgid "Enable a persistent object cache (e.g. Redis or Memcached) via your host or a caching plugin."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1062
-#: includes/seo/class-seo-analyzer.php:1070
+#: includes/seo/class-seo-analyzer.php:1091
+#: includes/seo/class-seo-analyzer.php:1099
 msgid "Site uses HTTPS (SSL)"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1064
+#: includes/seo/class-seo-analyzer.php:1093
 msgid "Your site URL is not served over HTTPS. HTTPS is a confirmed ranking signal and required for user trust."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1065
+#: includes/seo/class-seo-analyzer.php:1094
 msgid "Install an SSL certificate and set your WordPress Address / Site Address to https:// under Settings → General."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1072
+#: includes/seo/class-seo-analyzer.php:1101
 msgid "Your site is served securely over HTTPS."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1085
-#: includes/seo/class-seo-analyzer.php:1092
+#: includes/seo/class-seo-analyzer.php:1114
+#: includes/seo/class-seo-analyzer.php:1121
 msgid "File editing disabled"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1087
+#: includes/seo/class-seo-analyzer.php:1116
 msgid "The dashboard plugin/theme file editor is disabled, reducing your attack surface."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1094
+#: includes/seo/class-seo-analyzer.php:1123
 msgid "The built-in file editor is enabled. If an admin account is compromised, an attacker could edit your PHP files from wp-admin."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1095
+#: includes/seo/class-seo-analyzer.php:1124
 msgid "Add define('DISALLOW_FILE_EDIT', true); to your wp-config.php."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1114
-#: includes/seo/class-seo-analyzer.php:1122
+#: includes/seo/class-seo-analyzer.php:1143
+#: includes/seo/class-seo-analyzer.php:1151
 msgid "Errors not shown publicly"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1116
+#: includes/seo/class-seo-analyzer.php:1145
 msgid "Debug output is displayed on the front end. Visible PHP errors can leak server paths and internals."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1117
+#: includes/seo/class-seo-analyzer.php:1146
 msgid "Set define('WP_DEBUG_DISPLAY', false); (or turn off WP_DEBUG) in wp-config.php on production."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1124
+#: includes/seo/class-seo-analyzer.php:1153
 msgid "PHP errors are not displayed to visitors."
 msgstr ""
 
 #. translators: %d: number of sampled pages.
-#: includes/seo/class-seo-analyzer.php:1394
+#: includes/seo/class-seo-analyzer.php:1423
 #, php-format
 msgid "ThinkRank found no readable text on the %d page it sampled, so this could not be checked."
 msgid_plural "ThinkRank found no readable text on any of the %d pages it sampled, so this could not be checked."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/seo/class-seo-analyzer.php:1402
+#: includes/seo/class-seo-analyzer.php:1431
 msgid "Pages built only from shortcodes, or with a page builder ThinkRank does not support, have no text it can read. Publish pages with written content, or check that your page builder is supported."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1477
+#: includes/seo/class-seo-analyzer.php:1506
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1372
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1436
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1461
@@ -5691,171 +5691,171 @@ msgstr ""
 msgid "(no title)"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1548
+#: includes/seo/class-seo-analyzer.php:1577
 msgid "AI answer engines can crawl your site"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1555
+#: includes/seo/class-seo-analyzer.php:1584
 msgid "ChatGPT, Claude, Perplexity and Google AI Overviews can all reach your content and cite it."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:1573
+#: includes/seo/class-seo-analyzer.php:1602
 #, php-format
 msgid "Your robots.txt blocks every AI answer engine (%s), so your pages cannot be cited in AI answers at all."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:1575
+#: includes/seo/class-seo-analyzer.php:1604
 #, php-format
 msgid "Your robots.txt blocks these AI answer engines: %s. Their assistants cannot read or cite your pages."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1576
+#: includes/seo/class-seo-analyzer.php:1605
 msgid "Under Essential SEO → Crawling & AI Indexing → Robots.txt, set the answer-engine crawlers to Allow. Blocking the training-only crawlers (GPTBot, ClaudeBot, CCBot) is a separate choice and does not cost you citations."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1717
+#: includes/seo/class-seo-analyzer.php:1781
 msgid "llms.txt is published"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1723
+#: includes/seo/class-seo-analyzer.php:1787
 msgid "The llms.txt module is unavailable, so this could not be checked."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1733
+#: includes/seo/class-seo-analyzer.php:1797
 msgid "Your llms.txt is published, so AI assistants have a summary of your site and its key pages."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1741
+#: includes/seo/class-seo-analyzer.php:1805
 msgid "No llms.txt is published. It is the file AI assistants read to learn what your site is about and which pages matter."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1742
+#: includes/seo/class-seo-analyzer.php:1806
 msgid "Fill in the fields under Essential SEO → Crawling & AI Indexing → LLMs.txt and publish it."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1754
+#: includes/seo/class-seo-analyzer.php:1818
 msgid "Answer-ready structured data"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1760
+#: includes/seo/class-seo-analyzer.php:1824
 msgid "Your site publishes FAQ, How-To or Q&A structured data, which AI answers can quote question-and-answer pairs from directly."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1772
+#: includes/seo/class-seo-analyzer.php:1836
 msgid "Add a ThinkRank FAQ or How-To block, widget or element to the pages that answer questions, or enable the FAQPage / HowTo schema types under Essential SEO → Schema."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1773
+#: includes/seo/class-seo-analyzer.php:1837
 msgid "Only mark up question-and-answer content you already publish. If this site does not answer discrete questions, answer-shaped schema does not apply and there is nothing to fix here."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1781
+#: includes/seo/class-seo-analyzer.php:1845
 msgid "Your pages publish Article or WebPage structured data, but no FAQ, How-To or Q&A schema. Those are the types AI answers quote from."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1789
+#: includes/seo/class-seo-analyzer.php:1853
 msgid "Your pages publish no structured data at all, so an AI assistant has to infer what each page is from its prose."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2222
+#: includes/seo/class-seo-analyzer.php:2379
 msgid "Pages open with a direct answer"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:2229
+#: includes/seo/class-seo-analyzer.php:2386
 #, php-format
 msgid "%1$d of your %2$d most recent pages open with a concise, quotable answer."
 msgstr ""
 
 #. translators: 1: posts without one, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:2231
+#: includes/seo/class-seo-analyzer.php:2388
 #, php-format
 msgid "%1$d of your %2$d most recent pages do not open with a concise answer. AI assistants quote the first self-contained passage they find, and a long preamble gives them nothing to lift."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2232
+#: includes/seo/class-seo-analyzer.php:2389
 msgid "Open each page with a 40–60 word paragraph that answers its title directly, before any background or introduction."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2311
+#: includes/seo/class-seo-analyzer.php:2468
 msgid "Headings phrased as questions"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:2316
+#: includes/seo/class-seo-analyzer.php:2473
 #, php-format
 msgid "%1$d of your %2$d most recent pages use question-style headings."
 msgstr ""
 
 #. translators: 1: posts without one, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:2318
+#: includes/seo/class-seo-analyzer.php:2475
 #, php-format
 msgid "%1$d of your %2$d most recent pages have no question-style heading. Assistants match a user's question against your headings first."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2319
+#: includes/seo/class-seo-analyzer.php:2476
 msgid "Phrase at least one H2 or H3 per page as the question it answers: \"How does X work?\" rather than \"Overview\"."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2368
+#: includes/seo/class-seo-analyzer.php:2525
 msgid "Content uses lists or tables"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:2373
+#: includes/seo/class-seo-analyzer.php:2530
 #, php-format
 msgid "%1$d of your %2$d most recent pages present information in lists or tables."
 msgstr ""
 
 #. translators: 1: posts without one, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:2375
+#: includes/seo/class-seo-analyzer.php:2532
 #, php-format
 msgid "%1$d of your %2$d most recent pages are unbroken prose. Steps, comparisons and specifications are extracted far more reliably from a list or table."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2376
+#: includes/seo/class-seo-analyzer.php:2533
 msgid "Break steps, comparisons and specifications out of the paragraphs into list or table blocks."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2389
+#: includes/seo/class-seo-analyzer.php:2546
 msgid "Pages have enough depth to cite"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:2394
+#: includes/seo/class-seo-analyzer.php:2551
 #, php-format
 msgid "%1$d of your %2$d most recent pages have enough substance for an assistant to cite."
 msgstr ""
 
 #. translators: 1: thin posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:2396
+#: includes/seo/class-seo-analyzer.php:2553
 #, php-format
 msgid "%1$d of your %2$d most recent pages are under 300 words. An assistant with a choice of sources rarely quotes the thinnest one."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2397
+#: includes/seo/class-seo-analyzer.php:2554
 msgid "Expand thin pages so each one answers its topic completely, or merge them into a page that does."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2412
+#: includes/seo/class-seo-analyzer.php:2569
 msgid "Content has been updated recently"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:2417
+#: includes/seo/class-seo-analyzer.php:2574
 #, php-format
 msgid "%1$d of your %2$d most recent pages were revised within the last year."
 msgstr ""
 
 #. translators: 1: stale posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:2419
+#: includes/seo/class-seo-analyzer.php:2576
 #, php-format
 msgid "%1$d of your %2$d most recent pages have not been revised in over a year. AI answers favour sources that look current."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2420
+#: includes/seo/class-seo-analyzer.php:2577
 msgid "Review your most important pages, update what has changed, and save them so their modified date reflects the revision."
 msgstr ""
 
@@ -5863,52 +5863,52 @@ msgstr ""
 msgid "Invalid title separator specified."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:3264
+#: includes/seo/class-site-identity-manager.php:3289
 msgid "Select a business type so your local schema describes the right kind of business."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:3273
+#: includes/seo/class-site-identity-manager.php:3298
 msgid "Business type is set to Local Business. A more specific type sharpens your schema, if one fits."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:3279
+#: includes/seo/class-site-identity-manager.php:3304
 msgid "Business type is selected for proper schema markup."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:2109
+#: includes/seo/class-sitemap-generator.php:2112
 msgid "The previous automatic sitemap rebuild stopped before it finished, most likely because PHP ran out of memory or time. It is retried with a growing delay. If this keeps happening, raise the PHP memory_limit or max_execution_time, or run WP-Cron from a system cron."
 msgstr ""
 
 #. translators: 1: memory in use, 2: PHP memory limit.
-#: includes/seo/class-sitemap-generator.php:2479
+#: includes/seo/class-sitemap-generator.php:2482
 #, php-format
 msgid "The sitemap rebuild was stopped at %1$s of the %2$s PHP memory limit, before PHP would have run out of memory. It will be retried by a process with more memory (WP-CLI or a system cron). To let it finish in the admin, raise the PHP memory_limit."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3008
+#: includes/seo/class-sitemap-generator.php:3011
 #, php-format
 msgid "The sitemap is disabled, but these files are still in the site root and your web server is still serving them: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3016
+#: includes/seo/class-sitemap-generator.php:3019
 #, php-format
 msgid "The sitemap is being served from WordPress, but these files are still in the site root and your web server will keep serving them instead: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: %s: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3038
+#: includes/seo/class-sitemap-generator.php:3041
 #, php-format
 msgid "The sitemap could not be written because the folder %s is not writable by PHP. Ask your host to make the WordPress root writable, or set Sitemap Delivery to Dynamic to serve the sitemap without writing files."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:3043
+#: includes/seo/class-sitemap-generator.php:3046
 msgid "The sitemap files could not be written to the site root."
 msgstr ""
 
 #. translators: %s: search query.
-#: includes/seo/class-social-meta-manager.php:2043
+#: includes/seo/class-social-meta-manager.php:2063
 #, php-format
 msgid "Search Results for \"%s\""
 msgstr ""
@@ -8322,7 +8322,7 @@ msgstr ""
 msgid "Detailed keyword performance data from Google Search Console."
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:42
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:41
 msgid "SEO opportunities and actionable insights based on your search performance data."
 msgstr ""
 
@@ -8330,68 +8330,68 @@ msgstr ""
 msgid "Date Range"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:73
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:71
 msgid "Keyword Opportunities"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:79
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:77
 msgid "Keywords with potential for ranking improvements"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:130
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:246
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:128
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:244
 msgid "Position:"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:143
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:141
 msgid "Impressions:"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:156
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:237
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:154
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:235
 msgid "CTR:"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:171
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:169
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:163
 #: src/admin/components/essential-seo/SiteIdentityTab.js:935
 msgid "Score:"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:198
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:196
 msgid "Device Performance"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:201
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:199
 msgid "Performance breakdown by device type"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:226
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:224
 msgid "Clicks:"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:272
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:270
 msgid "Search Appearance"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:275
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:273
 msgid "Rich results and search appearance features"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:307
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:305
 msgid "clicks"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:314
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:312
 msgid "impressions"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:321
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:319
 #: src/admin/components/essential-seo/KeywordsTab.js:213
 msgid "CTR"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:345
+#: src/admin/components/essential-seo/analytics/OpportunitiesSection.js:343
 msgid "No SEO opportunities data available yet. Search Console data collection may take 24-48 hours after API configuration."
 msgstr ""
 
@@ -8963,7 +8963,7 @@ msgstr ""
 
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1489
 #: src/admin/components/essential-seo/GlobalSEOTab.js:729
-#: src/metabox/components/MetaboxRobotsTab.js:183
+#: src/metabox/components/MetaboxRobotsTab.js:191
 msgid "None"
 msgstr ""
 
@@ -11277,12 +11277,12 @@ msgid "Image Preview"
 msgstr ""
 
 #: src/admin/components/essential-seo/GlobalSEOTab.js:733
-#: src/metabox/components/MetaboxRobotsTab.js:187
+#: src/metabox/components/MetaboxRobotsTab.js:195
 msgid "Standard"
 msgstr ""
 
 #: src/admin/components/essential-seo/GlobalSEOTab.js:737
-#: src/metabox/components/MetaboxRobotsTab.js:194
+#: src/metabox/components/MetaboxRobotsTab.js:202
 msgid "Large"
 msgstr ""
 
@@ -20623,11 +20623,15 @@ msgstr ""
 msgid "Max video preview seconds (-1 for unlimited)."
 msgstr ""
 
-#: src/metabox/components/MetaboxRobotsTab.js:206
+#: src/metabox/components/MetaboxRobotsTab.js:180
+msgid "Max image preview"
+msgstr ""
+
+#: src/metabox/components/MetaboxRobotsTab.js:215
 msgid "Max image preview size."
 msgstr ""
 
-#: src/metabox/components/MetaboxRobotsTab.js:221
+#: src/metabox/components/MetaboxRobotsTab.js:230
 msgid "This post will not be indexed by search engines."
 msgstr ""
 

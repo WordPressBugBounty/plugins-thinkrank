@@ -610,14 +610,21 @@ class Sitemap_Endpoint extends WP_REST_Controller {
         try {
             $sitemap_url = $request->get_param('sitemap_url') ?? home_url('/sitemap.xml');
 
-            // Validate sitemap URL
-            if (!filter_var($sitemap_url, FILTER_VALIDATE_URL)) {
+            // Validate sitemap URL. Url_Validator accepts an internationalised
+            // domain or a non-ASCII path (home_url() on an IDN site is one).
+            if (!\ThinkRank\Core\Url_Validator::is_valid($sitemap_url)) {
                 return new WP_Error(
                     'invalid_url',
                     'Invalid sitemap URL provided',
                     ['status' => 400]
                 );
             }
+
+            // Everything from here on works on the ASCII form (punycode host,
+            // percent-encoded path). wp_http_validate_url() resolves the host
+            // with gethostbyname(), which cannot resolve a Unicode name, and
+            // the SSRF check must see exactly the URL that is fetched.
+            $sitemap_url = \ThinkRank\Core\Url_Validator::to_ascii((string) $sitemap_url);
 
             // Block SSRF: this endpoint fetches the URL server-side, so reject
             // loopback/link-local/private hosts and non-http(s) schemes via

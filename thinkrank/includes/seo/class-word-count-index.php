@@ -63,8 +63,17 @@ class Word_Count_Index {
 
     /**
      * Counting rules version. Bump to retire every stored entry.
+     *
+     * Version 3 stopped counting shortcode syntax as words and stopped merging
+     * two words that only a tag separated (#893), so every version 2 entry is
+     * recounted once.
+     *
+     * Version 4 stopped counting tokens with no letter or digit in them. The
+     * tag-to-space change in version 3 left the punctuation after an inline
+     * tag ("<a>link</a>.") standing alone, where it was counted as a word, so
+     * every version 3 entry is recounted once.
      */
-    public const VERSION = 2;
+    public const VERSION = 4;
 
     /**
      * Short codes for the counting unit, as stored in an entry.
@@ -535,15 +544,7 @@ class Word_Count_Index {
      * @return int
      */
     public static function count_text(string $content): int {
-        // Scripts and styles carry no reading matter, and a page builder's
-        // output can hold a great deal of both. Counting them would make an
-        // empty page look substantial, which is the failure that matters here.
-        $text = preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', ' ', $content);
-        $text = wp_strip_all_tags((string) $text);
-        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        // Non-breaking spaces are spaces to a reader.
-        $text = str_replace(["\xc2\xa0", "\xe2\x80\x8b"], ' ', $text);
-        $text = trim((string) preg_replace('/\s+/u', ' ', $text));
+        $text = self::reading_text($content);
 
         if ('' === $text) {
             return 0;
@@ -557,8 +558,97 @@ class Word_Count_Index {
                 return mb_strlen(str_replace(' ', '', $text));
 
             default:
-                return count(preg_split('/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: []);
+                return self::count_words($text);
         }
+    }
+
+    /**
+     * Count the words in a line of reading text.
+     *
+     * A word is a whitespace-separated token holding at least one letter or
+     * digit, in any script. A token of punctuation or symbols alone is not
+     * one: reading_text() turns every tag into a space, so the full stop in
+     * "<a>link</a>." and the "৳" in WooCommerce's
+     * "<span>৳</span>100" stand on their own, and a dash set between spaces
+     * ("one — two") does the same in plain prose. Core's JS word counter drops
+     * punctuation too. Letters and digits are matched by Unicode property, so
+     * Bengali, Arabic or Cyrillic words still count; a combining mark is part
+     * of the letter before it, so a Bengali word keeps its vowel signs.
+     *
+     * Only the words unit uses this. The character units count every
+     * character, as core does, which is how CJK locales are counted.
+     *
+     * @since 2.14.2
+     *
+     * @param string $text Text as returned by {@see self::reading_text()}.
+     * @return int
+     */
+    public static function count_words(string $text): int {
+        $tokens = preg_split('/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY);
+
+        if (!is_array($tokens)) {
+            return 0;
+        }
+
+        return count(preg_grep('/[\p{L}\p{N}]/u', $tokens) ?: []);
+    }
+
+    /**
+     * The text a reader reads in a piece of stored content, as one line.
+     *
+     * Everything that is markup rather than reading matter is removed:
+     *
+     * - **Scripts and styles.** A page builder's output can hold a great deal
+     *   of both. Counting them would make an empty page look substantial,
+     *   which is the failure that matters here.
+     * - **Shortcode syntax** (#893). `[vc_column width="1/2"]` is not three
+     *   words, and a WPBakery or Divi classic page is mostly made of it, so
+     *   counting it reported a 216-word page as 325 and called it not thin.
+     *   The shortcodes are stripped, not rendered: `do_shortcode()` would
+     *   count what they output more accurately, but it means executing every
+     *   shortcode on the site inside a batch count, with whatever side effects
+     *   each one has (#860, #864). A shortcode that renders real prose is
+     *   undercounted, which is the safe direction for a thin content report.
+     *   Anything shortcode-shaped is stripped, registered or not, because a
+     *   builder's shortcodes are often not registered when the count runs.
+     *   Bracketed prose that looks like one ("see [note 4]") goes with it;
+     *   "[1]" and "[...]" do not, since a shortcode name starts with a letter.
+     * - **Tags**, replaced with a space rather than deleted, the way core's
+     *   own word counter does, so `<p>five</p><p>six</p>` stays two words.
+     *
+     * @since 2.14.2
+     *
+     * @param string $content HTML or text.
+     * @return string Plain text with whitespace collapsed to single spaces.
+     */
+    public static function reading_text(string $content): string {
+        // A `/u` pattern answers null on bytes that are not valid UTF-8, and
+        // the string casts below turned that into "": one Latin-1 byte from an
+        // old import made the whole page read as empty, a word count of 0 in
+        // both this report and the SEO score. Replace the bad bytes instead.
+        if ('' !== $content && 1 !== preg_match('//u', $content) && function_exists('mb_scrub')) {
+            $content = mb_scrub($content, 'UTF-8');
+        }
+
+        $text = (string) preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', ' ', $content);
+
+        // Before tags: an attribute value may hold a ">", which would end a
+        // tag match early. WordPress does not allow "[" or "]" inside a
+        // shortcode's attributes, so neither is crossed; that also keeps a
+        // stray "[" in prose from swallowing the text after it. The optional
+        // outer brackets take the escaped form "[[name]]" whole, rather than
+        // leaving two stray brackets to be counted as words.
+        $text = (string) preg_replace('/\[?\[\/?[A-Za-z][\w-]*[^\[\]]*\]\]?/u', ' ', $text);
+
+        $text = (string) preg_replace('/<!--.*?-->/s', ' ', $text);
+        $text = (string) preg_replace('#</?[A-Za-z][^>]*>#', ' ', $text);
+        // Backstop for anything malformed the patterns above did not take.
+        $text = wp_strip_all_tags($text);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        // Non-breaking spaces are spaces to a reader.
+        $text = str_replace(["\xc2\xa0", "\xe2\x80\x8b"], ' ', $text);
+
+        return trim((string) preg_replace('/\s+/u', ' ', $text));
     }
 
     /**

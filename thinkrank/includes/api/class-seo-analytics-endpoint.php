@@ -468,9 +468,9 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
             'site_url' => [
                 'required' => true,
                 'type' => 'string',
-                'sanitize_callback' => 'esc_url_raw',
+                'sanitize_callback' => [$this, 'sanitize_site_url'],
                 'validate_callback' => [$this, 'validate_site_url'],
-                'description' => 'Site URL to verify in Search Console'
+                'description' => 'Search Console property: a URL-prefix property (https://example.com/) or a domain property (sc-domain:example.com)'
             ]
         ];
     }
@@ -503,7 +503,24 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
             );
         }
 
-        if (!filter_var($site_url, FILTER_VALIDATE_URL)) {
+        // A domain property (sc-domain:example.com) is not a URL, and
+        // is_valid() refused every one, though the rest of the Search Console
+        // code reads them. Its host must be a real hostname; an IDN is fine.
+        if (0 === stripos($site_url, 'sc-domain:')) {
+            if (null === \ThinkRank\Core\Url_Validator::search_console_domain_property($site_url)) {
+                return new WP_Error(
+                    'invalid_site_url',
+                    'A domain property must be sc-domain: followed by a domain name, such as sc-domain:example.com',
+                    ['status' => 400]
+                );
+            }
+
+            return true;
+        }
+
+        // Url_Validator accepts an internationalised domain, which is a valid
+        // site URL; the raw PHP filter refuses every non-ASCII byte.
+        if (!\ThinkRank\Core\Url_Validator::is_valid($site_url)) {
             return new WP_Error(
                 'invalid_site_url',
                 'Site URL must be a valid URL',
@@ -512,6 +529,32 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
         }
 
         return true;
+    }
+
+    /**
+     * Sanitize the Search Console property sent to setup.
+     *
+     * esc_url_raw() for a URL-prefix property, as before. A domain property
+     * is not a URL: esc_url_raw() drops "sc-domain:" as an unknown protocol
+     * and returns "", so it is normalised to its punycode form instead, which
+     * is what verify_site() matches against the account's property list.
+     *
+     * @since 2.14.2
+     *
+     * @param mixed $site_url Raw parameter, already through validate_site_url().
+     * @return string
+     */
+    public function sanitize_site_url($site_url): string {
+        if (!is_string($site_url)) {
+            return '';
+        }
+
+        $domain = \ThinkRank\Core\Url_Validator::search_console_domain_property($site_url);
+        if (null !== $domain) {
+            return $domain;
+        }
+
+        return esc_url_raw($site_url);
     }
 
     /**

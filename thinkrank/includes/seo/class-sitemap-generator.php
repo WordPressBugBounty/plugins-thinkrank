@@ -901,7 +901,10 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // Add image entries if provided
         foreach ($images as $image) {
             $xml .= "    <image:image>\n";
-            $xml .= "      <image:loc>" . esc_url(Url_Scheme::apply((string) $image['url'])) . "</image:loc>\n";
+            // The sitemap protocol wants an escaped URL, and WordPress hands back
+            // attachment URLs with non-ASCII filenames unencoded (esc_url() does
+            // not encode them either), so write the percent-encoded form (#924).
+            $xml .= "      <image:loc>" . esc_url(\ThinkRank\Core\Url_Validator::to_ascii(Url_Scheme::apply((string) $image['url']))) . "</image:loc>\n";
 
             if (!empty($image['title'])) {
                 $xml .= "      <image:title>" . esc_html($image['title']) . "</image:title>\n";
@@ -1351,7 +1354,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 $image_url = $src_match[1];
 
                 // Skip if not a valid URL or external image
-                if (!filter_var($image_url, FILTER_VALIDATE_URL)) {
+                if (!\ThinkRank\Core\Url_Validator::is_valid($image_url)) {
                     continue;
                 }
 

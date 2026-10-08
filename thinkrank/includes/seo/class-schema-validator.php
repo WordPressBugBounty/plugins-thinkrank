@@ -319,7 +319,7 @@ class Schema_Validator {
         // Check for social media profiles - properly validate array
         if (!isset($schema['sameAs']) || empty($schema['sameAs']) ||
             (is_array($schema['sameAs']) && count(array_filter($schema['sameAs'], function($url) {
-                return !empty($url) && filter_var($url, FILTER_VALIDATE_URL);
+                return !empty($url) && \ThinkRank\Core\Url_Validator::is_valid($url);
             })) === 0)) {
             $validation['suggestions'][] = 'Social media profiles (sameAs) are recommended for organization schema - add Facebook, Twitter, LinkedIn, Instagram, or YouTube URLs.';
         }
@@ -357,7 +357,7 @@ class Schema_Validator {
         // Check for social media profiles - properly validate array
         if (!isset($schema['sameAs']) || empty($schema['sameAs']) ||
             (is_array($schema['sameAs']) && count(array_filter($schema['sameAs'], function($url) {
-                return !empty($url) && filter_var($url, FILTER_VALIDATE_URL);
+                return !empty($url) && \ThinkRank\Core\Url_Validator::is_valid($url);
             })) === 0)) {
             $validation['suggestions'][] = 'Social media profiles (sameAs) are recommended for local business schema.';
         }

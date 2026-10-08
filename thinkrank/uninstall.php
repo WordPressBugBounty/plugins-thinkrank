@@ -260,6 +260,27 @@ class ThinkRank_Uninstaller {
             )
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+
+        // Names the wildcards above cannot reach (#918).
+        //
+        // The usage tracker stores the deactivation survey under
+        // `wpins_deactivation_{reason,details}_{plugin}`, which `wpins_thinkrank_%`
+        // misses. Named exactly: widening to `wpins_%` would delete the state of
+        // every other plugin that ships the same telemetry SDK.
+        foreach (['wpins_deactivation_reason_thinkrank', 'wpins_deactivation_details_thinkrank'] as $option) {
+            delete_option($option);
+        }
+
+        // Search Console caches that versions before 2.14.2 wrote under unprefixed
+        // names (2.14.2 moved them to the `thinkrank_` prefix, see #918).
+        // They expire within three days of the upgrade, but uninstalling inside
+        // that window would otherwise leave the site's search queries behind.
+        foreach (['7d', '30d', '90d', '14d', '60d', '180d'] as $range) {
+            delete_transient('analytics_dashboard_v5_' . $range);
+        }
+        foreach (['7d', '30d', '90d'] as $range) {
+            delete_transient('seo_opportunities_' . $range);
+        }
     }
     
     /**

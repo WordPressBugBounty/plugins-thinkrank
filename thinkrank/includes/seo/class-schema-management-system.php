@@ -2245,13 +2245,8 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             return false;
         }
 
-        if (!filter_var($url, FILTER_VALIDATE_URL)) {
-            return false;
-        }
-
-        $scheme = wp_parse_url($url, PHP_URL_SCHEME);
-
-        return in_array(strtolower((string) $scheme), ['http', 'https'], true);
+        // IRI-aware: a non-ASCII path or IDN host is a real URL (#924).
+        return \ThinkRank\Core\Url_Validator::is_http_url($url);
     }
 
     /**

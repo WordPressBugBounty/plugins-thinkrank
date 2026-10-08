@@ -24,6 +24,7 @@ use ThinkRank\SEO\Content_Optimization_Manager;
 use ThinkRank\SEO\Schema_Management_System;
 use ThinkRank\SEO\Social_Meta_Manager;
 use ThinkRank\SEO\Sitemap_Generator;
+use ThinkRank\SEO\Analytics_Manager;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -934,9 +935,10 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
 
             // Clear analytics cache when GSC/GA settings change so fresh data is fetched
             if ($category === 'seo_analytics') {
+                foreach (Analytics_Manager::dashboard_cache_keys() as $cache_key) {
+                    delete_transient($cache_key);
+                }
                 foreach (['7d', '30d', '90d'] as $range) {
-                    delete_transient("analytics_dashboard_v5_{$range}");
-                    delete_transient("seo_opportunities_{$range}");
                     delete_transient("seo_insights_{$range}");
                 }
                 delete_transient('indexing_status');

@@ -68,6 +68,35 @@ class SEO_Analyzer {
         'faq',         // Widely used in third-party add-on element names
     ];
 
+    /**
+     * Builder meta keys that never describe the published page.
+     *
+     * `_fl_builder_draft` holds Beaver Builder changes that were never
+     * published, so a FAQ that exists only there is not on the page (#945).
+     *
+     * @since 2.14.2
+     * @var string[]
+     */
+    private const UNPUBLISHED_BUILDER_META_KEYS = ['_fl_builder_draft'];
+
+    /**
+     * Builder layouts that only count while their builder renders the post.
+     *
+     * Elementor and Beaver Builder both keep their stored layout after the
+     * author switches the page back to the block editor, so the layout alone
+     * does not mean the builder renders it. Each key maps to the builder's own
+     * flag and the value that means "on": Elementor's `_elementor_edit_mode`
+     * is `builder`, Beaver's `_fl_builder_enabled` is any non-empty value
+     * (null here). The same tests as FAQ_Content::builder() (#945).
+     *
+     * @since 2.14.2
+     * @var array<string,array{0:string,1:string|null}>
+     */
+    private const FLAGGED_BUILDER_LAYOUTS = [
+        '_elementor_data'  => ['_elementor_edit_mode', 'builder'],
+        '_fl_builder_data' => ['_fl_builder_enabled', null],
+    ];
+
     // Check result statuses.
     public const PASSED  = 'passed';
     public const WARNING = 'warning';
@@ -1693,10 +1722,7 @@ class SEO_Analyzer {
 
             $collecting = false;
 
-            // `/` is the canonical full block; `/*` is the same instruction
-            // written for a wildcard-aware crawler, and every answer engine on
-            // the list is one.
-            if ('disallow' === $field && ('/' === $value || '/*' === $value)) {
+            if ('disallow' === $field && self::disallow_blocks_everything($value)) {
                 foreach ($current as $agent) {
                     $groups[$agent] = true;
                 }
@@ -1704,6 +1730,44 @@ class SEO_Analyzer {
         }
 
         return $groups;
+    }
+
+    /**
+     * Whether a `Disallow:` value matches every URL on the site.
+     *
+     * `/` is the canonical full block; `/*` is the same instruction written
+     * for a wildcard-aware crawler, and every answer engine on the list is
+     * one. A value is a path pattern in which `*` matches any run of
+     * characters, so a bare `*` (and `**`, `/**`) matches every path too, and
+     * Google's parser treats it that way. Recognising only `/` and `/*`
+     * reported a site that blocked everyone with `Disallow: *` as reachable
+     * by every answer engine (#890).
+     *
+     * A trailing `$` anchors the pattern to the end of the URL. After a `*`
+     * it changes nothing, since "any run of characters, then the end" still
+     * matches every path, so `*$` and `/*$` are full blocks as well. Without
+     * a `*` it narrows the match: `/$` is the home page only, and `/*.pdf$`
+     * is PDFs only, so neither counts.
+     *
+     * An empty value means "allow everything" and must never count as a
+     * block, so it is rejected here rather than left to the caller.
+     *
+     * `Allow:` lines are deliberately not weighed against this: a full
+     * robots.txt evaluator with longest-match precedence is a separate change.
+     *
+     * @since 2.14.2
+     * @param string $value Trimmed `Disallow:` value, comment already removed.
+     * @return bool
+     */
+    private static function disallow_blocks_everything(string $value): bool {
+        if ('' === $value) {
+            return false;
+        }
+
+        // Optional leading slash, then either nothing (`/`) or a run of `*`
+        // with an optional end anchor (`*`, `/*`, `/*$`, `**$`). A `$` with
+        // no `*` before it never matches here, so `/$` stays a partial block.
+        return 1 === preg_match('#^/?(?:\*+\$?)?$#', $value);
     }
 
     /**
@@ -1863,8 +1927,8 @@ class SEO_Analyzer {
 
         // Builder trees: ThinkRank's own elements, and the builders' generic
         // accordion/toggle/FAQ elements, which are what a non-ThinkRank FAQ
-        // is actually built from.
-        $meta_keys = self::builder_meta_keys();
+        // is actually built from. Only layouts the visitor is served count.
+        $meta_keys = self::rendered_builder_meta_keys();
 
         if (empty($meta_keys)) {
             return false;
@@ -1884,6 +1948,8 @@ class SEO_Analyzer {
             $marker_values[]  = '%' . $wpdb->esc_like($marker) . '%';
         }
 
+        [$gate_sql, $gate_values] = self::builder_layout_renders_sql('pm');
+
         // Same exemption: both placeholder runs are sized from fixed lists —
         // the builder meta keys and the marker list — and every value is
         // prepared.
@@ -1894,9 +1960,10 @@ class SEO_Analyzer {
                    INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
                   WHERE p.post_status = 'publish'
                     AND pm.meta_key IN ({$key_placeholders})
-                    AND (" . implode(' OR ', $marker_clauses) . ')
-                  LIMIT 1',
-                ...array_merge($meta_keys, $marker_values)
+                    AND (" . implode(' OR ', $marker_clauses) . ")
+                    {$gate_sql}
+                  LIMIT 1",
+                ...array_merge($meta_keys, $marker_values, $gate_values)
             )
         );
         // phpcs:enable
@@ -2015,7 +2082,7 @@ class SEO_Analyzer {
             $content_values[]  = '%' . $wpdb->esc_like($marker) . '%';
         }
 
-        $meta_keys = self::builder_meta_keys();
+        $meta_keys = self::rendered_builder_meta_keys();
         $meta_sql  = '';
         $values    = $content_values;
 
@@ -2027,14 +2094,17 @@ class SEO_Analyzer {
                 $meta_values[]  = '%' . $wpdb->esc_like($marker) . '%';
             }
 
+            [$gate_sql, $gate_values] = self::builder_layout_renders_sql('pm');
+
             $key_placeholders = implode(', ', array_fill(0, count($meta_keys), '%s'));
             $meta_sql         = " OR EXISTS (
                        SELECT 1 FROM {$wpdb->postmeta} pm
                         WHERE pm.post_id = p.ID
                           AND pm.meta_key IN ({$key_placeholders})
-                          AND (" . implode(' OR ', $meta_clauses) . ')
-                   )';
-            $values = array_merge($content_values, $meta_keys, $meta_values);
+                          AND (" . implode(' OR ', $meta_clauses) . ")
+                          {$gate_sql}
+                   )";
+            $values = array_merge($content_values, $meta_keys, $meta_values, $gate_values);
         }
 
         $values[] = self::CONTENT_SAMPLE_SIZE;
@@ -2090,7 +2160,11 @@ class SEO_Analyzer {
         }
 
         // Elementor stores its tree as JSON, so the widget name appears verbatim.
-        $elementor = get_post_meta($post_id, '_elementor_data', true);
+        // Read only while Elementor renders the post: the tree survives
+        // switching the page back to the block editor (#945).
+        $elementor = self::builder_layout_renders($post_id, '_elementor_data')
+            ? get_post_meta($post_id, '_elementor_data', true)
+            : '';
         if (is_string($elementor)
             && (false !== strpos($elementor, '"' . self::ANSWER_FAQ_NAME . '"')
                 || false !== strpos($elementor, '"' . self::ANSWER_HOWTO_NAME . '"'))) {
@@ -2104,7 +2178,10 @@ class SEO_Analyzer {
         }
 
         // Beaver Builder keeps its layout in postmeta as a map of node objects.
-        $layout = get_post_meta($post_id, '_fl_builder_data', true);
+        // Read only while Beaver renders the post, for the same reason (#945).
+        $layout = self::builder_layout_renders($post_id, '_fl_builder_data')
+            ? get_post_meta($post_id, '_fl_builder_data', true)
+            : [];
         if (is_array($layout)) {
             foreach ($layout as $node) {
                 $settings = is_object($node) ? ($node->settings ?? null) : ($node['settings'] ?? null);
@@ -2123,7 +2200,7 @@ class SEO_Analyzer {
         // already knows every key involved — Oxygen 6 is Breakdance under the
         // hood, and older releases used two other keys — so ask it rather than
         // keeping a second list that can drift.
-        foreach (self::builder_meta_keys() as $meta_key) {
+        foreach (self::rendered_builder_meta_keys() as $meta_key) {
             if ('_fl_builder_data' === $meta_key || '_elementor_data' === $meta_key) {
                 continue; // Handled above, in their own storage shapes.
             }
@@ -2158,6 +2235,86 @@ class SEO_Analyzer {
         }
 
         return Builder_Content::builder_meta_keys();
+    }
+
+    /**
+     * Builder meta keys that can hold the published page.
+     *
+     * {@see builder_meta_keys()} without the unpublished draft keys, which
+     * Builder_Content lists because the word-count index watches them, not
+     * because they are ever served (#945).
+     *
+     * @since 2.14.2
+     * @return string[]
+     */
+    private static function rendered_builder_meta_keys(): array {
+        return array_values(array_diff(self::builder_meta_keys(), self::UNPUBLISHED_BUILDER_META_KEYS));
+    }
+
+    /**
+     * Whether a builder layout key holds what the visitor is served.
+     *
+     * The answer-content readers' guard for #945. Builder_Content gains the
+     * same guards for its resolver in #910, and once that lands this can ask
+     * it instead; until then it reads the builders' own flags, exactly as
+     * FAQ_Content::builder() does.
+     *
+     * @since 2.14.2
+     * @param int    $post_id  Post being inspected.
+     * @param string $meta_key Builder meta key about to be read.
+     * @return bool
+     */
+    private static function builder_layout_renders(int $post_id, string $meta_key): bool {
+        if (in_array($meta_key, self::UNPUBLISHED_BUILDER_META_KEYS, true)) {
+            return false;
+        }
+
+        if (!isset(self::FLAGGED_BUILDER_LAYOUTS[$meta_key])) {
+            return true;
+        }
+
+        [$flag, $on] = self::FLAGGED_BUILDER_LAYOUTS[$meta_key];
+        $value       = get_post_meta($post_id, $flag, true);
+
+        return null === $on ? !empty($value) : $on === (string) $value;
+    }
+
+    /**
+     * {@see builder_layout_renders()} as an SQL condition on a postmeta row.
+     *
+     * The site-wide queries match markers in SQL with nothing confirming each
+     * row in PHP afterwards, so the flag test has to happen there too. Rows
+     * under any other key pass untouched. `!empty()` in PHP is false for '' and
+     * '0', which is what the "any non-empty value" branch excludes.
+     *
+     * @since 2.14.2
+     * @param string $alias Alias of the postmeta row being tested.
+     * @return array{0:string,1:array<int,string>} ` AND (...)` clause and its values.
+     */
+    private static function builder_layout_renders_sql(string $alias): array {
+        global $wpdb;
+
+        $flagged = array_keys(self::FLAGGED_BUILDER_LAYOUTS);
+        $clauses = [$alias . '.meta_key NOT IN (' . implode(', ', array_fill(0, count($flagged), '%s')) . ')'];
+        $values  = $flagged;
+
+        foreach (self::FLAGGED_BUILDER_LAYOUTS as $meta_key => [$flag, $on]) {
+            $test      = null === $on ? "flag.meta_value NOT IN ('', '0')" : 'flag.meta_value = %s';
+            $clauses[] = "({$alias}.meta_key = %s AND EXISTS (
+                           SELECT 1 FROM {$wpdb->postmeta} flag
+                            WHERE flag.post_id = {$alias}.post_id
+                              AND flag.meta_key = %s
+                              AND {$test}
+                       ))";
+            $values[]  = $meta_key;
+            $values[]  = $flag;
+
+            if (null !== $on) {
+                $values[] = $on;
+            }
+        }
+
+        return [' AND (' . implode(' OR ', $clauses) . ')', $values];
     }
 
     /**

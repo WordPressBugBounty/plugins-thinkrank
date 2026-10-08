@@ -791,9 +791,7 @@ class Slim_SEO_Schema_Converter {
      * @param mixed $value Candidate
      */
     private function is_url($value): bool {
-        return is_string($value)
-            && (bool) filter_var($value, FILTER_VALIDATE_URL)
-            && in_array(strtolower((string) wp_parse_url($value, PHP_URL_SCHEME)), ['http', 'https'], true);
+        return \ThinkRank\Core\Url_Validator::is_http_url($value);
     }
 
     // -------------------------------------------------------------------------

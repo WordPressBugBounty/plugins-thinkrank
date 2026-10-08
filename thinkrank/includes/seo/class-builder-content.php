@@ -736,6 +736,17 @@ class Builder_Content {
      * editor, which then showed the related post, and Update saved it over the
      * original (#860).
      *
+     * Secondary queries also run with front-end statuses. In wp-admin core
+     * marks every `WP_Query` as an admin query and, when no `post_status` is
+     * set, adds the statuses the admin post list shows, draft among them, so
+     * a related-posts shortcode listed drafts the front end never shows and
+     * the editor-load analysis disagreed with REST and the page (#902).
+     *
+     * The main query points at the post too. Restoring the globals afterwards
+     * (#860) did not reach between shortcodes: a related-posts loop's own
+     * `wp_reset_postdata()` still found no post on the main query, so every
+     * later shortcode in the same render saw the last looped post (#903).
+     *
      * @param string   $raw  Raw post content.
      * @param \WP_Post $post Post the content belongs to.
      * @return string Rendered content.
@@ -748,9 +759,27 @@ class Builder_Content {
         $content  = $raw;
         $previous = self::snapshot_post_globals();
 
+        // After pre_get_posts core reads `is_admin` only to add the admin
+        // list's statuses when none were asked for, so queries that set
+        // `post_status`, and the main query, are untouched.
+        $front_end_statuses = static function ($query): void {
+            if ($query instanceof \WP_Query && !$query->is_main_query()) {
+                $query->is_admin = false;
+            }
+        };
+
+        // `wp_reset_postdata()` returns to the main query's post, which admin
+        // and REST requests do not have. Restored in finally, null included.
+        $main_query      = (isset($GLOBALS['wp_query']) && $GLOBALS['wp_query'] instanceof \WP_Query) ? $GLOBALS['wp_query'] : null;
+        $main_query_post = $main_query ? $main_query->post : null;
+
         try {
             // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Made current for the render, restored in finally.
             $GLOBALS['post'] = $post;
+            add_action('pre_get_posts', $front_end_statuses, PHP_INT_MIN);
+            if ($main_query) {
+                $main_query->post = $post;
+            }
 
             // Fires `the_post`, which these paths never fired before: admin,
             // REST and cron analysis had no current post at all. That is the
@@ -775,6 +804,10 @@ class Builder_Content {
         } catch (\Throwable $e) {
             return $raw;
         } finally {
+            if ($main_query) {
+                $main_query->post = $main_query_post;
+            }
+            remove_action('pre_get_posts', $front_end_statuses, PHP_INT_MIN);
             self::restore_post_globals($previous);
         }
 

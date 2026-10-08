@@ -1637,7 +1637,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             $optimization['score'] -= 20;
         } else {
             // Validate logo URL and dimensions
-            if (!filter_var($logo_url, FILTER_VALIDATE_URL)) {
+            if (!\ThinkRank\Core\Url_Validator::is_http_url($logo_url)) {
                 $optimization['warnings'][] = 'Logo URL format is invalid';
                 $optimization['score'] -= 15;
             }
@@ -1658,7 +1658,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         }
 
         // Additional logo analysis for local images
-        if (!empty($logo_url) && filter_var($logo_url, FILTER_VALIDATE_URL)) {
+        if (!empty($logo_url) && \ThinkRank\Core\Url_Validator::is_http_url($logo_url)) {
             $attachment_id = Attachment_Lookup::id_from_url($logo_url);
             if ($attachment_id) {
                 $image_meta = wp_get_attachment_metadata($attachment_id);
@@ -2146,10 +2146,35 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             }
         }
 
-        // Validate logo URL
-        if (isset($settings['logo_url']) && !empty($settings['logo_url'])) {
-            if (!filter_var($settings['logo_url'], FILTER_VALIDATE_URL)) {
-                $validation['errors'][] = 'Logo URL must be a valid URL';
+        // Image and link URLs. These are written into src and href
+        // attributes (the schema logo, the admin previews, the hero section),
+        // so only web URLs are accepted. is_valid() takes any scheme, and
+        // "javascript://%0Aalert(1)" passed it and was stored as
+        // "javascript://alert(1)" once sanitize_text_field() dropped the %0A.
+        // The logo and default social image must be absolute: they are
+        // published in schema and Open Graph, which require it. The others
+        // may also be a path on this site.
+        $url_fields = [
+            'logo_url'              => ['Logo URL', false],
+            'default_social_image'  => ['Default social image URL', false],
+            'favicon_url'           => ['Favicon URL', true],
+            'apple_touch_icon_url'  => ['Apple touch icon URL', true],
+            'hero_background_image' => ['Hero background image URL', true],
+            'hero_cta_url'          => ['Call-to-action URL', true],
+        ];
+        foreach ($url_fields as $key => [$label, $allow_path]) {
+            if (!isset($settings[$key]) || '' === $settings[$key] || null === $settings[$key]) {
+                continue;
+            }
+
+            $ok = $allow_path
+                ? \ThinkRank\Core\Url_Validator::is_http_url_or_path($settings[$key])
+                : \ThinkRank\Core\Url_Validator::is_http_url($settings[$key]);
+
+            if (!$ok) {
+                $validation['errors'][] = $allow_path
+                    ? sprintf('%s must be an http or https URL, or a path starting with /', $label)
+                    : sprintf('%s must be an http or https URL', $label);
                 $validation['valid'] = false;
             }
         }
@@ -2589,7 +2614,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
 
         // CTA URL validation
         if (!empty($settings['hero_cta_url'])) {
-            if (filter_var($settings['hero_cta_url'], FILTER_VALIDATE_URL) || strpos($settings['hero_cta_url'], '/') === 0) {
+            if (\ThinkRank\Core\Url_Validator::is_http_url_or_path($settings['hero_cta_url'])) {
                 $field_details[] = [
                     'field' => 'hero_cta_url',
                     'label' => 'Call-to-action URL is properly configured.',
@@ -2632,7 +2657,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
 
         // Site Logo validation (from Site Assets section)
         if (!empty($settings['logo_url'])) {
-            if (filter_var($settings['logo_url'], FILTER_VALIDATE_URL)) {
+            if (\ThinkRank\Core\Url_Validator::is_http_url($settings['logo_url'])) {
                 $field_details[] = [
                     'field' => 'logo_url',
                     'label' => 'Site logo is properly configured.',
@@ -4103,7 +4128,10 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
                     }
                     break;
                 case 'sitemap':
-                    if (!filter_var($value, FILTER_VALIDATE_URL)) {
+                    // Url_Validator, not the raw PHP filter: on a site with an
+                    // internationalised domain the site's own sitemap URL is
+                    // non-ASCII and the raw filter refused it.
+                    if (!\ThinkRank\Core\Url_Validator::is_valid($value)) {
                         $validation['errors'][] = "Invalid sitemap URL: {$value}";
                         $validation['valid'] = false;
                     }
@@ -4504,8 +4532,8 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         }
 
         // Validate URL
-        if (!filter_var($value, FILTER_VALIDATE_URL)) {
-            $optimization['validation']['errors'][] = "{$element} must be a valid URL";
+        if (!\ThinkRank\Core\Url_Validator::is_http_url($value)) {
+            $optimization['validation']['errors'][] = "{$element} must be an http or https URL";
             $optimization['validation']['valid'] = false;
             return $optimization;
         }

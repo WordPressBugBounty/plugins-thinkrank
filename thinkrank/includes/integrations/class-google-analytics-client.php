@@ -121,6 +121,14 @@ class Google_Analytics_Client extends Google_API_Base_Client {
     /**
      * Run analytics report for specified metrics and date range
      *
+     * The window is exactly `$date_range` days long and ends yesterday (UTC):
+     * "30d" is the 30 complete days before today. GA4's startDate and endDate
+     * are both inclusive, so the start is `days - 1` days before the end.
+     * Today is left out because it is a partial day, which is also what
+     * GA4's own "Last 30 days" does. Search Console ends two days earlier
+     * (D-2) because its data lags; GA4's does not, so it is not held back
+     * to match (#923).
+     *
      * @param string $date_range Date range ('7d', '30d', '90d')
      * @param array $metrics Metrics to retrieve (GA4 metric names)
      * @param array $dimensions Dimensions to group by
@@ -130,10 +138,12 @@ class Google_Analytics_Client extends Google_API_Base_Client {
     public function run_report(string $date_range = '30d', array $metrics = ['sessions'], array $dimensions = []): array {
         $endpoint = "/{$this->property_id}:runReport";
 
-        // Convert date range to start/end dates
-        $end_date = gmdate('Y-m-d');
-        $days = (int) str_replace('d', '', $date_range);
-        $start_date = gmdate('Y-m-d', strtotime("-{$days} days"));
+        // Convert date range to start/end dates, from one anchor so a request
+        // straddling midnight cannot mix two days.
+        $days       = max(1, (int) str_replace('d', '', $date_range));
+        $end_ts     = strtotime('-1 day', time());
+        $end_date   = gmdate('Y-m-d', $end_ts);
+        $start_date = gmdate('Y-m-d', strtotime('-' . ($days - 1) . ' days', $end_ts));
 
         $request_body = [
             'dateRanges' => [

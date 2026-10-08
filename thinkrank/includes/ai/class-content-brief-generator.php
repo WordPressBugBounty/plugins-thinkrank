@@ -960,6 +960,30 @@ class Content_Brief_Generator {
 
         return $normalized;
     }
+    /**
+     * The URL to check and fetch for a competitor URL the user entered, or
+     * null when it is not a valid URL.
+     *
+     * A competitor page on an internationalised domain, or with a Bengali or
+     * Arabic slug, is a valid URL, so the syntax check is Url_Validator's.
+     * What comes back is the ASCII form (punycode host, percent-encoded path),
+     * and both the SSRF guard and the fetch use it: the guard cannot resolve
+     * a Unicode host name, and it must check exactly the URL that is then
+     * requested.
+     *
+     * @since 2.14.2
+     *
+     * @param string $url Trimmed URL as entered.
+     * @return string|null ASCII URL, or null when invalid.
+     */
+    private function competitor_fetch_url(string $url): ?string {
+        if ('' === $url || !\ThinkRank\Core\Url_Validator::is_valid($url)) {
+            return null;
+        }
+
+        return \ThinkRank\Core\Url_Validator::to_ascii($url);
+    }
+
     private function analyze_competitor_urls(array $urls): string {
         $analysis_results = [];
         $failed_urls = [];
@@ -969,7 +993,8 @@ class Content_Brief_Generator {
 
         foreach ($urls as $url) {
             $url = trim($url);
-            if (empty($url) || !filter_var($url, FILTER_VALIDATE_URL)) {
+            $fetch_url = $this->competitor_fetch_url($url);
+            if (null === $fetch_url) {
                 $failed_urls[] = $url . " (invalid URL)";
                 continue;
             }
@@ -977,12 +1002,12 @@ class Content_Brief_Generator {
             // SSRF guard: only fetch public http/https hosts. Blocks loopback,
             // link-local (cloud metadata), private and reserved ranges before any
             // request is made.
-            if (!$this->is_safe_public_url($url)) {
+            if (!$this->is_safe_public_url($fetch_url)) {
                 $failed_urls[] = $url . " (blocked: non-public host)";
                 continue;
             }
 
-            $content_data = $this->scrape_competitor_content($url);
+            $content_data = $this->scrape_competitor_content($fetch_url);
             if ($content_data) {
                 $analysis_results[] = $this->format_competitor_analysis($url, $content_data);
             } else {
@@ -1230,7 +1255,7 @@ class Content_Brief_Generator {
         if (!empty($content_data['headings'])) {
             $analysis .= "\nCONTENT STRUCTURE:\n";
             foreach ($content_data['headings'] as $level => $headings) {
-                $analysis .= "- " . strtoupper($level) . " ({count}): " . implode(', ', array_slice($headings, 0, 3));
+                $analysis .= "- " . strtoupper($level) . " (" . count($headings) . "): " . implode(', ', array_slice($headings, 0, 3));
                 if (count($headings) > 3) {
                     $analysis .= "... (+" . (count($headings) - 3) . " more)";
                 }

@@ -1264,12 +1264,14 @@ class SEOScoreCalculator {
             return 0.0;
         }
 
-        $content_lower = strtolower(wp_strip_all_tags($content));
+        // Occurrences and the word count both come from the reading text, so
+        // shortcode syntax is in neither.
+        $content_lower = strtolower(self::reading_text_of($content));
         $keyword_lower = strtolower($target_keyword);
 
         // Calculate keyword and semantic term frequency
         $keyword_count = substr_count($content_lower, $keyword_lower);
-        $word_count = $this->calculate_word_count_js_style($content_lower);
+        $word_count = \ThinkRank\SEO\Word_Count_Index::count_words($content_lower);
 
         if ($word_count === 0) {
             return 0.0;
@@ -1350,8 +1352,11 @@ class SEOScoreCalculator {
         if (empty($content) || empty($target_keyword)) {
             return 0.0;
         }
-        $plain = strtolower(wp_strip_all_tags($content));
-        $word_count = $this->calculate_word_count_js_style($plain);
+        // Numerator and denominator from the same reading text. Counting the
+        // keyword in wp_strip_all_tags() output found it inside shortcode
+        // attributes the word count no longer includes.
+        $plain = strtolower(self::reading_text_of($content));
+        $word_count = \ThinkRank\SEO\Word_Count_Index::count_words($plain);
         if ($word_count === 0) {
             return 0.0;
         }
@@ -1388,8 +1393,8 @@ class SEOScoreCalculator {
         if (empty($content) || empty($target_keyword)) {
             return false;
         }
-        $plain = strtolower(wp_strip_all_tags($content));
-        $words = preg_split('/\s+/', trim($plain), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $plain = strtolower(self::reading_text_of($content));
+        $words = preg_split('/\s+/', $plain, -1, PREG_SPLIT_NO_EMPTY) ?: [];
         $window = array_slice($words, 0, max(50, (int) ceil(count($words) * 0.1)));
         return strpos(implode(' ', $window), strtolower($target_keyword)) !== false;
     }
@@ -1651,9 +1656,10 @@ class SEOScoreCalculator {
         // Extract headings from content
         $headings = $this->extract_headings($content);
 
-        // Count words using JavaScript-compatible method
-        $plain_text = wp_strip_all_tags($content);
-        $word_count = $this->calculate_word_count_js_style($plain_text);
+        // Count the markup, not wp_strip_all_tags() output: stripping deletes
+        // tags without a space, so "five</p><p>six" would already be one word
+        // before the counter saw it.
+        $word_count = $this->calculate_word_count_js_style($content);
 
         // Calculate readability
         $readability_score = $this->calculate_readability_score($content);
@@ -1775,7 +1781,7 @@ class SEOScoreCalculator {
         $long_paragraphs = 0;
         if (preg_match_all('/<p[^>]*>(.*?)<\/p>/is', $content, $matches)) {
             foreach ($matches[1] as $paragraph) {
-                if ($this->calculate_word_count_js_style(wp_strip_all_tags($paragraph)) > 150) {
+                if ($this->calculate_word_count_js_style($paragraph) > 150) {
                     $long_paragraphs++;
                 }
             }
@@ -1832,20 +1838,20 @@ class SEOScoreCalculator {
      * @return float Readability score
      */
     private function calculate_readability_score(string $content): float {
-        $text = wp_strip_all_tags($content);
+        // Sentences, words and syllables all come from one reading text. The
+        // word count drops shortcode syntax and punctuation-only tokens; when
+        // sentences and syllables were still read off wp_strip_all_tags()
+        // output, "[vc_column width="1/2"]" added syllables (and, with a "." in
+        // an attribute, sentences) to a word count that did not include it,
+        // and a WPBakery page's Flesch fell from 65 to 46.
+        $text = self::reading_text_of($content);
 
-        if (empty($text)) {
+        if ('' === $text) {
             return 0;
         }
 
-        // Count sentences (approximate)
-        $sentences = preg_split('/[.!?]+/', $text, -1, PREG_SPLIT_NO_EMPTY);
-        $sentence_count = count($sentences);
-
-        // Count words
-        $word_count = $this->calculate_word_count_js_style(wp_strip_all_tags($text));
-
-        // Count syllables (approximate)
+        $sentence_count = self::count_sentences($text);
+        $word_count     = \ThinkRank\SEO\Word_Count_Index::count_words($text);
         $syllable_count = $this->count_syllables($text);
 
         if ($sentence_count === 0 || $word_count === 0) {
@@ -1859,13 +1865,35 @@ class SEOScoreCalculator {
     }
 
     /**
+     * Count the sentences in reading text.
+     *
+     * A sentence is a run of text between terminal punctuation that holds at
+     * least one letter or digit. A fragment with no word in it (the space
+     * after the final full stop, a stray "!" between two "?") is not a
+     * sentence. contentAnalysis.js countSentences() applies the same rule.
+     *
+     * @since 2.14.2
+     *
+     * @param string $text Text as returned by {@see self::reading_text_of()}.
+     * @return int
+     */
+    private static function count_sentences(string $text): int {
+        $fragments = preg_split('/[.!?]+/', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return count(preg_grep('/[\p{L}\p{N}]/u', $fragments) ?: []);
+    }
+
+    /**
      * Count syllables in text (approximate)
+     *
+     * Expects reading text ({@see self::reading_text_of()}); tags are not
+     * stripped here, so a decoded "<" in prose is not read as a tag.
      *
      * @param string $text Text to analyze
      * @return int Syllable count
      */
     private function count_syllables(string $text): int {
-        $words = preg_split('/\s+/', trim(strtolower(wp_strip_all_tags($text))), -1, PREG_SPLIT_NO_EMPTY);
+        $words = preg_split('/\s+/', trim(strtolower($text)), -1, PREG_SPLIT_NO_EMPTY) ?: [];
         $syllables = 0;
 
         foreach ($words as $word) {
@@ -2477,9 +2505,10 @@ class SEOScoreCalculator {
         // Extract headings from content
         $headings = $this->extract_headings($content);
 
-        // Count words using JavaScript-compatible method
-        $plain_text = wp_strip_all_tags($content);
-        $word_count = $this->calculate_word_count_js_style($plain_text);
+        // Count the markup, not wp_strip_all_tags() output: stripping deletes
+        // tags without a space, so "five</p><p>six" would already be one word
+        // before the counter saw it.
+        $word_count = $this->calculate_word_count_js_style($content);
 
         // Calculate readability
         $readability_score = $this->calculate_readability_score($content);
@@ -2515,20 +2544,57 @@ class SEOScoreCalculator {
     }
 
     /**
-     * Calculate word count using JavaScript-compatible method
-     * Matches the logic in contentAnalysis.js for consistency
+     * Count the words a reader reads in HTML or text.
      *
-     * @param string $text Text to count words in
+     * The same extraction and counting as the thin content report
+     * ({@see \ThinkRank\SEO\Word_Count_Index::reading_text()} and
+     * {@see \ThinkRank\SEO\Word_Count_Index::count_words()}), so the editor
+     * score and the report give one number for one page. Splitting on
+     * whitespace counted shortcode syntax as words: a WPBakery page with 216
+     * words of prose scored a word count of 325 while the report said 216
+     * (#893 fixed the report only). It also counted tokens of punctuation
+     * alone, such as a full stop after a link.
+     *
+     * Always words, whatever the locale's unit, because every threshold that
+     * reads this value (content length, long paragraphs, headings per 300
+     * words, readability, keyword density) is in words.
+     *
+     * contentAnalysis.js calculateWordCount() applies the same two rules in
+     * the editor.
+     *
+     * @param string $text HTML or text to count words in.
      * @return int Word count
      */
     private function calculate_word_count_js_style(string $text): int {
-        if (empty($text)) {
+        if ('' === $text) {
             return 0;
         }
 
-        // Match JavaScript: trim, split by whitespace, filter empty
-        $words = preg_split('/\s+/', trim($text), -1, PREG_SPLIT_NO_EMPTY);
-        return count($words);
+        return \ThinkRank\SEO\Word_Count_Index::count_words(self::reading_text_of($text));
+    }
+
+    /**
+     * The text a reader reads in HTML or text, as the word count sees it.
+     *
+     * Every check that divides by the word count (readability, keyword
+     * density, topic relevance) reads its numerator from this same text, so
+     * shortcode syntax is never on one side of a ratio and not the other.
+     *
+     * @since 2.14.2
+     *
+     * @param string $content HTML or text.
+     * @return string Plain text, whitespace collapsed.
+     */
+    private static function reading_text_of(string $content): string {
+        if ('' === $content) {
+            return '';
+        }
+
+        if (!class_exists('\ThinkRank\SEO\Word_Count_Index')) {
+            require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-word-count-index.php';
+        }
+
+        return \ThinkRank\SEO\Word_Count_Index::reading_text($content);
     }
 
     /**
