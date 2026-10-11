@@ -234,6 +234,23 @@ class Schema_Settings_Config {
     }
 
     /**
+     * Schema types that belong to the site context.
+     *
+     * The site entities the Schema Manager deploys once for the whole site.
+     * Content types (Article, WebPage, Product, ...) are per post and are set
+     * in the metabox. Mirrors getSupportedSchemaTypes('site') in
+     * src/admin/config/schema-settings-config.js, which is the list the
+     * Site-Level Schema Types grid renders and Generate sends.
+     *
+     * @since 2.15.0
+     *
+     * @return string[] Site-level schema types.
+     */
+    public static function get_site_level_schema_types(): array {
+        return ['Organization', 'LocalBusiness', 'Person', 'WebSite'];
+    }
+
+    /**
      * Get validation level options
      *
      * @since 1.0.0

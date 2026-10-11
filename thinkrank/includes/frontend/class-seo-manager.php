@@ -667,6 +667,51 @@ class SEO_Manager {
     }
 
     /**
+     * The title Open Graph and Twitter fall back to when no override is set.
+     *
+     * The effective SEO title everywhere except author archives, whose
+     * <title> is printed by Author_Archives_Manager (a pre_get_document_title
+     * filter at priority 15 that replaces this class's). Passing
+     * get_effective_seo_title() there gave og:title and twitter:title the Site
+     * Identity author title, so the share card and the tab disagreed (#977).
+     *
+     * @since 2.15.0
+     * @return string|null Fallback title, or null if none applies.
+     */
+    private function get_social_fallback_title(): ?string {
+        if (is_author()) {
+            $author_title = \ThinkRank\SEO\Author_Archives_Manager::resolve_title((int) get_queried_object_id());
+            if ($author_title !== '') {
+                return $author_title;
+            }
+        }
+
+        return $this->get_effective_seo_title();
+    }
+
+    /**
+     * The description Open Graph and Twitter fall back to when no override is set.
+     *
+     * Same split as get_social_fallback_title(): on an author archive the meta
+     * description comes from Author_Archives_Manager, and get_meta_description()
+     * knows nothing about it, so og:description and twitter:description were
+     * missing there even while the description tag was printed (#977).
+     *
+     * @since 2.15.0
+     * @return string|null Fallback description, or null if none applies.
+     */
+    private function get_social_fallback_description(): ?string {
+        if (is_author()) {
+            $author_description = \ThinkRank\SEO\Author_Archives_Manager::resolve_description((int) get_queried_object_id());
+            if ($author_description !== '') {
+                return $author_description;
+            }
+        }
+
+        return $this->get_meta_description();
+    }
+
+    /**
      * Override WordPress document title (HIGH PRIORITY)
      * Priority: Post-specific metadata > Global SEO templates > Site Identity templates
      *
@@ -1581,8 +1626,8 @@ class SEO_Manager {
             $social_data = $this->social_manager->get_output_data(
                 $social_context,
                 $this->current_post_id,
-                $this->get_effective_seo_title(),
-                $this->get_meta_description()
+                $this->get_social_fallback_title(),
+                $this->get_social_fallback_description()
             );
 
             if ($social_data['enabled'] && !empty($social_data['platform_tags'])) {
@@ -1652,8 +1697,8 @@ class SEO_Manager {
             $social_data = $this->social_manager->get_output_data(
                 $social_context,
                 $this->current_post_id,
-                $this->get_effective_seo_title(),
-                $this->get_meta_description()
+                $this->get_social_fallback_title(),
+                $this->get_social_fallback_description()
             );
 
             // The Social Meta Manager ran, so it owns Open Graph output. If OG is
@@ -1903,8 +1948,8 @@ class SEO_Manager {
             $social_data = $this->social_manager->get_output_data(
                 $social_context,
                 $this->current_post_id,
-                $this->get_effective_seo_title(),
-                $this->get_meta_description()
+                $this->get_social_fallback_title(),
+                $this->get_social_fallback_description()
             );
 
 
@@ -2502,7 +2547,7 @@ class SEO_Manager {
         $title = preg_replace('/\s*' . $separator_pattern . '\s*' . $separator_pattern . '\s*/', ' ' . $separator . ' ', $title);
 
         // Remove leading/trailing separators
-        $title = trim($title, " \t\n\r\0\x0B" . $separator);
+        $title = \ThinkRank\Core\Seo_Text::trim_separator($title, $separator);
 
         return $title;
     }
@@ -2907,7 +2952,7 @@ class SEO_Manager {
      * @return void
      */
     public function output_site_schema_markup(): void {
-        $has_schema_manager_output = false;
+        $has_site_entity_output = false;
         $has_website_schema = false;
 
         // The master switch on Essential SEO -> Schema Manager. Until #461 this
@@ -2929,7 +2974,7 @@ class SEO_Manager {
                 foreach ($site_wide_schemas as $schema_type => $schema_info) {
                     Schema_Graph::instance()->add_supporting($schema_info['data'], (string) $schema_type);
                 }
-                $has_schema_manager_output = true;
+                $has_site_entity_output = self::schemas_include_site_entity($site_wide_schemas);
                 $has_website_schema = isset($site_wide_schemas['WebSite']);
             }
         }
@@ -2957,8 +3002,7 @@ class SEO_Manager {
         // PRIORITY 2: Also output page-specific schemas (Article, HowTo, FAQ, etc.) on individual posts/pages
         if ($this->schema_manager && (is_single() || is_page())) {
 	        $context_id   = get_the_ID();
-	        $context_type = get_post_type( $context_id );
-	        $context_type = in_array( $context_type, [ 'site', 'post', 'page', 'product' ] , true) ? $context_type : 'post';
+	        $context_type = \ThinkRank\SEO\Schema_Management_System::context_type_for_post_type( (string) get_post_type( $context_id ) );
 
             $page_specific_schemas = $this->schema_manager->get_deployed_schemas($context_type, $context_id);
 
@@ -2996,7 +3040,10 @@ class SEO_Manager {
 
                     Schema_Graph::instance()->add_primary($node, (string) $schema_type, 'schema_manager');
                 }
-                $has_schema_manager_output = true;
+
+                if (!$has_site_entity_output) {
+                    $has_site_entity_output = self::schemas_include_site_entity($page_specific_schemas);
+                }
             }
         }
 
@@ -3010,8 +3057,15 @@ class SEO_Manager {
             }
         }
 
-        // Skip Site Identity fallback if any Schema Manager schemas were output
-        if ($has_schema_manager_output) {
+        // The deployed snapshot is exact, so the live builder never runs over
+        // it. But the Site Identity fallback below emits one entity, the
+        // Organization, and it used to be skipped whenever ANY row was
+        // output: a site whose deployed set was a WebSite, or a post with
+        // only a deployed Article, published no Organization at all and its
+        // publisher could not resolve to #organization (#1006). Skip it only
+        // when the Schema Manager already supplied the entity it stands in
+        // for, which also keeps a deployed #organization from being doubled.
+        if ($has_site_entity_output) {
             return;
         }
 
@@ -3035,6 +3089,65 @@ class SEO_Manager {
     }
 
     /**
+     * Organization types the Schema Manager can publish the site entity as.
+     *
+     * The values the organization_type setting offers. LocalBusiness and its
+     * subtypes are recognised through Local_Business_Types_Config instead.
+     *
+     * @since 2.15.0
+     * @var string[]
+     */
+    private const SITE_ENTITY_ORGANIZATION_TYPES = [
+        'Organization',
+        'Corporation',
+        'EducationalOrganization',
+        'GovernmentOrganization',
+        'NGO',
+        'PerformingGroup',
+        'SportsOrganization',
+    ];
+
+    /**
+     * Whether deployed schemas already describe the site's own entity.
+     *
+     * The entity is what the Site Identity Organization fallback stands in
+     * for: an Organization (or one of its configurable subtypes), a Person,
+     * or a LocalBusiness of any subtype. Both the row's schema type and the
+     * node's resolved @type are checked, since a LocalBusiness row is
+     * published as "Dentist" and an Organization row can carry a subtype.
+     *
+     * @since 2.15.0
+     *
+     * @param array $schemas Deployed schemas keyed by schema type, each with a 'data' node.
+     * @return bool
+     */
+    private static function schemas_include_site_entity(array $schemas): bool {
+        foreach ($schemas as $schema_type => $schema_info) {
+            $types = [(string) $schema_type];
+
+            if (is_array($schema_info) && is_array($schema_info['data'] ?? null) && isset($schema_info['data']['@type'])) {
+                $types = array_merge($types, (array) $schema_info['data']['@type']);
+            }
+
+            foreach ($types as $type) {
+                if (!is_string($type)) {
+                    continue;
+                }
+
+                if (
+                    'Person' === $type
+                    || in_array($type, self::SITE_ENTITY_ORGANIZATION_TYPES, true)
+                    || \ThinkRank\Config\Local_Business_Types_Config::is_local_business($type)
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Generate the default WebSite schema for the homepage.
      *
      * Includes a SearchAction potentialAction so search engines can surface a
@@ -3049,7 +3162,10 @@ class SEO_Manager {
             '@context' => 'https://schema.org',
             '@type'    => 'WebSite',
             '@id'      => home_url('/#website'),
-            'name'     => !empty($settings['site_name']) ? $settings['site_name'] : get_bloginfo('name'),
+            // The site name is stored esc_html()'d too, like the tagline below.
+            'name'     => \ThinkRank\Core\Seo_Text::normalize_schema_name(
+                (string) (!empty($settings['site_name']) ? $settings['site_name'] : get_bloginfo('name'))
+            ),
             'url'      => home_url('/'),
         ];
 
@@ -3074,25 +3190,14 @@ class SEO_Manager {
         // The sitelinks searchbox switch was honoured only for a deployed
         // WebSite row; this live fallback added potentialAction unconditionally,
         // so website_enable_search = 0 still shipped the SearchAction (#688).
-        // Absent means not configured, which stays enabled.
-        $search_enabled = true;
-        if ($this->schema_manager) {
-            $schema_settings = $this->schema_manager->get_settings('site', null);
+        // Absent means not configured, which stays enabled. The switch and the
+        // custom search URL go through the same helper the deployed WebSite
+        // uses, so the two paths cannot drift apart again (#1009).
+        $schema_settings = $this->schema_manager ? $this->schema_manager->get_settings('site', null) : [];
 
-            if (array_key_exists('website_enable_search', $schema_settings)) {
-                $search_enabled = !empty($schema_settings['website_enable_search']);
-            }
-        }
-
-        if ($search_enabled) {
-            $schema['potentialAction'] = [
-                '@type'       => 'SearchAction',
-                'target'      => [
-                    '@type'       => 'EntryPoint',
-                    'urlTemplate' => home_url('/?s={search_term_string}'),
-                ],
-                'query-input' => 'required name=search_term_string',
-            ];
+        $search_action = \ThinkRank\SEO\Schema_Builder::website_search_action($schema_settings);
+        if (null !== $search_action) {
+            $schema['potentialAction'] = $search_action;
         }
 
         return $schema;
@@ -3135,6 +3240,11 @@ class SEO_Manager {
             get_bloginfo('description')
         );
 
+        // Stored esc_html()'d by sanitize_option(), so "Fish & Chips" was
+        // published as `Fish &amp; Chips` (#976). Same for the description.
+        $org_name        = \ThinkRank\Core\Seo_Text::normalize_schema_name((string) $org_name);
+        $org_description = \ThinkRank\Core\Seo_Text::normalize_schema_text((string) $org_description);
+
         if (empty($org_name)) {
             return null;
         }
@@ -3156,8 +3266,13 @@ class SEO_Manager {
         }
 
         // Add logo if available with proper ImageObject structure
-        // Priority: Schema Manager logo > Site Identity logo
-        $logo_url = $schema_settings['organization_logo'] ?? $settings['logo_url'] ?? '';
+        // Priority: Schema Manager logo > Site Identity logo. first_non_empty()
+        // rather than ??: organization_logo is always present and defaults to
+        // '', which stopped a ?? chain before the Site Identity logo (#1010).
+        $logo_url = $this->first_non_empty(
+            $schema_settings['organization_logo'] ?? null,
+            $settings['logo_url'] ?? null
+        );
 
         if (!empty($logo_url)) {
             $schema['logo'] = [
@@ -4364,10 +4479,14 @@ class SEO_Manager {
         $schema_items = [];
 
         foreach ($items as $item) {
+            // The trail's labels are HTML (get_the_title() is texturized, term
+            // names are stored esc_html()'d), which the visible breadcrumb
+            // prints as such. JSON-LD is plain text, so the schema copy is
+            // decoded here and the visible trail is left alone (#976).
             $schema_items[] = [
                 '@type' => 'ListItem',
                 'position' => $item['position'],
-                'name' => $item['title'],
+                'name' => \ThinkRank\Core\Seo_Text::normalize_schema_name((string) $item['title']),
                 'item' => $item['url']
             ];
         }

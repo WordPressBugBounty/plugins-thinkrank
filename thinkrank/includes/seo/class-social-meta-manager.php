@@ -1757,11 +1757,12 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 }
             }
 
-            // Author, date and search archives have no ThinkRank-managed title
-            // to inherit — Author_Archives_Manager owns the author one, and the
-            // rest have no template — so the caller's fallback arrives empty and
-            // og:title used to collapse to the bare site name. Fall through to
-            // what the page itself is called (#388).
+            // Date and search archives can have no ThinkRank-managed title to
+            // inherit, so the caller's fallback arrives empty and og:title used
+            // to collapse to the bare site name. Fall through to what the page
+            // itself is called (#388). An author archive's fallback is the
+            // title and description Author_Archives_Manager renders (#977), so
+            // it only lands here when the Author Archives templates are empty.
             if ($og_title_override !== '') {
                 $data['title'] = $og_title_override;
             } elseif ($fallback_title !== null && $fallback_title !== '') {

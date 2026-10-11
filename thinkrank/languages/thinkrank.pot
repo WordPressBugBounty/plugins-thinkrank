@@ -2,14 +2,14 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 2.14.2\n"
+"Project-Id-Version: ThinkRank 2.14.3\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-08T12:13:51+00:00\n"
+"POT-Creation-Date: 2026-10-11T05:51:24+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
@@ -20,7 +20,7 @@ msgstr ""
 #: includes/admin/class-bulk-action-manager.php:82
 #: includes/admin/class-manager.php:232
 #: includes/admin/class-manager.php:233
-#: includes/admin/class-metabox-manager.php:424
+#: includes/admin/class-metabox-manager.php:439
 #: includes/editor/beaver/faq/faq.php:59
 #: includes/editor/beaver/howto/howto.php:49
 #: includes/editor/beaver/toc/toc.php:47
@@ -2251,7 +2251,7 @@ msgstr ""
 
 #: includes/admin/class-beaver-metabox.php:376
 #: includes/admin/class-manager.php:667
-#: includes/admin/class-metabox-manager.php:411
+#: includes/admin/class-metabox-manager.php:426
 #: src/bricks/index.js:223
 #: src/bricks/index.js:224
 #: src/divi/index.js:160
@@ -2455,7 +2455,7 @@ msgid "An error occurred"
 msgstr ""
 
 #: includes/admin/class-manager.php:910
-#: includes/admin/class-metabox-manager.php:1015
+#: includes/admin/class-metabox-manager.php:1030
 msgid "Success!"
 msgstr ""
 
@@ -2509,71 +2509,71 @@ msgstr ""
 msgid "Support"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:461
+#: includes/admin/class-metabox-manager.php:476
 msgid "Optimize this content for search & AI with ThinkRank."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:462
+#: includes/admin/class-metabox-manager.php:477
 #: src/metabox/components/MetaboxApp.js:1600
 #: src/metabox/components/MetaboxDrawer.js:169
 msgid "Open ThinkRank SEO"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1012
+#: includes/admin/class-metabox-manager.php:1027
 msgid "Generating..."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1013
+#: includes/admin/class-metabox-manager.php:1028
 msgid "Analyzing..."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1014
+#: includes/admin/class-metabox-manager.php:1029
 msgid "Error occurred"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1016
+#: includes/admin/class-metabox-manager.php:1031
 msgid "Metadata generated successfully"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1017
+#: includes/admin/class-metabox-manager.php:1032
 msgid "Please add some content before generating SEO metadata."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1018
+#: includes/admin/class-metabox-manager.php:1033
 msgid "Failed to connect to AI service. Please check your API settings."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1272
+#: includes/admin/class-metabox-manager.php:1287
 #: includes/seo/class-object-redirect.php:122
 msgid "Redirects require ThinkRank Pro with the Redirections feature active."
 msgstr ""
 
 #. translators: %s: reason the redirect was not saved.
-#: includes/admin/class-metabox-manager.php:1341
+#: includes/admin/class-metabox-manager.php:1356
 #, php-format
 msgid "ThinkRank could not save the redirect: %s"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1622
+#: includes/admin/class-metabox-manager.php:1637
 #: includes/ai/class-manager.php:1555
 msgid "SEO metadata generated successfully!"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1643
+#: includes/admin/class-metabox-manager.php:1658
 msgid "Security check failed"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1648
+#: includes/admin/class-metabox-manager.php:1663
 msgid "Insufficient permissions"
 msgstr ""
 
 #. translators: %s: reason the redirect was not saved.
-#: includes/admin/class-metabox-manager.php:1662
+#: includes/admin/class-metabox-manager.php:1677
 #, php-format
 msgid "Saved, except the redirect: %s"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1669
+#: includes/admin/class-metabox-manager.php:1684
 #: src/metabox/utils/persistSeoFields.js:144
 msgid "SEO settings saved successfully!"
 msgstr ""
@@ -2952,7 +2952,7 @@ msgstr ""
 msgid "The snapshot still holds data ThinkRank has not applied yet: %s. It stays preserved in the snapshot (cleanup never deletes the snapshot), but the source plugin's copy will be removed. Pass force=true to proceed."
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3175
+#: includes/admin/importers/class-snapshot-migrator.php:3172
 #: includes/core/class-capability-manager.php:122
 #: src/admin/components/essential-seo/SidebarNavigation.js:322
 #: src/admin/components/import-export/ExportProgress.js:17
@@ -2962,58 +2962,58 @@ msgstr ""
 msgid "Redirections"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3184
+#: includes/admin/importers/class-snapshot-migrator.php:3181
 #: src/admin/components/import-export/ExportProgress.js:18
 #: src/admin/components/import-export/PluginImportCard.js:39
 #: src/admin/components/import-export/SnapshotInfo.js:21
 msgid "404 Logs"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3331
+#: includes/admin/importers/class-snapshot-migrator.php:3328
 msgid "Header, body and footer code"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3332
+#: includes/admin/importers/class-snapshot-migrator.php:3329
 msgid "Redirect behaviour settings"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3333
+#: includes/admin/importers/class-snapshot-migrator.php:3330
 msgid "Taxonomy templates and images"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3334
+#: includes/admin/importers/class-snapshot-migrator.php:3331
 msgid "Post type archive templates and images"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3335
+#: includes/admin/importers/class-snapshot-migrator.php:3332
 msgid "Removing /category/ from category URLs"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3336
+#: includes/admin/importers/class-snapshot-migrator.php:3333
 msgid "Webmaster tools verification codes"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3337
+#: includes/admin/importers/class-snapshot-migrator.php:3334
 msgid "Role access settings"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3338
+#: includes/admin/importers/class-snapshot-migrator.php:3335
 msgid "Homepage social title"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3339
+#: includes/admin/importers/class-snapshot-migrator.php:3336
 msgid "Homepage social description"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3340
+#: includes/admin/importers/class-snapshot-migrator.php:3337
 msgid "Homepage social image"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3341
+#: includes/admin/importers/class-snapshot-migrator.php:3338
 msgid "Custom schemas (need ThinkRank Pro)"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3342
+#: includes/admin/importers/class-snapshot-migrator.php:3339
 msgid "Schema templates with no ThinkRank equivalent"
 msgstr ""
 
@@ -3626,7 +3626,7 @@ msgstr ""
 #: includes/api/class-sitemap-endpoint.php:1352
 #: includes/api/class-sitemap-endpoint.php:1384
 #: includes/editor/beaver/faq/faq.php:314
-#: includes/editor/beaver/howto/howto.php:326
+#: includes/editor/beaver/howto/howto.php:327
 #: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:385
 #: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:398
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:260
@@ -3939,11 +3939,11 @@ msgstr ""
 msgid "Just Deactivate"
 msgstr ""
 
-#: includes/core/class-role-manager.php:123
+#: includes/core/class-role-manager.php:129
 msgid "You do not have permission to access ThinkRank."
 msgstr ""
 
-#: includes/core/class-role-manager.php:132
+#: includes/core/class-role-manager.php:138
 msgid "You do not have permission to access this ThinkRank section."
 msgstr ""
 
@@ -4085,7 +4085,7 @@ msgid "Frequently asked questions"
 msgstr ""
 
 #: includes/editor/beaver/faq/faq.php:352
-#: includes/editor/beaver/howto/howto.php:369
+#: includes/editor/beaver/howto/howto.php:370
 #: includes/editor/beaver/toc/toc.php:271
 #: includes/editor/bricks/class-faq-element.php:103
 #: includes/editor/bricks/class-howto-element.php:113
@@ -4100,7 +4100,7 @@ msgid "Heading tag"
 msgstr ""
 
 #: includes/editor/beaver/faq/faq.php:358
-#: includes/editor/beaver/howto/howto.php:375
+#: includes/editor/beaver/howto/howto.php:376
 #: includes/editor/beaver/toc/toc.php:277
 #: includes/editor/bricks/class-faq-element.php:109
 #: includes/editor/bricks/class-howto-element.php:119
@@ -4120,22 +4120,22 @@ msgstr ""
 
 #: includes/editor/beaver/faq/faq.php:373
 #: includes/editor/beaver/faq/faq.php:392
-#: includes/editor/beaver/howto/howto.php:396
-#: includes/editor/beaver/howto/howto.php:428
+#: includes/editor/beaver/howto/howto.php:397
+#: includes/editor/beaver/howto/howto.php:429
 #: includes/editor/beaver/toc/toc.php:311
 msgid "Yes"
 msgstr ""
 
 #: includes/editor/beaver/faq/faq.php:374
 #: includes/editor/beaver/faq/faq.php:393
-#: includes/editor/beaver/howto/howto.php:397
-#: includes/editor/beaver/howto/howto.php:429
+#: includes/editor/beaver/howto/howto.php:398
+#: includes/editor/beaver/howto/howto.php:430
 #: includes/editor/beaver/toc/toc.php:312
 msgid "No"
 msgstr ""
 
 #: includes/editor/beaver/faq/faq.php:382
-#: includes/editor/beaver/howto/howto.php:418
+#: includes/editor/beaver/howto/howto.php:419
 #: includes/editor/beaver/toc/toc.php:301
 #: includes/editor/bricks/class-howto-element.php:95
 #: includes/editor/elementor/class-howto-widget.php:126
@@ -4212,37 +4212,37 @@ msgid_plural "%d minutes"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/editor/beaver/howto/howto.php:323
-#: includes/editor/beaver/howto/howto.php:386
+#: includes/editor/beaver/howto/howto.php:324
+#: includes/editor/beaver/howto/howto.php:387
 msgid "Step"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:333
+#: includes/editor/beaver/howto/howto.php:334
 #: includes/editor/bricks/class-howto-element.php:136
 #: includes/editor/elementor/class-howto-widget.php:81
 #: src/blocks/howto-block/edit.js:199
 msgid "Step title"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:338
+#: includes/editor/beaver/howto/howto.php:339
 #: includes/editor/bricks/class-howto-element.php:140
 #: includes/editor/elementor/class-howto-widget.php:86
 msgid "Step description"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:344
+#: includes/editor/beaver/howto/howto.php:345
 #: includes/editor/bricks/class-howto-element.php:144
 #: includes/editor/elementor/class-howto-widget.php:90
 msgid "Step image"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:356
+#: includes/editor/beaver/howto/howto.php:357
 #: includes/editor/bricks/class-howto-element.php:131
 #: includes/editor/elementor/class-howto-widget.php:95
 msgid "Steps"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:363
+#: includes/editor/beaver/howto/howto.php:364
 #: includes/editor/beaver/toc/toc.php:265
 #: includes/editor/bricks/class-howto-element.php:107
 #: includes/editor/bricks/class-toc-element.php:103
@@ -4253,7 +4253,7 @@ msgstr ""
 msgid "Title"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:364
+#: includes/editor/beaver/howto/howto.php:365
 #: includes/editor/bricks/class-howto-element.php:109
 #: includes/editor/elementor/class-howto-widget.php:63
 #: src/blocks/howto-block/edit.js:116
@@ -4261,7 +4261,7 @@ msgstr ""
 msgid "How to …"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:380
+#: includes/editor/beaver/howto/howto.php:381
 #: includes/editor/bricks/class-howto-element.php:126
 #: includes/editor/elementor/class-howto-widget.php:75
 #: src/admin/components/essential-seo/schema/forms/SchemaEventForm.js:351
@@ -4273,19 +4273,19 @@ msgstr ""
 msgid "Description"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:393
+#: includes/editor/beaver/howto/howto.php:394
 #: includes/editor/bricks/class-howto-element.php:157
 #: includes/editor/elementor/class-howto-widget.php:103
 #: src/blocks/howto-block/edit.js:130
 msgid "Numbered steps"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:405
+#: includes/editor/beaver/howto/howto.php:406
 #: src/admin/components/essential-seo/schema/forms/SchemaVideoObjectForm.js:128
 msgid "Duration"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:410
+#: includes/editor/beaver/howto/howto.php:411
 #: includes/editor/bricks/class-howto-element.php:365
 #: includes/editor/elementor/class-howto-widget.php:114
 #: src/admin/components/essential-seo/performance/HistoricalSection.js:229
@@ -4293,28 +4293,28 @@ msgstr ""
 msgid "Days"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:411
+#: includes/editor/beaver/howto/howto.php:412
 #: includes/editor/bricks/class-howto-element.php:366
 #: includes/editor/elementor/class-howto-widget.php:114
 #: src/blocks/howto-block/edit.js:168
 msgid "Hours"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:412
+#: includes/editor/beaver/howto/howto.php:413
 #: includes/editor/bricks/class-howto-element.php:367
 #: includes/editor/elementor/class-howto-widget.php:114
 #: src/blocks/howto-block/edit.js:177
 msgid "Minutes"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:425
+#: includes/editor/beaver/howto/howto.php:426
 #: includes/editor/bricks/class-howto-element.php:173
 #: includes/editor/elementor/class-howto-widget.php:130
 #: src/blocks/howto-block/edit.js:140
 msgid "Output HowTo schema (JSON-LD)"
 msgstr ""
 
-#: includes/editor/beaver/howto/howto.php:431
+#: includes/editor/beaver/howto/howto.php:432
 #: includes/editor/bricks/class-howto-element.php:176
 #: includes/editor/elementor/class-howto-widget.php:131
 #: src/blocks/howto-block/edit.js:144
@@ -4423,7 +4423,7 @@ msgstr ""
 msgid "Guide"
 msgstr ""
 
-#: includes/frontend/class-global-seo-schema-output.php:280
+#: includes/frontend/class-global-seo-schema-output.php:286
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:51
 #: src/admin/components/essential-seo/SocialMediaTab.js:1220
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:31
@@ -4431,7 +4431,7 @@ msgid "Blog"
 msgstr ""
 
 #. translators: %d: page number.
-#: includes/frontend/class-seo-manager.php:801
+#: includes/frontend/class-seo-manager.php:846
 #, php-format
 msgid "Page %d"
 msgstr ""
@@ -5185,15 +5185,15 @@ msgstr ""
 msgid "Enter a full URL starting with http:// or https://, or a path starting with /."
 msgstr ""
 
-#: includes/seo/class-pattern-resolver.php:461
+#: includes/seo/class-pattern-resolver.php:488
 msgid "In stock"
 msgstr ""
 
-#: includes/seo/class-pattern-resolver.php:462
+#: includes/seo/class-pattern-resolver.php:489
 msgid "Out of stock"
 msgstr ""
 
-#: includes/seo/class-pattern-resolver.php:463
+#: includes/seo/class-pattern-resolver.php:490
 msgid "On backorder"
 msgstr ""
 
@@ -5261,134 +5261,134 @@ msgid "Google could not return performance data for this site right now. Try aga
 msgstr ""
 
 #. translators: %s: comma-separated list of schema types
-#: includes/seo/class-schema-management-system.php:874
+#: includes/seo/class-schema-management-system.php:884
 #, php-format
 msgid "Deployed schema could not be read back: %s"
 msgstr ""
 
-#: includes/seo/class-schema-management-system.php:883
+#: includes/seo/class-schema-management-system.php:893
 msgid "Schema deployed and read back from storage"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:59
+#: includes/seo/class-seo-analyzer-fixer.php:61
 msgid "Allow search engines to index this site"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:62
+#: includes/seo/class-seo-analyzer-fixer.php:64
 msgid "This makes your site visible to search engines. Do not apply it on a staging or private site."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:65
+#: includes/seo/class-seo-analyzer-fixer.php:67
 msgid "Enable the XML sitemap"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:69
+#: includes/seo/class-seo-analyzer-fixer.php:71
 msgid "Turn on automatic structured data"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:73
+#: includes/seo/class-seo-analyzer-fixer.php:75
 msgid "Fill in missing image alt text"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:74
+#: includes/seo/class-seo-analyzer-fixer.php:76
 msgid "Runs in batches over your media library. With AI alt text enabled this uses your AI provider key."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:77
+#: includes/seo/class-seo-analyzer-fixer.php:79
 msgid "Allow AI answer engines to crawl this site"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:81
+#: includes/seo/class-seo-analyzer-fixer.php:83
 msgid "Sets the answer-engine crawlers (ChatGPT, Claude, Perplexity, Google-Extended) to Allow. Crawlers that only collect training data keep whatever setting you gave them."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:84
+#: includes/seo/class-seo-analyzer-fixer.php:86
 msgid "Publish llms.txt"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:85
+#: includes/seo/class-seo-analyzer-fixer.php:87
 msgid "Publishes /llms.txt from your saved LLMs.txt settings. It needs those fields filled in first."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:121
+#: includes/seo/class-seo-analyzer-fixer.php:123
 msgid "This issue cannot be fixed automatically."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:153
+#: includes/seo/class-seo-analyzer-fixer.php:155
 msgid "No handler is registered for this fix."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:166
+#: includes/seo/class-seo-analyzer-fixer.php:168
 msgid "Search engines can now index this site."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:188
+#: includes/seo/class-seo-analyzer-fixer.php:190
 msgid "The sitemap setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:193
+#: includes/seo/class-seo-analyzer-fixer.php:195
 msgid "Your XML sitemap is now enabled."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:206
+#: includes/seo/class-seo-analyzer-fixer.php:208
 msgid "The schema module is unavailable."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:225
+#: includes/seo/class-seo-analyzer-fixer.php:237
 msgid "The schema setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:230
+#: includes/seo/class-seo-analyzer-fixer.php:242
 msgid "Automatic structured data is now enabled."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:263
+#: includes/seo/class-seo-analyzer-fixer.php:301
 msgid "Every image in your media library already has alt text."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:296
+#: includes/seo/class-seo-analyzer-fixer.php:334
 msgid "No images could be filled automatically. Check your alt text format under Essential SEO → Image SEO, or add alt text manually in the Media Library."
 msgstr ""
 
 #. translators: 1: images updated in this batch, 2: images still to process.
-#: includes/seo/class-seo-analyzer-fixer.php:307
+#: includes/seo/class-seo-analyzer-fixer.php:345
 #, php-format
 msgid "Added alt text to %1$d images. %2$d still to go. Run the fix again to continue."
 msgstr ""
 
 #. translators: %d: number of images updated.
-#: includes/seo/class-seo-analyzer-fixer.php:313
+#: includes/seo/class-seo-analyzer-fixer.php:351
 #, php-format
 msgid "Added alt text to %d images. Your media library is done."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:366
+#: includes/seo/class-seo-analyzer-fixer.php:404
 msgid "The AI crawler rules could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer-fixer.php:386
+#: includes/seo/class-seo-analyzer-fixer.php:424
 #, php-format
 msgid "The crawler rules were saved, but your robots.txt still blocks %s. That block comes from your own robots.txt content, a robots.txt file in your site root, or the site-wide search-engine setting. Edit it under Essential SEO → Crawling and AI Indexing."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:394
+#: includes/seo/class-seo-analyzer-fixer.php:432
 msgid "AI answer engines can now crawl and cite your site."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:414
+#: includes/seo/class-seo-analyzer-fixer.php:452
 msgid "The llms.txt module is unavailable."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:425
+#: includes/seo/class-seo-analyzer-fixer.php:463
 msgid "llms.txt could not be published because its settings are incomplete. Fill in Website Description, Key Features and Target Audience under Essential SEO → Crawling and AI Indexing → LLMs.txt, then try again."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:437
+#: includes/seo/class-seo-analyzer-fixer.php:475
 msgid "llms.txt could not be written. Check that your site root is writable."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:443
+#: includes/seo/class-seo-analyzer-fixer.php:481
 msgid "Your llms.txt is now published at /llms.txt."
 msgstr ""
 
@@ -5875,40 +5875,40 @@ msgstr ""
 msgid "Business type is selected for proper schema markup."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:2112
+#: includes/seo/class-sitemap-generator.php:2214
 msgid "The previous automatic sitemap rebuild stopped before it finished, most likely because PHP ran out of memory or time. It is retried with a growing delay. If this keeps happening, raise the PHP memory_limit or max_execution_time, or run WP-Cron from a system cron."
 msgstr ""
 
 #. translators: 1: memory in use, 2: PHP memory limit.
-#: includes/seo/class-sitemap-generator.php:2482
+#: includes/seo/class-sitemap-generator.php:2584
 #, php-format
 msgid "The sitemap rebuild was stopped at %1$s of the %2$s PHP memory limit, before PHP would have run out of memory. It will be retried by a process with more memory (WP-CLI or a system cron). To let it finish in the admin, raise the PHP memory_limit."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3011
+#: includes/seo/class-sitemap-generator.php:3113
 #, php-format
 msgid "The sitemap is disabled, but these files are still in the site root and your web server is still serving them: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3019
+#: includes/seo/class-sitemap-generator.php:3121
 #, php-format
 msgid "The sitemap is being served from WordPress, but these files are still in the site root and your web server will keep serving them instead: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: %s: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3041
+#: includes/seo/class-sitemap-generator.php:3143
 #, php-format
 msgid "The sitemap could not be written because the folder %s is not writable by PHP. Ask your host to make the WordPress root writable, or set Sitemap Delivery to Dynamic to serve the sitemap without writing files."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:3046
+#: includes/seo/class-sitemap-generator.php:3148
 msgid "The sitemap files could not be written to the site root."
 msgstr ""
 
 #. translators: %s: search query.
-#: includes/seo/class-social-meta-manager.php:2063
+#: includes/seo/class-social-meta-manager.php:2064
 #, php-format
 msgid "Search Results for \"%s\""
 msgstr ""

@@ -571,7 +571,8 @@ class Blocks_Manager {
         $schema = [
             '@context' => 'https://schema.org',
             '@type'    => 'HowTo',
-            'name'     => $name,
+            // The fallback is get_the_title(), texturized HTML (#976).
+            'name'     => \ThinkRank\Core\Seo_Text::normalize_schema_name((string) $name),
             'step'     => $step_entities,
         ];
 

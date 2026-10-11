@@ -230,6 +230,14 @@ class Schema_Input_Validator {
             'warnings' => []
         ];
 
+        // The deploy routes read the type from the node's @type, and a
+        // LocalBusiness is published under the business type chosen in Local
+        // SEO ("Restaurant", #1005). Validate it as the LocalBusiness it is;
+        // the @type match below accepts the subtype.
+        if (\ThinkRank\Config\Local_Business_Types_Config::is_local_business($schema_type)) {
+            $schema_type = 'LocalBusiness';
+        }
+
         try {
             // 1. Validate payload size to prevent DoS attacks
             $size_validation = $this->validate_payload_size($schema_data);
@@ -417,7 +425,12 @@ class Schema_Input_Validator {
                 ? array_map('strval', $schema_data['@type'])
                 : [(string) $schema_data['@type']];
 
-            if (!in_array($schema_type, $declared_types, true)) {
+            // A LocalBusiness is deployed under the business subtype the site
+            // chose (#1005).
+            $is_local_business_subtype = 'LocalBusiness' === $schema_type
+                && [] !== array_filter($declared_types, [\ThinkRank\Config\Local_Business_Types_Config::class, 'is_local_business']);
+
+            if (!$is_local_business_subtype && !in_array($schema_type, $declared_types, true)) {
                 $result['errors'][] = sprintf(
                     "Schema @type '%s' does not match expected type '%s'",
                     implode(', ', $declared_types),

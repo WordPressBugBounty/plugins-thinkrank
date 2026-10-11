@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.14.2
+Stable tag: 2.14.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -327,6 +327,20 @@ Content brief competitor analysis and schema import fetch the URLs you type in, 
 
 == Changelog ==
 
+= 2.14.3 =
+Release Date: 2026-10-11
+
+- Fixed: Schema names and breadcrumbs no longer show HTML entities such as &amp; or &#8217;
+- Fixed: Titles that start with €, ✅ or a curly quote keep every character with the Bullet separator
+- Fixed: Sitemap image captions stay whole and valid, and empty categories and tags stay out with WooCommerce
+- Fixed: Author archives now share their own SEO title and description on social media
+- Fixed: Turning off the sitelinks search box or setting a custom search URL now takes effect
+- Fixed: Organization schema uses the Site Identity logo and no longer disappears beside other schema
+- Fixed: LocalBusiness subtypes such as Restaurant or Dentist now deploy from the Schema Manager
+- Fixed: The SEO Analyzer's structured data fix no longer removes deployed site schema
+- Fixed: WooCommerce products with a deployed Product schema no longer output two Product entries
+- Fixed: Saving ThinkRank robots or schema fields from WP-CLI or code no longer causes a fatal error
+
 = 2.14.2 =
 Release Date: 2026-10-08
 
@@ -380,24 +394,12 @@ Release Date: 2026-10-04
 - Fixed: Quick Setup now imports 404 logs and names every data type it imports
 - Fixed: Minor migration issues with term titles, separators and cleanup warnings
 
-= 2.12.0 =
-Release Date: 2026-10-01
-
-- Improved: Alt text updates clear Elementor and page caches, and name any cache to clear by hand
-- Fixed: Related-posts shortcodes no longer swap the post in the Classic Editor or skew its score
-- Fixed: Content Analysis no longer measures only the FAQ block on a post that has one
-- Fixed: Page-builder posts no longer save "No content" for readability and content quality
-- Fixed: Open Graph tags now include the size, type and alt of large featured images
-- Fixed: Schema deployed from the Schema Manager now appears on sites running MySQL 5.7
-- Fixed: The sitemap index no longer lists sitemaps that contain no URLs
-- Fixed: Re-downloading an uploaded export file now keeps the Pro data it carried
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.14.3 =
+Schema names and breadcrumbs drop stray HTML entities, Organization schema keeps the Site Identity logo, LocalBusiness subtypes deploy, and sitemap image captions stay valid XML. Recommended for all sites.
+
 = 2.14.2 =
 Word counts and readability now ignore shortcode syntax, the AI crawler check catches Disallow: * blocks, and non-Latin URLs and Search Console domain properties are accepted. Recommended for all sites.
-
-= 2.14.1 =
-Sitemaps and IndexNow now skip noindexed and redirected URLs, page builder content is read in page order, and email reports flag Search Console errors and count large sites correctly. Recommended for all sites.

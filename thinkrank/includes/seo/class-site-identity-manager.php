@@ -3809,7 +3809,8 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             $schema['itemListElement'][] = [
                 '@type' => 'ListItem',
                 'position' => $item['position'],
-                'name' => $item['title'],
+                // Plain text, as in SEO_Manager's live trail (#976).
+                'name' => \ThinkRank\Core\Seo_Text::normalize_schema_name((string) $item['title']),
                 'item' => $item['url']
             ];
         }

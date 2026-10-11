@@ -26,6 +26,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\SEO;
 
+use ThinkRank\Config\Schema_Settings_Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -213,12 +215,22 @@ class SEO_Analyzer_Fixer {
         $settings  = $schema->get_settings('site');
         $settings  = is_array($settings) ? $settings : [];
 
+        // The audit fails while the master switch is off, and nothing is
+        // emitted then, so "now enabled" was only true once it is on too.
+        $settings['enabled']              = true;
         $settings['auto_generate_schema'] = true;
 
-        // Seed the two types that apply to virtually every site, so enabling
-        // the toggle actually produces output rather than an empty config.
-        if (empty($settings['enabled_schema_types']) || !is_array($settings['enabled_schema_types'])) {
-            $settings['enabled_schema_types'] = ['Article', 'WebPage'];
+        // Seed a site-level selection so enabling the toggle produces output
+        // rather than an empty config. The site context holds the site
+        // entities only. Seeding Article/WebPage made the auto-deploy pass
+        // treat a selection the grid cannot even show as the user's choice,
+        // and retire every deployed Organization, WebSite, LocalBusiness and
+        // Person (#1004).
+        $selected = is_array($settings['enabled_schema_types'] ?? null) ? $settings['enabled_schema_types'] : [];
+        if (empty(Schema_Management_System::filter_types_for_context('site', $selected))) {
+            $settings['enabled_schema_types'] = self::site_schema_types_to_seed(
+                array_keys($schema->get_deployed_schemas('site', null))
+            );
         }
 
         if (!$schema->save_settings('site', null, $settings)) {
@@ -230,6 +242,32 @@ class SEO_Analyzer_Fixer {
             'message' => __('Automatic structured data is now enabled.', 'thinkrank'),
             'data'    => [],
         ];
+    }
+
+    /**
+     * The site Schema Types a schema fix seeds.
+     *
+     * The types already live on the site come first: they are what the page
+     * publishes now, so seeding them turns the setting on without retiring
+     * anything. The site defaults would not do that, since they leave out
+     * WebSite and Person, and auto-deploy retires every deployed type the
+     * selection leaves out. A site with nothing deployed gets the site
+     * defaults from Schema_Settings_Config.
+     *
+     * @since 2.15.0
+     *
+     * @param string[] $deployed_types Schema types deployed in the site context.
+     * @return string[] Site-level schema types to save as the selection.
+     */
+    private static function site_schema_types_to_seed(array $deployed_types): array {
+        $deployed = Schema_Management_System::filter_types_for_context('site', $deployed_types);
+        if (!empty($deployed)) {
+            return $deployed;
+        }
+
+        $defaults = Schema_Settings_Config::get_default_settings('site')['enabled_schema_types'] ?? [];
+
+        return Schema_Management_System::filter_types_for_context('site', is_array($defaults) ? $defaults : []);
     }
 
     /**

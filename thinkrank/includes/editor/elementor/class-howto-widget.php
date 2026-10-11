@@ -284,7 +284,8 @@ class Howto_Widget extends \Elementor\Widget_Base {
         $schema = [
             '@context' => 'https://schema.org',
             '@type'    => 'HowTo',
-            'name'     => $heading !== '' ? $heading : get_the_title(),
+            // The fallback is get_the_title(), texturized HTML (#976).
+            'name'     => \ThinkRank\Core\Seo_Text::normalize_schema_name($heading !== '' ? $heading : (string) get_the_title()),
             'step'     => $step_entities,
         ];
 

@@ -103,6 +103,36 @@ class Seo_Text {
     }
 
     /**
+     * Strip leading and trailing whitespace and title separators.
+     *
+     * The separator is removed as a whole string, never byte by byte.
+     * `trim($title, " \t..." . $separator)` reads its second argument as a
+     * list of single bytes, so with the Bullet separator (`•`, E2 80 A2) it
+     * also stripped any E2, 80 or A2 byte at either end of the title: the
+     * middle of €, ✅, curly quotes and many Cyrillic letters. The broken
+     * UTF-8 left behind made `<title>` invalid and `esc_attr()` blank out
+     * og:title and twitter:title (#972).
+     *
+     * @since 2.15.0
+     *
+     * @param string $value     Title or description.
+     * @param string $separator The active separator, possibly multibyte.
+     * @return string
+     */
+    public static function trim_separator(string $value, string $separator): string {
+        $alternatives = '[\s\x00]';
+        if ('' !== $separator) {
+            $alternatives .= '|' . preg_quote($separator, '/');
+        }
+
+        $trimmed = preg_replace('/^(?:' . $alternatives . ')+|(?:' . $alternatives . ')+$/u', '', $value);
+
+        // Invalid UTF-8 makes a /u pattern fail. Fall back to whitespace only,
+        // which cannot cut a character in half.
+        return null === $trimmed ? trim($value) : $trimmed;
+    }
+
+    /**
      * Trim a description to a character budget, multibyte-safe.
      *
      * Cuts on a word boundary when one is available inside the budget, so the
@@ -176,6 +206,35 @@ class Seo_Text {
             '',
             $text
         );
+
+        return trim((string) preg_replace('/\s+/u', ' ', $text));
+    }
+
+    /**
+     * Make a title or name fit to appear in JSON-LD.
+     *
+     * get_the_title() runs wptexturize and keeps any markup in the title, and
+     * WordPress stores term names and the site name esc_html()'d, so a page
+     * called "R&D at Tom's" reached the graph as `R&#038;D at Tom&#8217;s` and
+     * a category "Cats & Dogs" as `Cats &amp; Dogs`. Nothing downstream
+     * decodes JSON-LD, so those were published literally (#976).
+     *
+     * normalize_schema_text() without its excerpt-marker strip: that marker
+     * is an artefact of a derived description, while a title that ends in an
+     * ellipsis was written that way and keeps it. A decoded `<` stays safe
+     * because the graph is encoded with JSON_HEX_TAG (#118).
+     *
+     * @since 2.15.0
+     *
+     * @param string $text Raw title or name.
+     * @return string Plain text with tags removed and entities decoded.
+     */
+    public static function normalize_schema_name(string $text): string {
+        if ('' === trim($text)) {
+            return '';
+        }
+
+        $text = self::decode_schema_entities(wp_strip_all_tags($text));
 
         return trim((string) preg_replace('/\s+/u', ' ', $text));
     }

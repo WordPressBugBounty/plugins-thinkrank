@@ -153,7 +153,7 @@ class Global_SEO_Schema_Output {
         // Checked second because the default path above answers without a
         // query; this one is a single indexed lookup and only runs on the
         // rare configured-away sites.
-        if ($this->post_has_deployed_product_schema($queried_id)) {
+        if ($this->post_has_deployed_product_schema($queried_id, $post_type)) {
             return [];
         }
 
@@ -167,20 +167,26 @@ class Global_SEO_Schema_Output {
      * Schema_Management_System — this runs inside WooCommerce's structured
      * data filter on product pages, where spinning up the full manager (and
      * its builder) to answer a yes/no question would be waste. Query shape
-     * matches get_deployed_schemas(): active rows for the post context.
+     * matches get_deployed_schemas(): active, deployed rows for the post's
+     * context. That context is the one the editor's Schema tab writes under,
+     * which for a product is 'product', not 'post'; querying 'post' meant a
+     * per-product deployment never suppressed WooCommerce's copy (#1008).
      *
      * @since 2.0.1
-     * @param int $post_id Post to check.
+     * @param int    $post_id   Post to check.
+     * @param string $post_type Post type of the post.
      * @return bool
      */
-    private function post_has_deployed_product_schema(int $post_id): bool {
+    private function post_has_deployed_product_schema(int $post_id, string $post_type): bool {
         global $wpdb;
 
-        $table = $wpdb->prefix . 'thinkrank_seo_schema';
+        $table        = $wpdb->prefix . 'thinkrank_seo_schema';
+        $context_type = \ThinkRank\SEO\Schema_Management_System::context_type_for_post_type($post_type);
 
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one indexed EXISTS-style lookup on the render path; the deployment cache layer belongs to the full manager this deliberately avoids constructing.
         $found = $wpdb->get_var($wpdb->prepare(
-            "SELECT 1 FROM {$table} WHERE context_type = 'post' AND context_id = %d AND schema_type = 'Product' AND is_active = 1 LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix.
+            "SELECT 1 FROM {$table} WHERE context_type = %s AND context_id = %d AND schema_type = 'Product' AND is_active = 1 AND validation_status IN ('deployed', 'valid') LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix.
+            $context_type,
             $post_id
         ));
 
@@ -332,7 +338,7 @@ class Global_SEO_Schema_Output {
         $schema = [
             '@context' => self::SCHEMA_CONTEXT,
             '@type'    => 'CollectionPage',
-            'name'     => $name,
+            'name'     => self::normalize_name((string) $name),
             'url'      => $url,
             'isPartOf' => [
                 '@type' => 'WebSite',
@@ -546,7 +552,7 @@ class Global_SEO_Schema_Output {
         $schema = [
             '@context' => self::SCHEMA_CONTEXT,
             '@type' => $type,
-            'headline' => get_the_title($post),
+            'headline' => self::normalize_name(get_the_title($post)),
             'url' => get_permalink($post),
             'datePublished' => get_the_date('c', $post),
             'dateModified' => get_the_modified_date('c', $post),
@@ -566,7 +572,7 @@ class Global_SEO_Schema_Output {
         if ($author_id) {
             $schema['author'] = [
                 '@type' => 'Person',
-                'name' => get_the_author_meta('display_name', $author_id),
+                'name' => self::normalize_name((string) get_the_author_meta('display_name', $author_id)),
                 'url' => get_author_posts_url($author_id),
             ];
         }
@@ -635,7 +641,8 @@ class Global_SEO_Schema_Output {
         $schema  = $builder->build_schema(
             'FAQPage',
             [
-                'title'   => get_the_title($post),
+                // Becomes the FAQPage name.
+                'title'   => self::normalize_name(get_the_title($post)),
                 'content' => \ThinkRank\SEO\Builder_Content::visible_content($post),
                 'excerpt' => $excerpt ? wp_strip_all_tags($excerpt) : '',
                 'url'     => get_permalink($post),
@@ -702,7 +709,7 @@ class Global_SEO_Schema_Output {
         $schema = [
             '@context' => self::SCHEMA_CONTEXT,
             '@type' => $type,
-            'name' => get_the_title($post),
+            'name' => self::normalize_name(get_the_title($post)),
             'url' => get_permalink($post),
             'datePublished' => get_the_date('c', $post),
             'dateModified' => get_the_modified_date('c', $post),
@@ -742,13 +749,13 @@ class Global_SEO_Schema_Output {
             '@type' => 'ImageObject',
             'contentUrl' => $image_url,
             'url' => get_permalink($post),
-            'name' => get_the_title($post),
+            'name' => self::normalize_name(get_the_title($post)),
         ];
 
         // Add caption/description
         $caption = wp_get_attachment_caption($post->ID);
         if (!empty($caption)) {
-            $schema['caption'] = $caption;
+            $schema['caption'] = self::normalize_name((string) $caption);
             $schema['description'] = self::normalize_description((string) $caption);
         }
 
@@ -775,7 +782,7 @@ class Global_SEO_Schema_Output {
         $schema = [
             '@context' => self::SCHEMA_CONTEXT,
             '@type' => 'VideoObject',
-            'name' => get_the_title($post),
+            'name' => self::normalize_name(get_the_title($post)),
             'url' => get_permalink($post),
         ];
 
@@ -840,7 +847,7 @@ class Global_SEO_Schema_Output {
         $schema = [
             '@context' => self::SCHEMA_CONTEXT,
             '@type' => 'Product',
-            'name' => get_the_title($post),
+            'name' => self::normalize_name(get_the_title($post)),
             'url' => get_permalink($post),
         ];
 
@@ -867,7 +874,7 @@ class Global_SEO_Schema_Output {
         if (!empty($brand)) {
             $schema['brand'] = [
                 '@type' => 'Brand',
-                'name' => $brand,
+                'name' => self::normalize_name($brand),
             ];
         }
 
@@ -916,7 +923,7 @@ class Global_SEO_Schema_Output {
 
         $publisher = [
             '@type' => 'Organization',
-            'name' => $site_name,
+            'name' => self::normalize_name((string) $site_name),
             'url' => $site_url,
         ];
 
@@ -1212,9 +1219,10 @@ class Global_SEO_Schema_Output {
                             ],
                             'author' => [
                                 '@type' => 'Person',
-                                'name' => $comment->comment_author,
+                                'name' => self::normalize_name((string) $comment->comment_author),
                             ],
-                            'reviewBody' => wp_strip_all_tags($comment->comment_content),
+                            // Decoded, not collapsed: a review keeps its line breaks.
+                            'reviewBody' => \ThinkRank\Core\Seo_Text::decode_schema_entities(wp_strip_all_tags((string) $comment->comment_content)),
                             'datePublished' => get_comment_date('c', $comment),
                         ];
                     }
@@ -1300,6 +1308,23 @@ class Global_SEO_Schema_Output {
         }
 
         return (int) $post->ID === (int) get_queried_object_id();
+    }
+
+    /**
+     * Make a title or name fit to appear in JSON-LD.
+     *
+     * get_the_title() is texturized and keeps markup, and term names and the
+     * site name are stored esc_html()'d, so headline and name carried
+     * `&#038;`, `&#8217;`, `&amp;` and tags while the description beside them
+     * was already decoded (#976).
+     *
+     * @since 2.15.0
+     *
+     * @param string $name Raw title or name.
+     * @return string
+     */
+    private static function normalize_name(string $name): string {
+        return \ThinkRank\Core\Seo_Text::normalize_schema_name($name);
     }
 
     /**

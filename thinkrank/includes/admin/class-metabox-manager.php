@@ -243,10 +243,19 @@ class Metabox_Manager {
      * Validates JSON structure and recursively sanitizes all string values
      * to prevent XSS and injection attacks.
      *
-     * @param string $value Raw JSON string value
+     * Untyped on purpose: this is a registered `sanitize_callback`, so
+     * WordPress hands it whatever any writer stored. A `string` parameter made
+     * an array or null a fatal TypeError instead of reaching the guard below
+     * (#1014). An array is a decoded payload and is encoded rather than lost.
+     *
+     * @param mixed $value Raw JSON string value, or an already-decoded array
      * @return string Sanitized JSON string or empty string if invalid
      */
-    public function sanitize_json_meta_field(string $value): string {
+    public function sanitize_json_meta_field($value): string {
+        if (is_array($value)) {
+            $value = (string) wp_json_encode($value);
+        }
+
         // Return empty string for non-string values
         if (!is_string($value) || empty($value)) {
             return '';
@@ -317,11 +326,17 @@ class Metabox_Manager {
 	 * Validates JSON structure, recursively sanitizes all string values,
 	 * and preserves @ characters in keys (crucial for JSON-LD).
 	 *
-	 * @param string $value Raw JSON string value
+	 * Untyped for the same reason as sanitize_json_meta_field() (#1014).
+	 *
+	 * @param mixed $value Raw JSON string value, or an already-decoded array
 	 *
 	 * @return string Sanitized JSON string or empty string if invalid
 	 */
-	public function sanitize_json_ld_field( string $value ): string {
+	public function sanitize_json_ld_field( $value ): string {
+		if ( is_array( $value ) ) {
+			$value = (string) wp_json_encode( $value );
+		}
+
 		// Return empty string for non-string values
 		if ( ! is_string( $value ) || empty( $value ) ) {
 			return '';

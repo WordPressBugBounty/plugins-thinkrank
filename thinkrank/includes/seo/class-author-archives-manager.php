@@ -55,33 +55,10 @@ class Author_Archives_Manager {
             return;
         }
 
-        $author_id = get_queried_object_id();
-
-        // A per-author meta description (e.g. imported from another SEO plugin)
-        // overrides the global template.
-        $custom_desc = (string) get_user_meta($author_id, '_thinkrank_meta_description', true);
-        if ($custom_desc !== '') {
-            $this->print_meta_description($custom_desc);
+        $meta_desc = self::resolve_description((int) get_queried_object_id());
+        if ($meta_desc === '') {
             return;
         }
-
-        $settings = Settings::instance();
-        // Default value matches what we set in endpoint
-        $template = $settings->get('author_archives_meta_desc', Settings::DEFAULT_AUTHOR_ARCHIVES_META_DESC);
-        if (empty($template)) {
-            return;
-        }
-
-        // Get variables
-        $author_name = get_the_author_meta('display_name', $author_id);
-        $site_title = get_bloginfo('name');
-
-        $replacements = [
-            '%author_name%' => $author_name,
-            '%site_title%' => $site_title
-        ];
-
-        $meta_desc = str_replace(array_keys($replacements), array_values($replacements), $template);
 
         $this->print_meta_description($meta_desc);
     }
@@ -97,7 +74,7 @@ class Author_Archives_Manager {
      * @return void
      */
     private function print_meta_description(string $description): void {
-        $description = $this->tidy_whitespace($description);
+        $description = self::tidy_whitespace($description);
         if ($description === '') {
             return;
         }
@@ -154,53 +131,116 @@ class Author_Archives_Manager {
      * @return string Modified title
      */
     public function modify_document_title(string $title): string {
-        if (is_author()) {
-            $author_id = get_queried_object_id();
-
-            // A per-author SEO title (e.g. imported from another SEO plugin)
-            // overrides the global template entirely.
-            $custom_title = (string) get_user_meta($author_id, '_thinkrank_seo_title', true);
-            if ($custom_title !== '') {
-                return $this->with_page_suffix($custom_title);
-            }
-
-            $settings = Settings::instance();
-            $template = $settings->get('author_archives_title', Settings::DEFAULT_AUTHOR_ARCHIVES_TITLE);
-
-            if (empty($template)) {
-                return $title;
-            }
-
-            // Get variables
-            $author_name = get_the_author_meta('display_name', $author_id);
-            $site_title = get_bloginfo('name');
-
-            // Separator
-            $separator = '-';
-            if (class_exists('ThinkRank\SEO\Site_Identity_Manager')) {
-                $separator = \ThinkRank\SEO\Site_Identity_Manager::get_active_separator_symbol();
-            }
-
-            // %page% resolves to nothing here. This filter runs at priority 15,
-            // after SEO_Manager's at priority 1, so its own page indicator was
-            // the one that reached the page — and it rendered without the
-            // separator the rest of the site uses ("admin | tr Page 2" against
-            // "Uncategorized | tr | Page 2" everywhere else). The token stays
-            // recognised so a template that already contains it does not leak
-            // the literal string; the indicator itself comes from the one
-            // helper every other context uses (#397 review).
-            $replacements = [
-                '%author_name%' => $author_name,
-                '%site_title%' => $site_title,
-                '%separator%' => $separator,
-                '%page%' => ''
-            ];
-
-            $rendered = str_replace(array_keys($replacements), array_values($replacements), $template);
-
-            return $this->with_page_suffix($this->tidy_whitespace($rendered));
+        if (!is_author()) {
+            return $title;
         }
-        return $title;
+
+        $resolved = self::resolve_title((int) get_queried_object_id());
+
+        return $resolved === '' ? $title : $this->with_page_suffix($resolved);
+    }
+
+    /**
+     * The SEO title an author archive renders, without the page indicator.
+     *
+     * A per-author SEO title (e.g. imported from another SEO plugin) overrides
+     * the Author Archives title template entirely. Public so SEO_Manager can
+     * hand the same string to og:title and twitter:title: they used to inherit
+     * the Site Identity author title instead, so the share card disagreed with
+     * the document <title> this class prints (#977).
+     *
+     * @since 2.15.0
+     * @param int $author_id Queried author.
+     * @return string Rendered title, or '' when the template is empty.
+     */
+    public static function resolve_title(int $author_id): string {
+        $custom_title = (string) get_user_meta($author_id, '_thinkrank_seo_title', true);
+        if (trim($custom_title) !== '') {
+            return self::render_template($custom_title, $author_id);
+        }
+
+        $template = (string) Settings::instance()->get('author_archives_title', Settings::DEFAULT_AUTHOR_ARCHIVES_TITLE);
+        if (trim($template) === '') {
+            return '';
+        }
+
+        return self::render_template($template, $author_id);
+    }
+
+    /**
+     * The meta description an author archive renders, before the length trim.
+     *
+     * A per-author meta description overrides the Author Archives description
+     * template. Public for the same reason as resolve_title(): it is also the
+     * og:description and twitter:description of the archive (#977).
+     *
+     * @since 2.15.0
+     * @param int $author_id Queried author.
+     * @return string Rendered description, or '' when there is none.
+     */
+    public static function resolve_description(int $author_id): string {
+        $custom_desc = (string) get_user_meta($author_id, '_thinkrank_meta_description', true);
+        if (trim($custom_desc) !== '') {
+            return self::render_template($custom_desc, $author_id);
+        }
+
+        // Default value matches what we set in endpoint
+        $template = (string) Settings::instance()->get('author_archives_meta_desc', Settings::DEFAULT_AUTHOR_ARCHIVES_META_DESC);
+        if (trim($template) === '') {
+            return '';
+        }
+
+        return self::render_template($template, $author_id);
+    }
+
+    /**
+     * Fill an author-archive template with the author and site values.
+     *
+     * The Author Archives tab offers %author_name%, %site_title%, %separator%
+     * and %page%, but the importers write Site Identity vocabulary into the
+     * same setting: Rank Math's stock "%name% %sep% %sitename%" arrives as
+     * "%author_name% %sep% %site_title%", and %sep% used to reach the <title>
+     * as literal text. The Site Identity aliases resolve here too, with the
+     * values that context gives them on an author archive.
+     *
+     * %page% resolves to nothing. modify_document_title() runs at priority 15,
+     * after SEO_Manager's at priority 1, so its own page indicator was the one
+     * that reached the page, and it rendered without the separator the rest
+     * of the site uses ("admin | tr Page 2" against "Uncategorized | tr |
+     * Page 2" everywhere else). The token stays recognised so a template that
+     * already contains it does not leak the literal string; the indicator
+     * itself comes from the one helper every other context uses (#397 review).
+     *
+     * @since 2.15.0
+     * @param string $template  Title or description template.
+     * @param int    $author_id Queried author.
+     * @return string Rendered text with whitespace tidied.
+     */
+    private static function render_template(string $template, int $author_id): string {
+        $author_name = (string) get_the_author_meta('display_name', $author_id);
+        $site_title  = (string) get_bloginfo('name');
+        $tagline     = (string) get_bloginfo('description');
+
+        $separator = '-';
+        if (class_exists('ThinkRank\SEO\Site_Identity_Manager')) {
+            $separator = \ThinkRank\SEO\Site_Identity_Manager::get_active_separator_symbol();
+        }
+
+        $replacements = [
+            '%author_name%'      => $author_name,
+            '%author%'           => $author_name,
+            '%archive_title%'    => $author_name,
+            '%site_title%'       => $site_title,
+            '%site_name%'        => $site_title,
+            '%site_description%' => $tagline,
+            '%tagline%'          => $tagline,
+            '%separator%'        => $separator,
+            '%sep%'              => $separator,
+            '%date%'             => gmdate('F Y'),
+            '%page%'             => '',
+        ];
+
+        return self::tidy_whitespace(str_replace(array_keys($replacements), array_values($replacements), $template));
     }
 
     /**
@@ -229,7 +269,7 @@ class Author_Archives_Manager {
      * @param string $value Rendered template
      * @return string Template with runs of whitespace collapsed and trimmed
      */
-    private function tidy_whitespace(string $value): string {
+    private static function tidy_whitespace(string $value): string {
         return trim((string) preg_replace('/\s+/u', ' ', $value));
     }
 

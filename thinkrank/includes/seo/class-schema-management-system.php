@@ -444,6 +444,16 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             $refresh_types[] = 'WebSite';
         }
 
+        // The Site Identity logo is the Organization logo's fallback, the
+        // WebSite publisher's logo and the LocalBusiness logo. Without this a
+        // logo change reached none of the deployed nodes until a manual
+        // Deploy (#1010).
+        if (array_key_exists('logo_url', $settings)) {
+            $refresh_types[] = 'Organization';
+            $refresh_types[] = 'WebSite';
+            $refresh_types[] = 'LocalBusiness';
+        }
+
         if (empty($refresh_types)) {
             return;
         }
@@ -1078,9 +1088,15 @@ class Schema_Management_System extends Abstract_SEO_Manager {
                 break;
 
             case 'Organization':
-                // Ensure logo for rich snippets
+                // Fill a missing logo from the site icon when there is one.
+                // logo is recommended, not required, so with nothing to point
+                // at it stays out rather than naming a file that is not there
+                // (#1010).
                 if (empty($schema_data['logo'])) {
-                    $schema_data['logo'] = $this->get_default_organization_logo();
+                    $logo_url = $this->get_default_organization_logo();
+                    if ('' !== $logo_url) {
+                        $schema_data['logo'] = $logo_url;
+                    }
                 }
                 break;
 
@@ -1235,9 +1251,12 @@ class Schema_Management_System extends Abstract_SEO_Manager {
     /**
      * Get default organization logo for rich snippets
      *
+     * The theme's custom logo, then the site icon. Returns '' when neither
+     * is set; callers then leave logo out of the schema.
+     *
      * @since 1.0.0
      *
-     * @return string Default logo URL
+     * @return string Logo URL, or '' when none is available
      */
     private function get_default_organization_logo(): string {
         // Try to get custom logo
@@ -1249,14 +1268,14 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             }
         }
 
-        // Fallback to site icon or default
+        // Fallback to site icon
         $site_icon_url = get_site_icon_url();
         if ($site_icon_url) {
             return $site_icon_url;
         }
 
-        // Final fallback
-        return home_url('/wp-content/plugins/thinkrank/assets/images/default-logo.jpg');
+        // No logo anywhere: there is no bundled default image to point at.
+        return '';
     }
 
     /**
@@ -1380,6 +1399,29 @@ class Schema_Management_System extends Abstract_SEO_Manager {
     }
 
     /**
+     * Keep only the schema types that are valid for a context.
+     *
+     * The site context holds the site-level entities only
+     * (Schema_Settings_Config::get_site_level_schema_types()). Other contexts
+     * have no server-side list, so their types pass through unchanged.
+     *
+     * @since 2.15.0
+     *
+     * @param string $context_type Context type.
+     * @param array  $types        Schema types, as selected or stored.
+     * @return string[] The types valid for the context, in their given order.
+     */
+    public static function filter_types_for_context(string $context_type, array $types): array {
+        $types = array_values(array_filter($types, 'is_string'));
+
+        if ('site' !== $context_type) {
+            return $types;
+        }
+
+        return array_values(array_intersect($types, Schema_Settings_Config::get_site_level_schema_types()));
+    }
+
+    /**
      * Auto-deploy schema when settings change
      *
      * Automatically regenerates and deploys schema markup when organization or other
@@ -1424,7 +1466,14 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         // An empty selection means "auto", so only filter when one is set.
         $enabled_types = $settings['enabled_schema_types'] ?? $this->get_settings($context_type, $context_id)['enabled_schema_types'] ?? [];
 
-        if (!empty($enabled_types) && is_array($enabled_types)) {
+        // Only types that can live in this context count as a selection. A
+        // foreign type (Article or WebPage in the site context) is not one
+        // the user can see or untick, and treating it as the selection
+        // retired every deployed site entity and kept them from redeploying
+        // (#1004).
+        $enabled_types = is_array($enabled_types) ? self::filter_types_for_context($context_type, $enabled_types) : [];
+
+        if (!empty($enabled_types)) {
             $schema_types_to_regenerate = array_values(
                 array_intersect($schema_types_to_regenerate, $enabled_types)
             );
@@ -1514,6 +1563,9 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         // schema never auto-deployed no matter what was edited (#455).
         $website_keys = [
             'website_name', 'website_url', 'website_description', 'website_author',
+            // The sitelinks search box switch and URL shape potentialAction,
+            // so a save of either has to redeploy WebSite too (#1009).
+            'website_enable_search', 'website_search_url',
         ];
 
         foreach ($website_keys as $key) {
@@ -2095,6 +2147,33 @@ class Schema_Management_System extends Abstract_SEO_Manager {
     }
 
     /**
+     * Context types a deployed schema row can be stored under.
+     *
+     * @since 2.15.0
+     * @var string[]
+     */
+    public const CONTEXT_TYPES = ['site', 'post', 'page', 'product'];
+
+    /**
+     * The context_type a post's deployed schema rows are stored under.
+     *
+     * The editor's Schema tab writes and reads rows under the post's own type
+     * when it is one of CONTEXT_TYPES, and under 'post' for every other type,
+     * so a WooCommerce product's rows are 'product' rows. Every server-side
+     * reader of a post's rows goes through this so it looks where the writer
+     * wrote: a reader that hard-coded 'post' never found a product's
+     * deployed Product schema (#1008).
+     *
+     * @since 2.15.0
+     *
+     * @param string $post_type Post type of the post.
+     * @return string Context type.
+     */
+    public static function context_type_for_post_type(string $post_type): string {
+        return in_array($post_type, self::CONTEXT_TYPES, true) ? $post_type : 'post';
+    }
+
+    /**
      * Get deployed schemas for frontend integration
      *
      * Returns the newest active, deployed row of each schema type for the
@@ -2563,6 +2642,9 @@ class Schema_Management_System extends Abstract_SEO_Manager {
      * Retire deployed types that are no longer in the user's Schema Types selection.
      *
      * An empty selection means "auto-detect", so nothing is retired in that case.
+     * Types that are not valid for the context are ignored, so a selection
+     * holding only foreign types counts as empty rather than as one that
+     * excludes every deployed site entity (#1004).
      *
      * @since 1.16.0
      *
@@ -2572,6 +2654,8 @@ class Schema_Management_System extends Abstract_SEO_Manager {
      * @return int Number of rows deactivated.
      */
     private function retire_unselected_schema_types(string $context_type, ?int $context_id, array $enabled_types): int {
+        $enabled_types = self::filter_types_for_context($context_type, $enabled_types);
+
         if (empty($enabled_types)) {
             return 0;
         }
@@ -2765,6 +2849,12 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             'website_url' => $schema_settings['website_url'] ?? '',
             'website_description' => $schema_settings['website_description'] ?? '',
             'website_author' => $schema_settings['website_author'] ?? '',
+            // Read by Schema_Builder::website_search_action(). Without them the
+            // deployed WebSite always shipped the default SearchAction, whatever
+            // the sitelinks search box switch and URL said (#1009). null keeps
+            // "not configured" distinct from a switched-off ''.
+            'website_enable_search' => $schema_settings['website_enable_search'] ?? null,
+            'website_search_url' => $schema_settings['website_search_url'] ?? '',
 
             'organization_logo' => $schema_settings['organization_logo'] ?? '',
             // Social media links (sameAs)

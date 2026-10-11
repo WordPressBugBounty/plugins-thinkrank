@@ -100,7 +100,13 @@ class Role_Manager {
             return $result;
         }
 
-        $route = (string) $request->get_route();
+        // WP_REST_Server matches routes case-insensitively ('@^...$@i'), so
+        // /ThinkRank/v1/... reaches the same handler as /thinkrank/v1/...
+        // Compare a lowercased copy, or a change of case skips the gate (#975).
+        // Every route this class names, including the exemptions below, is
+        // lowercase, and lowercasing only lets a variant reach the same handler
+        // its lowercase form already reaches, so no exemption grows.
+        $route = strtolower((string) $request->get_route());
         // Gate both the free (/thinkrank/v1/) and Pro (/thinkrank-pro/v1/)
         // namespaces so the Role Manager governs Pro sections too — otherwise the
         // whole Pro namespace bypasses the capability gate.

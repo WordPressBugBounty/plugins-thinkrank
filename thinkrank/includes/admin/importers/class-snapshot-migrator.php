@@ -658,15 +658,12 @@ class Snapshot_Migrator {
      * @return bool Whether the value was written
      */
     private function write_object_meta(string $object_type, int $object_id, string $key, $value): bool {
-        // Registered meta can carry a typed sanitize_callback, and some of ours
-        // declare `string` — `_thinkrank_robots_meta` and
-        // `_thinkrank_advanced_robots_meta` both run through
-        // Metabox_Manager::sanitize_json_meta_field(string $value). Everything
-        // writing those today stores JSON, so an export carries them back as
-        // strings; but the restore's whole policy is to write the file's value
-        // verbatim, and a file holding one as an array would otherwise raise a
-        // TypeError that takes down the rest of the chunk with it. One bad key
-        // is worth skipping, not the records behind it.
+        // Registered meta can carry a sanitize_callback that throws on a value
+        // it does not expect. ThinkRank's own JSON sanitizers accept any type
+        // since #1014, but another plugin's callback may still be typed, and
+        // the restore's whole policy is to write the file's value verbatim, so
+        // a TypeError here would otherwise take down the rest of the chunk with
+        // it. One bad key is worth skipping, not the records behind it.
         //
         // wp_slash() because the meta writers unslash: a restored JSON value
         // (schema form data, robots) would otherwise lose the backslash of

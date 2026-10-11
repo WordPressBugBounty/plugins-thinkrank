@@ -2061,9 +2061,7 @@ class SEOScoreCalculator {
             require_once $manager_file;
         }
 
-        $context_type = in_array($post->post_type, ['site', 'post', 'page', 'product'], true)
-            ? $post->post_type
-            : 'post';
+        $context_type = \ThinkRank\SEO\Schema_Management_System::context_type_for_post_type((string) $post->post_type);
 
         try {
             $manager = new \ThinkRank\SEO\Schema_Management_System();

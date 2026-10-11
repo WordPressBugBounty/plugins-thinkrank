@@ -464,6 +464,52 @@ class Schema_Builder {
     }
 
     /**
+     * The WebSite SearchAction for the sitelinks search box, or null when the
+     * site switched it off.
+     *
+     * Reads the Website tab's two settings. website_enable_search absent (or
+     * null) means not configured, which stays on; any other value is read as
+     * a boolean, so the '' a switched-off toggle is stored as turns it off.
+     *
+     * website_search_url is used as the urlTemplate when it is an http(s) URL,
+     * or a site path, and carries the {search_term_string} placeholder that
+     * query-input names. Without the placeholder the template cannot take a
+     * query, so the default WordPress search URL is used instead, as it is
+     * when the field is empty.
+     *
+     * @since 2.15.0
+     *
+     * @param array $settings Schema settings or site_data.
+     * @return array|null SearchAction node, or null when switched off.
+     */
+    public static function website_search_action(array $settings): ?array {
+        $enabled = $settings['website_enable_search'] ?? null;
+        if (null !== $enabled && empty($enabled)) {
+            return null;
+        }
+
+        $url_template = home_url('/?s={search_term_string}');
+
+        $custom = trim((string) ($settings['website_search_url'] ?? ''));
+        if ('' !== $custom && false !== strpos($custom, '{search_term_string}')) {
+            if (\ThinkRank\Core\Url_Validator::is_http_url($custom)) {
+                $url_template = $custom;
+            } elseif (\ThinkRank\Core\Url_Validator::is_http_url_or_path($custom)) {
+                $url_template = home_url($custom);
+            }
+        }
+
+        return [
+            '@type' => 'SearchAction',
+            'target' => [
+                '@type' => 'EntryPoint',
+                'urlTemplate' => $url_template
+            ],
+            'query-input' => 'required name=search_term_string'
+        ];
+    }
+
+    /**
      * Populate Organization schema
      * PRESERVED: Exact same method logic from original Schema_Generator
      *
@@ -494,9 +540,16 @@ class Schema_Builder {
             home_url()
         );
 
-        // Logo from user configuration or theme customizer
-        if (!empty($data['site_data']['organization_logo'])) {
-            $schema['logo'] = $this->format_image_schema($data['site_data']['organization_logo']);
+        // Logo: the Schema Manager's Organization logo, then the Site Identity
+        // logo (the one WebSite.publisher and LocalBusiness already use, so the
+        // same entity carries the same logo everywhere), then the theme's
+        // custom logo. With none of them, logo is left out (#1010).
+        $logo_url = $this->first_non_empty(
+            $data['site_data']['organization_logo'] ?? null,
+            $data['site_data']['logo_url'] ?? null
+        );
+        if ('' !== $logo_url) {
+            $schema['logo'] = $this->format_image_schema($logo_url);
         } else {
             // Fallback to WordPress custom logo
             $custom_logo_id = get_theme_mod('custom_logo');
@@ -1131,20 +1184,12 @@ class Schema_Builder {
 
         $schema['publisher'] = $publisher;
 
-        // Search action for sitelinks search box (optional but recommended)
-        if ($data['site_data']['website_enable_search'] ?? true) {
-            $search_url = $this->first_non_empty(
-                $data['site_data']['website_search_url'] ?? '',
-                home_url('/?s={search_term_string}')
-            );
-            $schema['potentialAction'] = [
-                '@type' => 'SearchAction',
-                'target' => [
-                    '@type' => 'EntryPoint',
-                    'urlTemplate' => $search_url
-                ],
-                'query-input' => 'required name=search_term_string'
-            ];
+        // Search action for sitelinks search box (optional but recommended).
+        // Shared with the live fallback in SEO_Manager so the deployed and
+        // live WebSite nodes read the switch and the URL the same way (#1009).
+        $search_action = self::website_search_action($data['site_data'] ?? []);
+        if (null !== $search_action) {
+            $schema['potentialAction'] = $search_action;
         }
 
         // Social media profiles (sameAs)

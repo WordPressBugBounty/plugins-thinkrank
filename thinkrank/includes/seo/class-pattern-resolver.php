@@ -370,6 +370,25 @@ class Pattern_Resolver {
     }
 
     /**
+     * Whether the post's content is behind a password for this request.
+     *
+     * The same test SEO_Manager uses for the Global SEO path (#363), guarded
+     * because this class is also exercised outside a front-end request.
+     *
+     * @since 2.15.0
+     *
+     * @param \WP_Post $post Post.
+     * @return bool
+     */
+    private static function is_password_required(\WP_Post $post): bool {
+        if ('' === (string) $post->post_password) {
+            return false;
+        }
+
+        return !function_exists('post_password_required') || post_password_required($post);
+    }
+
+    /**
      * Build placeholder values for an explicit post (no loop dependency).
      *
      * @param int $post_id Post ID.
@@ -378,11 +397,19 @@ class Pattern_Resolver {
     private static function placeholders_for(int $post_id): array {
         $post = get_post($post_id);
 
+        // An authored excerpt is written for public consumption, so it stays.
+        // The body is not: deriving %excerpt% from a protected post's body put
+        // the gated text into the title, meta, og/twitter tags and JSON-LD of
+        // the page that asks for the password. The Global SEO path closed this
+        // in #363; the per-post templates resolve here, so the same rule
+        // applies here too (#973).
         $excerpt = '';
         if ($post) {
-            $excerpt = !empty($post->post_excerpt)
-                ? $post->post_excerpt
-                : self::derive_excerpt(Builder_Content::visible_content($post));
+            if (!empty($post->post_excerpt)) {
+                $excerpt = $post->post_excerpt;
+            } elseif (!self::is_password_required($post)) {
+                $excerpt = self::derive_excerpt(Builder_Content::visible_content($post));
+            }
         }
 
         $author_id = (int) get_post_field('post_author', $post_id);
@@ -577,7 +604,7 @@ class Pattern_Resolver {
         );
 
         // Strip leading/trailing separators and whitespace.
-        return trim($value, " \t\n\r\0\x0B" . $separator);
+        return \ThinkRank\Core\Seo_Text::trim_separator($value, $separator);
     }
 
     /**

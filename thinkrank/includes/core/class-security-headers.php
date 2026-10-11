@@ -135,7 +135,9 @@ class Security_Headers {
      * @return bool
      */
     private function is_thinkrank_api_request($request): bool {
-        $route = $request->get_route();
+        // Lowercased: WP_REST_Server matches routes case-insensitively, so
+        // /ThinkRank/v1/... is still a ThinkRank request (#975).
+        $route = strtolower((string) $request->get_route());
         return strpos($route, '/thinkrank/') === 0;
     }
 

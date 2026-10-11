@@ -308,6 +308,12 @@ class Capability_Manager {
      * @return string
      */
     public static function capability_for_route(string $route): string {
+        // Routes match case-insensitively in WP_REST_Server, and every key in
+        // route_map() and settings_category_map() is lowercase, so a section
+        // spelled /SiteMap/ must resolve to the same capability as /sitemap/
+        // rather than fall back to the base access cap (#975).
+        $route = strtolower($route);
+
         // Settings-management categories resolve by category rather than by
         // prefix — see settings_category_map() for why this one route differs.
         if (preg_match('#/thinkrank(?:-pro)?/v1/settings-management/category/([a-zA-Z0-9_-]+)#', $route, $c)) {

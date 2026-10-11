@@ -893,10 +893,10 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // Omit <lastmod> when unknown (empty) — a fabricated timestamp is worse
         // than no timestamp, and an absent lastmod is valid per the spec.
         if (!empty($lastmod)) {
-            $xml .= "    <lastmod>" . esc_html($lastmod) . "</lastmod>\n";
+            $xml .= "    <lastmod>" . self::xml_text($lastmod) . "</lastmod>\n";
         }
         $xml .= "    <priority>" . number_format($priority, 1) . "</priority>\n";
-        $xml .= "    <changefreq>" . esc_html($changefreq) . "</changefreq>\n";
+        $xml .= "    <changefreq>" . self::xml_text($changefreq) . "</changefreq>\n";
 
         // Add image entries if provided
         foreach ($images as $image) {
@@ -907,11 +907,11 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             $xml .= "      <image:loc>" . esc_url(\ThinkRank\Core\Url_Validator::to_ascii(Url_Scheme::apply((string) $image['url']))) . "</image:loc>\n";
 
             if (!empty($image['title'])) {
-                $xml .= "      <image:title>" . esc_html($image['title']) . "</image:title>\n";
+                $xml .= "      <image:title>" . self::xml_text((string) $image['title']) . "</image:title>\n";
             }
 
             if (!empty($image['alt'])) {
-                $xml .= "      <image:caption>" . esc_html($image['alt']) . "</image:caption>\n";
+                $xml .= "      <image:caption>" . self::xml_text((string) $image['alt']) . "</image:caption>\n";
             }
 
             $xml .= "    </image:image>\n";
@@ -920,6 +920,32 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $xml .= "  </url>\n";
 
         return $xml;
+    }
+
+    /**
+     * Escape a value for an XML text node.
+     *
+     * esc_html() escapes for HTML: it leaves an existing entity alone, so
+     * `&eacute;` or `&nbsp;` from an alt attribute, an attachment title or a
+     * wptexturized title reached the sitemap as is. XML defines only five
+     * named entities, so one such caption made the whole sitemap.xml fail to
+     * parse (#978). Decode every HTML entity to its character first, drop the
+     * control characters XML 1.0 does not allow, then escape for XML.
+     *
+     * @since 2.15.0
+     *
+     * @param string $value Text, possibly HTML-encoded.
+     * @return string XML-safe text.
+     */
+    private static function xml_text(string $value): string {
+        $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        // Byte-wise on purpose: these are ASCII C0 bytes, so this cannot split
+        // a multi-byte sequence, and a /u pattern returns null on a malformed
+        // subject. ENT_SUBSTITUTE below handles invalid UTF-8.
+        $value = (string) preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $value);
+
+        return htmlspecialchars($value, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
     /**
@@ -1120,7 +1146,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         }
 
         // product_cat may legitimately have empty terms (products added later);
-        // every other taxonomy hides empties — matching fetch_taxonomies_optimized().
+        // every other taxonomy hides empties, matching fetch_taxonomies_optimized().
         $hide_empty = $taxonomy !== 'product_cat';
         $priority   = $taxonomy === 'category' ? 0.6 : 0.4;
 
@@ -1345,40 +1371,106 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     private function extract_content_images(string $content): array {
         $images = [];
 
-        // Find all img tags in content
-        preg_match_all('/<img[^>]+>/i', $content, $img_tags);
+        foreach ($this->read_img_tags($content) as $attributes) {
+            $image_url = $attributes['src'];
 
-        foreach ($img_tags[0] as $img_tag) {
-            // Extract src attribute
-            if (preg_match('/src=["\']([^"\']+)["\']/', $img_tag, $src_match)) {
-                $image_url = $src_match[1];
-
-                // Skip if not a valid URL or external image
-                if (!\ThinkRank\Core\Url_Validator::is_valid($image_url)) {
-                    continue;
-                }
-
-                // Extract title and alt attributes
-                $title = '';
-                $alt = '';
-
-                if (preg_match('/title=["\']([^"\']*)["\']/', $img_tag, $title_match)) {
-                    $title = $title_match[1];
-                }
-
-                if (preg_match('/alt=["\']([^"\']*)["\']/', $img_tag, $alt_match)) {
-                    $alt = $alt_match[1];
-                }
-
-                $images[] = [
-                    'url' => $image_url,
-                    'title' => $title,
-                    'alt' => $alt
-                ];
+            // Skip if not a valid URL or external image
+            if ($image_url === '' || !\ThinkRank\Core\Url_Validator::is_valid($image_url)) {
+                continue;
             }
+
+            $images[] = [
+                'url'   => $image_url,
+                'title' => $attributes['title'],
+                'alt'   => $attributes['alt'],
+            ];
         }
 
         return $images;
+    }
+
+    /**
+     * Read src, title and alt of every <img> in a block of HTML.
+     *
+     * Values come back decoded, the way a browser reads them. The previous
+     * `/alt=["\']([^"\']*)["\']/` stopped at the first quote of either kind,
+     * so `alt="Tom's dog"` became "Tom", and it returned entities such as
+     * `&eacute;` still encoded (#978).
+     *
+     * @since 2.15.0
+     *
+     * @param string $content Post content.
+     * @return array<int, array{src: string, title: string, alt: string}>
+     */
+    private function read_img_tags(string $content): array {
+        if (stripos($content, '<img') === false) {
+            return [];
+        }
+
+        // WordPress 6.2+: the HTML API parses attributes exactly as a browser
+        // does and get_attribute() returns the decoded value.
+        if (class_exists('WP_HTML_Tag_Processor')) {
+            return $this->read_img_tags_with_tag_processor($content);
+        }
+
+        return $this->read_img_tags_with_regex($content);
+    }
+
+    /**
+     * read_img_tags() through WP_HTML_Tag_Processor (WordPress 6.2+).
+     *
+     * @since 2.15.0
+     *
+     * @param string $content Post content.
+     * @return array<int, array{src: string, title: string, alt: string}>
+     */
+    private function read_img_tags_with_tag_processor(string $content): array {
+        $found = [];
+        $tags  = new \WP_HTML_Tag_Processor($content);
+        while ($tags->next_tag(['tag_name' => 'img'])) {
+            $read = [];
+            foreach (['src', 'title', 'alt'] as $name) {
+                $value       = $tags->get_attribute($name);
+                $read[$name] = is_string($value) ? $value : '';
+            }
+            $found[] = $read;
+        }
+
+        return $found;
+    }
+
+    /**
+     * read_img_tags() without the HTML API (WordPress 6.0/6.1).
+     *
+     * Matches the tag and each attribute so a quoted value runs to its own
+     * closing quote, then decodes it.
+     *
+     * @since 2.15.0
+     *
+     * @param string $content Post content.
+     * @return array<int, array{src: string, title: string, alt: string}>
+     */
+    private function read_img_tags_with_regex(string $content): array {
+        $found = [];
+
+        preg_match_all('/<img\b(?:[^>"\']|"[^"]*"|\'[^\']*\')*>/i', $content, $img_tags);
+
+        foreach ($img_tags[0] as $img_tag) {
+            $read = [];
+            foreach (['src', 'title', 'alt'] as $name) {
+                $read[$name] = '';
+                if (preg_match('/[\s"\'\/]' . $name . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'=<>`]+))/i', $img_tag, $match)) {
+                    // Groups that did not take part in the match are absent
+                    // from the end of $match, so the last one present is the
+                    // one that matched.
+                    $raw         = $match[3] ?? $match[2] ?? $match[1];
+                    $read[$name] = html_entity_decode($raw, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                }
+            }
+            $found[] = $read;
+        }
+
+        return $found;
     }
 
     /**
@@ -1448,27 +1540,37 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
         }
 
-        // Determine hide_empty setting based on taxonomies
-        $hide_empty = true;
-        foreach ($taxonomies as $taxonomy) {
-            // For product categories, don't hide empty categories since they might not have products yet
-            if ($taxonomy === 'product_cat') {
-                $hide_empty = false;
-                break;
+        // product_cat keeps its empty terms (products may be added later);
+        // every other taxonomy hides them, the same per-taxonomy rule as
+        // collect_taxonomy_entries_iter(). hide_empty is one flag for a whole
+        // get_terms() call, so the two groups are queried separately: one
+        // combined query with hide_empty off for product_cat listed every
+        // empty category and tag on a WooCommerce site (#979).
+        $query_groups = [
+            'hide' => array_values(array_diff($taxonomies, ['product_cat'])),
+            'keep' => array_values(array_intersect($taxonomies, ['product_cat'])),
+        ];
+
+        $all_terms = [];
+        foreach ($query_groups as $group => $group_taxonomies) {
+            if (empty($group_taxonomies)) {
+                continue;
             }
-        }
 
-        // OPTIMIZED: Single query for multiple taxonomies
-        $all_terms = get_terms($this->filter_term_query_args([
-            'taxonomy' => $taxonomies,  // ✅ Multiple taxonomies in single query
-            'hide_empty' => $hide_empty,
-            'exclude' => $exclude_term_ids,
-            'orderby' => 'taxonomy count',
-            'order' => 'ASC DESC'  // Order by taxonomy ASC, then count DESC
-        ]));
+            // Single query for every taxonomy that shares the same rule.
+            $terms = get_terms($this->filter_term_query_args([
+                'taxonomy'   => $group_taxonomies,
+                'hide_empty' => $group === 'hide',
+                'exclude'    => $exclude_term_ids,
+                'orderby'    => 'taxonomy count',
+                'order'      => 'ASC DESC', // Order by taxonomy ASC, then count DESC
+            ]));
 
-        if (is_wp_error($all_terms)) {
-            return [];
+            if (is_wp_error($terms) || !is_array($terms)) {
+                continue;
+            }
+
+            $all_terms = array_merge($all_terms, $terms);
         }
 
         // Drop terms that are not indexable destinations. This path feeds the
@@ -3479,7 +3581,8 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         }
 
         foreach ($this->get_enabled_taxonomies($settings) as $taxonomy) {
-            $count = wp_count_terms(['taxonomy' => $taxonomy, 'hide_empty' => true]);
+            // Same per-taxonomy empty-term rule as the term walks.
+            $count = wp_count_terms(['taxonomy' => $taxonomy, 'hide_empty' => $taxonomy !== 'product_cat']);
             if (!is_wp_error($count)) {
                 $total += (int) $count;
             }
