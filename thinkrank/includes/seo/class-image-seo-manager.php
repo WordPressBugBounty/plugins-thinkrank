@@ -66,6 +66,16 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
     private ?array $deferred_alt_purge = null;
 
     /**
+     * What a bulk fill changed, attachment ID => [before, after], or null
+     * outside a bulk run. Returned as `changes` so the MCP activity log can
+     * show each write and undo it image by image (#717).
+     *
+     * @since 2.15.0
+     * @var array<int,array{before:string,after:string}>|null
+     */
+    private ?array $bulk_alt_changes = null;
+
+    /**
      * What the most recent purge_alt_caches() call did.
      *
      * Read by the MCP abilities, which have to report the cache outcome
@@ -602,6 +612,9 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         $written = update_post_meta($attachment_id, '_wp_attachment_image_alt', $value) !== false;
 
         if ($written) {
+            if (null !== $this->bulk_alt_changes) {
+                $this->bulk_alt_changes[$attachment_id] = ['before' => $existing, 'after' => $value];
+            }
             $this->record_alt_write($attachment_id, $purge);
         }
 
@@ -788,6 +801,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
 
         // Hold every purge until the batch is done: see $deferred_alt_purge.
         $this->deferred_alt_purge = [];
+        $this->bulk_alt_changes   = [];
 
         try {
             foreach ($ids as $id) {
@@ -796,7 +810,9 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             }
         } finally {
             $written                  = array_values(array_unique($this->deferred_alt_purge ?? []));
+            $changes                  = $this->bulk_alt_changes ?? [];
             $this->deferred_alt_purge = null;
+            $this->bulk_alt_changes   = null;
             $cache                    = $this->purge_alt_caches($written);
         }
 
@@ -835,6 +851,13 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             'next_offset' => $next_offset,
             'remaining'   => $remaining,
             'done'        => $exhausted || $next_offset >= $total,
+            'changes'     => array_map(
+                static function (int $id, array $change): array {
+                    return ['id' => $id, 'before' => $change['before'], 'after' => $change['after']];
+                },
+                array_keys($changes),
+                array_values($changes)
+            ),
             'cache'       => [
                 'posts_purged' => count($cache['posts']),
                 'warnings'     => $cache['warnings'],

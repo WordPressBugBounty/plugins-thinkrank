@@ -181,11 +181,6 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
             'hourly_data' => 30,     // 30 days of hourly data
             'daily_data' => 365,     // 1 year of daily data
             'weekly_data' => 1095    // 3 years of weekly data
-        ],
-        'api_endpoints' => [
-            'pagespeed_insights' => 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed',
-            'mobile_friendly' => 'https://searchconsole.googleapis.com/v1/urlTestingTools/mobileFriendlyTest:run',
-            'core_web_vitals' => 'https://chromeuxreport.googleapis.com/v1/records:queryRecord'
         ]
     ];
 

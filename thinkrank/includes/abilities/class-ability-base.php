@@ -84,6 +84,28 @@ abstract class Ability_Base {
 	}
 
 	/**
+	 * A map value for an output property the schema types as `object`.
+	 *
+	 * An empty PHP array JSON-encodes as `[]`, so a map that happens to have
+	 * no entries reaches the client as an array where the output schema
+	 * promised an object. Since tools/call returns `structuredContent`, clients
+	 * that validate it against `outputSchema` (the MCP TypeScript SDK, ajv)
+	 * reject the whole call (#1089). A non-empty map is returned as is, so it
+	 * stays array-accessible for PHP callers.
+	 *
+	 * Not `empty_properties()`: core's output validation accepts a stdClass as
+	 * an object but not an ArrayObject.
+	 *
+	 * @since 2.15.0
+	 *
+	 * @param array<string, mixed> $map Map to return.
+	 * @return array<string, mixed>|\stdClass The map, or `{}` when it is empty.
+	 */
+	protected static function object_value( array $map ) {
+		return [] === $map ? new \stdClass() : $map;
+	}
+
+	/**
 	 * Get the JSON Schema for ability input.
 	 *
 	 * @return array<string, mixed>
@@ -134,6 +156,22 @@ abstract class Ability_Base {
 		}
 
 		return current_user_can( $this->capability );
+	}
+
+	/**
+	 * Whether core's Abilities REST API may list and run this ability.
+	 *
+	 * Off unless a site opts the ability in. Core's `wp-abilities/v1` route
+	 * runs an ability for any REST session that passes its permission
+	 * callback, outside `enable_mcp`, the credential's scope and the rate
+	 * limiter, which the MCP server applies on the way to the same ability.
+	 * The server itself runs abilities through `wp_get_ability()`, so this
+	 * changes nothing for it.
+	 *
+	 * @return bool
+	 */
+	public function show_in_rest() {
+		return (bool) apply_filters( 'thinkrank_ability_show_in_rest', false, $this->id, $this );
 	}
 
 	/**
@@ -197,7 +235,7 @@ abstract class Ability_Base {
 				'permission_callback' => [ $this, 'permission_callback' ],
 				'execute_callback'    => [ $this, 'execute_wrapper' ],
 				'meta'                => [
-					'show_in_rest' => true,
+					'show_in_rest' => $this->show_in_rest(),
 					'annotations'  => $this->get_annotations(),
 					'mcp'          => [
 						'public' => false,

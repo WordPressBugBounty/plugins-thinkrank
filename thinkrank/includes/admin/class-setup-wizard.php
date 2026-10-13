@@ -63,12 +63,14 @@ class Setup_Wizard {
     public const OPT_MIGRATED_PLUGINS = 'thinkrank_setup_wizard_migrated_plugins';
 
     /**
-     * Option flag: the user clicked "Get Started" on the Start step.
+     * Option flag: the user clicked "Allow & Continue" on the Start step,
+     * opting in to usage tracking.
      *
      * Once set, the Start step is permanently dismissed — future visits resume
      * from saved progress (or Migration if progress was wiped), never Start.
-     * Clicking "Skip" on the Start step deliberately does NOT set this, so the
-     * Start step can be shown again on subsequent visits.
+     * "Skip" deliberately does NOT set this, so the Start step stays
+     * reachable and the user can opt in later.
+     * Either way the wizard resumes from the saved step.
      */
     public const OPT_STARTED = 'thinkrank_setup_wizard_started';
 
@@ -79,7 +81,7 @@ class Setup_Wizard {
 
     /**
      * 1-based index of the Migration step — the earliest step shown once the
-     * Start step has been dismissed via "Get Started".
+     * Start step has been dismissed by opting in on it.
      */
     public const STEP_MIGRATION = 2;
 
@@ -93,7 +95,7 @@ class Setup_Wizard {
      *
      * @var string[]
      */
-    private const STEPS = ['start', 'migration', 'site-setup', 'mcp', 'analytics', 'ecosystem', 'help', 'ready'];
+    private const STEPS = ['start', 'migration', 'site-setup', 'mcp', 'analytics', 'ecosystem', 'hub', 'ready'];
 
     /**
      * Captured page hook suffix for the hidden wizard page.
@@ -150,7 +152,7 @@ class Setup_Wizard {
     }
 
     /**
-     * Whether the user has dismissed the Start step via "Get Started".
+     * Whether the user has dismissed the Start step by opting in on it.
      *
      * @return bool
      */
@@ -161,22 +163,26 @@ class Setup_Wizard {
     /**
      * Resolve the step the wizard should open on.
      *
-     * Before "Get Started" the Start step is shown. Once "Get Started" has been
-     * used it is permanently dismissed: the wizard resumes from the saved step,
-     * clamped so it can never fall back to Start — even if the progress option
-     * was manually deleted, in which case it begins at Migration.
+     * The wizard resumes from the saved step whichever way the Start step was
+     * answered. The Hub and Google connections leave the page and come back to
+     * the plain wizard URL, so the saved step is the only thing that returns
+     * the owner to where they were (#1141). With no saved step it opens on
+     * Start.
+     *
+     * Opting in on Start dismisses it for good: the step is then clamped so it
+     * can never fall back to Start, even if the progress option was manually
+     * deleted, in which case it begins at Migration. After "Skip" the floor
+     * stays at Start, which the stepper keeps reachable so the owner can still
+     * opt in later.
      *
      * @param bool $started Whether the Start step has been dismissed.
      * @return int 1-based step index.
      */
     public static function resolve_current_step(bool $started): int {
-        if (!$started) {
-            return self::STEP_START;
-        }
+        $floor = $started ? self::STEP_MIGRATION : self::STEP_START;
+        $step  = (int) get_option(self::OPT_STEP, $floor);
 
-        $step = (int) get_option(self::OPT_STEP, self::STEP_MIGRATION);
-
-        return max(self::STEP_MIGRATION, min(self::TOTAL_STEPS, $step));
+        return max($floor, min(self::TOTAL_STEPS, $step));
     }
 
     /**

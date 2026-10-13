@@ -20,8 +20,12 @@
  *   - Authorization codes and access/refresh tokens stored only as SHA-256
  *     hashes; the raw value exists solely in the response that hands it out.
  *     Constant-time comparison.
- *   - Tokens carry the read/write scope model; a read-only grant refuses
- *     every write tool, exactly like a read-only pairing token.
+ *   - Tokens carry the scope model (Mcp_Scopes): the legacy `mcp` / `read` /
+ *     `write` forms or per-area grants such as `content:write`. The admin
+ *     chooses the areas on the consent screen and can narrow or widen them
+ *     per client afterwards (set_client_scope), effective on the next call.
+ *     A ThinkRank Hub grant is the exception: it is only ever narrowed
+ *     there, because widening it is what the hub's consent gate is for.
  *
  * State lives in the `thinkrank_mcp_oauth` option (clients, codes, tokens,
  * refresh — keyed by id or sha256 of the secret); expired entries are pruned
@@ -81,11 +85,6 @@ final class Mcp_OAuth {
 	private const REFRESH_TTL = 2592000;
 
 	/**
-	 * Scopes we advertise + honor. `mcp` is the umbrella scope MCP clients request.
-	 */
-	private const SUPPORTED_SCOPES = [ 'mcp', 'read', 'write' ];
-
-	/**
 	 * Throttle window (seconds) for per-client last-used writes — at most one
 	 * option write per minute per client, so a busy connector can't turn every
 	 * MCP call into a database write.
@@ -125,6 +124,16 @@ final class Mcp_OAuth {
 	 * a code within a minute.
 	 */
 	private const CLIENT_TTL = 86400; // 24 hours.
+
+	/**
+	 * How many rotated-away refresh digests are remembered per family.
+	 *
+	 * Reuse detection needs the digests a client could plausibly still be
+	 * holding, which is the last few in a family rather than every one
+	 * issued: pruning by expiry alone does not bound a client rotating at
+	 * its own rate (#1001).
+	 */
+	private const MAX_SPENT_PER_FAMILY = 8;
 
 	// -- URLs ------------------------------------------------------------
 
@@ -226,7 +235,7 @@ final class Mcp_OAuth {
 		return [
 			'resource'                 => self::resource(),
 			'authorization_servers'    => [ self::issuer() ],
-			'scopes_supported'         => self::SUPPORTED_SCOPES,
+			'scopes_supported'         => Mcp_Scopes::supported_tokens(),
 			'bearer_methods_supported' => [ 'header' ],
 		];
 	}
@@ -243,11 +252,14 @@ final class Mcp_OAuth {
 			'authorization_endpoint'                => self::authorize_url(),
 			'token_endpoint'                        => self::token_url(),
 			'registration_endpoint'                 => self::register_url(),
-			'scopes_supported'                      => self::SUPPORTED_SCOPES,
+			'scopes_supported'                      => Mcp_Scopes::supported_tokens(),
 			'response_types_supported'              => [ 'code' ],
 			'grant_types_supported'                 => [ 'authorization_code', 'refresh_token' ],
 			'code_challenge_methods_supported'      => [ 'S256' ],
 			'token_endpoint_auth_methods_supported' => [ 'none' ],
+			// RFC 8707: a client may name the resource it wants a token for,
+			// and here it has to be this endpoint (#1001).
+			'resource_indicators_supported'         => true,
 		];
 	}
 
@@ -317,6 +329,7 @@ final class Mcp_OAuth {
 		$method        = isset( $params['code_challenge_method'] ) ? (string) $params['code_challenge_method'] : '';
 		$scope         = isset( $params['scope'] ) ? (string) $params['scope'] : 'mcp';
 		$state         = isset( $params['state'] ) ? (string) $params['state'] : '';
+		$resource      = isset( $params['resource'] ) ? (string) $params['resource'] : '';
 
 		$client = self::client( $client_id );
 		if ( null === $client ) {
@@ -361,6 +374,19 @@ final class Mcp_OAuth {
 				]
 			);
 		}
+		// RFC 8707: a client may name the resource it wants a token for, and
+		// it has to be this endpoint. Optional, because most clients send
+		// none; the hub sends it on every request (#1001).
+		if ( '' !== $resource && ! self::names_this_resource( $resource ) ) {
+			return new \WP_Error(
+				'invalid_target',
+				__( 'That request asked for a token for a different address than this one.', 'thinkrank' ),
+				[
+					'status'       => 400,
+					'redirectable' => true,
+				]
+			);
+		}
 
 		return [
 			'client_id'      => $client_id,
@@ -369,6 +395,9 @@ final class Mcp_OAuth {
 			'code_challenge' => $challenge,
 			'scope'          => self::normalize_scope( $scope ),
 			'state'          => $state,
+			// Carried in its canonical form whatever spelling the client used,
+			// so the consent form's hidden copy re-validates the same way.
+			'resource'       => self::resource(),
 		];
 	}
 
@@ -382,7 +411,27 @@ final class Mcp_OAuth {
 	 * @return string The authorization code.
 	 */
 	public static function issue_code( array $req, int $user_id ): string {
-		$code = bin2hex( random_bytes( 32 ) );
+		$code  = bin2hex( random_bytes( 32 ) );
+		$entry = [
+			'client_id'    => $req['client_id'],
+			'redirect_uri' => $req['redirect_uri'],
+			'challenge'    => $req['code_challenge'],
+			'scope'        => $req['scope'],
+			// The address the code is for, so the pair it becomes records it.
+			'resource'     => isset( $req['resource'] ) ? (string) $req['resource'] : self::resource(),
+			'user_id'      => $user_id,
+			'expires'      => time() + self::CODE_TTL,
+		];
+
+		// A hub connection's ticket travels with its code as a digest, so the
+		// exchange can insist on the same one and spend it there. The grant
+		// that exchange mints is marked as the hub's, by the return address
+		// the code was issued against, so it stays that hub's whatever the
+		// address setting says later (thinkrank#1002).
+		if ( '' !== (string) ( $req['hub_ticket'] ?? '' ) ) {
+			$entry['hub_ticket'] = Mcp_Hub::digest( (string) $req['hub_ticket'] );
+			$entry['hub']        = Mcp_Hub::host_of( (string) $req['redirect_uri'] );
+		}
 
 		// Keyed by hash, like access and refresh tokens. The authorization
 		// code is a bearer credential too, and this file's own contract says
@@ -391,15 +440,8 @@ final class Mcp_OAuth {
 		// single use, bound to client_id + redirect_uri + PKCE) but #396 made
 		// exactly that argument about the pairing token and still hashed it.
 		self::mutate(
-			static function ( array &$state ) use ( $code, $req, $user_id ): void {
-				$state['codes'][ self::hash( $code ) ] = [
-					'client_id'    => $req['client_id'],
-					'redirect_uri' => $req['redirect_uri'],
-					'challenge'    => $req['code_challenge'],
-					'scope'        => $req['scope'],
-					'user_id'      => $user_id,
-					'expires'      => time() + self::CODE_TTL,
-				];
+			static function ( array &$state ) use ( $code, $entry ): void {
+				$state['codes'][ self::hash( $code ) ] = $entry;
 			}
 		);
 
@@ -416,7 +458,16 @@ final class Mcp_OAuth {
 	 * @return array<string,mixed>|\WP_Error
 	 */
 	public static function exchange_token( array $body ) {
-		$grant = isset( $body['grant_type'] ) ? (string) $body['grant_type'] : '';
+		$grant    = isset( $body['grant_type'] ) ? (string) $body['grant_type'] : '';
+		$resource = isset( $body['resource'] ) ? (string) $body['resource'] : '';
+
+		// RFC 8707, on both grants: a request that names a resource names this
+		// endpoint, or it gets no token. Checked before anything is spent, so
+		// a code or refresh token presented for the wrong address survives the
+		// refusal (#1001).
+		if ( '' !== $resource && ! self::names_this_resource( $resource ) ) {
+			return self::oauth_error( 'invalid_target', 'That request asked for a token for a different address than this one.' );
+		}
 
 		if ( 'authorization_code' === $grant ) {
 			return self::grant_authorization_code( $body );
@@ -438,53 +489,87 @@ final class Mcp_OAuth {
 		$client_id    = isset( $body['client_id'] ) ? (string) $body['client_id'] : '';
 		$redirect_uri = isset( $body['redirect_uri'] ) ? (string) $body['redirect_uri'] : '';
 		$verifier     = isset( $body['code_verifier'] ) ? (string) $body['code_verifier'] : '';
+		$hub_ticket   = isset( $body['hub_ticket'] ) ? (string) $body['hub_ticket'] : '';
 
-		// Claim the code and remove it in one guarded read-modify-write.
-		// Single-use has to mean single-use: looking it up, saving the removal,
-		// and letting a concurrent writer restore its pre-removal snapshot put
-		// a spent code back in the store (#485). Looked up by hash, because
-		// that is how issue_code() stores it (#488).
-		$entry = self::mutate(
-			static function ( array &$state ) use ( $code ) {
+		// Claim the code, verify it and store the new pair in one guarded
+		// read-modify-write. Single-use has to mean single-use: looking it up,
+		// saving the removal, and letting a concurrent writer restore its
+		// pre-removal snapshot put a spent code back in the store (#485). And
+		// minting in a second write left a gap where Revoke all or a scope
+		// edit could land, after which the pair was written anyway. Looked up
+		// by hash, because that is how issue_code() stores it (#488).
+		$result = self::mutate(
+			static function ( array &$state ) use ( $code, $client_id, $redirect_uri, $verifier, $hub_ticket ) {
 				$chash = self::hash( $code );
 
 				if ( '' === $code || ! isset( $state['codes'][ $chash ] ) ) {
-					return null;
+					return [ 'error' => 'Unknown or expired authorization code.' ];
 				}
 
-				$claimed = $state['codes'][ $chash ];
+				$entry = $state['codes'][ $chash ];
 
 				// Removed whether or not verification below passes.
 				unset( $state['codes'][ $chash ] );
 
-				return $claimed;
+				if ( $entry['expires'] <= time() ) {
+					return [ 'error' => 'Authorization code expired.' ];
+				}
+				if ( ! hash_equals( (string) $entry['client_id'], $client_id ) ) {
+					return [ 'error' => 'client_id mismatch.' ];
+				}
+				if ( ! hash_equals( (string) $entry['redirect_uri'], $redirect_uri ) ) {
+					return [ 'error' => 'redirect_uri mismatch.' ];
+				}
+				// PKCE S256: BASE64URL(SHA256(verifier)) must equal the stored challenge.
+				if ( '' === $verifier || ! hash_equals( (string) $entry['challenge'], self::s256( $verifier ) ) ) {
+					return [ 'error' => 'PKCE verification failed.' ];
+				}
+
+				// A code approved against a hub ticket needs that ticket back,
+				// still outstanding: spending it here, under the same lock
+				// that serializes code exchanges, is what makes it single use
+				// (thinkrank#1002).
+				$hub = '';
+				if ( '' !== (string) ( $entry['hub_ticket'] ?? '' ) ) {
+					if ( '' === $hub_ticket || ! hash_equals( (string) $entry['hub_ticket'], Mcp_Hub::digest( $hub_ticket ) ) || ! Mcp_Hub::spend_ticket( $hub_ticket ) ) {
+						return [ 'error' => 'That connection was not started from this site’s ThinkRank Hub tab, or it has already been completed. Start it again from ThinkRank > AI Tools > ThinkRank Hub.' ];
+					}
+					$hub = (string) ( $entry['hub'] ?? '' );
+
+					// Connecting the hub again replaces what it held. A site
+					// holds one hub grant at a time: an earlier write grant
+					// left in place would outlive a reconnect for reading
+					// only, while the card said the hub could change nothing.
+					self::drop_hub_grants( $state );
+				}
+
+				// The grant is made here: its time rides with the pair and
+				// every rotation of it (#1091).
+				$tokens = self::store_pair( $state, (string) $entry['client_id'], (string) $entry['scope'], (int) $entry['user_id'], $hub, '', time() );
+
+				// The site names itself at the exchange, so the hub can refuse
+				// a code that came back from somewhere other than where the
+				// connection began, and learn which versions run here.
+				if ( '' !== $hub ) {
+					$tokens['thinkrank_site'] = Mcp_Hub::site_facts();
+				}
+
+				return [ 'tokens' => $tokens ];
 			}
 		);
 
-		if ( null === $entry ) {
-			return self::oauth_error( 'invalid_grant', 'Unknown or expired authorization code.' );
+		if ( isset( $result['error'] ) ) {
+			return self::oauth_error( 'invalid_grant', (string) $result['error'] );
 		}
 
-		if ( $entry['expires'] < time() ) {
-			return self::oauth_error( 'invalid_grant', 'Authorization code expired.' );
-		}
-		if ( ! hash_equals( (string) $entry['client_id'], $client_id ) ) {
-			return self::oauth_error( 'invalid_grant', 'client_id mismatch.' );
-		}
-		if ( ! hash_equals( (string) $entry['redirect_uri'], $redirect_uri ) ) {
-			return self::oauth_error( 'invalid_grant', 'redirect_uri mismatch.' );
-		}
-		// PKCE S256: BASE64URL(SHA256(verifier)) must equal the stored challenge.
-		if ( '' === $verifier || ! hash_equals( (string) $entry['challenge'], self::s256( $verifier ) ) ) {
-			return self::oauth_error( 'invalid_grant', 'PKCE verification failed.' );
-		}
-
-		return self::mint_tokens( (string) $entry['client_id'], (string) $entry['scope'], (int) $entry['user_id'] );
+		return $result['tokens'];
 	}
 
 	/**
 	 * refresh_token grant: rotate the refresh token, issue a fresh access
-	 * token. The old refresh + its access token are revoked.
+	 * token. The old refresh + its access token are revoked, and the old
+	 * refresh token's digest is remembered: presenting it again revokes the
+	 * whole family it belonged to.
 	 *
 	 * @param array<string,string> $body POST body.
 	 * @return array<string,mixed>|\WP_Error
@@ -495,10 +580,32 @@ final class Mcp_OAuth {
 
 		$rhash = self::hash( $refresh );
 
-		// Look up and rotate under one guard. A mismatched client_id must not
-		// consume the token, so the check happens inside the mutation.
+		// Look up, rotate and mint under one guard. A mismatched client_id
+		// must not consume the token, so the check happens inside the
+		// mutation.
 		$claim = self::mutate(
 			static function ( array &$state ) use ( $refresh, $rhash, $client_id ): array {
+				/*
+				 * Already rotated away. This is the case rotation exists to
+				 * make visible: the real client rotated, so a second
+				 * presentation of the same token is a copy of it being used.
+				 * Everything descended from that grant goes — including the
+				 * pair the real client holds right now, which is the point
+				 * (OAuth 2.1 §4.3.1; #1001, BetterShield A10). Whichever
+				 * application the request names: the token is the evidence,
+				 * and a client id is no secret.
+				 */
+				if ( '' !== $refresh && isset( $state['spent'][ $rhash ] ) ) {
+					$spent = $state['spent'][ $rhash ];
+
+					self::drop_family( $state, (string) ( $spent['family'] ?? '' ) );
+
+					return [
+						'reuse'  => true,
+						'client' => (string) ( $spent['client_id'] ?? '' ),
+					];
+				}
+
 				if ( '' === $refresh || ! isset( $state['refresh'][ $rhash ] ) ) {
 					return [ 'error' => 'Unknown refresh token.' ];
 				}
@@ -509,58 +616,121 @@ final class Mcp_OAuth {
 					return [ 'error' => 'client_id mismatch.' ];
 				}
 
-				// Rotate: drop old refresh + its access token.
+				// A grant minted before grants carried a family joins one now,
+				// so a replay of this token can still take its successors.
+				$family = (string) ( $entry['family'] ?? '' );
+				if ( '' === $family ) {
+					$family = self::new_family();
+				}
+
+				// Rotate: drop old refresh + its access token, and store the
+				// new pair in the same write, so nothing can land in between.
+				// A hub grant's mark rides along, so the grant stays the
+				// hub's through every refresh.
 				unset( $state['refresh'][ $rhash ] );
 				if ( isset( $entry['access_hash'] ) ) {
 					unset( $state['tokens'][ $entry['access_hash'] ] );
 				}
 
-				return [ 'entry' => $entry ];
+				// Remembered for as long as it would have lived, so a replay
+				// is recognized rather than answered as a token never issued.
+				$state['spent'][ $rhash ] = [
+					'family'    => $family,
+					'client_id' => (string) $entry['client_id'],
+					'expires'   => time() + self::REFRESH_TTL,
+				];
+
+				// So does the time the grant was made: a refresh continues
+				// the grant, it does not make a new one (#1091).
+				return [ 'tokens' => self::store_pair( $state, (string) $entry['client_id'], (string) $entry['scope'], (int) $entry['user_id'], (string) ( $entry['hub'] ?? '' ), $family, (int) ( $entry['granted_at'] ?? 0 ) ) ];
 			}
 		);
+
+		if ( ! empty( $claim['reuse'] ) ) {
+			/**
+			 * Fires when a rotated-away refresh token is presented again and
+			 * the grant family it belonged to has been revoked for it.
+			 *
+			 * @since 2.15.0
+			 *
+			 * @param string $client_id The application the token was issued to.
+			 */
+			do_action( 'thinkrank_mcp_refresh_reused', (string) $claim['client'] );
+
+			return self::oauth_error( 'invalid_grant', 'That refresh token has already been replaced. Every token from that connection has been withdrawn; connect the application again.' );
+		}
 
 		if ( isset( $claim['error'] ) ) {
 			return self::oauth_error( 'invalid_grant', (string) $claim['error'] );
 		}
 
-		$entry = $claim['entry'];
-
-		return self::mint_tokens( (string) $entry['client_id'], (string) $entry['scope'], (int) $entry['user_id'] );
+		return $claim['tokens'];
 	}
 
 	/**
-	 * Mint an access + refresh token pair, store them hashed, and return
-	 * the RFC 6749 token response with the raw values.
+	 * Mint an access + refresh token pair into $state, stored hashed, and
+	 * return the RFC 6749 token response with the raw values. Called inside
+	 * the mutate() that claims the grant, so the claim and the new pair are
+	 * one locked write.
 	 *
-	 * @param string $client_id Client id.
-	 * @param string $scope     Granted scope string.
-	 * @param int    $user_id   Resource-owner user id.
+	 * @param array<string,mixed> $state     OAuth state, modified in place.
+	 * @param string              $client_id Client id.
+	 * @param string              $scope     Granted scope string.
+	 * @param int                 $user_id   Resource-owner user id.
+	 * @param string              $hub       The hub host a hub grant was
+	 *                                       approved for; '' for every other
+	 *                                       grant.
+	 * @param string              $family    The family the pair continues; ''
+	 *                                       starts a new one.
+	 * @param int                 $granted_at When the grant the pair belongs
+	 *                                        to was made (recorded since
+	 *                                        2.15.0); 0 for a grant minted
+	 *                                        before then, which stays
+	 *                                        without one.
 	 * @return array<string,mixed>
 	 */
-	private static function mint_tokens( string $client_id, string $scope, int $user_id ): array {
+	private static function store_pair( array &$state, string $client_id, string $scope, int $user_id, string $hub = '', string $family = '', int $granted_at = 0 ): array {
 		$access  = bin2hex( random_bytes( 32 ) );
 		$refresh = bin2hex( random_bytes( 32 ) );
 		$ahash   = self::hash( $access );
 		$rhash   = self::hash( $refresh );
 
-		self::mutate(
-			static function ( array &$state ) use ( $ahash, $rhash, $client_id, $scope, $user_id ): void {
-				$state['tokens'][ $ahash ]  = [
-					'client_id' => $client_id,
-					'scope'     => $scope,
-					'user_id'   => $user_id,
-					'expires'   => time() + self::ACCESS_TTL,
-					'refresh'   => $rhash,
-				];
-				$state['refresh'][ $rhash ] = [
-					'access_hash' => $ahash,
-					'client_id'   => $client_id,
-					'scope'       => $scope,
-					'user_id'     => $user_id,
-					'expires'     => time() + self::REFRESH_TTL,
-				];
-			}
-		);
+		// Every token records the resource it was issued for (RFC 8707).
+		$resource = self::resource();
+
+		// One identifier for everything a single approval ever produces, so
+		// a refresh token that turns up after it was replaced can take the
+		// whole line with it (#1001).
+		$family = '' === $family ? self::new_family() : $family;
+
+		$state['tokens'][ $ahash ]  = [
+			'client_id' => $client_id,
+			'scope'     => $scope,
+			'user_id'   => $user_id,
+			'resource'  => $resource,
+			'family'    => $family,
+			'expires'   => time() + self::ACCESS_TTL,
+			'refresh'   => $rhash,
+		];
+		$state['refresh'][ $rhash ] = [
+			'access_hash' => $ahash,
+			'client_id'   => $client_id,
+			'scope'       => $scope,
+			'user_id'     => $user_id,
+			'resource'    => $resource,
+			'family'      => $family,
+			'expires'     => time() + self::REFRESH_TTL,
+		];
+
+		if ( '' !== $hub ) {
+			$state['tokens'][ $ahash ]['hub']  = $hub;
+			$state['refresh'][ $rhash ]['hub'] = $hub;
+		}
+
+		if ( $granted_at > 0 ) {
+			$state['tokens'][ $ahash ]['granted_at']  = $granted_at;
+			$state['refresh'][ $rhash ]['granted_at'] = $granted_at;
+		}
 
 		return [
 			'access_token'  => $access,
@@ -591,7 +761,15 @@ final class Mcp_OAuth {
 			return null;
 		}
 		$entry = $state['tokens'][ $hash ];
-		if ( (int) $entry['expires'] < time() ) {
+		if ( (int) $entry['expires'] <= time() ) {
+			return null;
+		}
+
+		// A staging copy carries the live site's grants with its database.
+		// The hub's grant is paused on one, not ended: the hub goes on seeing
+		// one site rather than two, and the grant works again where the copy
+		// stops being marked staging (thinkrank#1002).
+		if ( '' !== (string) ( $entry['hub'] ?? '' ) && Mcp_Hub::is_staging() ) {
 			return null;
 		}
 
@@ -621,9 +799,142 @@ final class Mcp_OAuth {
 	 * @return bool
 	 */
 	public static function scope_is_read_only( string $scope ): bool {
-		$parts = preg_split( '/\s+/', trim( $scope ) );
-		$parts = is_array( $parts ) ? $parts : [];
-		return ! in_array( 'write', $parts, true ) && ! in_array( 'mcp', $parts, true );
+		return ! Mcp_Scopes::grants_any_write( Mcp_Scopes::levels( Mcp_Scopes::parse( $scope ) ) );
+	}
+
+	/**
+	 * The scope string to store for a level map: `mcp` when every area is
+	 * writable (exactly what an unnarrowed grant stored before areas existed),
+	 * otherwise the canonical tokens.
+	 *
+	 * @param array<string,mixed> $levels Area => level.
+	 * @return string
+	 */
+	public static function scope_for_levels( array $levels ): string {
+		$levels = Mcp_Scopes::normalize_levels( $levels );
+		if ( Mcp_Scopes::grants_everything( $levels ) ) {
+			return 'mcp';
+		}
+		return implode( ' ', Mcp_Scopes::tokens( $levels ) );
+	}
+
+	/**
+	 * The scope string to store for a ThinkRank Hub grant's level map.
+	 *
+	 * Always the explicit tokens, never the `mcp` umbrella: the hub reads
+	 * `write` from the scope it is handed back to decide what it may do, and
+	 * is promised it never receives `mcp`. Every area writable is therefore
+	 * `read write`, the form the consent page stores.
+	 *
+	 * @since 2.15.0
+	 *
+	 * @param array<string,mixed> $levels Area => level.
+	 * @return string
+	 */
+	public static function hub_scope_for_levels( array $levels ): string {
+		return implode( ' ', Mcp_Scopes::tokens( Mcp_Scopes::normalize_levels( $levels ) ) );
+	}
+
+	/**
+	 * Change what one connected client may do. Rewrites the scope on every
+	 * live token and refresh token the client holds, so the next call, and
+	 * every refresh after it, carries the new grant. Nobody reconnects.
+	 *
+	 * A ThinkRank Hub grant (one carrying the hub mark) may only be narrowed
+	 * here. Giving the hub more is a fresh connection from the MCP screen:
+	 * a ticket started for changes and a signed-in browser session
+	 * (thinkrank#1002, #1062). This route has neither, and takes an
+	 * application password, so a level above what a hub entry
+	 * holds refuses the whole change and nothing is written (thinkrank#1088).
+	 * The comparison is made against each entry as stored, inside the same
+	 * locked write, so a reconnect landing in between is compared against
+	 * rather than overwritten.
+	 *
+	 * @param string              $client_id Client.
+	 * @param array<string,mixed> $levels    Area => level.
+	 * @return bool|\WP_Error True when the client held a live grant, false
+	 *                        when it held none, and a 403 error when the
+	 *                        change would widen a hub grant.
+	 */
+	public static function set_client_scope( string $client_id, array $levels ) {
+		if ( '' === $client_id ) {
+			return false;
+		}
+		$levels    = Mcp_Scopes::normalize_levels( $levels );
+		$scope     = self::scope_for_levels( $levels );
+		$hub_scope = self::hub_scope_for_levels( $levels );
+
+		$result = self::mutate(
+			static function ( array &$state ) use ( $client_id, $levels, $scope, $hub_scope ) {
+				// Pending codes too: one issued just before the edit would
+				// otherwise mint tokens with the old grant.
+				$buckets = [ 'codes', 'tokens', 'refresh' ];
+
+				// Checked in full before anything is rewritten, so a refusal
+				// leaves every entry as it was.
+				foreach ( $buckets as $bucket ) {
+					foreach ( $state[ $bucket ] as $entry ) {
+						if ( ! self::is_hub_entry_of( $entry, $client_id ) ) {
+							continue;
+						}
+						$held = Mcp_Scopes::levels( Mcp_Scopes::parse( (string) ( $entry['scope'] ?? '' ) ) );
+						foreach ( $levels as $area => $level ) {
+							if ( $level > $held[ $area ] ) {
+								return 'widens_hub';
+							}
+						}
+					}
+				}
+
+				$found = false;
+				foreach ( $buckets as $bucket ) {
+					foreach ( $state[ $bucket ] as $key => $entry ) {
+						if ( isset( $entry['client_id'] ) && (string) $entry['client_id'] === $client_id ) {
+							$state[ $bucket ][ $key ]['scope'] = self::is_hub_entry_of( $entry, $client_id ) ? $hub_scope : $scope;
+							$found                             = true;
+						}
+					}
+				}
+				return $found;
+			}
+		);
+
+		if ( 'widens_hub' === $result ) {
+			return new \WP_Error(
+				'thinkrank_mcp_hub_widen',
+				__( 'ThinkRank Hub’s access can only be narrowed here. To let the hub read or change more, disconnect it on the ThinkRank Hub card and connect it again with the access you want.', 'thinkrank' ),
+				[ 'status' => 403 ]
+			);
+		}
+
+		return (bool) $result;
+	}
+
+	/**
+	 * Whether a stored code, access token or refresh token belongs to this
+	 * client and carries the hub mark.
+	 *
+	 * @since 2.15.0
+	 *
+	 * @param mixed  $entry     A stored entry.
+	 * @param string $client_id Client.
+	 * @return bool
+	 */
+	private static function is_hub_entry_of( $entry, string $client_id ): bool {
+		return is_array( $entry )
+			&& (string) ( $entry['client_id'] ?? '' ) === $client_id
+			&& '' !== (string) ( $entry['hub'] ?? '' );
+	}
+
+	/**
+	 * Registered display name of a client.
+	 *
+	 * @param string $client_id Client id.
+	 * @return string
+	 */
+	public static function client_name( string $client_id ): string {
+		$client = self::client( $client_id );
+		return null === $client ? '' : $client['name'];
 	}
 
 	/**
@@ -632,7 +943,40 @@ final class Mcp_OAuth {
 	 * @return void
 	 */
 	public static function revoke_all(): void {
-		delete_option( self::OPTION );
+		// Under the same lock as mutate(): a refresh that already read the
+		// state would otherwise save every token back after the delete,
+		// including the pair it just minted for a leaked refresh token.
+		$locked = self::lock();
+
+		try {
+			delete_option( self::OPTION );
+			delete_option( self::LAST_USED_OPTION );
+		} finally {
+			if ( $locked ) {
+				self::unlock();
+			}
+		}
+	}
+
+	/**
+	 * Revoke every OAuth app's ACCESS at once (the "Revoke all access"
+	 * button): every code, access token and refresh token goes, but the
+	 * client registrations stay, for the reason revoke_client() keeps them.
+	 * MCP clients such as ChatGPT reconnect with the client_id they cached,
+	 * and deleting it answered that reconnect "Unknown client_id" (#1068).
+	 * Reconnecting still needs fresh admin consent. Disconnect, the full
+	 * wipe, still uses revoke_all().
+	 *
+	 * @return void
+	 */
+	public static function revoke_all_grants(): void {
+		self::mutate(
+			static function ( array &$state ): void {
+				$state['codes']   = [];
+				$state['tokens']  = [];
+				$state['refresh'] = [];
+			}
+		);
 		delete_option( self::LAST_USED_OPTION );
 	}
 
@@ -643,7 +987,13 @@ final class Mcp_OAuth {
 	 * only registered but never completed consent is excluded. One entry per
 	 * client_id, newest connection first.
 	 *
-	 * @return array<int,array{client_id:string,name:string,scope:string,read_only:bool,user_id:int,connected_at:int,last_used:int}>
+	 * `hub` is the hub host a hub grant was approved for, and '' for every
+	 * other grant. `connected_at` is when the client's newest live grant was
+	 * made, which a refresh does not move; a client registers once and may
+	 * be granted access many times, so its registration time is only the
+	 * fallback for a grant minted before grant times were recorded (#1091).
+	 *
+	 * @return array<int,array{client_id:string,name:string,scope:string,levels:array<string,int>,read_only:bool,expires_at:int,user_id:int,connected_at:int,last_used:int,hub:string}>
 	 */
 	public static function connected_apps(): array {
 		$state     = self::state();
@@ -655,13 +1005,36 @@ final class Mcp_OAuth {
 		foreach ( [ 'refresh', 'tokens' ] as $bucket ) {
 			foreach ( $state[ $bucket ] as $entry ) {
 				$cid = isset( $entry['client_id'] ) ? (string) $entry['client_id'] : '';
-				if ( '' === $cid || isset( $active[ $cid ] ) ) {
+				if ( '' === $cid ) {
+					continue;
+				}
+				$hub     = isset( $entry['hub'] ) ? (string) $entry['hub'] : '';
+				$granted = isset( $entry['granted_at'] ) ? (int) $entry['granted_at'] : 0;
+				if ( isset( $active[ $cid ] ) ) {
+					// Any one of a client's tokens naming its hub is enough.
+					if ( '' === $active[ $cid ]['hub'] ) {
+						$active[ $cid ]['hub'] = $hub;
+					}
+					$active[ $cid ]['granted_at'] = max( $active[ $cid ]['granted_at'], $granted );
 					continue;
 				}
 				$active[ $cid ] = [
-					'scope'   => isset( $entry['scope'] ) ? (string) $entry['scope'] : 'mcp',
-					'user_id' => isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0,
+					'scope'      => isset( $entry['scope'] ) ? (string) $entry['scope'] : 'mcp',
+					'user_id'    => isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0,
+					'hub'        => $hub,
+					'granted_at' => $granted,
 				];
+			}
+		}
+
+		// When each client's grant lapses: its newest refresh token's expiry
+		// (the access token alone lasts an hour). Unused for 30 days, a
+		// client has to be approved again.
+		$expires = [];
+		foreach ( $state['refresh'] as $entry ) {
+			$cid = isset( $entry['client_id'] ) ? (string) $entry['client_id'] : '';
+			if ( '' !== $cid ) {
+				$expires[ $cid ] = max( $expires[ $cid ] ?? 0, (int) ( $entry['expires'] ?? 0 ) );
 			}
 		}
 
@@ -672,14 +1045,19 @@ final class Mcp_OAuth {
 				'client_id'    => $cid,
 				'name'         => isset( $client['name'] ) ? (string) $client['name'] : __( 'MCP Client', 'thinkrank' ),
 				'scope'        => $info['scope'],
+				'levels'       => Mcp_Scopes::levels( Mcp_Scopes::parse( $info['scope'] ) ),
 				'read_only'    => self::scope_is_read_only( $info['scope'] ),
+				'expires_at'   => $expires[ $cid ] ?? 0,
 				'user_id'      => $info['user_id'],
-				'connected_at' => isset( $client['created'] ) ? (int) $client['created'] : 0,
+				'connected_at' => $info['granted_at'] > 0
+					? $info['granted_at']
+					: ( isset( $client['created'] ) ? (int) $client['created'] : 0 ),
 				// Legacy fallback: stamps written before #485 still sit on the
 				// client record, so an existing install keeps its dates.
 				'last_used'    => isset( $last_used[ $cid ] )
 					? (int) $last_used[ $cid ]
 					: ( isset( $client['last_used'] ) ? (int) $client['last_used'] : 0 ),
+				'hub'          => $info['hub'],
 			];
 		}
 
@@ -692,6 +1070,84 @@ final class Mcp_OAuth {
 		);
 
 		return $apps;
+	}
+
+	/**
+	 * Drop every grant that carries a hub mark, in place, ahead of the pair
+	 * a new hub connection mints. Called inside the mutation that mints it,
+	 * so the replacement and the new grant are one write. Pending codes are
+	 * left: one in flight for the hub replaces this grant in turn when it is
+	 * exchanged, which is the same rule, newest wins.
+	 *
+	 * @param array<string,mixed> $state OAuth state, modified in place.
+	 * @return void
+	 */
+	private static function drop_hub_grants( array &$state ): void {
+		foreach ( [ 'tokens', 'refresh' ] as $bucket ) {
+			foreach ( $state[ $bucket ] as $key => $entry ) {
+				if ( is_array( $entry ) && '' !== (string) ( $entry['hub'] ?? '' ) ) {
+					unset( $state[ $bucket ][ $key ] );
+				}
+			}
+		}
+	}
+
+	/**
+	 * A fresh family identifier for a new grant.
+	 *
+	 * @return string
+	 */
+	private static function new_family(): string {
+		return bin2hex( random_bytes( 16 ) );
+	}
+
+	/**
+	 * Everything descended from one grant, gone: its live pair, any pair
+	 * rotated from it, and the spent digests that remembered the rotation.
+	 *
+	 * @param array<string,mixed> $state  OAuth state, modified in place.
+	 * @param string              $family The family to drop; '' drops nothing.
+	 * @return void
+	 */
+	private static function drop_family( array &$state, string $family ): void {
+		if ( '' === $family ) {
+			return;
+		}
+
+		foreach ( [ 'tokens', 'refresh', 'spent' ] as $bucket ) {
+			foreach ( $state[ $bucket ] as $key => $entry ) {
+				if ( is_array( $entry ) && $family === (string) ( $entry['family'] ?? '' ) ) {
+					unset( $state[ $bucket ][ $key ] );
+				}
+			}
+		}
+	}
+
+	/**
+	 * Keep the newest MAX_SPENT_PER_FAMILY spent digests of each family.
+	 *
+	 * Every rotation adds a digest with a fresh thirty-day life, so expiry
+	 * alone never bounds a client that rotates often. The newest few are the
+	 * ones a client could plausibly still be holding, which is all reuse
+	 * detection needs. Walked backwards, so the newest entry of each family
+	 * is seen first.
+	 *
+	 * @param array<string,mixed> $spent The spent bucket.
+	 * @return array<string,mixed>
+	 */
+	private static function cap_spent( array $spent ): array {
+		$seen = [];
+
+		foreach ( array_reverse( $spent, true ) as $key => $entry ) {
+			$family = is_array( $entry ) ? (string) ( $entry['family'] ?? '' ) : '';
+
+			$seen[ $family ] = ( $seen[ $family ] ?? 0 ) + 1;
+			if ( $seen[ $family ] > self::MAX_SPENT_PER_FAMILY ) {
+				unset( $spent[ $key ] );
+			}
+		}
+
+		return $spent;
 	}
 
 	/**
@@ -728,6 +1184,14 @@ final class Mcp_OAuth {
 					}
 				}
 
+				// Its spent digests go too: there is no family left for a
+				// replay to revoke, and nothing to remember it against.
+				foreach ( $state['spent'] as $key => $entry ) {
+					if ( is_array( $entry ) && (string) ( $entry['client_id'] ?? '' ) === $client_id ) {
+						unset( $state['spent'][ $key ] );
+					}
+				}
+
 				return $found;
 			}
 		);
@@ -759,24 +1223,35 @@ final class Mcp_OAuth {
 			'codes'   => isset( $stored['codes'] ) && is_array( $stored['codes'] ) ? $stored['codes'] : [],
 			'tokens'  => isset( $stored['tokens'] ) && is_array( $stored['tokens'] ) ? $stored['tokens'] : [],
 			'refresh' => isset( $stored['refresh'] ) && is_array( $stored['refresh'] ) ? $stored['refresh'] : [],
+			// Rotated-away refresh digests, kept so a second presentation of
+			// one is answerable (#1001).
+			'spent'   => isset( $stored['spent'] ) && is_array( $stored['spent'] ) ? $stored['spent'] : [],
 		];
 
+		// Expired AT `expires`, as the connection token is (#1079).
 		$now = time();
 		foreach ( $state['codes'] as $k => $v ) {
-			if ( ! isset( $v['expires'] ) || $v['expires'] < $now ) {
+			if ( ! isset( $v['expires'] ) || $v['expires'] <= $now ) {
 				unset( $state['codes'][ $k ] );
 			}
 		}
 		foreach ( $state['tokens'] as $k => $v ) {
-			if ( ! isset( $v['expires'] ) || $v['expires'] < $now ) {
+			if ( ! isset( $v['expires'] ) || $v['expires'] <= $now ) {
 				unset( $state['tokens'][ $k ] );
 			}
 		}
 		foreach ( $state['refresh'] as $k => $v ) {
-			if ( isset( $v['expires'] ) && $v['expires'] < $now ) {
+			if ( isset( $v['expires'] ) && $v['expires'] <= $now ) {
 				unset( $state['refresh'][ $k ] );
 			}
 		}
+		foreach ( $state['spent'] as $k => $v ) {
+			if ( ! is_array( $v ) || ! isset( $v['expires'] ) || $v['expires'] < $now ) {
+				unset( $state['spent'][ $k ] );
+			}
+		}
+		$state['spent'] = self::cap_spent( $state['spent'] );
+
 		return $state;
 	}
 
@@ -816,8 +1291,16 @@ final class Mcp_OAuth {
 		$locked = self::lock();
 
 		try {
+			// This request may hold a copy read before the lock (the consent
+			// form validates, then issues a code). Saving that copy would undo
+			// a revoke or a mint that landed in between (#1074).
+			wp_cache_delete( self::OPTION, 'options' );
+
 			$state  = self::state();
 			$result = $mutator( $state );
+			// Capped on the way out as well as on the way in, so the stored
+			// option never holds more than the bound.
+			$state['spent'] = self::cap_spent( $state['spent'] );
 			self::save( $state );
 		} finally {
 			if ( $locked ) {
@@ -826,6 +1309,30 @@ final class Mcp_OAuth {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Run a read-modify-write of another MCP option under this class's lock.
+	 * Mcp_Pairing uses it so an access or expiry edit cannot write a rotated
+	 * token's old hash back (#927 review), and Mcp_Hub for every ticket
+	 * write — mint, spend, retire — and for a disconnect or address change,
+	 * since the exchange spends a ticket and mints a grant under this lock
+	 * (#1144). One lock for the three options: a revoke-all or a disconnect
+	 * touches more than one, and each write is small.
+	 *
+	 * @param callable $work Work to run while the lock is held.
+	 * @return mixed What $work returns.
+	 */
+	public static function with_lock( callable $work ) {
+		$locked = self::lock();
+
+		try {
+			return $work();
+		} finally {
+			if ( $locked ) {
+				self::unlock();
+			}
+		}
 	}
 
 	/**
@@ -1052,6 +1559,125 @@ final class Mcp_OAuth {
 	}
 
 	/**
+	 * Whether an RFC 8707 resource indicator names this MCP endpoint.
+	 *
+	 * This server answers at the pretty endpoint the protected-resource
+	 * document names, at the REST fallback, and at the REST route's query
+	 * form, `/?rest_route=/thinkrank/v1/mcp` or `/index.php?rest_route=…`,
+	 * which WordPress serves on every permalink setting; each is this
+	 * resource. Compared by parts rather than as a string: a client that
+	 * appends a slash, spells the host in another case, or writes the port
+	 * its scheme already implies has still named this address, and refusing
+	 * it would be a refusal nobody could act on.
+	 *
+	 * @since 2.15.0 Accepts the `rest_route` query form on any permalink setting.
+	 *
+	 * A resource carrying a fragment names nothing, whatever precedes it:
+	 * RFC 8707 section 2 says the parameter must not include one, and the
+	 * parts compared below would drop it silently (#1094).
+	 *
+	 * @since 2.15.0 Refuses a resource that carries a fragment.
+	 *
+	 * @param string $given The resource the request named.
+	 * @return bool
+	 */
+	private static function names_this_resource( string $given ): bool {
+		if ( false !== strpos( $given, '#' ) ) {
+			return false;
+		}
+
+		$asked = self::address_parts( $given );
+		if ( null === $asked ) {
+			return false;
+		}
+
+		foreach ( self::resource_addresses() as $ours ) {
+			if ( $asked === self::address_parts( $ours ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Every address this MCP endpoint answers at.
+	 *
+	 * The two the site generates, plus the REST route's query form at the
+	 * site root and at index.php. On plain permalinks the fallback already
+	 * is one of those; with pretty permalinks WordPress still serves them,
+	 * so a client configured with one names this endpoint too (#1095).
+	 *
+	 * @since 2.15.0
+	 *
+	 * @return string[]
+	 */
+	private static function resource_addresses(): array {
+		// The route Mcp_Pairing::site_endpoint_fallback() hands rest_url().
+		$route = '/thinkrank/v1/mcp';
+
+		return [
+			Mcp_Pairing::site_endpoint(),
+			Mcp_Pairing::site_endpoint_fallback(),
+			home_url( '/?rest_route=' . $route ),
+			home_url( '/index.php?rest_route=' . $route ),
+		];
+	}
+
+	/**
+	 * The parts of an address that identify it, normalized, or null for a
+	 * string that is not an absolute URL.
+	 *
+	 * The scheme and host lower-cased, the port spelled or implied, the path
+	 * without its trailing slash, and the `rest_route` query value where
+	 * there is one — on a site with plain permalinks the REST address is
+	 * `/?rest_route=/thinkrank/v1/mcp`, and the route is the address there.
+	 * The route is decoded the way WordPress decodes it (so `%2F` is a
+	 * slash) and loses its trailing slash, as WordPress drops it when it
+	 * serves the route. Any other query parameter, or a second `rest_route`,
+	 * makes it an address this server does not answer at, so it is null.
+	 *
+	 * @since 2.15.0 Decodes the route and refuses any other query parameter.
+	 *
+	 * @param string $url An absolute URL.
+	 * @return array{0:string,1:string,2:int,3:string,4:string}|null
+	 */
+	private static function address_parts( string $url ): ?array {
+		$parts = wp_parse_url( trim( $url ) );
+		if ( ! is_array( $parts ) || empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return null;
+		}
+
+		$scheme = strtolower( (string) $parts['scheme'] );
+		if ( isset( $parts['port'] ) ) {
+			$port = (int) $parts['port'];
+		} else {
+			$port = 'https' === $scheme ? 443 : ( 'http' === $scheme ? 80 : 0 );
+		}
+
+		$route = null;
+		$query = isset( $parts['query'] ) ? (string) $parts['query'] : '';
+		foreach ( explode( '&', $query ) as $pair ) {
+			if ( '' === $pair ) {
+				continue;
+			}
+			$pair = explode( '=', $pair, 2 );
+			if ( 'rest_route' !== urldecode( $pair[0] ) || null !== $route ) {
+				return null;
+			}
+			$route = untrailingslashit( urldecode( isset( $pair[1] ) ? $pair[1] : '' ) );
+		}
+
+		return [
+			$scheme,
+			strtolower( (string) $parts['host'] ),
+			$port,
+			untrailingslashit( isset( $parts['path'] ) ? (string) $parts['path'] : '' ),
+			(string) $route,
+		];
+	}
+
+	/**
 	 * Constrain a requested scope to what we support. Defaults to `mcp`
 	 * (read+write umbrella).
 	 *
@@ -1061,7 +1687,7 @@ final class Mcp_OAuth {
 	private static function normalize_scope( string $requested ): string {
 		$parts = preg_split( '/\s+/', trim( $requested ) );
 		$parts = is_array( $parts ) ? $parts : [];
-		$parts = array_values( array_intersect( $parts, self::SUPPORTED_SCOPES ) );
+		$parts = array_values( array_intersect( $parts, Mcp_Scopes::supported_tokens() ) );
 		if ( empty( $parts ) ) {
 			return 'mcp';
 		}

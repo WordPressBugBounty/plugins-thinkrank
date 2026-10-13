@@ -1,0 +1,42 @@
+@import "../shared/styles/fonts.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Tailwind Preflight (@tailwind base) emits UNSCOPED global resets — e.g.
+ * `img, svg, video, canvas { display: block }` and `*, ::before, ::after`
+ * box-sizing/border. Left as-is they leak past our React root into WordPress
+ * admin chrome and page builders (Divi/Elementor/Oxygen), breaking host UI
+ * (e.g. Divi's Visual Builder breadcrumb stacked vertically — issue #275).
+ *
+ * The scoping now happens at BUILD TIME in `build/postcss-scope-preflight.js`,
+ * which rewrites every Preflight selector to live under `.tr-root` (where the
+ * `tr-*` utilities already live). That removes the leak at the source, so the
+ * old per-symptom overrides here (e.g. restoring `#adminmenu` icon centering)
+ * are no longer needed.
+ *
+ * Do NOT add unscoped bare element selectors to this file — they would leak the
+ * same way and defeat the build-time scoping.
+ */
+
+/* Ensure Tailwind's animate-* skeleton pulse respects reduced-motion */
+@layer utilities {
+
+	@media (prefers-reduced-motion: reduce) {
+
+		.tr-animate-skeleton-pulse,
+		.tr-animate-spin,
+		.tr-animate-score-spin {
+			animation: none !important;
+		}
+
+		.tr-transition,
+		.tr-transition-colors,
+		.tr-transition-transform,
+		.tr-transition-opacity,
+		.tr-transition-all {
+			transition: none !important;
+		}
+	}
+}

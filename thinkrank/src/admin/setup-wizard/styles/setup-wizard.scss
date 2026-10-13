@@ -1,0 +1,1692 @@
+/**
+ * Setup Wizard styles — onboarding flow rendered inside the standard WP
+ * admin page (the admin menu and toolbar remain visible).
+ *
+ * Self-contained design tokens (aligned with the ThinkRank admin design system
+ * in `src/admin/styles/_variables.scss`) so the wizard reads as one polished,
+ * elevated onboarding surface while staying isolated from the rest of admin CSS.
+ */
+
+@use "../../../shared/styles/fonts"; // Self-hosted Inter (no Google Fonts request)
+
+/* ---- Design tokens ----------------------------------------------------- */
+$tr-primary: #4451ff;
+$tr-primary-600: #3a46e0;
+$tr-primary-700: #2f39c9;
+
+$tr-text: #16181d;
+$tr-text-2: #4a4d55;
+$tr-text-3: #676b73;
+$tr-help: #8a8d95;
+
+$tr-border: #e7e8f0; // soft neutral hairline
+$tr-border-strong: #d5d7e2;
+$tr-divider: #eef0f5;
+
+$tr-surface: #fff;
+$tr-surface-alt: #f6f7fb;
+$tr-tint: #f3f4ff; // faint brand wash
+$tr-tint-2: #e9ecfe; // stronger brand wash
+
+$tr-success: #027a48;
+$tr-success-bg: #ecfdf3;
+$tr-success-border: #abefc6;
+$tr-warning: #b54708;
+$tr-warning-bg: #fffaeb;
+$tr-danger: #b42318;
+$tr-danger-bg: #fef3f2;
+
+$tr-radius: 12px;
+$tr-radius-lg: 16px;
+$tr-radius-xl: 22px;
+$tr-radius-pill: 999px;
+
+$tr-shadow-panel:
+	0 1px 2px rgba(16, 24, 40, 0.04),
+	0 12px 28px -8px rgba(16, 24, 40, 0.1),
+	0 32px 56px -20px rgba(68, 81, 255, 0.14);
+$tr-shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04);
+$tr-shadow-card-hover:
+	0 1px 2px rgba(16, 24, 40, 0.04),
+	0 10px 24px -8px rgba(68, 81, 255, 0.2);
+$tr-shadow-btn: 0 1px 2px rgba(16, 24, 40, 0.06);
+
+$tr-ease: cubic-bezier(0.4, 0, 0.2, 1);
+$tr-t-fast: 0.15s $tr-ease;
+$tr-t: 0.22s $tr-ease;
+
+/* ---- Ambient page canvas ----------------------------------------------- */
+
+/* A soft brand-tinted backdrop turns the plain grey admin body into a
+   dedicated onboarding canvas without hiding the WP chrome. */
+body.thinkrank-setup-wizard-active #wpbody-content {
+	background:
+		radial-gradient(900px 420px at 12% -8%, rgba(68, 81, 255, 0.07), transparent 60%),
+		radial-gradient(760px 380px at 100% 0%, rgba(108, 120, 255, 0.06), transparent 55%);
+}
+
+/* ---- Loading skeleton --------------------------------------------------- */
+
+/* The PHP container paints a static mirror of the wizard chrome (stepper,
+   header, body rows, footer) so the layout does not shift when React mounts
+   over it. */
+.tr-wizard-skeleton {
+
+	.tr-wizard__step {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.tr-wizard__header {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+}
+
+.tr-skel {
+	display: block;
+	border-radius: 6px;
+	background: $tr-divider;
+	background-image: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.85) 50%, transparent 100%);
+	background-repeat: no-repeat;
+	background-size: 200px 100%;
+	background-position: -200px 0;
+	animation: thinkrank-wizard-shimmer 1.4s $tr-ease infinite;
+}
+
+.tr-skel--marker {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.tr-skel--step-label {
+	width: 100%;
+	max-width: 84px;
+	height: 12px;
+}
+
+.tr-skel--title {
+	width: 260px;
+	max-width: 100%;
+	height: 20px;
+	border-radius: 8px;
+}
+
+.tr-skel--subtitle {
+	width: 420px;
+	max-width: 100%;
+	height: 12px;
+}
+
+.tr-wizard-skeleton__rows {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.tr-wizard-skeleton__row {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	border: 1px solid $tr-border;
+	border-radius: $tr-radius;
+	padding: 16px 18px;
+	background: $tr-surface;
+}
+
+.tr-wizard-skeleton__row-text {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.tr-skel--row-icon {
+	width: 40px;
+	height: 40px;
+	border-radius: $tr-radius;
+	flex-shrink: 0;
+}
+
+.tr-skel--row-title {
+	width: 180px;
+	max-width: 100%;
+	height: 13px;
+}
+
+.tr-skel--row-detail {
+	width: 300px;
+	max-width: 100%;
+	height: 11px;
+}
+
+.tr-skel--row-badge {
+	width: 74px;
+	height: 24px;
+	border-radius: $tr-radius-pill;
+	flex-shrink: 0;
+}
+
+.tr-skel--btn {
+	width: 132px;
+	height: 40px;
+	border-radius: $tr-radius;
+}
+
+.tr-skel--btn-ghost {
+	width: 84px;
+	height: 20px;
+	border-radius: 8px;
+}
+
+@keyframes thinkrank-wizard-shimmer {
+
+	to {
+		background-position: calc(100% + 200px) 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.tr-skel {
+		animation: none;
+	}
+}
+
+@keyframes thinkrank-wizard-spin {
+
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@keyframes thinkrank-wizard-fade {
+
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* ---- Layout ------------------------------------------------------------ */
+.tr-wizard {
+	box-sizing: border-box;
+	max-width: 1080px;
+	margin: 28px auto 56px;
+	padding: 0 20px;
+	font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	color: $tr-text;
+	-webkit-font-smoothing: antialiased;
+
+	* {
+		box-sizing: border-box;
+	}
+}
+
+/* Unified elevated surface: the stepper header and the step card read as one
+   continuous panel (corners clipped, single shadow, hairline border). */
+.tr-wizard__panel {
+	display: flex;
+	flex-direction: column;
+	background: $tr-surface;
+	border: 1px solid $tr-border;
+	border-radius: $tr-radius-xl;
+	box-shadow: $tr-shadow-panel;
+	overflow: hidden;
+}
+
+/* ---- Stepper ----------------------------------------------------------- */
+.tr-wizard__stepper-card {
+	background:
+		linear-gradient(180deg, $tr-tint 0%, rgba(243, 244, 255, 0) 100%),
+		$tr-surface;
+	padding: 4px 32px 0;
+	border-bottom: 1px solid $tr-divider;
+}
+
+.tr-wizard__stepper {
+	display: flex;
+	align-items: stretch;
+	justify-content: space-between;
+	gap: 4px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.tr-wizard__step {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0; /* neutralize WP admin's default <li> margin-bottom */
+	padding: 18px 6px;
+	position: relative;
+	border-bottom: 3px solid transparent;
+	transition: border-color $tr-t;
+
+	&-button {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		margin: 0;
+		padding: 0;
+		background: none;
+		border: 0;
+		cursor: pointer;
+		font: inherit;
+		color: inherit;
+
+		&:disabled {
+			cursor: default;
+		}
+
+		&:not(:disabled):hover .tr-wizard__step-marker {
+			border-color: $tr-primary;
+			color: $tr-primary;
+		}
+
+		&:not(:disabled):hover .tr-wizard__step-label {
+			color: $tr-text;
+		}
+
+		&:focus-visible {
+			outline: 2px solid $tr-primary;
+			outline-offset: 3px;
+			border-radius: 6px;
+		}
+	}
+
+	&-marker {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 50%;
+		font-size: 13px;
+		font-weight: 600;
+		border: 1.5px solid $tr-border-strong;
+		color: $tr-help;
+		background: $tr-surface;
+		flex-shrink: 0;
+		transition: background $tr-t, border-color $tr-t, color $tr-t, box-shadow $tr-t;
+	}
+
+	&-label {
+		font-size: 15px;
+		font-weight: 500;
+		color: $tr-text-3;
+		white-space: nowrap;
+		transition: color $tr-t;
+	}
+
+	&.is-active {
+		border-bottom-color: $tr-primary;
+
+		/* Rounded cap on the active underline. */
+		&::after {
+			content: "";
+			position: absolute;
+			left: 6px;
+			right: 6px;
+			bottom: -3px;
+			height: 3px;
+			border-radius: 3px 3px 0 0;
+			background: $tr-primary;
+		}
+
+		.tr-wizard__step-marker {
+			background: linear-gradient(135deg, $tr-primary 0%, #6c78ff 100%);
+			border-color: $tr-primary;
+			color: #fff;
+			box-shadow: 0 4px 10px -2px rgba(68, 81, 255, 0.5);
+		}
+
+		.tr-wizard__step-label {
+			color: $tr-primary;
+			font-weight: 600;
+		}
+	}
+
+	&.is-complete {
+
+		.tr-wizard__step-marker {
+			background: $tr-tint-2;
+			border-color: transparent;
+			color: $tr-primary;
+		}
+
+		.tr-wizard__step-label {
+			color: $tr-text;
+		}
+	}
+}
+
+/* ---- Card -------------------------------------------------------------- */
+.tr-wizard__card {
+	display: flex;
+	flex-direction: column;
+	background: $tr-surface;
+}
+
+.tr-wizard__header {
+	padding: 28px 40px 16px;
+}
+
+.tr-wizard__title {
+	margin: 0 0 6px;
+	font-size: 22px;
+	font-weight: 700;
+	line-height: 1.3;
+	letter-spacing: -0.01em;
+	color: $tr-text;
+}
+
+.tr-wizard__subtitle {
+	margin: 0;
+	max-width: 68ch;
+	font-size: 14px;
+	line-height: 1.55;
+	color: $tr-text-3;
+}
+
+.tr-wizard__divider {
+	height: 1px;
+	background: $tr-divider;
+}
+
+.tr-wizard__body {
+	display: flex;
+	flex-direction: column;
+	flex: 1 0 auto; /* grow so the footer pins to the bottom of the card */
+	padding: 28px 40px 36px;
+	animation: thinkrank-wizard-fade 0.28s $tr-ease both;
+}
+
+.tr-wizard__error {
+	margin-top: 16px;
+	padding: 12px 16px;
+	border-radius: $tr-radius;
+	background: $tr-danger-bg;
+	border: 1px solid #fecdca;
+	color: #912018;
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+/* Post-migration auto-deactivation notice (success or manual-action warning). */
+.tr-wizard__notice {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	margin: 0 0 20px;
+	padding: 12px 16px;
+	border-radius: $tr-radius;
+	font-size: 13px;
+	line-height: 1.5;
+	border: 1px solid transparent;
+
+	&--success {
+		background: $tr-success-bg;
+		border-color: $tr-success-border;
+		color: #05603a;
+	}
+
+	&--error {
+		background: $tr-warning-bg;
+		border-color: #fedf89;
+		color: #93370d;
+	}
+}
+
+.tr-wizard__notice-text {
+	flex: 1;
+}
+
+.tr-wizard__notice-dismiss {
+	flex: none;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font-size: 18px;
+	line-height: 1;
+	cursor: pointer;
+	opacity: 0.65;
+	transition: opacity $tr-t-fast;
+
+	&:hover {
+		opacity: 1;
+	}
+}
+
+/* ---- Footer ------------------------------------------------------------ */
+.tr-wizard__footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 18px 40px 22px;
+	border-top: 1px solid $tr-divider;
+	background: linear-gradient(180deg, rgba(246, 247, 251, 0) 0%, $tr-surface-alt 100%);
+
+	&--ready {
+		margin: auto -40px -36px; /* margin-top:auto pins it to the card bottom */
+		padding-left: 40px;
+		padding-right: 40px;
+	}
+}
+
+.tr-wizard__footer-left {
+	display: flex;
+	align-items: center;
+}
+
+.tr-wizard__footer-right {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.tr-wizard__skip.components-button.is-link {
+	color: $tr-text-3;
+	font-weight: 600;
+	text-decoration: none;
+
+	&:hover:not(:disabled),
+	&:focus:not(:disabled) {
+		color: $tr-primary;
+		text-decoration: underline;
+	}
+}
+
+/* ---- WP component overrides (button styling) --------------------------- */
+.tr-wizard .components-button.is-primary {
+	background: $tr-primary;
+	border-color: $tr-primary;
+	border-radius: $tr-radius;
+	min-height: 40px;
+	padding: 9px 20px;
+	font-size: 14px;
+	font-weight: 600;
+	box-shadow: $tr-shadow-btn;
+	transition: background $tr-t-fast, box-shadow $tr-t-fast, transform $tr-t-fast;
+
+	&:hover:not(:disabled),
+	&:focus:not(:disabled),
+	&:active:not(:disabled) {
+		background: $tr-primary-600;
+		border-color: $tr-primary-600;
+		color: #fff;
+		box-shadow: 0 6px 16px -4px rgba(68, 81, 255, 0.5);
+	}
+
+	&:active:not(:disabled) {
+		transform: translateY(1px);
+	}
+
+	/* While saving, WP's .is-busy paints an admin-blue striped gradient that
+	   otherwise overrides the primary button on click — keep the brand fill
+	   and show a spinning loader instead. */
+	&.is-busy,
+	&.is-busy:disabled,
+	&.is-busy[aria-disabled="true"] {
+		background: $tr-primary;
+		background-image: none;
+		border-color: $tr-primary;
+		color: #fff;
+		opacity: 1;
+	}
+
+	&.is-busy::before {
+		content: "";
+		display: inline-block;
+		width: 14px;
+		height: 14px;
+		margin-right: 8px;
+		border: 2px solid rgba(255, 255, 255, 0.45);
+		border-top-color: #fff;
+		border-radius: 50%;
+		animation: thinkrank-wizard-spin 0.7s linear infinite;
+	}
+}
+
+.tr-wizard .components-button.is-secondary {
+	color: $tr-text-2;
+	border-radius: $tr-radius;
+	min-height: 40px;
+	padding: 9px 18px;
+	font-size: 14px;
+	font-weight: 600;
+	background: $tr-surface;
+	box-shadow: inset 0 0 0 1px $tr-border-strong, $tr-shadow-btn;
+	transition: background $tr-t-fast, box-shadow $tr-t-fast, color $tr-t-fast;
+
+	&:hover:not(:disabled),
+	&:focus:not(:disabled) {
+		background: $tr-surface-alt;
+		color: $tr-text;
+		box-shadow: inset 0 0 0 1px $tr-border-strong, $tr-shadow-btn;
+	}
+}
+
+/* Migration "Import" (enabled) — outlined primary. */
+.tr-wizard .components-button.tr-wizard__import-btn {
+	min-height: 38px;
+	padding: 8px 18px;
+	border-radius: $tr-radius;
+	font-size: 14px;
+	font-weight: 700;
+	background: $tr-tint;
+	color: $tr-primary;
+	box-shadow: inset 0 0 0 1px rgba(68, 81, 255, 0.45);
+	transition: background $tr-t-fast, box-shadow $tr-t-fast;
+
+	&:hover:not(:disabled):not([aria-disabled="true"]),
+	&:focus:not(:disabled):not([aria-disabled="true"]) {
+		background: $tr-tint-2;
+		color: $tr-primary-700;
+		box-shadow: inset 0 0 0 1px $tr-primary;
+	}
+}
+
+/* Migration "Import" disabled/busy — muted grey. */
+.tr-wizard .components-button.tr-wizard__import-btn:disabled,
+.tr-wizard .components-button.tr-wizard__import-btn[aria-disabled="true"] {
+	background: #eeeff2;
+	color: #b0b2c0;
+	box-shadow: inset 0 0 0 1px $tr-border;
+	opacity: 1;
+}
+
+/* Field labels — normal-case 14px medium (WP defaults to 11px caps). */
+.tr-wizard .components-base-control__label,
+.tr-wizard .components-input-control__label {
+	text-transform: none;
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.4;
+	letter-spacing: normal;
+	color: $tr-text;
+	margin-bottom: 6px;
+}
+
+/* Text inputs — outlined modern (8px radius, 1.5px border, no shadow, brand
+   border on focus). Matches the ThinkRank form-control convention. */
+.tr-wizard .components-text-control__input,
+.tr-wizard .components-input-control__container input {
+	border-radius: 8px;
+	border: 1.5px solid $tr-border-strong;
+	box-shadow: none;
+	min-height: 40px;
+	transition: border-color $tr-t-fast;
+
+	&:focus {
+		border-color: $tr-primary;
+		box-shadow: none;
+		outline: none;
+	}
+}
+
+/* Media picker — label/help spacing to match the admin app's copy of these
+   rules. The zone itself is Tailwind-styled inside the picker's own
+   `.tr-root`. */
+.tr-wizard .thinkrank-media-picker {
+
+	.components-base-control__label {
+		display: block;
+		font-size: 14px;
+		font-weight: 500;
+		color: $tr-text;
+		margin-bottom: 8px;
+	}
+
+	.components-base-control__help {
+		color: $tr-text-2;
+		font-size: 13px;
+		margin: 6px 0 0;
+	}
+
+	+ .thinkrank-media-picker {
+		margin-top: 22px;
+	}
+}
+
+/* Side-by-side pickers are grid cells, not a stack — the sibling gap above
+   would push the second one out of line with the first. */
+.tr-wizard__cols > .thinkrank-media-picker + .thinkrank-media-picker {
+	margin-top: 0;
+}
+
+/* Toggles — on state uses the brand color. */
+.tr-wizard .components-form-toggle.is-checked .components-form-toggle__track {
+	background-color: $tr-primary;
+	border-color: $tr-primary;
+}
+
+/* "Connect with Google" — white outlined button with the Google mark. */
+.tr-wizard .components-button.tr-wizard__google-btn {
+	background: $tr-surface;
+	color: $tr-text;
+
+	&:hover:not(:disabled),
+	&:focus:not(:disabled) {
+		background: $tr-surface-alt;
+		color: $tr-text;
+	}
+}
+
+.thinkrank-google-icon {
+	display: inline-block;
+	width: 18px;
+	height: 18px;
+	margin-right: 8px;
+	vertical-align: middle;
+}
+
+/* ---- Stacks & groups --------------------------------------------------- */
+.tr-wizard__stack {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.tr-wizard__cols {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 16px;
+}
+
+.tr-wizard__group {
+	border: 1px solid $tr-border;
+	border-radius: $tr-radius;
+	padding: 18px;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	background: $tr-surface;
+	transition: border-color $tr-t, box-shadow $tr-t;
+
+	&:hover {
+		border-color: $tr-border-strong;
+	}
+}
+
+.tr-wizard__group-head {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.tr-wizard__group-title {
+	font-size: 15px;
+	font-weight: 600;
+	color: $tr-text;
+}
+
+.tr-wizard__group-sub {
+	font-size: 13px;
+	color: $tr-text-3;
+}
+
+.tr-wizard__section-label {
+	text-transform: uppercase;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	color: $tr-help;
+	margin-top: 6px;
+}
+
+/* ---- Pills ------------------------------------------------------------- */
+.tr-wizard__pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.tr-wizard__pill {
+	appearance: none;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	border: 1.5px solid $tr-border;
+	background: $tr-surface;
+	color: $tr-text-2;
+	border-radius: $tr-radius-pill;
+	padding: 9px 16px;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1;
+	transition: background $tr-t-fast, color $tr-t-fast, border-color $tr-t-fast, box-shadow $tr-t-fast;
+
+	&:hover {
+		border-color: $tr-border-strong;
+		color: $tr-text;
+	}
+
+	&.is-selected {
+		background: $tr-tint;
+		border-color: $tr-primary;
+		color: $tr-primary;
+		box-shadow: 0 1px 2px rgba(68, 81, 255, 0.12);
+	}
+}
+
+.tr-wizard__pill-radio {
+	width: 15px;
+	height: 15px;
+	border-radius: 50%;
+	border: 1.5px solid #c4c4d4;
+	position: relative;
+	flex-shrink: 0;
+	transition: border-color $tr-t-fast;
+
+	.tr-wizard__pill.is-selected & {
+		border-color: $tr-primary;
+	}
+
+	.tr-wizard__pill.is-selected &::after {
+		content: "";
+		position: absolute;
+		inset: 2.5px;
+		border-radius: 50%;
+		background: $tr-primary;
+	}
+}
+
+/* ---- Row cards (list items) -------------------------------------------- */
+.tr-wizard__rows {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.tr-wizard__row-card {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 24px;
+	border: 1px solid $tr-border;
+	border-radius: $tr-radius;
+	padding: 16px 18px;
+	background: $tr-surface;
+	transition: border-color $tr-t, box-shadow $tr-t;
+
+	&:hover {
+		border-color: $tr-border-strong;
+		box-shadow: $tr-shadow-card;
+	}
+}
+
+/* Migration card stacks the header row above the import-progress block. */
+.tr-wizard__row-card--migration {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 16px;
+}
+
+.tr-wizard__row-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 24px;
+}
+
+.tr-wizard__row-main {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
+/* ---- Migration import progress ----------------------------------------- */
+.tr-wizard__import-detecting,
+.tr-wizard__import-empty {
+	color: $tr-text-2;
+	font-size: 14px;
+	padding: 4px 0;
+}
+
+.tr-wizard__import-progress {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+
+	/* Indent to line up under the plugin name (logo 48 + gap 16). */
+	padding-left: 64px;
+}
+
+.tr-wizard__import-progress-title {
+	font-size: 14px;
+	font-weight: 600;
+	color: $tr-text;
+}
+
+/* Single continuous progress bar spanning both migration phases. */
+.tr-wizard__import-bar {
+	height: 8px;
+	border-radius: $tr-radius-pill;
+	background: $tr-divider;
+	overflow: hidden;
+}
+
+.tr-wizard__import-bar-fill {
+	height: 100%;
+	border-radius: $tr-radius-pill;
+	background: linear-gradient(90deg, $tr-primary 0%, #6c78ff 100%);
+	transition: width 0.3s $tr-ease;
+}
+
+.tr-wizard__import-steps {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.tr-wizard__import-step {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+
+	/* Vertical connector between consecutive steps. */
+	&:not(:last-child)::before {
+		content: "";
+		position: absolute;
+		left: 9px;
+		top: 20px;
+		width: 2px;
+		height: 12px;
+		background: $tr-border;
+	}
+}
+
+.tr-wizard__import-step-dot {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	border: 1.5px solid $tr-border-strong;
+	background: $tr-surface;
+	color: #fff;
+	transition: background $tr-t, border-color $tr-t;
+}
+
+.tr-wizard__import-step-label {
+	font-size: 14px;
+	font-weight: 500;
+	color: $tr-text;
+}
+
+.tr-wizard__import-step.is-active .tr-wizard__import-step-dot {
+	border-color: $tr-primary;
+	box-shadow: 0 0 0 3px rgba(68, 81, 255, 0.14);
+}
+
+.tr-wizard__import-step.is-done .tr-wizard__import-step-dot {
+	border-color: $tr-primary;
+	background: $tr-primary;
+}
+
+.tr-wizard__import-step.is-active .tr-wizard__import-step-label {
+	font-weight: 600;
+	color: $tr-primary;
+}
+
+.tr-wizard__import-step.is-pending .tr-wizard__import-step-label {
+	color: $tr-help;
+}
+
+/* Completed-import indicator shown in place of the Import button. */
+.tr-wizard__import-done {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 14px;
+	font-weight: 700;
+	color: $tr-primary;
+}
+
+.tr-wizard__import-done-dot {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background: $tr-primary;
+	color: #fff;
+}
+
+.tr-wizard__import-error {
+	margin: 8px 0 0;
+	font-size: 13px;
+	color: #912018;
+}
+
+.tr-wizard__row-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border-radius: $tr-radius;
+	background: $tr-tint;
+	color: $tr-primary;
+	font-weight: 700;
+	flex-shrink: 0;
+}
+
+.tr-wizard__row-logo {
+	display: block;
+	width: 48px;
+	height: 48px;
+	flex-shrink: 0;
+	border-radius: 10px;
+}
+
+/* Monogram fallback for a supported plugin that has no logo asset. */
+.tr-wizard__row-logo--text {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 10px;
+	background: $tr-tint;
+	color: $tr-primary;
+	font-size: 20px;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.tr-wizard__row-text {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.tr-wizard__row-title {
+	font-size: 15px;
+	font-weight: 600;
+	color: $tr-text;
+}
+
+.tr-wizard__row-detail {
+	font-size: 12.5px;
+	color: $tr-text-3;
+}
+
+.tr-wizard__badge {
+	font-size: 12px;
+	font-weight: 600;
+	padding: 5px 12px;
+	border-radius: $tr-radius-pill;
+	white-space: nowrap;
+
+	&.is-success {
+		background: $tr-success-bg;
+		color: $tr-success;
+		box-shadow: inset 0 0 0 1px $tr-success-border;
+	}
+
+	&.is-neutral {
+		background: $tr-surface-alt;
+		color: $tr-help;
+		box-shadow: inset 0 0 0 1px $tr-border;
+	}
+}
+
+/* ---- Badge pill (used in step headers, e.g. "Setup complete") ---------- */
+.tr-wizard__badge-pill {
+	align-self: flex-start;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	background: $tr-success-bg;
+	color: $tr-success;
+	box-shadow: inset 0 0 0 1px $tr-success-border;
+	font-size: 12px;
+	font-weight: 600;
+	padding: 5px 12px;
+	border-radius: $tr-radius-pill;
+	margin-bottom: 10px;
+
+	&::before {
+		content: "";
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: currentcolor;
+	}
+}
+
+/* ---- Start ------------------------------------------------------------- */
+.tr-wizard__start {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	gap: 0;
+	padding: 8px 0 4px;
+}
+
+.tr-wizard__start-preview {
+	width: 100%;
+	display: flex;
+	justify-content: center;
+
+	/* The preview PNG bakes in the illustration's ambient shadow as transparent
+	   padding (~93px top, ~165px bottom of its 769px height). Negative margins
+	   pull the neighbouring content into that empty shadow zone so the visible
+	   dashboard is spaced like the design without altering the asset. */
+	margin: -42px 0 -25px;
+}
+
+.tr-wizard__start-preview-img {
+	display: block;
+	width: 380px;
+	max-width: 100%;
+	height: auto;
+}
+
+.tr-wizard__start-consent {
+	width: 100%;
+	max-width: 730px;
+	margin-top: 8px;
+	padding: 24px 24px 28px;
+	border: 1px solid $tr-border;
+	border-radius: 8px;
+	background: #fff;
+}
+
+.tr-wizard__start-usage {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.6;
+	color: $tr-text-3;
+
+	& + & {
+		margin-top: 6px;
+	}
+}
+
+.tr-wizard__start-collect-link {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: $tr-primary;
+	font: inherit;
+	font-weight: 600;
+	text-decoration: underline;
+	cursor: pointer;
+
+	&:hover,
+	&:focus {
+		color: $tr-primary-600;
+	}
+}
+
+.tr-wizard__start-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 12px;
+	margin-top: 22px;
+}
+
+/* ---- Ecosystem --------------------------------------------------------- */
+.tr-wizard__plugin-grid {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 16px;
+	margin-top: 14px;
+}
+
+.tr-wizard__plugin-card {
+	border: 1px solid $tr-border;
+	border-radius: $tr-radius;
+	padding: 18px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	background: $tr-surface;
+	transition: border-color $tr-t, box-shadow $tr-t, transform $tr-t;
+
+	&:hover {
+		border-color: rgba(68, 81, 255, 0.4);
+		box-shadow: $tr-shadow-card-hover;
+		transform: translateY(-2px);
+	}
+}
+
+.tr-wizard__plugin-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding-bottom: 14px;
+	border-bottom: 1px solid $tr-divider;
+}
+
+.tr-wizard__plugin-logo {
+	display: block;
+	width: 40px;
+	height: 40px;
+	padding: 4px;
+	border-radius: 10px;
+	background: #fff;
+	box-shadow:
+		inset 0 0 0 1px rgba(68, 81, 255, 0.13),
+		inset 0 0 6px 0 #d6d6ff;
+	flex-shrink: 0;
+}
+
+.tr-wizard__plugin-name {
+	font-size: 15px;
+	font-weight: 600;
+	flex: 1;
+}
+
+.tr-wizard__plugin-status {
+	flex-shrink: 0;
+	padding: 3px 9px;
+	border-radius: $tr-radius-pill;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 1.5;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: #05603a;
+	background: $tr-success-bg;
+	box-shadow: inset 0 0 0 1px $tr-success-border;
+}
+
+.tr-wizard__plugin-desc {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.6;
+	color: $tr-text-3;
+}
+
+/* ---- Social ------------------------------------------------------------ */
+.tr-wizard__social-list {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.tr-wizard__social-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	border: 1px solid $tr-border;
+	border-radius: $tr-radius;
+	padding: 8px 16px;
+	background: $tr-surface;
+	transition: border-color $tr-t-fast;
+
+	&:focus-within {
+		border-color: $tr-primary;
+	}
+}
+
+.tr-wizard__social-brand {
+	display: block;
+	width: 28px;
+	height: 28px;
+	flex-shrink: 0;
+}
+
+.tr-wizard__social-name {
+	width: 96px;
+	flex-shrink: 0;
+	font-size: 14px;
+	font-weight: 500;
+	color: $tr-text;
+}
+
+.tr-wizard__social-row .tr-wizard__social-input {
+	flex: 1;
+	min-width: 0;
+	min-height: 36px;
+	border: 0 !important;
+	border-left: 1px solid $tr-border !important;
+	border-radius: 0 !important;
+	padding: 8px 0 8px 16px;
+	margin: 0;
+	font-size: 14px;
+	color: $tr-text;
+	background: transparent;
+	box-shadow: none !important;
+
+	&::placeholder {
+		color: $tr-help;
+	}
+
+	&:focus {
+		outline: none;
+		border-left-color: $tr-primary !important;
+	}
+}
+
+/* ---- Ready ------------------------------------------------------------- */
+.tr-wizard__ready {
+	display: flex;
+	flex-direction: column;
+	flex: 1 0 auto; /* fill the card so the actions pin to the bottom */
+}
+
+.tr-wizard__status-grid {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px 24px;
+}
+
+.tr-wizard__status-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 16px;
+	border: 1px solid $tr-border;
+	border-radius: $tr-radius;
+	background: linear-gradient(180deg, $tr-surface 0%, rgba(236, 253, 243, 0.35) 100%);
+}
+
+.tr-wizard__status-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	background: $tr-success-bg;
+	color: $tr-success;
+	box-shadow: inset 0 0 0 1px $tr-success-border;
+	font-size: 13px;
+	font-weight: 700;
+	flex-shrink: 0;
+}
+
+.tr-wizard__status-text {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.tr-wizard__status-title {
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.tr-wizard__status-detail {
+	font-size: 13px;
+	line-height: 1.5;
+	color: $tr-text-3;
+}
+
+/* ---- MCP server step --------------------------------------------------- */
+.tr-wizard__mcp-loading {
+	color: $tr-text-2;
+	font-size: 14px;
+	padding: 4px 0;
+}
+
+.tr-wizard__mcp-access {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 24px;
+	border: 1px solid $tr-border;
+	border-radius: $tr-radius;
+	padding: 18px;
+	background: linear-gradient(180deg, $tr-tint 0%, $tr-surface 60%);
+
+	.components-form-toggle {
+		flex-shrink: 0;
+		margin-top: 2px;
+	}
+}
+
+.tr-wizard__mcp-access-text {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.tr-wizard__mcp-access-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.tr-wizard__mcp-access-desc {
+	margin: 0;
+	max-width: 72ch;
+	font-size: 13px;
+	line-height: 1.6;
+	color: $tr-text-3;
+}
+
+.tr-wizard__mcp-connector {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	border: 1px solid $tr-border;
+	border-radius: $tr-radius;
+	padding: 18px;
+	background: $tr-surface;
+	transition: border-color $tr-t, box-shadow $tr-t;
+
+	&:hover {
+		border-color: $tr-border-strong;
+		box-shadow: $tr-shadow-card;
+	}
+}
+
+.tr-wizard__mcp-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border-radius: 10px;
+	flex-shrink: 0;
+
+	svg {
+		width: 22px;
+		height: 22px;
+	}
+}
+
+.tr-wizard__mcp-detail {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding-top: 16px;
+	border-top: 1px solid $tr-divider;
+}
+
+.tr-wizard__mcp-field-label {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: $tr-help;
+}
+
+.tr-wizard__mcp-url {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 7px 7px 7px 14px;
+	border: 1.5px solid $tr-border-strong;
+	border-radius: 10px;
+	background: $tr-surface-alt;
+
+	code {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		padding: 0;
+		background: none;
+		font-size: 13px;
+		font-family: ui-monospace, sfmono-regular, menlo, monospace;
+		color: $tr-text-2;
+	}
+}
+
+.tr-wizard__mcp-copy {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-shrink: 0;
+	height: 32px;
+	padding: 0 14px;
+	border: 0;
+	border-radius: 8px;
+	cursor: pointer;
+	background: $tr-surface;
+	color: $tr-primary;
+	font-size: 13px;
+	font-weight: 600;
+	box-shadow: inset 0 0 0 1px $tr-border-strong;
+	transition: background $tr-t-fast, box-shadow $tr-t-fast;
+
+	&:hover,
+	&:focus {
+		background: $tr-tint;
+		box-shadow: inset 0 0 0 1px $tr-primary;
+	}
+}
+
+.tr-wizard__mcp-steps {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+
+	li {
+		display: flex;
+		align-items: flex-start;
+		gap: 10px;
+		margin: 0;
+		font-size: 14px;
+		line-height: 1.5;
+		color: $tr-text-2;
+	}
+}
+
+.tr-wizard__mcp-step-num {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	background: $tr-tint-2;
+	color: $tr-primary;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+/* ---- ThinkRank Hub step ------------------------------------------------ */
+
+/* The AI Tools card, framed like the MCP step's access card. */
+.tr-wizard__hub {
+	overflow: hidden;
+	border: 1px solid $tr-border;
+	border-radius: $tr-radius;
+	background: $tr-surface;
+}
+
+/* ---- Ready step: onboarding call --------------------------------------- */
+.tr-wizard__help {
+	display: flex;
+	align-items: flex-start;
+	gap: 16px;
+	margin: 20px 0 28px;
+	padding: 18px;
+	border: 1px solid $tr-border;
+	border-radius: $tr-radius;
+	background: linear-gradient(180deg, $tr-tint 0%, $tr-surface 70%);
+}
+
+.tr-wizard__help-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	flex-shrink: 0;
+	border-radius: 12px;
+	color: #fff;
+	background: linear-gradient(135deg, $tr-primary 0%, #6c78ff 100%);
+}
+
+.tr-wizard__help-body {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+
+.tr-wizard__help-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 10px;
+}
+
+.tr-wizard__help-title {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 600;
+	color: $tr-text;
+}
+
+.tr-wizard__help-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 10px;
+	border-radius: $tr-radius-pill;
+	background: $tr-tint-2;
+	color: $tr-primary;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.tr-wizard__help-desc {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.6;
+	color: $tr-text-3;
+}
+
+.tr-wizard__help-benefits {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 18px;
+	margin: 2px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.tr-wizard__help-benefit {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: 13px;
+	color: $tr-text-2;
+}
+
+.tr-wizard__help-check {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	background: $tr-tint-2;
+	color: $tr-primary;
+}
+
+.tr-wizard .components-button.tr-wizard__help-cta {
+	display: inline-flex;
+	align-items: center;
+	flex-shrink: 0;
+	gap: 8px;
+	align-self: center;
+
+	svg {
+		transition: transform $tr-t-fast;
+	}
+
+	&:hover svg,
+	&:focus svg {
+		transform: translateX(3px);
+	}
+}
+
+/* ---- Responsive -------------------------------------------------------- */
+@media (max-width: 960px) {
+
+	.tr-wizard__plugin-grid {
+		grid-template-columns: 1fr 1fr;
+	}
+}
+
+@media (max-width: 782px) {
+
+	.tr-wizard {
+		margin-top: 16px;
+	}
+
+	.tr-wizard__stepper-card {
+		padding-left: 20px;
+		padding-right: 20px;
+	}
+
+	.tr-wizard__stepper {
+		flex-wrap: wrap;
+		gap: 4px 16px;
+	}
+
+	.tr-wizard__step {
+		padding: 12px 4px;
+	}
+
+	.tr-wizard__step.is-active::after {
+		display: none;
+	}
+
+	.tr-wizard__header,
+	.tr-wizard__body,
+	.tr-wizard__footer {
+		padding-left: 20px;
+		padding-right: 20px;
+	}
+
+	.tr-wizard__footer--ready {
+		margin-left: -20px;
+		margin-right: -20px;
+	}
+
+	.tr-wizard__help {
+		flex-direction: column;
+	}
+
+	.tr-wizard .components-button.tr-wizard__help-cta {
+		align-self: flex-start;
+	}
+
+	.tr-wizard__cols,
+	.tr-wizard__status-grid,
+	.tr-wizard__plugin-grid {
+		grid-template-columns: 1fr;
+	}
+}

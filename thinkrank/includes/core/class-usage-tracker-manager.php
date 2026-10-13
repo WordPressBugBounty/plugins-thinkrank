@@ -104,8 +104,8 @@ class Usage_Tracker_Manager {
 
         $this->tracker->set_notice_options([
             'notice_title' => __('Want to help make ThinkRank even better?', 'thinkrank'),
-            'notice'       => __('Allow us to collect non-sensitive diagnostic data and usage information.', 'thinkrank'),
-            'extra_notice' => __('We collect non-sensitive diagnostic data and plugin usage information: your site URL, WordPress &amp; PHP version, active plugins &amp; theme, and admin email. This lets us keep ThinkRank compatible with the most popular plugins and themes. No spam, we promise.', 'thinkrank'),
+            'notice'       => __('Allow us to collect diagnostic data and usage information.', 'thinkrank'),
+            'extra_notice' => __('If you allow it, we collect your site URL and name, your admin email address, WordPress, PHP &amp; server versions, active and inactive plugins, active theme, and which ThinkRank features you use. This lets us keep ThinkRank compatible with the most popular plugins and themes, and we may email you ThinkRank news and offers. No spam, we promise.', 'thinkrank'),
         ]);
 
         $this->tracker->init();
@@ -152,8 +152,8 @@ class Usage_Tracker_Manager {
     /**
      * Record explicit user consent for usage tracking.
      *
-     * Called by flows outside the opt-in notice (e.g. the Setup Wizard
-     * "Get Started" action). Builds the tracker if it has not been wired
+     * Called by flows outside the opt-in notice (e.g. the Setup Wizard's
+     * "Allow & Continue" button). Builds the tracker if it has not been wired
      * yet so consent works regardless of hook timing.
      *
      * @return void

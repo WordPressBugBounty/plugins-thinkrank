@@ -1,0 +1,38 @@
+/**
+ * Divi Visual Builder — drawer stacking overrides.
+ *
+ * Divi's VB chrome (the left icon rail and the right settings panel) paints at
+ * `z-index: 100000`, one above the shared drawer's default `99999`, so it
+ * overlaps the ThinkRank drawer. These rules lift the drawer above Divi's
+ * chrome. They live in the `divi` bundle, which is enqueued ONLY inside the
+ * Visual Builder, so the classic/block, Elementor and Oxygen editors keep the
+ * shared component's normal stacking.
+ */
+
+// Panel — must clear Divi's 100000 chrome.
+.thinkrank-metabox-drawer {
+	z-index: 2147483000 !important;
+}
+
+// Backdrop (the portaled overlay, aria-hidden) — sits just under the panel but
+// still above Divi's chrome so the dim covers the whole builder.
+body > .tr-root > [aria-hidden="true"] {
+	z-index: 2147482999 !important;
+}
+
+// Restore border rendering inside the drawer.
+// The shared drawer's `tr-border*` utilities set only border-width and
+// border-color; the visible line comes from Tailwind Preflight's global
+// `*, ::before, ::after { border-style: solid }`. Divi's front-end reset
+// (themes/Divi/style.min.css) applies `border: 0` — i.e. `border-style: none` —
+// to a list of *type* selectors (div, span, p, label, ul, li, form, h1..h6, …).
+// Type selectors (specificity 0,0,1) out-rank Preflight's universal `*` (0,0,0)
+// regardless of load order, so every drawer element ends up border-style:none
+// and no border paints. Re-assert `solid` under `.tr-root` (0,1,0 beats Divi's
+// 0,0,1). Elements without a border-width stay invisible, exactly as Preflight
+// intends. Scoped to this Divi-only bundle, so other editors are untouched.
+.tr-root *,
+.tr-root *::before,
+.tr-root *::after {
+	border-style: solid;
+}

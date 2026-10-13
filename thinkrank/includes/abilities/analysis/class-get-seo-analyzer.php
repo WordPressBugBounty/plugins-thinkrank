@@ -32,7 +32,7 @@ class Get_Seo_Analyzer extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-seo-analyzer';
 		$this->label       = __( 'Get Site SEO Analyzer Audit', 'thinkrank' );
-		$this->description = __( 'Retrieve the latest whole-site SEO audit (Site SEO Analyzer): overall 0-100 score, letter grade, summary counts, and per-check results across Basic, Advanced, Content, Performance, Security and GEO/AEO. A failing per-item check (meta descriptions, image alt text, and the content-sampled GEO checks) lists what fails it in affected_posts (id, title, type, edit_url, url), with affected_total counting every failing item when the list is capped. Returns the cached audit (refreshed hourly); use run-seo-analyzer for a fresh run.', 'thinkrank' );
+		$this->description = __( 'Retrieve the latest whole-site SEO audit (Site SEO Analyzer): overall 0-100 score, letter grade, summary counts, and per-check results across Basic, Advanced, Content, Performance, Security and GEO/AEO. A failing per-item check (meta descriptions, image alt text, and the content-sampled GEO checks) lists what fails it in affected_posts (id, title, type, edit_url, url), with affected_total counting every failing item when the list is capped. A check whose can_auto_fix is true can be fixed with fix-seo-check: fix_label says what the fix does, fix_warning what to tell the person first, and fix_undoable whether the change can be put back afterwards. Returns the cached audit (refreshed hourly); use run-seo-analyzer for a fresh run.', 'thinkrank' );
 	}
 
 	/**

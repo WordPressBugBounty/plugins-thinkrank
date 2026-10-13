@@ -1,0 +1,94 @@
+/**
+ * Bricks builder — root font size, drawer stacking and reset overrides.
+ *
+ * Every rule here is scoped by enqueue, not by selector: the `bricks` bundle
+ * loads ONLY inside the Bricks builder (Bricks_Metabox gates on
+ * `bricks_is_builder_main()`), so the classic/block, Elementor, Oxygen and Divi
+ * editors are untouched by all of it.
+ */
+
+/*
+ * Restore a 16px rem base for the builder window.
+ *
+ * Bricks' `frontend-layer.min.css` sets `html { font-size: 62.5% }` — the
+ * 1rem = 10px convention — and that stylesheet is loaded in the builder window
+ * too, not just on the front end. The shared drawer's type and spacing come
+ * from the Tailwind `tr-*` utilities, which are authored in `rem`, so every one
+ * of them rendered at 62.5% of its intended size: 14px labels came out at
+ * 8.75px and 12px helper text at 7.5px. The drawer was legible only because the
+ * rest of its chrome is authored in px, which made the result a mismatched
+ * blend of correct-size and two-thirds-size text rather than an obviously
+ * broken layout.
+ *
+ * `rem` always resolves against the root element, so no amount of scoping under
+ * `.tr-root` can fix this — the root font size itself has to be right.
+ *
+ * Bricks' builder chrome is authored in px almost throughout: with this rule
+ * applied, 400 toolbar / panel / structure elements were measured (position,
+ * size, font-size, padding, line-height) against Bricks 2.3.12 and not one of
+ * them changed. The 62.5% convention still matters for the page being edited,
+ * and that is unaffected: Bricks renders the canvas in its own iframe, which
+ * keeps its own document and its own 10px root.
+ *
+ * "Almost" — `builder.min.css` has exactly two rem-authored declarations, both
+ * inside popups that are absent from the DOM until opened, which is why the
+ * sweep above could not see them. They are pinned back to their 62.5% values
+ * immediately below rather than left to scale by 1.6x.
+ *
+ * No `!important` and no dependence on enqueue order: Bricks' declaration sits
+ * inside its `bricks.reset` cascade layer, and an unlayered declaration beats a
+ * layered one whatever the source order. Verified both ways round.
+ */
+html {
+	font-size: 100%;
+}
+
+/*
+ * Pin Bricks' two rem-authored builder declarations to the px values they
+ * resolved to under its own 62.5% root, so restoring the rem base above cannot
+ * resize Bricks' own UI.
+ *
+ * Bricks 2.3.12, `assets/css/builder.min.css`:
+ *   .bricks-popup.styles.variables .columns .new-variable { margin-bottom: 1rem }   // 10px
+ *   .bricks-popup.fonts … .file-info                     { padding: .75rem }        // 7.5px
+ *
+ * Selectors are copied verbatim so specificity matches Bricks' own rule and
+ * source order decides — this bundle is enqueued last. If Bricks ever converts
+ * these to px the declarations become redundant, not wrong.
+ */
+.bricks-popup.styles.variables .columns .new-variable {
+	margin-bottom: 10px;
+}
+
+/* stylelint-disable-next-line selector-max-compound-selectors */
+.bricks-popup.fonts .font-item-edit .edit-content .font-files .files-list .variation-item .variation-info .file-info {
+	padding: 7.5px;
+}
+
+// Panel — must clear Bricks' chrome.
+.thinkrank-metabox-drawer {
+	z-index: 2147483000 !important;
+}
+
+// Backdrop (the portaled overlay, aria-hidden) — sits just under the panel but
+// still above the builder chrome so the dim covers the whole editor.
+body > .tr-root > [aria-hidden="true"] {
+	z-index: 2147482999 !important;
+}
+
+// Restore border rendering inside the drawer.
+// The shared drawer's `tr-border*` utilities set only border-width and
+// border-color; the visible line comes from Tailwind Preflight's global
+// `*, ::before, ::after { border-style: solid }`, which the build scopes under
+// `.tr-root`. A host reset that zeroes borders with *type* selectors
+// (specificity 0,0,1) out-ranks Preflight's universal `*` (0,0,0) regardless of
+// load order and leaves every drawer element at border-style:none — this is
+// exactly how the Divi Visual Builder lost its drawer borders. Bricks ships its
+// own front-end reset, so re-assert `solid` under `.tr-root` (0,1,0) rather
+// than find out in the field. Elements with no border-width stay invisible,
+// exactly as Preflight intends, and the rule is scoped to this bundle.
+.tr-root *,
+.tr-root *::before,
+.tr-root *::after {
+	border-style: solid;
+}

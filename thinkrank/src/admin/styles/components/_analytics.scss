@@ -1,0 +1,854 @@
+/**
+ * Analytics Component Styles
+ *
+ * Styles for SEO Analytics & Intelligence components
+ * Following ThinkRank design patterns and utility-first approach
+ *
+ * @package ThinkRank
+ * @since 1.0.0
+ */
+
+// Import shared variables for access to design tokens
+@use "../../../shared/styles/variables" as *;
+
+/* ==========================================================================
+   ANALYTICS TAB LAYOUT
+   ========================================================================== */
+
+.thinkrank-analytics-tab {
+	// Base layout styles are handled by SettingsCard component
+}
+
+/* ==========================================================================
+   METRIC CARDS & DISPLAYS
+   ========================================================================== */
+
+// Metric card for displaying key numbers
+.thinkrank-metric-card {
+	padding: $spacing-lg;
+	background: $white;
+	border: 1px solid $border-secondary;
+	border-radius: $radius-md;
+	text-align: center;
+	transition: all 0.2s ease;
+
+	&:hover {
+		border-color: $border-primary;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+	}
+}
+
+.thinkrank-metric-value {
+	font-size: $font-size-2xl;
+	font-weight: $font-weight-bold;
+	color: $text-primary;
+	line-height: 1.2;
+	margin-bottom: $spacing-xs;
+}
+
+.thinkrank-metric-label {
+	font-size: $font-size-sm;
+	color: $text-secondary;
+	font-weight: $font-weight-medium;
+	text-transform: uppercase;
+	letter-spacing: 0.025em;
+}
+
+// Small metric displays for inline use
+.thinkrank-metric-small {
+	font-size: $font-size-sm;
+	color: $text-secondary;
+
+	.thinkrank-metric-label {
+		font-size: $font-size-xs;
+		color: $text-tertiary;
+		margin-right: $spacing-xs;
+	}
+
+	.thinkrank-metric-value {
+		font-weight: $font-weight-semibold;
+		color: $text-primary;
+	}
+}
+
+/* ==========================================================================
+   SEO HEALTH SCORE
+   ========================================================================== */
+
+.thinkrank-seo-health-card {
+
+	.thinkrank-health-score {
+		display: flex;
+		align-items: center;
+		gap: $spacing-sm;
+
+		.thinkrank-score-value {
+			font-size: $font-size-3xl;
+			font-weight: $font-weight-bold;
+			line-height: 1;
+		}
+
+		.thinkrank-score-grade {
+			font-size: $font-size-lg;
+			font-weight: $font-weight-semibold;
+			padding: $spacing-xs $spacing-sm;
+			border-radius: $radius-sm;
+			background: rgba(255, 255, 255, 0.8);
+		}
+
+		// Score color variants
+		&.thinkrank-score-success {
+
+			.thinkrank-score-value {
+				color: $success-green;
+			}
+
+			.thinkrank-score-grade {
+				background: rgba($success-green, 0.1);
+				color: $success-green;
+			}
+		}
+
+		&.thinkrank-score-warning {
+
+			.thinkrank-score-value {
+				color: $warning-orange;
+			}
+
+			.thinkrank-score-grade {
+				background: rgba($warning-orange, 0.1);
+				color: $warning-orange;
+			}
+		}
+
+		&.thinkrank-score-error {
+
+			.thinkrank-score-value {
+				color: $error-red;
+			}
+
+			.thinkrank-score-grade {
+				background: rgba($error-red, 0.1);
+				color: $error-red;
+			}
+		}
+	}
+}
+
+// Component scores grid
+.thinkrank-component-score {
+	padding: $spacing-sm;
+	background: $bg-secondary;
+	border-radius: $radius-sm;
+	text-align: center;
+
+	.thinkrank-component-name {
+		font-size: $font-size-xs;
+		color: $text-secondary;
+		margin-bottom: $spacing-xs;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+	}
+
+	.thinkrank-component-value {
+		font-size: $font-size-sm;
+		font-weight: $font-weight-semibold;
+		color: $text-primary;
+	}
+}
+
+// Recommendations list
+.thinkrank-recommendations {
+	margin-top: $spacing-md;
+
+	.thinkrank-recommendation-list {
+		list-style: none;
+		padding: 0;
+		margin: $spacing-sm 0 0 0;
+
+		.thinkrank-recommendation {
+			padding: $spacing-sm;
+			margin-bottom: $spacing-xs;
+			border-left: 3px solid $border-primary;
+			background: $bg-secondary;
+			font-size: $font-size-sm;
+
+			&.thinkrank-priority-high {
+				border-left-color: $error-red;
+				background: rgba($error-red, 0.05);
+			}
+
+			&.thinkrank-priority-medium {
+				border-left-color: $warning-orange;
+				background: rgba($warning-orange, 0.05);
+			}
+
+			&.thinkrank-priority-low {
+				border-left-color: $success-green;
+				background: rgba($success-green, 0.05);
+			}
+		}
+	}
+}
+
+/* ==========================================================================
+   TREND INDICATORS
+   ========================================================================== */
+
+.thinkrank-trend-item {
+	padding: $spacing-sm 0;
+	border-bottom: 1px solid $bg-secondary;
+
+	&:last-child {
+		border-bottom: none;
+	}
+}
+
+.thinkrank-trend-indicator {
+	display: flex;
+	align-items: center;
+	gap: $spacing-xs;
+
+	.thinkrank-trend-value {
+		font-weight: $font-weight-semibold;
+		font-size: $font-size-sm;
+	}
+
+	.thinkrank-trend-significance {
+		font-size: $font-size-xs;
+		padding: 2px $spacing-xs;
+		border-radius: $radius-sm;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+	}
+
+	// Trend direction colors
+	&.thinkrank-trend-up {
+
+		.thinkrank-trend-value {
+			color: $success-green;
+		}
+
+		.thinkrank-trend-significance.thinkrank-significance-high {
+			background: rgba($success-green, 0.1);
+			color: $success-green;
+		}
+	}
+
+	&.thinkrank-trend-down {
+
+		.thinkrank-trend-value {
+			color: $error-red;
+		}
+
+		.thinkrank-trend-significance.thinkrank-significance-high {
+			background: rgba($error-red, 0.1);
+			color: $error-red;
+		}
+	}
+
+	&.thinkrank-trend-stable {
+
+		.thinkrank-trend-value {
+			color: $text-secondary;
+		}
+	}
+}
+
+// Metric trend indicators (small, inline)
+.thinkrank-metric-trend {
+	font-size: $font-size-xs;
+	font-weight: $font-weight-medium;
+	margin-top: $spacing-xs;
+
+	&.thinkrank-trend-up {
+		color: $success-green;
+	}
+
+	&.thinkrank-trend-down {
+		color: $error-red;
+	}
+
+	&.thinkrank-trend-stable {
+		color: $text-tertiary;
+	}
+}
+
+.thinkrank-trend-summary {
+	padding: $spacing-sm;
+	background: $bg-secondary;
+	border-radius: $radius-sm;
+	font-size: $font-size-sm;
+	color: $text-secondary;
+	margin-top: $spacing-sm;
+}
+
+/* ==========================================================================
+   KEYWORD & OPPORTUNITY COMPONENTS
+   ========================================================================== */
+
+// Keyword item with indicators
+.thinkrank-keyword-item {
+
+	.thinkrank-keyword-indicators {
+		margin-top: $spacing-xs;
+		display: flex;
+		gap: $spacing-xs;
+	}
+}
+
+.thinkrank-keyword-opportunity {
+	display: flex;
+	flex-direction: column;
+	gap: $spacing-xs;
+}
+
+// Badge components
+.thinkrank-keyword-badge,
+.thinkrank-opportunity-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px $spacing-xs;
+	font-size: $font-size-xs;
+	font-weight: $font-weight-medium;
+	border-radius: $radius-sm;
+	text-transform: uppercase;
+	letter-spacing: 0.025em;
+
+	&.thinkrank-badge-success {
+		background: rgba($success-green, 0.1);
+		color: $success-green;
+	}
+
+	&.thinkrank-badge-warning {
+		background: rgba($warning-orange, 0.1);
+		color: $warning-orange;
+	}
+
+	&.thinkrank-badge-info {
+		background: rgba($primary-blue, 0.1);
+		color: $primary-blue;
+	}
+}
+
+// Status badge components for connection status
+.thinkrank-status-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px $spacing-sm;
+	font-size: $font-size-xs;
+	font-weight: $font-weight-medium;
+	border-radius: $radius-sm;
+	text-transform: uppercase;
+	letter-spacing: 0.025em;
+
+	&.thinkrank-status-configured {
+		background: rgba($success-green, 0.1);
+		color: $success-green;
+		border: 1px solid rgba($success-green, 0.2);
+	}
+
+	&.thinkrank-status-error {
+		background: rgba($error-red, 0.1);
+		color: $error-red;
+		border: 1px solid rgba($error-red, 0.2);
+	}
+
+	&.thinkrank-status-not_configured {
+		background: rgba($text-tertiary, 0.1);
+		color: $text-secondary;
+		border: 1px solid rgba($text-tertiary, 0.2);
+	}
+}
+
+/* ==========================================================================
+   QUICK WINS & OPPORTUNITIES
+   ========================================================================== */
+
+.thinkrank-quick-wins-summary {
+	text-align: right;
+
+	.thinkrank-potential-clicks {
+		font-weight: $font-weight-semibold;
+		color: $success-green;
+	}
+}
+
+.thinkrank-quick-win-item {
+	padding: $spacing-md;
+	border: 1px solid $border-secondary;
+	border-radius: $radius-md;
+	margin-bottom: $spacing-sm;
+	background: $white;
+
+	&:hover {
+		border-color: $primary-blue;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+	}
+}
+
+.thinkrank-opportunity-content {
+
+	.thinkrank-opportunity-metrics {
+		display: flex;
+		flex-direction: column;
+		gap: $spacing-xs;
+
+		.thinkrank-metric-row {
+			display: flex;
+			align-items: center;
+			gap: $spacing-xs;
+			font-size: $font-size-sm;
+
+			.thinkrank-metric-label {
+				color: $text-secondary;
+				min-width: 60px;
+			}
+
+			.thinkrank-metric-value {
+				font-weight: $font-weight-semibold;
+				color: $text-primary;
+			}
+
+			.thinkrank-metric-arrow {
+				color: $text-tertiary;
+				font-weight: $font-weight-bold;
+			}
+
+			.thinkrank-metric-target {
+				font-weight: $font-weight-semibold;
+				color: $success-green;
+			}
+		}
+	}
+}
+
+// Impact and opportunity scores
+.thinkrank-impact-score,
+.thinkrank-opportunity-score {
+	padding: $spacing-xs $spacing-sm;
+	border-radius: $radius-sm;
+	font-size: $font-size-xs;
+	font-weight: $font-weight-bold;
+	text-align: center;
+	min-width: 40px;
+
+	&.thinkrank-score-high {
+		background: rgba($success-green, 0.1);
+		color: $success-green;
+	}
+
+	&.thinkrank-score-medium {
+		background: rgba($warning-orange, 0.1);
+		color: $warning-orange;
+	}
+
+	&.thinkrank-score-low {
+		background: rgba($text-tertiary, 0.1);
+		color: $text-secondary;
+	}
+}
+
+/* ==========================================================================
+   IMPACT/EFFORT MATRIX
+   ========================================================================== */
+
+.thinkrank-matrix-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: $spacing-md;
+	margin: $spacing-lg 0;
+
+	@media (max-width: #{$breakpoint-sm - 1px}) {
+		grid-template-columns: 1fr;
+		gap: $spacing-sm;
+	}
+}
+
+.thinkrank-matrix-quadrant {
+	padding: $spacing-lg;
+	border-radius: $radius-md;
+	border: 2px solid;
+	min-height: 120px;
+
+	.thinkrank-quadrant-header {
+		margin-bottom: $spacing-md;
+
+		.thinkrank-quadrant-title {
+			font-size: $font-size-base;
+			font-weight: $font-weight-bold;
+			margin-bottom: $spacing-xs;
+		}
+
+		.thinkrank-quadrant-subtitle {
+			color: $text-secondary;
+			margin-bottom: $spacing-sm;
+		}
+
+		.thinkrank-quadrant-count {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 24px;
+			height: 24px;
+			border-radius: 50%;
+			font-size: $font-size-sm;
+			font-weight: $font-weight-bold;
+			background: rgba(255, 255, 255, 0.8);
+		}
+	}
+
+	.thinkrank-matrix-item {
+		padding: $spacing-xs;
+		margin-bottom: $spacing-xs;
+		background: rgba(255, 255, 255, 0.5);
+		border-radius: $radius-sm;
+		font-size: $font-size-sm;
+
+		&:last-child {
+			margin-bottom: 0;
+		}
+	}
+
+	// Quadrant color variants
+	&.thinkrank-quadrant-quick-wins {
+		border-color: $success-green;
+		background: rgba($success-green, 0.05);
+
+		.thinkrank-quadrant-title {
+			color: $success-green;
+		}
+
+		.thinkrank-quadrant-count {
+			background: $success-green;
+			color: $white;
+		}
+	}
+
+	&.thinkrank-quadrant-major-projects {
+		border-color: $primary-blue;
+		background: rgba($primary-blue, 0.05);
+
+		.thinkrank-quadrant-title {
+			color: $primary-blue;
+		}
+
+		.thinkrank-quadrant-count {
+			background: $primary-blue;
+			color: $white;
+		}
+	}
+
+	&.thinkrank-quadrant-fill-ins {
+		border-color: $text-tertiary;
+		background: rgba($text-tertiary, 0.05);
+
+		.thinkrank-quadrant-title {
+			color: $text-secondary;
+		}
+
+		.thinkrank-quadrant-count {
+			background: $text-tertiary;
+			color: $white;
+		}
+	}
+
+	&.thinkrank-quadrant-avoid {
+		border-color: $error-red;
+		background: rgba($error-red, 0.05);
+
+		.thinkrank-quadrant-title {
+			color: $error-red;
+		}
+
+		.thinkrank-quadrant-count {
+			background: $error-red;
+			color: $white;
+		}
+	}
+}
+
+.thinkrank-matrix-recommendations {
+	margin-top: $spacing-lg;
+	padding: $spacing-md;
+	background: $bg-secondary;
+	border-radius: $radius-md;
+	border-left: 4px solid $primary-blue;
+}
+
+/* ==========================================================================
+   INSIGHTS COMPONENTS
+   ========================================================================== */
+
+.thinkrank-insight-item {
+	padding: $spacing-md;
+	border: 1px solid $border-secondary;
+	border-radius: $radius-md;
+	margin-bottom: $spacing-sm;
+	background: $white;
+
+	&:hover {
+		border-color: $border-primary;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+	}
+
+	// Impact level styling
+	&.thinkrank-impact-high {
+		border-left: 4px solid $error-red;
+	}
+
+	&.thinkrank-impact-medium {
+		border-left: 4px solid $warning-orange;
+	}
+
+	&.thinkrank-impact-low {
+		border-left: 4px solid $text-tertiary;
+	}
+}
+
+.thinkrank-insight-header {
+	margin-bottom: $spacing-sm;
+}
+
+.thinkrank-insight-meta {
+	display: flex;
+	align-items: center;
+	gap: $spacing-xs;
+}
+
+.thinkrank-impact-badge {
+	padding: 2px $spacing-xs;
+	font-size: $font-size-xs;
+	font-weight: $font-weight-medium;
+	border-radius: $radius-sm;
+	text-transform: uppercase;
+	letter-spacing: 0.025em;
+
+	&.thinkrank-impact-high {
+		background: rgba($error-red, 0.1);
+		color: $error-red;
+	}
+
+	&.thinkrank-impact-medium {
+		background: rgba($warning-orange, 0.1);
+		color: $warning-orange;
+	}
+
+	&.thinkrank-impact-low {
+		background: rgba($text-tertiary, 0.1);
+		color: $text-secondary;
+	}
+}
+
+.thinkrank-action-required {
+	padding: 2px $spacing-xs;
+	font-size: $font-size-xs;
+	font-weight: $font-weight-medium;
+	border-radius: $radius-sm;
+	background: rgba($primary-blue, 0.1);
+	color: $primary-blue;
+	text-transform: uppercase;
+	letter-spacing: 0.025em;
+}
+
+.thinkrank-insight-content {
+
+	.thinkrank-insight-action {
+		margin-top: $spacing-sm;
+		padding: $spacing-sm;
+		background: $bg-secondary;
+		border-radius: $radius-sm;
+		border-left: 3px solid $primary-blue;
+	}
+}
+
+/* ==========================================================================
+   LOADING STATES
+   ========================================================================== */
+
+.thinkrank-intelligence-loading {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: $spacing-xl;
+
+	.thinkrank-loading-text {
+		margin-left: $spacing-sm;
+		color: $text-secondary;
+		font-style: italic;
+	}
+}
+
+/* ==========================================================================
+   RESPONSIVE ADJUSTMENTS
+   ========================================================================== */
+
+@media (max-width: #{$breakpoint-md - 1px}) {
+
+	.thinkrank-metric-card {
+		padding: $spacing-md;
+	}
+
+	.thinkrank-metric-value {
+		font-size: $font-size-xl;
+	}
+
+	.thinkrank-health-score {
+
+		.thinkrank-score-value {
+			font-size: $font-size-2xl;
+		}
+	}
+
+	.thinkrank-quick-win-item,
+	.thinkrank-insight-item {
+		padding: $spacing-sm;
+	}
+
+	.thinkrank-opportunity-metrics {
+
+		.thinkrank-metric-row {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: $spacing-xs;
+		}
+	}
+}
+
+/* ==========================================================================
+   PRO FEATURE OVERLAY
+   Reusable blur + badge pattern for Pro-gated features
+   ========================================================================== */
+
+.thinkrank-pro-feature-wrapper {
+	position: relative;
+	overflow: hidden;
+	border-radius: $radius-md;
+}
+
+.thinkrank-pro-feature-blur {
+	filter: blur(1px);
+	pointer-events: none;
+	user-select: none;
+	opacity: 0.75;
+}
+
+.thinkrank-pro-badge-overlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 10;
+	background: rgba(255, 255, 255, 0.15);
+	backdrop-filter: blur(1px);
+
+	.thinkrank-pro-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		padding: 14px 28px;
+		background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+		color: $white;
+		font-size: 15px;
+		font-weight: $font-weight-bold;
+		border-radius: 50px;
+		border: none;
+		cursor: pointer;
+		box-shadow: 0 4px 18px rgba(234, 88, 12, 0.45);
+		text-decoration: none;
+
+		.thinkrank-pro-icon {
+			display: inline-flex;
+			align-items: center;
+		}
+	}
+
+	.thinkrank-pro-cta {
+		display: none;
+	}
+}
+
+/* ==========================================================================
+   NAV PRO BADGE — Small inline badge for sidebar navigation items
+   ========================================================================== */
+
+.thinkrank-nav-pro-badge {
+	display: inline-flex;
+	align-items: center;
+	margin-left: $spacing-xs;
+	padding: 1px $spacing-xs;
+	background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+	color: $white;
+	font-size: 9px;
+	font-weight: $font-weight-bold;
+	border-radius: $radius-sm;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	line-height: 1.4;
+	vertical-align: middle;
+}
+
+/* ==========================================================================
+   INDEX STATUS TAB
+   Pie chart overview + status breakdown list for Google URL Inspection API
+   ========================================================================== */
+
+.thinkrank-index-status-tab {
+	// Tab wrapper
+}
+
+.thinkrank-index-status-content {
+	display: flex;
+	gap: $spacing-xl * 1.5;
+	align-items: center;
+	justify-content: center;
+	flex-wrap: wrap;
+}
+
+.thinkrank-index-status-chart {
+	position: relative;
+	flex-shrink: 0;
+}
+
+.thinkrank-index-status-breakdown {
+	display: flex;
+	flex-direction: column;
+	gap: $spacing-sm;
+	min-width: 260px;
+}
+
+.thinkrank-index-status-item {
+	display: flex;
+	align-items: center;
+	gap: $spacing-sm;
+	padding: $spacing-sm $spacing-md;
+	background: $bg-secondary;
+	border-radius: $radius-md;
+	border: 1px solid $border-secondary;
+	transition: all 0.2s ease;
+
+	&:hover {
+		border-color: $border-primary;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+		transform: translateY(-1px);
+	}
+}
+
+@media (max-width: #{$breakpoint-md - 1px}) {
+
+	.thinkrank-index-status-content {
+		flex-direction: column;
+		gap: $spacing-lg;
+	}
+
+	.thinkrank-index-status-chart {
+		width: 200px !important;
+		height: 200px !important;
+	}
+
+	.thinkrank-index-status-breakdown {
+		min-width: auto;
+		width: 100%;
+	}
+}

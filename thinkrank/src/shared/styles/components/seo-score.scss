@@ -1,0 +1,994 @@
+/**
+ * SEO Score Calculator Styles
+ *
+ * Styles for the comprehensive SEO scoring system
+ * Shared between admin and metabox contexts
+ *
+ * @package ThinkRank
+ * @since 1.0.0
+ */
+
+@use "../variables" as *;
+@use "../mixins" as *;
+
+/* Main Calculator Container */
+.thinkrank-seo-score-calculator {
+
+	.calculator-header {
+		margin-bottom: 20px;
+		background: #f9f9f9;
+		border-radius: 8px;
+		padding: 10px 20px;
+
+		.header-content {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 10px;
+
+			h3 {
+				margin: 0;
+				font-size: 18px;
+				font-weight: 600;
+			}
+		}
+
+		.last-calculated {
+			font-size: 12px;
+			color: #666;
+			font-style: italic;
+		}
+	}
+
+	.calculating-state {
+		text-align: center;
+		padding: 40px 20px;
+
+		.components-spinner {
+			margin-bottom: 15px;
+		}
+
+		p {
+			color: #666;
+			margin: 0;
+		}
+	}
+
+	.empty-state {
+		text-align: center;
+		padding: 60px 20px;
+
+		.empty-state-content {
+			max-width: 400px;
+			margin: 0 auto;
+
+			.empty-state-icon {
+				font-size: 48px;
+				margin-bottom: 20px;
+			}
+
+			h4 {
+				margin: 0 0 10px 0;
+				font-size: 18px;
+				color: #1e1e1e;
+			}
+
+			p {
+				color: #666;
+				line-height: 1.5;
+				margin: 0;
+			}
+		}
+	}
+}
+
+/* Score Breakdown Component */
+.thinkrank-score-breakdown {
+
+	.score-overview-card {
+		margin-bottom: 20px;
+
+		.overall-score-display {
+			display: flex;
+			align-items: center;
+			gap: 20px;
+
+			.score-circle {
+				width: 80px;
+				height: 80px;
+				border-radius: 50%;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				font-weight: 700;
+				position: relative;
+
+				&.score-excellent {
+					background: linear-gradient(135deg, #10b981, #059669);
+					color: #fff;
+				}
+
+				&.score-good {
+					background: linear-gradient(135deg, #4451ff, #4451ff);
+					color: #fff;
+				}
+
+				&.score-fair {
+					background: linear-gradient(135deg, #b54708, #b54708);
+					color: #fff;
+				}
+
+				&.score-poor {
+					background: linear-gradient(135deg, #921c13, #921c13);
+					color: #fff;
+				}
+
+				.score-number {
+					font-size: 24px;
+					line-height: 1;
+				}
+
+				.score-grade {
+					font-size: 12px;
+					opacity: 0.9;
+				}
+			}
+
+			.score-info {
+				flex: 1;
+
+				.score-description {
+					font-size: 16px;
+					font-weight: 500;
+					margin: 0 0 5px 0;
+					color: #1e1e1e;
+				}
+
+				.score-timestamp {
+					font-size: 12px;
+					color: #666;
+					margin: 0;
+				}
+			}
+		}
+	}
+
+	.score-factors-card {
+
+		.score-factors-list {
+
+			.score-factor-item {
+				border: 1px solid #e5e7eb;
+				border-radius: 8px;
+				margin-bottom: 12px;
+				overflow: hidden;
+
+				.factor-header {
+					padding: 16px;
+					cursor: pointer;
+					transition: background-color 0.2s;
+
+					&:hover {
+						background-color: #f9fafb;
+					}
+
+					// WordPress Flex component alignment
+					.components-flex {
+						width: 100%;
+						align-items: center;
+
+						// First item (factor info) - takes available space
+						.components-flex-item:first-child {
+							flex: 1;
+						}
+
+						// Second item (score container) - fixed width, right aligned
+						.components-flex-item.factor-score-container {
+							flex: 0 0 auto;
+							min-width: 80px;
+							text-align: right;
+						}
+
+						// Third item (button) - fixed width
+						.components-flex-item:last-child {
+							flex: 0 0 auto;
+							margin-left: 8px;
+						}
+					}
+
+					.factor-info {
+						display: flex;
+						align-items: center;
+						gap: 12px;
+						flex: 1;
+
+						.factor-icon {
+							font-size: 20px;
+						}
+
+						.factor-text {
+
+							.factor-label {
+								display: block;
+								font-weight: 500;
+								color: #1e1e1e;
+								margin-bottom: 2px;
+							}
+
+							.factor-description {
+								display: block;
+								font-size: 12px;
+								color: #666;
+							}
+						}
+					}
+
+					.factor-score {
+						text-align: right;
+
+						.score-value {
+							display: block;
+							font-weight: 600;
+							margin-bottom: 4px;
+							color: #1e1e1e;
+						}
+
+						.score-bar {
+							width: 100px;
+							height: 6px;
+							background-color: #e5e7eb;
+							border-radius: 3px;
+							overflow: hidden;
+
+							.score-bar-fill {
+								height: 100%;
+								transition: width 0.3s ease;
+
+								&.score-excellent {
+									background-color: #10b981;
+								}
+
+								&.score-good {
+									background-color: #4451ff;
+								}
+
+								&.score-fair {
+									background-color: #b54708;
+								}
+
+								&.score-poor {
+									background-color: #921c13;
+								}
+							}
+						}
+					}
+				}
+
+				.factor-details {
+					padding: 16px;
+					background-color: #f9fafb;
+					border-top: 1px solid #e5e7eb;
+
+					.factor-suggestions {
+						margin-bottom: 16px;
+
+						h5 {
+							margin: 0 0 8px 0;
+							font-size: 14px;
+							font-weight: 600;
+							color: #1e1e1e;
+						}
+
+						ul {
+							margin: 0;
+							padding-left: 20px;
+
+							li {
+								margin-bottom: 4px;
+								color: #374151;
+								font-size: 14px;
+							}
+						}
+					}
+
+					.factor-technical-details {
+						margin-top: 16px;
+						padding: 12px;
+						background: #f8f9fa;
+						border-radius: 4px;
+						border-left: 3px solid #007cba;
+
+						h5 {
+							margin: 0 0 8px 0;
+							font-size: 13px;
+							font-weight: 600;
+							color: #1e1e1e;
+						}
+
+						.details-list {
+
+							.detail-item {
+								display: flex;
+								align-items: center;
+								padding: 6px 0;
+								font-size: 13px;
+								color: #374151;
+
+								&::before {
+									content: "";
+									width: 4px;
+									height: 4px;
+									background: #007cba;
+									border-radius: 50%;
+									margin-right: 8px;
+									flex-shrink: 0;
+								}
+
+								&:not(:last-child) {
+									margin-bottom: 2px;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+/* Improvement Suggestions Component */
+.improvement-suggestions-card {
+	margin-bottom: 20px;
+
+	.suggestions-header {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+
+		.suggestions-icon {
+			font-size: 20px;
+		}
+
+		h4 {
+			margin: 0;
+			font-size: 16px;
+			font-weight: 600;
+		}
+	}
+
+	.suggestions-count {
+		font-size: 12px;
+		color: #666;
+		background-color: #f3f4f6;
+		padding: 4px 8px;
+		border-radius: 12px;
+	}
+
+	.no-suggestions {
+		text-align: center;
+		padding: 40px 20px;
+
+		.success-icon {
+			font-size: 48px;
+			margin-bottom: 16px;
+		}
+
+		h4 {
+			margin: 0 0 8px 0;
+			color: #10b981;
+			font-size: 18px;
+		}
+
+		p {
+			color: #666;
+			margin: 0;
+		}
+	}
+
+	.suggestions-list {
+
+		.priority-group {
+			margin-bottom: 24px;
+
+			.priority-header {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				margin: 0 0 12px 0;
+				font-size: 14px;
+				font-weight: 600;
+
+				.priority-icon {
+					font-size: 12px;
+				}
+
+				.priority-count {
+					font-size: 12px;
+					color: #666;
+					font-weight: 400;
+				}
+			}
+
+			&.priority-high .priority-header {
+				color: #921c13;
+			}
+
+			&.priority-medium .priority-header {
+				color: #b54708;
+			}
+
+			&.priority-low .priority-header {
+				color: #059669;
+			}
+
+			.suggestions-in-group {
+
+				.suggestion-item {
+					border: 1px solid #e5e7eb;
+					border-radius: 8px;
+					margin-bottom: 8px;
+
+					&.priority-high {
+						border-left: 4px solid #921c13;
+					}
+
+					&.priority-medium {
+						border-left: 4px solid #b54708;
+					}
+
+					&.priority-low {
+						border-left: 4px solid #059669;
+					}
+
+					.suggestion-content {
+						padding: 16px;
+						display: flex;
+						justify-content: space-between;
+						align-items: flex-start;
+						gap: 16px;
+
+						.suggestion-text {
+							flex: 1;
+							display: flex;
+							flex-direction: column;
+							gap: 8px;
+
+							.category-badge {
+								display: inline-block;
+								background-color: #f3f4f6;
+								color: #374151;
+								font-size: 10px;
+								font-weight: 500;
+								text-transform: uppercase;
+								padding: 2px 6px;
+								border-radius: 3px;
+								align-self: flex-start;
+							}
+
+							.suggestion-message {
+								font-size: 14px;
+								line-height: 1.5;
+								color: #374151;
+							}
+
+							.priority-badge {
+								display: inline-block;
+								font-size: 10px;
+								font-weight: 600;
+								text-transform: uppercase;
+								padding: 3px 8px;
+								align-self: flex-start;
+
+								&.priority-high {
+									background-color: #fef2f2;
+									color: #921c13;
+									border: 1px solid #fecaca;
+								}
+
+								&.priority-medium {
+									background-color: #fffbeb;
+									color: #b54708;
+									border: 1px solid #fed7aa;
+								}
+
+								&.priority-low {
+									background-color: #f0fdf4;
+									color: #059669;
+									border: 1px solid #bbf7d0;
+								}
+								border-radius: 4px;
+								margin-right: 8px;
+							}
+						}
+
+						.suggestion-actions {
+							display: flex;
+							gap: 8px;
+							flex-shrink: 0;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	.dismissed-suggestions-notice {
+		margin-top: 16px;
+	}
+}
+
+/* Responsive Design - Enhanced for restored functionality */
+@media (max-width: 768px) {
+
+	.thinkrank-score-breakdown {
+
+		.score-overview-card {
+
+			.overall-score-display {
+				flex-direction: column;
+				text-align: center;
+				gap: 16px;
+			}
+		}
+
+		.score-factors-card {
+
+			.score-factors-list {
+
+				.score-factor-item {
+
+					.factor-header {
+
+						.factor-score {
+							min-width: auto;
+
+							.score-bar {
+								width: 80px;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	.improvement-suggestions-card {
+
+		.suggestions-list {
+
+			.priority-group {
+
+				.suggestions-in-group {
+
+					.suggestion-item {
+
+						.suggestion-content {
+							flex-direction: column;
+							gap: 12px;
+
+							.suggestion-actions {
+								align-self: flex-end;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/* SEO Score Summary responsive design */
+	.seo-score-summary-card {
+
+		.analysis-section {
+
+			&.score-section {
+				flex-direction: column;
+				text-align: center;
+				gap: 20px;
+
+				.score-circle {
+					width: 100px;
+					height: 100px;
+
+					.score-number {
+						font-size: 28px;
+					}
+
+					.score-grade {
+						font-size: 16px;
+					}
+				}
+
+				.score-breakdown {
+					width: 100%;
+
+					.score-item {
+						flex-direction: column;
+						text-align: center;
+						gap: 8px;
+
+						.score-label {
+							font-size: 13px;
+						}
+
+						.score-value {
+							font-size: 13px;
+						}
+					}
+				}
+			}
+
+			&.content-analysis {
+
+				.analysis-grid {
+					grid-template-columns: 1fr;
+					gap: 12px;
+
+					.analysis-item {
+						flex-direction: column;
+						text-align: center;
+						gap: 6px;
+
+						.analysis-label {
+							font-size: 12px;
+						}
+
+						.analysis-value {
+							font-size: 12px;
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+@media (max-width: 480px) {
+
+	.seo-score-summary-card {
+
+		.analysis-section {
+
+			&.score-section {
+				padding: 16px;
+
+				.score-circle {
+					width: 80px;
+					height: 80px;
+
+					.score-number {
+						font-size: 24px;
+					}
+
+					.score-grade {
+						font-size: 14px;
+					}
+
+					.score-label {
+						font-size: 10px;
+					}
+				}
+			}
+
+			&.content-analysis {
+				padding: 16px;
+
+				h4 {
+					font-size: 14px;
+				}
+			}
+		}
+	}
+
+	.improvement-suggestions-card {
+
+		.suggestions-list {
+
+			.priority-group {
+
+				.suggestions-in-group {
+
+					.suggestion-item {
+
+						.suggestion-content {
+
+							.suggestion-text {
+
+								.suggestion-message {
+									font-size: 13px;
+								}
+
+								.priority-badge {
+									font-size: 9px;
+									padding: 2px 6px;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+/* SEO Score Summary Component - Restored from jQuery implementation */
+.seo-score-summary-card {
+	margin-bottom: 20px;
+
+	.analysis-section {
+
+		&.score-section {
+			display: flex;
+			align-items: center;
+			gap: 24px;
+			margin-bottom: 24px;
+			padding: 20px;
+			background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+			border-radius: 12px;
+			border: 1px solid #e2e8f0;
+
+			.score-circle {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				width: 120px;
+				height: 120px;
+				border-radius: 50%;
+				border: 4px solid;
+				background: #fff;
+				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+				flex-shrink: 0;
+
+				.score-number {
+					font-size: 32px;
+					font-weight: 700;
+					line-height: 1;
+					margin-bottom: 4px;
+				}
+
+				.score-grade {
+					font-size: 18px;
+					font-weight: 600;
+					line-height: 1;
+					margin-bottom: 4px;
+				}
+
+				.score-label {
+					font-size: 12px;
+					font-weight: 500;
+					text-transform: uppercase;
+					letter-spacing: 0.5px;
+					opacity: 0.8;
+				}
+
+				&.score-high {
+					border-color: #10b981;
+					color: #10b981;
+					background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+				}
+
+				&.score-medium {
+					border-color: #b54708;
+					color: #b54708;
+					background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+				}
+
+				&.score-low {
+					border-color: #921c13;
+					color: #921c13;
+					background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+				}
+			}
+
+			.score-breakdown {
+				flex: 1;
+				display: grid;
+				grid-template-columns: 1fr;
+				gap: 16px;
+
+				.score-item {
+					display: flex;
+					justify-content: space-between;
+					align-items: center;
+					padding: 12px 16px;
+					background: #fff;
+					border-radius: 8px;
+					border: 1px solid #e5e7eb;
+					box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+
+					.score-label {
+						font-weight: 600;
+						color: #374151;
+						font-size: 14px;
+					}
+
+					.score-value {
+						font-weight: 500;
+						color: #1f2937;
+						font-size: 14px;
+						padding: 4px 8px;
+						background: #f9fafb;
+						border-radius: 4px;
+						border: 1px solid #e5e7eb;
+					}
+				}
+			}
+		}
+
+		&.content-analysis {
+			padding: 20px;
+			background: #f9fafb;
+			border-radius: 8px;
+			border: 1px solid #e5e7eb;
+
+			h4 {
+				margin: 0 0 16px 0;
+				font-size: 16px;
+				font-weight: 600;
+				color: #1f2937;
+				display: flex;
+				align-items: center;
+				gap: 8px;
+
+				&::before {
+					content: "📊";
+					font-size: 18px;
+				}
+			}
+
+			.analysis-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+				gap: 16px;
+
+				.analysis-item {
+					display: flex;
+					justify-content: space-between;
+					align-items: center;
+					padding: 12px 16px;
+					background: #fff;
+					border-radius: 6px;
+					border: 1px solid #e5e7eb;
+
+					.analysis-label {
+						font-weight: 500;
+						color: #6b7280;
+						font-size: 13px;
+					}
+
+					.analysis-value {
+						font-weight: 600;
+						color: #1f2937;
+						font-size: 13px;
+					}
+
+					.analysis-note {
+						display: block;
+						font-size: 11px;
+						color: #666;
+						margin-top: 2px;
+						font-style: italic;
+					}
+				}
+			}
+		}
+	}
+}
+
+/* SEO Results Tabs Styling */
+.thinkrank-seo-results-tabs {
+	margin-top: 20px;
+
+	.components-tab-panel__tabs {
+		display: flex;
+		border-bottom: 1px solid #ddd;
+		margin-bottom: 20px;
+
+		.components-button {
+			border: none;
+			border-bottom: 2px solid transparent;
+			border-radius: 0;
+			padding: 12px 20px;
+			font-weight: 500;
+			color: #666;
+			background: none;
+			transition: all 0.2s ease;
+
+			&:hover {
+				color: #0073aa;
+				background-color: #f8f9fa;
+			}
+
+			&.is-active {
+				color: #0073aa;
+				border-bottom-color: #0073aa;
+				background-color: #fff;
+			}
+
+			.tab-title-with-badge {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+
+				.suggestion-count-badge {
+					background-color: #dc3545;
+					color: #fff;
+					font-size: 11px;
+					font-weight: 600;
+					padding: 2px 6px;
+					border-radius: 10px;
+					min-width: 18px;
+					text-align: center;
+					line-height: 1.2;
+				}
+			}
+		}
+	}
+
+	.tab-content {
+		min-height: 300px;
+
+		.no-suggestions-message {
+			text-align: center;
+			padding: 60px 20px;
+
+			.success-icon {
+				font-size: 48px;
+				margin-bottom: 16px;
+			}
+
+			h4 {
+				margin: 0 0 8px 0;
+				color: #10b981;
+				font-size: 18px;
+			}
+
+			p {
+				color: #666;
+				margin: 0;
+				font-size: 14px;
+			}
+		}
+	}
+}
+
+/* Suggestion Modal Styling */
+.thinkrank-suggestion-modal {
+
+	.modal-content {
+		margin-bottom: 20px;
+
+		.suggestion-quote {
+			background-color: #f8f9fa;
+			border-left: 4px solid #0073aa;
+			padding: 12px 16px;
+			margin: 12px 0;
+			font-style: italic;
+			color: #1e1e1e;
+		}
+
+		.guidance-section {
+			background-color: #e7f3ff;
+			border: 1px solid #b3d9ff;
+			border-radius: 6px;
+			padding: 12px;
+			margin: 12px 0;
+
+			p {
+				margin: 0;
+				color: #0073aa;
+				font-weight: 500;
+			}
+		}
+	}
+
+	.modal-actions {
+		display: flex;
+		gap: 12px;
+		justify-content: flex-end;
+		padding-top: 16px;
+		border-top: 1px solid #ddd;
+	}
+}

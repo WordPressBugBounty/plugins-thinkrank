@@ -1,0 +1,193 @@
+/* Full-page WP chrome takeover — applied when ThinkRank admin UI is active */
+
+#wpcontent:has(#thinkrank-root) {
+	padding-left: 0;
+	padding-right: 0;
+}
+
+#wpbody-content:has(#thinkrank-root) {
+	padding-bottom: 0;
+	padding-top: 0;
+}
+
+body:has(#thinkrank-root) #wpfooter {
+	display: none;
+}
+
+/* Remove WP .wrap margins so our shell fills the full width */
+body:has(#thinkrank-root) .wrap {
+	margin: 0;
+	padding: 0;
+	max-width: none;
+}
+
+/* Hide the WP-generated page <h1> — our TopBar renders it */
+body:has(#thinkrank-root) .wrap > h1:first-child {
+	display: none;
+}
+
+/* Hide admin notices inside ThinkRank pages */
+#wpbody:has(#thinkrank-root) #wpbody-content > .notice,
+#wpbody:has(#thinkrank-root) #wpbody-content > .updated,
+#wpbody:has(#thinkrank-root) #wpbody-content > .error {
+	display: none;
+}
+
+/* Pin the WP admin menu on ThinkRank full-page screens.
+   The shell uses `min-height: 100vh` with no capped height, so the inner
+   `overflow-y-auto` pane never activates and the whole document scrolls —
+   carrying the in-flow WP admin menu (`#adminmenuwrap`, `position: relative`)
+   out of view while the viewport-fixed `#adminmenuback` rail stays, leaving an
+   empty dark column.
+
+   `position: fixed` is the only value that actually pins it: `#adminmenuwrap`
+   is floated, so its containing block (`#adminmenumain`) collapses to zero
+   height — a `sticky` menu has no room to stick and scrolls away anyway. This
+   mirrors WP core's own `.sticky-menu #adminmenuwrap { position: fixed }`
+   mechanism, but applies it reliably here instead of depending on WP's
+   scroll JS. `bottom: 0` + `overflow-y: auto` keep every menu item reachable
+   when the menu is taller than the viewport.
+
+   Scoped to `#thinkrank-root` (the full-page app) so the metabox (`.tr-root`)
+   and normal WP screens are untouched; `min-width: 783px` avoids WP's
+   off-canvas mobile menu; no `!important`, so WP's own inline pin styles still
+   win for a taller-than-viewport menu. */
+@media screen and (min-width: 783px) {
+
+	body:has(#thinkrank-root) #adminmenuwrap {
+		position: fixed;
+		top: var(--wp-admin--admin-bar--height, 32px);
+		bottom: 0;
+		overflow-x: hidden;
+		overflow-y: auto;
+
+		/* Keep the menu scrollable for taller-than-viewport menus, but hide the
+		   scrollbar so the sidebar stays clean (Firefox / IE / WebKit). */
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+	}
+
+	body:has(#thinkrank-root) #adminmenuwrap::-webkit-scrollbar {
+		width: 0;
+		height: 0;
+		display: none;
+	}
+
+	/* Let WP's hover fly-out submenus escape the scroll container above.
+	   `overflow-y: auto` on #adminmenuwrap makes it clip on BOTH axes (per the
+	   CSS spec, an `auto` axis forces the other axis to clip too), which cuts
+	   off the fly-out panels WP pops out to the right for non-current top-level
+	   menu items. Promoting the hovered fly-out to `position: fixed` lifts it
+	   out of the clipping context so it renders over the page. In the normal
+	   (non-folded) menu WP does not set a viewport-relative `top` on these, so
+	   `positionAdminFlyouts()` in the admin bundle sets `top`/`left` from the
+	   hovered item's rect; the values below are only a first-paint fallback. */
+	body:has(#thinkrank-root) #adminmenu li.wp-not-current-submenu:hover .wp-submenu {
+		position: fixed;
+		left: 160px;
+	}
+}
+
+/* Ensure Inter font applies inside both admin shell and metabox */
+#thinkrank-root,
+.tr-root {
+	font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Reduced-motion ────────────────────────────────────────────────────────── */
+
+/* Honour the user's OS-level preference; collapse all durations to near-zero   */
+@media (prefers-reduced-motion: reduce) {
+
+	.tr-root *,
+	.tr-root *::before,
+	.tr-root *::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}
+
+/* ─── CSS Custom Properties — Design Token Layer ───────────────────────────── */
+
+/* These mirror the Tailwind palette and serve as a hook for a future dark-mode  */
+
+/* toggle. Dark-mode overrides are intentionally empty until the toggle ships.   */
+:root {
+
+	/* Brand */
+	--tr-color-brand: #4451ff;
+	--tr-color-brand-500: #4451ff;
+	--tr-color-brand-bg: #eef0ff;
+
+	/* Semantic */
+	--tr-color-success: #027a48;
+	--tr-color-success-bg: #ecfdf3;
+	--tr-color-warning: #b54708;
+	--tr-color-warning-bg: #fffaeb;
+	--tr-color-danger: #921c13;
+	--tr-color-danger-bg: #fef3f2;
+
+	/* Semantic surfaces */
+	--tr-bg-canvas: #fff;
+	--tr-bg-surface: #fff;
+	--tr-bg-elevated: #fff;
+
+	/* Text */
+	--tr-text-primary: #1d1d1d;
+	--tr-text-secondary: #535353;
+	--tr-text-tertiary: #5a5c5e;
+	--tr-text-muted: #5a5c5e;
+
+	/* Borders */
+	--tr-border-primary: #d5d5dd;
+	--tr-border-secondary: #e2e6f1;
+	--tr-border-base: #d5d5dd;
+	--tr-border-subtle: #e2e6f1;
+
+	/* Focus ring */
+	--tr-ring-color: #4451ff;
+	--tr-ring-width: 2px;
+
+	/* Transition */
+	--tr-duration-fast: 150ms;
+	--tr-duration-normal: 200ms;
+	--tr-easing: ease-in-out;
+}
+
+/* Dark mode hook — intentionally a no-op until the toggle feature ships */
+
+/* @media (prefers-color-scheme: dark) { :root { ... } } */
+
+/* ─── WP Admin Color Scheme Isolation ──────────────────────────────────────── */
+
+/* WP ships 6 admin color schemes that override link colour, menu highlight etc. */
+
+/* Our plugin UI is fully self-contained inside .tr-root so these bleed-throughs */
+
+/* are neutralised by Tailwind's important:.tr-root specificity.                 */
+
+/* The rule below prevents WP's focus outline colour from leaking into our shell. */
+
+/* Suppress WP is-busy button stripe animation — our plugin uses text-only loading states */
+.tr-root .components-button.is-busy,
+.tr-root .components-button.is-busy:hover,
+.tr-root .components-button.is-busy:disabled,
+.tr-root .components-button.is-busy::after {
+	animation: none !important;
+	background-image: none !important;
+}
+
+.tr-root a:focus,
+.tr-root a:focus-visible,
+.tr-root button:focus,
+.tr-root button:focus-visible,
+.tr-root input:focus,
+.tr-root select:focus,
+.tr-root textarea:focus {
+	outline: none;
+	box-shadow: none;
+}

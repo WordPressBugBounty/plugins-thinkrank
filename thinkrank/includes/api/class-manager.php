@@ -680,6 +680,14 @@ class Manager {
             // Failed to register Role Manager endpoint
         }
 
+        // Register the ThinkRank Hub connection endpoint (thinkrank#1002)
+        try {
+            $hub_endpoint = new \ThinkRank\API\Hub_Endpoint();
+            $hub_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register Hub endpoint
+        }
+
         // Register Email Report endpoints
         try {
             $email_report_endpoint = new \ThinkRank\API\Email_Report_Endpoint();
@@ -1138,6 +1146,23 @@ class Manager {
                 'success' => false,
                 'message' => __('Only an administrator can configure a custom AI endpoint.', 'thinkrank'),
                 'field' => 'ai_provider',
+            ], 403);
+        }
+
+        // Opening the MCP server is an administrator's decision too: a client
+        // connected through it acts as the administrator who approves it, with
+        // every ability that administrator may run. The route stays delegable
+        // for every other field, so only an actual change of the switch needs
+        // the capability; a payload that echoes the stored value saves as
+        // before (#1057).
+        if (isset($params['enable_mcp'])
+            && rest_sanitize_boolean($params['enable_mcp']) !== $mcp_was_enabled
+            && !current_user_can('manage_options')
+        ) {
+            return new \WP_REST_Response([
+                'success' => false,
+                'message' => __('Only an administrator can turn the MCP server on or off.', 'thinkrank'),
+                'field' => 'enable_mcp',
             ], 403);
         }
 

@@ -49,6 +49,8 @@ return [
         'thinkrank_regenerate_sitemap',
         'thinkrank_regenerate_sitemap_settings',
         'thinkrank_ai_traffic_prune',
+        'thinkrank_mcp_audit_prune',
+        'thinkrank_mcp_audit_prune_more',
         'thinkrank_instant_indexing_reconcile',
         'thinkrank_instant_indexing_submit',
         'thinkrank_email_report_tick',

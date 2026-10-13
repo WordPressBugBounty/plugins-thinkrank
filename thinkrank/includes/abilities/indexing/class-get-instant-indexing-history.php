@@ -79,8 +79,8 @@ class Get_Instant_Indexing_History extends Ability_Base {
 						'properties' => [
 							'url'              => [ 'type' => 'string' ],
 							'status'           => [ 'type' => 'string' ],
-							'response_code'    => [ 'type' => 'integer' ],
-							'response_message' => [ 'type' => 'string' ],
+							'response_code'    => [ 'type' => [ 'integer', 'null' ] ],
+							'response_message' => [ 'type' => [ 'string', 'null' ] ],
 							'created_at'       => [ 'type' => 'string' ],
 						],
 					],
@@ -102,7 +102,37 @@ class Get_Instant_Indexing_History extends Ability_Base {
 		$history = $manager->get_history( $limit );
 
 		return [
-			'history' => is_array( $history ) ? array_values( $history ) : [],
+			'history' => is_array( $history ) ? array_map( [ self::class, 'present_row' ], array_values( $history ) ) : [],
 		];
+	}
+
+	/**
+	 * One history row, with its numeric columns as numbers.
+	 *
+	 * $wpdb returns every column as a string, so `response_code` reached the
+	 * client as `"200"` where the output schema declares an integer, and
+	 * clients that validate `structuredContent` against `outputSchema` refused
+	 * the call (#1090). `response_code` and `response_message` are nullable
+	 * columns, so a NULL stays null rather than becoming 0 or "".
+	 *
+	 * @since 2.15.0
+	 *
+	 * @param mixed $row Row as $wpdb returned it.
+	 * @return mixed The row with `id` and `response_code` cast.
+	 */
+	private static function present_row( $row ) {
+		if ( ! is_array( $row ) ) {
+			return $row;
+		}
+
+		if ( isset( $row['id'] ) ) {
+			$row['id'] = (int) $row['id'];
+		}
+
+		if ( array_key_exists( 'response_code', $row ) ) {
+			$row['response_code'] = null === $row['response_code'] ? null : (int) $row['response_code'];
+		}
+
+		return $row;
 	}
 }

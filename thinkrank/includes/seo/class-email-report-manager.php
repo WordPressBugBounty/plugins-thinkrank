@@ -29,6 +29,7 @@ use ThinkRank\SEO\Email_Report_Sections\Top_Winning_Keywords_Section;
 use ThinkRank\SEO\Email_Report_Sections\Top_Losing_Keywords_Section;
 use ThinkRank\SEO\Email_Report_Sections\Site_Traffic_Section;
 use ThinkRank\SEO\Email_Report_Sections\Ai_Search_Section;
+use ThinkRank\SEO\Email_Report_Sections\Mcp_Access_Section;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -81,6 +82,7 @@ final class Email_Report_Manager {
         require_once $base . 'class-top-losing-keywords-section.php';
         require_once $base . 'class-site-traffic-section.php';
         require_once $base . 'class-ai-search-section.php';
+        require_once $base . 'class-mcp-access-section.php';
 
         // Defaults config is procedural — load eagerly.
         require_once THINKRANK_PLUGIN_DIR . 'includes/config/email-report-settings-config.php';
@@ -112,6 +114,7 @@ final class Email_Report_Manager {
         $this->registry->register(new Position_Summary_Section());
         $this->registry->register(new Site_Traffic_Section());
         $this->registry->register(new Ai_Search_Section());
+        $this->registry->register(new Mcp_Access_Section());
     }
 
     private function register_extension_sections(): void {

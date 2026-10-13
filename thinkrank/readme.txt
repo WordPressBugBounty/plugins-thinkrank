@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.14.3
+Stable tag: 2.15.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -12,7 +12,7 @@ WordPress SEO plugin with AI SEO: meta descriptions, schema, XML sitemaps, Searc
 
 == Description ==
 
-**[ThinkRank](https://thinkrank.ai/) is the AI SEO plugin for WordPress that your AI assistant can operate.** Ask Claude, ChatGPT, or Cursor to write metadata, audit posts, fix schema, and run bulk SEO work on your site - in plain language, from the chat window you already use. Underneath sits a complete SEO plugin: meta tags (SEO titles and meta descriptions), real-time on-page content analysis, keyword optimization, schema markup and structured data, XML sitemaps, robots meta, canonical URLs, Open Graph and Twitter Cards, Local SEO, llms.txt, and Google Search Console + GA4 insights - built for Google and for AI search (AEO and GEO) alike.
+**[ThinkRank](https://thinkrank.ai/) is the AI SEO plugin for WordPress that your AI assistant can operate.** Ask Claude, ChatGPT, or Cursor to write metadata, audit posts, fix schema, and run bulk SEO work on your site - in plain language, from the chat window you already use. Underneath sits a complete SEO plugin: meta tags (SEO titles and meta descriptions), real-time on-page content analysis, keyword optimization, schema markup and structured data, XML sitemaps, robots meta, canonical URLs, Open Graph and Twitter Cards, Local SEO, llms.txt, and Google Search Console insights - built for Google and for AI search (AEO and GEO) alike.
 
 Two things make ThinkRank different, and both are checkable:
 
@@ -92,10 +92,11 @@ SEO fields in the WPML Translation Editor, correct `og:locale` alternates, hrefl
 * **llms.txt generator** - a maintained Markdown index of your key content for AI agents and tools. Google has said llms.txt does not affect Google Search, so we ship it as infrastructure, not a ranking lever.
 * **An AI assistant in the loop** - ask Claude or ChatGPT to review a page the way an answer engine reads it, and apply the fixes from the same chat.
 
-= Google Search Console, GA4 and SEO Insights =
+= Google Search Console and SEO Insights =
 
 * Google Search Console clicks, impressions, queries, and keyword opportunities inside WordPress, plus a **Website Insights dashboard widget** for your last 30 days.
-* Google Analytics 4 traffic and organic performance, PageSpeed Insights and Core Web Vitals monitoring, and scheduled email SEO reports.
+* PageSpeed Insights and Core Web Vitals monitoring, and scheduled email SEO reports.
+* Google Analytics 4 (GA4) traffic and engagement data is a ThinkRank Pro feature - see below.
 
 = On-Page & Technical SEO: Robots Meta, Canonical URLs, Robots.txt, Breadcrumbs =
 
@@ -128,7 +129,8 @@ Upgrade to **ThinkRank Pro** for advanced SEO automation, also available to your
 * **AI Internal Linking** - relevance-ranked suggestions with one-click insertion.
 * **Rank Tracker** - daily keyword positions from Search Console with history charts.
 * **Custom Schema & Display Conditions**, **Advanced WooCommerce SEO** (GTIN/MPN/ISBN, variation offers) and **Multi-location Local SEO**.
-* **News and Video sitemaps**, additional focus keywords, and **Advanced Analytics** for GA4 and URL index status.
+* **Google Analytics 4 (GA4)** - connect your GA4 account, property, and data stream for traffic, users, and engagement on the dashboard and in email reports, plus the optional GA4 tracking code.
+* **News and Video sitemaps**, additional focus keywords, and URL index status.
 
 = Why Choose ThinkRank? =
 
@@ -157,7 +159,7 @@ Upgrade to **ThinkRank Pro** for advanced SEO automation, also available to your
 1. Open the ThinkRank Setup Wizard.
 2. Import existing SEO data from Rank Math, Yoast SEO, AIOSEO, SEOPress, Squirrly SEO, or Slim SEO if needed.
 3. Choose your AI provider and enter your API key for AI features.
-4. Configure metadata, schema, XML sitemaps, robots meta, canonical URLs, social meta, Search Console, GA4, and llms.txt.
+4. Configure metadata, schema, XML sitemaps, robots meta, canonical URLs, social meta, Search Console, and llms.txt (GA4 with ThinkRank Pro).
 5. (Optional) Enable the MCP server under ThinkRank → MCP and connect Claude, ChatGPT, or Cursor.
 
 **Connect the MCP Server**
@@ -174,7 +176,7 @@ Upgrade to **ThinkRank Pro** for advanced SEO automation, also available to your
 
 = What is ThinkRank? =
 
-ThinkRank is an AI SEO plugin for WordPress that helps manage metadata, on-page SEO, technical SEO, schema markup, XML sitemaps, robots meta, canonical URLs, Open Graph social meta, Google Search Console insights, GA4 analytics, llms.txt, and AI-powered SEO recommendations. It also includes a built-in MCP server so AI assistants like Claude, ChatGPT, and Cursor can help run SEO tasks in plain language.
+ThinkRank is an AI SEO plugin for WordPress that helps manage metadata, on-page SEO, technical SEO, schema markup, XML sitemaps, robots meta, canonical URLs, Open Graph social meta, Google Search Console insights, llms.txt, and AI-powered SEO recommendations. It also includes a built-in MCP server so AI assistants like Claude, ChatGPT, and Cursor can help run SEO tasks in plain language.
 
 = What is the ThinkRank MCP server? =
 
@@ -210,7 +212,7 @@ Yes. The Role Manager lets you decide which roles can access Essential SEO, AI T
 
 = Do I need an AI API key to use ThinkRank? =
 
-You don't need an AI key for every core SEO feature. Metadata fields, schema controls, XML sitemaps, robots meta, canonical URLs, breadcrumbs, Open Graph, the Site SEO Analyzer, multilingual output, page-builder integrations, and Search Console/GA4 connections work without AI generation. AI-powered features - AI metadata generation, content briefs, AI insights, and generative MCP tools - require your own OpenAI, Claude, Gemini, or OpenRouter API key.
+You don't need an AI key for every core SEO feature. Metadata fields, schema controls, XML sitemaps, robots meta, canonical URLs, breadcrumbs, Open Graph, the Site SEO Analyzer, multilingual output, page-builder integrations, and the Search Console connection work without AI generation. AI-powered features - AI metadata generation, content briefs, AI insights, and generative MCP tools - require your own OpenAI, Claude, Gemini, or OpenRouter API key.
 
 = Which AI providers and models does ThinkRank support? =
 
@@ -238,7 +240,7 @@ llms.txt is an emerging convention: a Markdown index of your important content, 
 
 = Does ThinkRank work with Google Search Console and GA4? =
 
-Yes. ThinkRank connects with Google Search Console to show clicks, impressions, queries, and keyword opportunities inside WordPress - including a dashboard widget with your last 30 days of traffic - and supports GA4 for traffic and organic-performance insights.
+Yes. ThinkRank connects with Google Search Console to show clicks, impressions, queries, and keyword opportunities inside WordPress - including a dashboard widget with your last 30 days of traffic. Google Analytics 4 (GA4) is a ThinkRank Pro feature: Pro lets you pick your GA4 account, property, and data stream and adds GA4 traffic and engagement data to the dashboard and email reports.
 
 = Does ThinkRank support Open Graph, canonical URLs and noindex? =
 
@@ -246,7 +248,7 @@ Yes. ThinkRank includes Open Graph and social meta controls for Facebook, Linked
 
 = Is ThinkRank a Yoast, Rank Math, AIOSEO or SEOPress alternative? =
 
-Yes. ThinkRank covers the core SEO those plugins cover - metadata, schema, XML sitemaps, robots meta, canonical URLs, Search Console and GA4 insights - plus two things they don't sell at any price: an AI-assistant connection that operates the plugin directly, and AI features at a flat price with your own key instead of metered credits. The Setup Wizard imports your existing Rank Math, Yoast, AIOSEO, or SEOPress data and can deactivate the old plugin once migration completes.
+Yes. ThinkRank covers the core SEO those plugins cover - metadata, schema, XML sitemaps, robots meta, canonical URLs, Search Console insights - plus two things they don't sell at any price: an AI-assistant connection that operates the plugin directly, and AI features at a flat price with your own key instead of metered credits. The Setup Wizard imports your existing Rank Math, Yoast, AIOSEO, or SEOPress data and can deactivate the old plugin once migration completes.
 
 = Can I migrate from AIOSEO, SEOPress, Squirrly SEO or Slim SEO? =
 
@@ -293,6 +295,12 @@ Optional. If you choose the "Custom endpoint" AI provider and enter a base URL, 
 
 Clicking Connect Google (Search Console, GA4) signs in through api.thinkrank.ai, which holds ThinkRank's Google app credentials. It receives your site URL and a one-time sign-in code on connect, and your Google refresh token whenever the access token is renewed. [Terms](https://thinkrank.ai/terms-and-conditions/), [Privacy](https://thinkrank.ai/privacy-policy/)
 
+= ThinkRank Hub (hub.thinkrank.ai, optional) =
+
+Only if you click Connect to ThinkRank Hub under ThinkRank > AI Tools > ThinkRank Hub, or on the Setup Wizard's ThinkRank Hub step. Connecting turns on MCP access and sends your browser to hub.thinkrank.ai with this site's address and a one-time ticket. You then approve the hub on this site's own approval page, the way any AI client is approved, choosing for each area whether the hub can read only or also make changes it can undo. At the approval the site tells the hub its address, its blog ID and the ThinkRank (and ThinkRank Pro) versions.
+
+Under that approval, within the areas you approve, the hub and the AI assistants you connect to the hub can read over MCP: SEO Analyzer reports, settings, posts' and pages' content and SEO fields, Search Console, Google Analytics and PageSpeed data, indexing history and the MCP activity log. The hub keeps the reports and figures it reads, never your posts' content. With changes allowed, they make only the changes the approval and ThinkRank allow, each recorded in the MCP activity log where it can be reverted. The hub also checks this site's public pages from outside (the home page, robots.txt, the sitemap and llms.txt) to report uptime and crawlability. No license key, AI provider key or Google token travels. Connecting is optional: every feature works without the hub, and you can end its access at any time with Disconnect on the same screen. [Terms](https://thinkrank.ai/terms-and-conditions/), [Privacy](https://thinkrank.ai/privacy-policy/)
+
 = Google APIs: Search Console, Analytics Data, PageSpeed Insights, OAuth =
 
 After you connect Google or add a PageSpeed Insights key, ThinkRank sends your access token or API key, your Search Console or GA4 property, and page URLs to test, to www.googleapis.com and analyticsdata.googleapis.com - when you open analytics or performance screens or the dashboard widget, and when scheduled reports or checks run. Disconnecting sends the token to oauth2.googleapis.com to revoke it. [Terms](https://developers.google.com/terms), [Privacy](https://policies.google.com/privacy)
@@ -303,15 +311,17 @@ Only with Instant Indexing on: your host name, IndexNow key and key file locatio
 
 = WP Insights usage tracking (send.wpinsight.com, opt-in) =
 
-Nothing is sent unless you opt in, from the admin notice or "Get Started" in the Setup Wizard. Then, on opt-in and daily after: site URL and name, admin email, WordPress, PHP and server versions, active and inactive plugins, active theme, the plugin's file path, which ThinkRank features you use, and a country on the first send. Optional deactivation feedback is sent too. The email may be used for ThinkRank news and offers. [Terms](https://wpdeveloper.com/terms-and-conditions/), [Privacy](https://wpdeveloper.com/privacy-policy/)
-
-= ip-api.com country lookup =
-
-Only on WP Insights' first send after opt-in: the IP address of that request (normally yours) is sent to look up a country name. Nothing else is sent. [Terms and privacy](https://ip-api.com/docs/legal)
+Nothing is sent unless you opt in, from the admin notice or by choosing "Allow & Continue" on the Setup Wizard's first step ("Skip" sends nothing). Then, on opt-in and daily after: site URL and name, admin email, WordPress, PHP and server versions, active and inactive plugins, active theme, the plugin's file path, and which ThinkRank features you use. Optional deactivation feedback is sent too. The email may be used for ThinkRank news and offers. [Terms](https://wpdeveloper.com/terms-and-conditions/), [Privacy](https://wpdeveloper.com/privacy-policy/)
 
 = Websites you enter =
 
 Content brief competitor analysis and schema import fetch the URLs you type in, from your server. Nothing else is sent to those sites.
+
+== Source code and build ==
+
+The JavaScript and CSS in `assets/` are compiled. Their human-readable source ships with the plugin in `src/`.
+
+The assets are built from `src/` with `@wordpress/scripts` (webpack), which writes the compiled files to `assets/`.
 
 == Screenshots ==
 
@@ -322,10 +332,24 @@ Content brief competitor analysis and schema import fetch the URLs you type in, 
 5. Schema Manager - choose Article, FAQ, Local Business, or Review schema with validation.
 6. XML Sitemap generator - Basic, Complete, E-commerce, and Segmented modes with post-type controls.
 7. llms.txt generator - a maintained Markdown index of your content for AI agents and tools.
-8. Google Search Console & GA4 insights with Core Web Vitals inside WordPress.
+8. Google Search Console insights with Core Web Vitals inside WordPress.
 9. AI Content Brief Generator with competitor analysis and content gaps.
 
 == Changelog ==
+
+= 2.15.0 =
+Release Date: 2026-10-13
+
+- New: Connect to ThinkRank Hub from AI Tools or the setup wizard to see every site's SEO in one place
+- New: The MCP activity log records every AI change with what it replaced, and lets you revert it
+- New: Each AI connection gets Read or Read & Write access per area and an expiry under Connected AI apps
+- New: The MCP connection check runs on its own when the MCP tab opens
+- New: AI assistants can apply the SEO Analyzer's one-click fixes and undo them
+- Improved: The setup wizard offers ThinkRank Hub, and the onboarding call moved to the Ready step
+- Improved: The deactivation feedback dialog uses the native WordPress design
+- Changed: The MCP address with the token in its path is removed; connect with the bearer header instead
+- Fixed: The MCP activity log now works on WordPress 6.0 and 6.1
+- Fixed: Revoke all access keeps app registrations, so ChatGPT and other clients reconnect
 
 = 2.14.3 =
 Release Date: 2026-10-11
@@ -383,23 +407,12 @@ Release Date: 2026-10-06
 - Fixed: Media no longer appears in Bulk SEO Optimization when attachment pages are turned off
 - Fixed: MCP connection check catches more host blocks, and FAQ tools no longer write to Oxygen pages
 
-= 2.13.0 =
-Release Date: 2026-10-04
-
-- New: Import your SEO data from Slim SEO, including Slim SEO Pro's focus keywords
-- New: Homepage Meta Description setting in Site Identity
-- Improved: Imported titles keep their variables, so a site rename or new separator still applies
-- Fixed: Organization schema edits now appear on the page without a manual redeploy
-- Fixed: Imported homepage descriptions and social profiles now appear on the site
-- Fixed: Quick Setup now imports 404 logs and names every data type it imports
-- Fixed: Minor migration issues with term titles, separators and cleanup warnings
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.15.0 =
+Connect to ThinkRank Hub, an MCP activity log with revert, per-area access and expiring tokens for every AI connection. The token-in-path MCP address is removed: any client still using it must reconnect with the bearer header. Recommended for all sites.
+
 = 2.14.3 =
 Schema names and breadcrumbs drop stray HTML entities, Organization schema keeps the Site Identity logo, LocalBusiness subtypes deploy, and sitemap image captions stay valid XML. Recommended for all sites.
-
-= 2.14.2 =
-Word counts and readability now ignore shortcode syntax, the AI crawler check catches Disallow: * blocks, and non-Latin URLs and Search Console domain properties are accepted. Recommended for all sites.

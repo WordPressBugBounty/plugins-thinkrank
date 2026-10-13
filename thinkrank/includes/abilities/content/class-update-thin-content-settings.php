@@ -54,16 +54,23 @@ class Update_Thin_Content_Settings extends Ability_Base {
 	 * @return array<string, mixed>
 	 */
 	public function get_input_schema() {
-		$properties = [];
-		foreach ( Thin_Content::post_types() as $post_type ) {
-			$properties[ $post_type ] = [
-				'type'        => [ 'integer', 'null' ],
-				'minimum'     => Thin_Content::MIN_THRESHOLD,
-				'maximum'     => Thin_Content::MAX_THRESHOLD,
-				/* translators: %s: post type slug. */
-				'description' => sprintf( __( 'Threshold for %s, or null to use the default.', 'thinkrank' ), $post_type ),
-			];
-		}
+		$threshold = [
+			'type'    => [ 'integer', 'null' ],
+			'minimum' => Thin_Content::MIN_THRESHOLD,
+			'maximum' => Thin_Content::MAX_THRESHOLD,
+		];
+
+		// The map is described by its values, never by the site's post types:
+		// a per-type list differs between the release manifest (built with
+		// none) and every site, and the hub stops a tool whose schemas
+		// disagree (#1066). execute() refuses a key that is not a post type
+		// we report on.
+		$overrides = [
+			'type'                 => 'object',
+			'additionalProperties' => $threshold + [
+				'description' => __( 'Threshold for the post type named by the key (a slug from list-content-types), or null to use the default.', 'thinkrank' ),
+			],
+		];
 
 		return [
 			'type'                 => 'object',
@@ -75,11 +82,8 @@ class Update_Thin_Content_Settings extends Ability_Base {
 					'maximum'     => Thin_Content::MAX_THRESHOLD,
 					'description' => __( 'Threshold for every post type without an override. 300 by default, the same number the Site SEO Analyzer depth check uses.', 'thinkrank' ),
 				],
-				'overrides' => [
-					'type'                 => 'object',
-					'additionalProperties' => false,
-					'properties'           => $properties,
-					'description'          => __( 'Per-post-type thresholds. Only the post types sent are changed; the rest keep what they have.', 'thinkrank' ),
+				'overrides' => $overrides + [
+					'description' => __( 'Per-post-type thresholds. Only the post types sent are changed; the rest keep what they have.', 'thinkrank' ),
 				],
 			],
 		];
@@ -122,6 +126,18 @@ class Update_Thin_Content_Settings extends Ability_Base {
 		}
 
 		if ( isset( $input['overrides'] ) && is_array( $input['overrides'] ) ) {
+			$unknown = array_diff( array_map( 'strval', array_keys( $input['overrides'] ) ), Thin_Content::post_types() );
+			if ( [] !== $unknown ) {
+				return new \WP_Error(
+					'thinkrank_invalid_post_type',
+					sprintf(
+						/* translators: %s: comma-separated post type slugs. */
+						__( 'Not a post type ThinkRank reports on: %s. Use list-content-types for valid slugs.', 'thinkrank' ),
+						implode( ', ', $unknown )
+					),
+					[ 'status' => 400 ]
+				);
+			}
 			$payload['overrides'] = $input['overrides'];
 		}
 

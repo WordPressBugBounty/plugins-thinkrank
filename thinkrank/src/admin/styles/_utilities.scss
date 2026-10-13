@@ -1,0 +1,1946 @@
+/**
+ * Utility Classes
+ *
+ * Tailwind-inspired utility classes for rapid development
+ * All utilities are prefixed with 'thinkrank-' to avoid conflicts
+ *
+ * @package ThinkRank
+ * @since 1.0.0
+ */
+
+// Import shared variables for access to design tokens
+@use "../../shared/styles/variables" as *;
+
+/* ==========================================================================
+   SPACING UTILITIES
+   ========================================================================== */
+
+// Generate spacing utilities using the spacing scale
+@each $key, $value in $spacing-scale {
+	// Margin utilities
+	.thinkrank-m-#{$key} {
+		margin: #{$value} !important;
+	}
+	.thinkrank-mt-#{$key} {
+		margin-top: #{$value} !important;
+	}
+	.thinkrank-mb-#{$key} {
+		margin-bottom: #{$value} !important;
+	}
+	.thinkrank-ml-#{$key} {
+		margin-left: #{$value} !important;
+	}
+	.thinkrank-mr-#{$key} {
+		margin-right: #{$value} !important;
+	}
+	.thinkrank-mx-#{$key} {
+		margin-left: #{$value} !important;
+		margin-right: #{$value} !important;
+	}
+	.thinkrank-my-#{$key} {
+		margin-top: #{$value} !important;
+		margin-bottom: #{$value} !important;
+	}
+
+	// Padding utilities
+	.thinkrank-p-#{$key} {
+		padding: #{$value} !important;
+	}
+	.thinkrank-pt-#{$key} {
+		padding-top: #{$value} !important;
+	}
+	.thinkrank-pb-#{$key} {
+		padding-bottom: #{$value} !important;
+	}
+	.thinkrank-pl-#{$key} {
+		padding-left: #{$value} !important;
+	}
+	.thinkrank-pr-#{$key} {
+		padding-right: #{$value} !important;
+	}
+	.thinkrank-px-#{$key} {
+		padding-left: #{$value} !important;
+		padding-right: #{$value} !important;
+	}
+	.thinkrank-py-#{$key} {
+		padding-top: #{$value} !important;
+		padding-bottom: #{$value} !important;
+	}
+}
+
+// Auto margins
+.thinkrank-m-auto {
+	margin: auto !important;
+}
+
+.thinkrank-mx-auto {
+	margin-left: auto !important;
+	margin-right: auto !important;
+}
+
+.thinkrank-my-auto {
+	margin-top: auto !important;
+	margin-bottom: auto !important;
+}
+
+// Space between utilities (for child elements)
+.thinkrank-space-y-1 > * + * {
+	margin-top: 0.25rem !important;
+}
+
+.thinkrank-space-y-2 > * + * {
+	margin-top: 0.5rem !important;
+}
+
+.thinkrank-space-y-3 > * + * {
+	margin-top: 0.75rem !important;
+}
+
+.thinkrank-space-y-4 > * + * {
+	margin-top: 1rem !important;
+}
+
+.thinkrank-space-y-6 > * + * {
+	margin-top: 1.5rem !important;
+}
+
+.thinkrank-space-x-1 > * + * {
+	margin-left: 0.25rem !important;
+}
+
+.thinkrank-space-x-2 > * + * {
+	margin-left: 0.5rem !important;
+}
+
+.thinkrank-space-x-3 > * + * {
+	margin-left: 0.75rem !important;
+}
+
+/* ==========================================================================
+   LAYOUT UTILITIES
+   ========================================================================== */
+
+// Display utilities
+.thinkrank-block {
+	display: block !important;
+}
+
+.thinkrank-inline-block {
+	display: inline-block !important;
+}
+
+.thinkrank-inline {
+	display: inline !important;
+}
+
+.thinkrank-flex {
+	display: flex !important;
+}
+
+.thinkrank-inline-flex {
+	display: inline-flex !important;
+}
+
+.thinkrank-grid {
+	display: grid !important;
+}
+
+.thinkrank-inline-grid {
+	display: inline-grid !important;
+}
+
+.thinkrank-hidden {
+	display: none !important;
+}
+
+// Position utilities
+.thinkrank-static {
+	position: static !important;
+}
+
+.thinkrank-relative {
+	position: relative !important;
+}
+
+.thinkrank-absolute {
+	position: absolute !important;
+}
+
+.thinkrank-fixed {
+	position: fixed !important;
+}
+
+.thinkrank-sticky {
+	position: sticky !important;
+}
+
+// Position values
+.thinkrank-top-0 {
+	top: 0 !important;
+}
+
+.thinkrank-top-3 {
+	top: 0.75rem !important;
+}
+
+.thinkrank-top-4 {
+	top: 1rem !important;
+}
+
+.thinkrank-top-6 {
+	top: 1.5rem !important;
+}
+
+.thinkrank-right-0 {
+	right: 0 !important;
+}
+
+.thinkrank-right-3 {
+	right: 0.75rem !important;
+}
+
+.thinkrank-right-4 {
+	right: 1rem !important;
+}
+
+.thinkrank-bottom-0 {
+	bottom: 0 !important;
+}
+
+.thinkrank-left-0 {
+	left: 0 !important;
+}
+
+// Z-index utilities
+.thinkrank-z-10 {
+	z-index: 10 !important;
+}
+
+// Focus utilities
+.thinkrank-focus\:border-blue:focus {
+	border-color: $primary-blue !important;
+}
+
+.thinkrank-focus\:ring-2:focus {
+	box-shadow: 0 0 0 2px rgba($primary-blue, 0.2) !important;
+}
+
+.thinkrank-focus\:ring-blue:focus {
+	--thinkrank-ring-color: #{$primary-blue};
+}
+
+.thinkrank-focus\:ring-opacity-20:focus {
+	--thinkrank-ring-opacity: 0.2;
+}
+
+// Min height utilities
+.thinkrank-min-h-32 {
+	min-height: 8rem !important;
+}
+
+// Animation utilities
+.thinkrank-animate-spin {
+	animation: thinkrank-spin 1s linear infinite !important;
+}
+
+@keyframes thinkrank-spin {
+
+	from {
+		transform: rotate(0deg);
+	}
+
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+// Screen reader utilities
+.thinkrank-sr-only {
+	position: absolute !important;
+	width: 1px !important;
+	height: 1px !important;
+	padding: 0 !important;
+	margin: -1px !important;
+	overflow: hidden !important;
+	clip: rect(0, 0, 0, 0) !important;
+	white-space: nowrap !important;
+	border: 0 !important;
+}
+
+// Additional utilities for AI components
+.thinkrank-max-w-lg {
+	max-width: 32rem !important;
+}
+
+.thinkrank-max-w-sm {
+	max-width: 24rem !important;
+}
+
+.thinkrank-max-h-80 {
+	max-height: 20rem !important;
+}
+
+.thinkrank-max-h-96 {
+	max-height: 24rem !important;
+}
+
+.thinkrank-max-h-160 {
+	max-height: 40rem !important;
+}
+
+.thinkrank-max-h-screen-75 {
+	max-height: 75vh !important;
+}
+
+.thinkrank-overflow-y-auto {
+	overflow-y: auto !important;
+}
+
+.thinkrank-font-mono {
+	font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace !important;
+}
+
+.thinkrank-truncate {
+	overflow: hidden !important;
+	text-overflow: ellipsis !important;
+	white-space: nowrap !important;
+}
+
+.thinkrank-py-0\.5 {
+	padding-top: 0.125rem !important;
+	padding-bottom: 0.125rem !important;
+}
+
+.thinkrank-h-6 {
+	height: 1.5rem !important;
+}
+
+.thinkrank-w-3 {
+	width: 0.75rem !important;
+}
+
+.thinkrank-h-3 {
+	height: 0.75rem !important;
+}
+
+// Gray text utilities
+.thinkrank-text-gray-400 {
+	color: $text-tertiary !important;
+}
+
+.thinkrank-text-gray-500 {
+	color: $text-tertiary !important;
+}
+
+.thinkrank-text-gray-600 {
+	color: $text-secondary !important;
+}
+
+.thinkrank-text-gray-700 {
+	color: $text-secondary !important;
+}
+
+// Hover utilities
+.hover\:thinkrank-underline:hover {
+	text-decoration: underline !important;
+}
+
+.hover\:thinkrank-text-gray-700:hover {
+	color: $text-secondary !important;
+}
+
+.hover\:thinkrank-text-red-dark:hover {
+	color: $error-red !important;
+}
+
+/* ==========================================================================
+   FLEXBOX UTILITIES
+   ========================================================================== */
+
+// Flex direction
+.thinkrank-flex-row {
+	flex-direction: row !important;
+}
+
+.thinkrank-flex-row-reverse {
+	flex-direction: row-reverse !important;
+}
+
+.thinkrank-flex-col {
+	flex-direction: column !important;
+}
+
+.thinkrank-flex-col-reverse {
+	flex-direction: column-reverse !important;
+}
+
+// Flex wrap
+.thinkrank-flex-wrap {
+	flex-wrap: wrap !important;
+}
+
+.thinkrank-flex-wrap-reverse {
+	flex-wrap: wrap-reverse !important;
+}
+
+.thinkrank-flex-nowrap {
+	flex-wrap: nowrap !important;
+}
+
+// Flex grow/shrink
+.thinkrank-flex-1 {
+	flex: 1 1 0% !important;
+}
+
+.thinkrank-flex-auto {
+	flex: 1 1 auto !important;
+}
+
+.thinkrank-flex-initial {
+	flex: 0 1 auto !important;
+}
+
+.thinkrank-flex-none {
+	flex: none !important;
+}
+
+.thinkrank-flex-grow {
+	flex-grow: 1 !important;
+}
+
+.thinkrank-flex-grow-0 {
+	flex-grow: 0 !important;
+}
+
+.thinkrank-flex-shrink {
+	flex-shrink: 1 !important;
+}
+
+.thinkrank-flex-shrink-0 {
+	flex-shrink: 0 !important;
+}
+
+// Justify content
+.thinkrank-justify-start {
+	justify-content: flex-start !important;
+}
+
+.thinkrank-justify-end {
+	justify-content: flex-end !important;
+}
+
+.thinkrank-justify-center {
+	justify-content: center !important;
+}
+
+.thinkrank-justify-between {
+	justify-content: space-between !important;
+}
+
+.thinkrank-justify-around {
+	justify-content: space-around !important;
+}
+
+.thinkrank-justify-evenly {
+	justify-content: space-evenly !important;
+}
+
+// Align items
+.thinkrank-items-start {
+	align-items: flex-start !important;
+}
+
+.thinkrank-items-end {
+	align-items: flex-end !important;
+}
+
+.thinkrank-items-center {
+	align-items: center !important;
+}
+
+.thinkrank-items-baseline {
+	align-items: baseline !important;
+}
+
+.thinkrank-items-stretch {
+	align-items: stretch !important;
+}
+
+// Align content
+.thinkrank-content-start {
+	align-content: flex-start !important;
+}
+
+.thinkrank-content-end {
+	align-content: flex-end !important;
+}
+
+.thinkrank-content-center {
+	align-content: center !important;
+}
+
+.thinkrank-content-between {
+	align-content: space-between !important;
+}
+
+.thinkrank-content-around {
+	align-content: space-around !important;
+}
+
+.thinkrank-content-evenly {
+	align-content: space-evenly !important;
+}
+
+// Align self
+.thinkrank-self-auto {
+	align-self: auto !important;
+}
+
+.thinkrank-self-start {
+	align-self: flex-start !important;
+}
+
+.thinkrank-self-end {
+	align-self: flex-end !important;
+}
+
+.thinkrank-self-center {
+	align-self: center !important;
+}
+
+.thinkrank-self-stretch {
+	align-self: stretch !important;
+}
+
+.thinkrank-self-baseline {
+	align-self: baseline !important;
+}
+
+/* ==========================================================================
+   GRID UTILITIES
+   ========================================================================== */
+
+// Grid template columns
+.thinkrank-grid-cols-1 {
+	grid-template-columns: repeat(1, 1fr) !important;
+}
+
+.thinkrank-grid-cols-2 {
+	grid-template-columns: repeat(2, 1fr) !important;
+}
+
+.thinkrank-grid-cols-3 {
+	grid-template-columns: repeat(3, 1fr) !important;
+}
+
+.thinkrank-grid-cols-4 {
+	grid-template-columns: repeat(4, 1fr) !important;
+}
+
+.thinkrank-grid-cols-5 {
+	grid-template-columns: repeat(5, 1fr) !important;
+}
+
+.thinkrank-grid-cols-6 {
+	grid-template-columns: repeat(6, 1fr) !important;
+}
+
+.thinkrank-grid-cols-none {
+	grid-template-columns: none !important;
+}
+
+// Grid template rows
+.thinkrank-grid-rows-1 {
+	grid-template-rows: repeat(1, 1fr) !important;
+}
+
+.thinkrank-grid-rows-2 {
+	grid-template-rows: repeat(2, 1fr) !important;
+}
+
+.thinkrank-grid-rows-3 {
+	grid-template-rows: repeat(3, 1fr) !important;
+}
+
+.thinkrank-grid-rows-4 {
+	grid-template-rows: repeat(4, 1fr) !important;
+}
+
+.thinkrank-grid-rows-none {
+	grid-template-rows: none !important;
+}
+
+// Grid column span utilities
+.thinkrank-col-span-1 {
+	grid-column: span 1 / span 1 !important;
+}
+
+.thinkrank-col-span-2 {
+	grid-column: span 2 / span 2 !important;
+}
+
+.thinkrank-col-span-3 {
+	grid-column: span 3 / span 3 !important;
+}
+
+.thinkrank-col-span-full {
+	grid-column: 1 / -1 !important;
+}
+
+// Responsive grid column span utilities
+.thinkrank-col-span-1-lg {
+	grid-column: span 1 / span 1 !important;
+}
+
+.thinkrank-col-span-2-lg {
+	grid-column: span 2 / span 2 !important;
+}
+
+// Grid column span
+.thinkrank-col-auto {
+	grid-column: auto !important;
+}
+
+.thinkrank-col-span-4 {
+	grid-column: span 4 / span 4 !important;
+}
+
+.thinkrank-col-span-5 {
+	grid-column: span 5 / span 5 !important;
+}
+
+.thinkrank-col-span-6 {
+	grid-column: span 6 / span 6 !important;
+}
+
+// Grid row span
+.thinkrank-row-auto {
+	grid-row: auto !important;
+}
+
+.thinkrank-row-span-1 {
+	grid-row: span 1 / span 1 !important;
+}
+
+.thinkrank-row-span-2 {
+	grid-row: span 2 / span 2 !important;
+}
+
+.thinkrank-row-span-3 {
+	grid-row: span 3 / span 3 !important;
+}
+
+.thinkrank-row-span-4 {
+	grid-row: span 4 / span 4 !important;
+}
+
+.thinkrank-row-span-full {
+	grid-row: 1 / -1 !important;
+}
+
+// Gap utilities
+.thinkrank-gap-0 {
+	gap: 0 !important;
+}
+
+.thinkrank-gap-1 {
+	gap: $spacing-xs !important;
+}
+
+.thinkrank-gap-2 {
+	gap: $spacing-sm !important;
+}
+
+.thinkrank-gap-3 {
+	gap: $spacing-md !important;
+}
+
+.thinkrank-gap-4 {
+	gap: $spacing-lg !important;
+}
+
+.thinkrank-gap-5 {
+	gap: $spacing-xl !important;
+}
+
+.thinkrank-gap-6 {
+	gap: $spacing-2xl !important;
+}
+
+.thinkrank-gap-8 {
+	gap: $spacing-3xl !important;
+}
+
+// Gap x/y utilities
+.thinkrank-gap-x-0 {
+	column-gap: 0 !important;
+}
+
+.thinkrank-gap-x-1 {
+	column-gap: $spacing-xs !important;
+}
+
+.thinkrank-gap-x-2 {
+	column-gap: $spacing-sm !important;
+}
+
+.thinkrank-gap-x-3 {
+	column-gap: $spacing-md !important;
+}
+
+.thinkrank-gap-x-4 {
+	column-gap: $spacing-lg !important;
+}
+
+.thinkrank-gap-x-6 {
+	column-gap: $spacing-2xl !important;
+}
+
+.thinkrank-gap-y-0 {
+	row-gap: 0 !important;
+}
+
+.thinkrank-gap-y-1 {
+	row-gap: $spacing-xs !important;
+}
+
+.thinkrank-gap-y-2 {
+	row-gap: $spacing-sm !important;
+}
+
+.thinkrank-gap-y-3 {
+	row-gap: $spacing-md !important;
+}
+
+.thinkrank-gap-y-4 {
+	row-gap: $spacing-lg !important;
+}
+
+.thinkrank-gap-y-6 {
+	row-gap: $spacing-2xl !important;
+}
+
+/* ==========================================================================
+   WIDTH & HEIGHT UTILITIES
+   ========================================================================== */
+
+// Width utilities
+.thinkrank-w-auto {
+	width: auto !important;
+}
+
+.thinkrank-w-full {
+	width: 100% !important;
+}
+
+.thinkrank-w-screen {
+	width: 100vw !important;
+}
+
+.thinkrank-w-min {
+	width: min-content !important;
+}
+
+.thinkrank-w-max {
+	width: max-content !important;
+}
+
+.thinkrank-w-fit {
+	width: fit-content !important;
+}
+
+// Fixed width utilities
+.thinkrank-w-4 {
+	width: 1rem !important;
+}     // 16px
+.thinkrank-w-5 {
+	width: 1.25rem !important;
+}  // 20px
+.thinkrank-w-8 {
+	width: 2rem !important;
+}     // 32px
+.thinkrank-w-10 {
+	width: 2.5rem !important;
+}  // 40px
+.thinkrank-w-16 {
+	width: 4rem !important;
+}    // 64px
+
+// Height utilities
+.thinkrank-h-auto {
+	height: auto !important;
+}
+
+.thinkrank-h-full {
+	height: 100% !important;
+}
+
+.thinkrank-h-screen {
+	height: 100vh !important;
+}
+
+// Fixed height utilities
+.thinkrank-h-4 {
+	height: 1rem !important;
+}     // 16px
+.thinkrank-h-5 {
+	height: 1.25rem !important;
+}  // 20px
+.thinkrank-h-8 {
+	height: 2rem !important;
+}     // 32px
+.thinkrank-h-10 {
+	height: 2.5rem !important;
+}  // 40px
+.thinkrank-h-16 {
+	height: 4rem !important;
+}    // 64px
+.thinkrank-h-min {
+	height: min-content !important;
+}
+
+.thinkrank-h-max {
+	height: max-content !important;
+}
+
+.thinkrank-h-fit {
+	height: fit-content !important;
+}
+
+// Min/Max width
+.thinkrank-min-w-0 {
+	min-width: 0 !important;
+}
+
+.thinkrank-min-w-full {
+	min-width: 100% !important;
+}
+
+.thinkrank-max-w-none {
+	max-width: none !important;
+}
+
+.thinkrank-max-w-full {
+	max-width: 100% !important;
+}
+
+// Min/Max height
+.thinkrank-min-h-0 {
+	min-height: 0 !important;
+}
+
+.thinkrank-min-h-full {
+	min-height: 100% !important;
+}
+
+.thinkrank-max-h-full {
+	max-height: 100% !important;
+}
+
+.thinkrank-max-h-screen {
+	max-height: 100vh !important;
+}
+
+/* ==========================================================================
+   TEXT UTILITIES
+   ========================================================================== */
+
+// Text alignment
+.thinkrank-text-left {
+	text-align: left !important;
+}
+
+.thinkrank-text-center {
+	text-align: center !important;
+}
+
+.thinkrank-text-right {
+	text-align: right !important;
+}
+
+.thinkrank-text-justify {
+	text-align: justify !important;
+}
+
+// Font sizes
+.thinkrank-text-xs {
+	font-size: $font-size-xs !important;
+}
+
+.thinkrank-text-sm {
+	font-size: $font-size-sm !important;
+}
+
+.thinkrank-text-base {
+	font-size: $font-size-base !important;
+}
+
+.thinkrank-text-lg {
+	font-size: $font-size-lg !important;
+}
+
+.thinkrank-text-xl {
+	font-size: $font-size-xl !important;
+}
+
+.thinkrank-text-2xl {
+	font-size: $font-size-2xl !important;
+}
+
+.thinkrank-text-3xl {
+	font-size: $font-size-3xl !important;
+}
+
+// Font weights
+.thinkrank-font-normal {
+	font-weight: $font-weight-normal !important;
+}
+
+.thinkrank-font-medium {
+	font-weight: $font-weight-medium !important;
+}
+
+.thinkrank-font-semibold {
+	font-weight: $font-weight-semibold !important;
+}
+
+.thinkrank-font-bold {
+	font-weight: $font-weight-bold !important;
+}
+
+// Line heights
+.thinkrank-leading-tight {
+	line-height: $line-height-tight !important;
+}
+
+.thinkrank-leading-normal {
+	line-height: $line-height-normal !important;
+}
+
+.thinkrank-leading-relaxed {
+	line-height: $line-height-relaxed !important;
+}
+
+// Text colors using design tokens
+.thinkrank-text-primary {
+	color: $text-primary !important;
+}
+
+.thinkrank-text-secondary {
+	color: $text-secondary !important;
+}
+
+.thinkrank-text-tertiary {
+	color: $text-tertiary !important;
+}
+
+.thinkrank-text-muted {
+	color: $text-muted !important;
+}
+
+.thinkrank-text-white {
+	color: $white !important;
+}
+
+// Brand text colors
+.thinkrank-text-blue {
+	color: $primary-blue !important;
+}
+
+.thinkrank-text-green {
+	color: $success-green !important;
+}
+
+.thinkrank-text-orange {
+	color: $warning-orange !important;
+}
+
+.thinkrank-text-red {
+	color: $error-red !important;
+}
+
+// Provider colors
+.thinkrank-text-openai {
+	color: $primary !important;
+}
+
+.thinkrank-text-claude {
+	color: $primary !important;
+}
+
+// Text utilities
+.thinkrank-whitespace-pre-wrap {
+	white-space: pre-wrap !important;
+}
+
+.thinkrank-overflow-x-auto {
+	overflow-x: auto !important;
+}
+
+// List utilities
+.thinkrank-list-disc {
+	list-style-type: disc !important;
+}
+
+.thinkrank-list-inside {
+	list-style-position: inside !important;
+}
+
+/* ==========================================================================
+   BACKGROUND UTILITIES
+   ========================================================================== */
+
+// Background colors
+.thinkrank-bg-transparent {
+	background-color: transparent !important;
+}
+
+.thinkrank-bg-white {
+	background-color: $white !important;
+}
+
+.thinkrank-bg-gray-50 {
+	background-color: $bg-secondary !important;
+}
+
+.thinkrank-bg-gray-100 {
+	background-color: $bg-secondary !important;
+}
+
+.thinkrank-bg-gray-200 {
+	background-color: $border-secondary !important;
+}
+
+// Brand background colors
+.thinkrank-bg-blue {
+	background-color: $primary-blue !important;
+}
+
+.thinkrank-bg-green {
+	background-color: $success-green !important;
+}
+
+.thinkrank-bg-orange {
+	background-color: $warning-orange !important;
+}
+
+.thinkrank-bg-red {
+	background-color: $error-red !important;
+}
+
+.thinkrank-bg-purple {
+	background-color: $primary !important;
+}
+
+// Provider background colors
+.thinkrank-bg-openai {
+	background-color: $primary !important;
+}
+
+.thinkrank-bg-claude {
+	background-color: $primary !important;
+}
+
+// Background opacity utilities (using CSS custom properties for flexibility)
+.thinkrank-bg-opacity-5 {
+	--thinkrank-bg-opacity: 0.05;
+}
+
+.thinkrank-bg-opacity-10 {
+	--thinkrank-bg-opacity: 0.1;
+}
+
+.thinkrank-bg-opacity-20 {
+	--thinkrank-bg-opacity: 0.2;
+}
+
+.thinkrank-bg-opacity-50 {
+	--thinkrank-bg-opacity: 0.5;
+}
+
+// Background color with opacity combinations
+.thinkrank-bg-blue.thinkrank-bg-opacity-5 {
+	background-color: rgba(59, 130, 246, 0.05) !important;
+}
+
+.thinkrank-bg-blue.thinkrank-bg-opacity-10 {
+	background-color: rgba(59, 130, 246, 0.1) !important;
+}
+
+.thinkrank-bg-blue.thinkrank-bg-opacity-20 {
+	background-color: rgba(59, 130, 246, 0.2) !important;
+}
+
+.thinkrank-bg-green.thinkrank-bg-opacity-5 {
+	background-color: rgba(34, 197, 94, 0.05) !important;
+}
+
+.thinkrank-bg-green.thinkrank-bg-opacity-10 {
+	background-color: rgba(34, 197, 94, 0.1) !important;
+}
+
+.thinkrank-bg-orange.thinkrank-bg-opacity-5 {
+	background-color: rgba(249, 115, 22, 0.05) !important;
+}
+
+.thinkrank-bg-orange.thinkrank-bg-opacity-10 {
+	background-color: rgba(249, 115, 22, 0.1) !important;
+}
+
+.thinkrank-bg-orange.thinkrank-bg-opacity-20 {
+	background-color: rgba(249, 115, 22, 0.2) !important;
+}
+
+.thinkrank-bg-red.thinkrank-bg-opacity-5 {
+	background-color: rgba(239, 68, 68, 0.05) !important;
+}
+
+.thinkrank-bg-red.thinkrank-bg-opacity-10 {
+	background-color: rgba(146, 28, 19, 0.1) !important;
+}
+
+.thinkrank-bg-red.thinkrank-bg-opacity-20 {
+	background-color: rgba(146, 28, 19, 0.2) !important;
+}
+
+.thinkrank-bg-purple.thinkrank-bg-opacity-5 {
+	background-color: rgba(68, 81, 255, 0.05) !important;
+}
+
+.thinkrank-bg-purple.thinkrank-bg-opacity-10 {
+	background-color: rgba(68, 81, 255, 0.1) !important;
+}
+
+.thinkrank-bg-purple.thinkrank-bg-opacity-20 {
+	background-color: rgba(68, 81, 255, 0.2) !important;
+}
+
+// Add yellow background color
+.thinkrank-bg-yellow {
+	background-color: $warning-orange !important;
+}
+
+/* ==========================================================================
+   BORDER UTILITIES
+   ========================================================================== */
+
+// Border width
+.thinkrank-border-0 {
+	border-width: 0 !important;
+}
+
+.thinkrank-border {
+	border-width: 1px !important;
+}
+
+.thinkrank-border-2 {
+	border-width: 2px !important;
+}
+
+.thinkrank-border-t {
+	border-top-width: 1px !important;
+}
+
+.thinkrank-border-b {
+	border-bottom-width: 1px !important;
+}
+
+.thinkrank-border-l {
+	border-left-width: 1px !important;
+}
+
+.thinkrank-border-r {
+	border-right-width: 1px !important;
+}
+
+// Border colors
+.thinkrank-border-transparent {
+	border-color: transparent !important;
+}
+
+.thinkrank-border-light {
+	border-color: $border-light !important;
+}
+
+.thinkrank-border-medium {
+	border-color: $border-medium !important;
+}
+
+.thinkrank-border-dark {
+	border-color: $border-dark !important;
+}
+
+.thinkrank-border-gray-200 {
+	border-color: $border-secondary !important;
+}
+
+// Brand border colors
+.thinkrank-border-blue {
+	border-color: $primary-blue !important;
+}
+
+.thinkrank-border-l-blue {
+	border-left-color: $primary-blue !important;
+}
+
+.thinkrank-border-green {
+	border-color: $success-green !important;
+}
+
+.thinkrank-border-orange {
+	border-color: $warning-orange !important;
+}
+
+.thinkrank-border-red {
+	border-color: $error-red !important;
+}
+
+.thinkrank-border-purple {
+	border-color: $primary !important;
+}
+
+// Border opacity utilities
+.thinkrank-border-opacity-10 {
+	--thinkrank-border-opacity: 0.1;
+}
+
+.thinkrank-border-opacity-20 {
+	--thinkrank-border-opacity: 0.2;
+}
+
+.thinkrank-border-opacity-50 {
+	--thinkrank-border-opacity: 0.5;
+}
+
+// Border color with opacity combinations
+.thinkrank-border-blue.thinkrank-border-opacity-20 {
+	border-color: rgba(59, 130, 246, 0.2) !important;
+}
+
+.thinkrank-border-green.thinkrank-border-opacity-20 {
+	border-color: rgba(34, 197, 94, 0.2) !important;
+}
+
+.thinkrank-border-red.thinkrank-border-opacity-20 {
+	border-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+// Border left width utilities
+.thinkrank-border-l-4 {
+	border-left-width: 4px !important;
+}
+
+// Border radius
+.thinkrank-rounded-none {
+	border-radius: 0 !important;
+}
+
+.thinkrank-rounded-sm {
+	border-radius: $radius-sm !important;
+}
+
+.thinkrank-rounded {
+	border-radius: $radius-md !important;
+}
+
+.thinkrank-rounded-md {
+	border-radius: $radius-md !important;
+}
+
+.thinkrank-rounded-lg {
+	border-radius: $radius-lg !important;
+}
+
+.thinkrank-rounded-xl {
+	border-radius: $radius-xl !important;
+}
+
+.thinkrank-rounded-2xl {
+	border-radius: $radius-2xl !important;
+}
+
+.thinkrank-rounded-3xl {
+	border-radius: $radius-3xl !important;
+}
+
+.thinkrank-rounded-full {
+	border-radius: $radius-full !important;
+}
+
+/* ==========================================================================
+   SHADOW UTILITIES
+   ========================================================================== */
+
+.thinkrank-shadow-none {
+	box-shadow: none !important;
+}
+
+.thinkrank-shadow-sm {
+	box-shadow: $shadow-sm !important;
+}
+
+.thinkrank-shadow {
+	box-shadow: $shadow-md !important;
+}
+
+.thinkrank-shadow-md {
+	box-shadow: $shadow-md !important;
+}
+
+.thinkrank-shadow-lg {
+	box-shadow: $shadow-lg !important;
+}
+
+.thinkrank-shadow-xl {
+	box-shadow: $shadow-xl !important;
+}
+
+.thinkrank-shadow-2xl {
+	box-shadow: $shadow-2xl !important;
+}
+
+/* ==========================================================================
+   RESPONSIVE UTILITIES
+   ========================================================================== */
+
+// Mobile-first responsive utilities (xs: 0-575px)
+@media (max-width: #{$breakpoint-sm - 1px}) {
+	// Display utilities
+	.thinkrank-hidden-xs {
+		display: none !important;
+	}
+
+	.thinkrank-block-xs {
+		display: block !important;
+	}
+
+	.thinkrank-flex-xs {
+		display: flex !important;
+	}
+
+	.thinkrank-grid-xs {
+		display: grid !important;
+	}
+
+	// Flexbox utilities
+	.thinkrank-flex-col-xs {
+		flex-direction: column !important;
+	}
+
+	.thinkrank-flex-row-xs {
+		flex-direction: row !important;
+	}
+
+	.thinkrank-items-center-xs {
+		align-items: center !important;
+	}
+
+	.thinkrank-items-start-xs {
+		align-items: flex-start !important;
+	}
+
+	.thinkrank-justify-center-xs {
+		justify-content: center !important;
+	}
+
+	.thinkrank-justify-between-xs {
+		justify-content: space-between !important;
+	}
+
+	// Grid utilities
+	.thinkrank-grid-cols-1-xs {
+		grid-template-columns: repeat(1, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-2-xs {
+		grid-template-columns: repeat(2, 1fr) !important;
+	}
+
+	.thinkrank-gap-2-xs {
+		gap: $spacing-sm !important;
+	}
+
+	.thinkrank-gap-4-xs {
+		gap: $spacing-lg !important;
+	}
+
+	// Text utilities
+	.thinkrank-text-center-xs {
+		text-align: center !important;
+	}
+
+	.thinkrank-text-left-xs {
+		text-align: left !important;
+	}
+
+	.thinkrank-text-sm-xs {
+		font-size: $font-size-sm !important;
+	}
+
+	.thinkrank-text-xs-xs {
+		font-size: $font-size-xs !important;
+	}
+
+	// Spacing utilities
+	.thinkrank-p-2-xs {
+		padding: $spacing-sm !important;
+	}
+
+	.thinkrank-p-4-xs {
+		padding: $spacing-lg !important;
+	}
+
+	.thinkrank-px-4-xs {
+		padding-left: $spacing-lg !important;
+		padding-right: $spacing-lg !important;
+	}
+
+	.thinkrank-py-4-xs {
+		padding-top: $spacing-lg !important;
+		padding-bottom: $spacing-lg !important;
+	}
+
+	.thinkrank-m-2-xs {
+		margin: $spacing-sm !important;
+	}
+
+	.thinkrank-m-4-xs {
+		margin: $spacing-lg !important;
+	}
+
+	.thinkrank-mb-4-xs {
+		margin-bottom: $spacing-lg !important;
+	}
+
+	.thinkrank-mt-4-xs {
+		margin-top: $spacing-lg !important;
+	}
+
+	// Width utilities
+	.thinkrank-w-full-xs {
+		width: 100% !important;
+	}
+
+	.thinkrank-w-auto-xs {
+		width: auto !important;
+	}
+}
+
+// Small devices (sm: 576px and up)
+@media (min-width: $breakpoint-sm) {
+	// Display utilities
+	.thinkrank-hidden-sm {
+		display: none !important;
+	}
+
+	.thinkrank-block-sm {
+		display: block !important;
+	}
+
+	.thinkrank-flex-sm {
+		display: flex !important;
+	}
+
+	.thinkrank-grid-sm {
+		display: grid !important;
+	}
+
+	// Flexbox utilities
+	.thinkrank-flex-col-sm {
+		flex-direction: column !important;
+	}
+
+	.thinkrank-flex-row-sm {
+		flex-direction: row !important;
+	}
+
+	.thinkrank-items-center-sm {
+		align-items: center !important;
+	}
+
+	.thinkrank-items-start-sm {
+		align-items: flex-start !important;
+	}
+
+	.thinkrank-justify-center-sm {
+		justify-content: center !important;
+	}
+
+	.thinkrank-justify-between-sm {
+		justify-content: space-between !important;
+	}
+
+	// Grid utilities
+	.thinkrank-grid-cols-1-sm {
+		grid-template-columns: repeat(1, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-2-sm {
+		grid-template-columns: repeat(2, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-3-sm {
+		grid-template-columns: repeat(3, 1fr) !important;
+	}
+
+	.thinkrank-gap-4-sm {
+		gap: $spacing-lg !important;
+	}
+
+	.thinkrank-gap-6-sm {
+		gap: $spacing-2xl !important;
+	}
+
+	// Text utilities
+	.thinkrank-text-center-sm {
+		text-align: center !important;
+	}
+
+	.thinkrank-text-left-sm {
+		text-align: left !important;
+	}
+
+	.thinkrank-text-base-sm {
+		font-size: $font-size-base !important;
+	}
+
+	// Spacing utilities
+	.thinkrank-p-6-sm {
+		padding: $spacing-2xl !important;
+	}
+
+	.thinkrank-px-6-sm {
+		padding-left: $spacing-2xl !important;
+		padding-right: $spacing-2xl !important;
+	}
+
+	.thinkrank-py-6-sm {
+		padding-top: $spacing-2xl !important;
+		padding-bottom: $spacing-2xl !important;
+	}
+}
+
+// Medium devices (md: 768px and up) - Tablet
+@media (min-width: $breakpoint-md) {
+	// Display utilities
+	.thinkrank-hidden-md {
+		display: none !important;
+	}
+
+	.thinkrank-block-md {
+		display: block !important;
+	}
+
+	.thinkrank-flex-md {
+		display: flex !important;
+	}
+
+	.thinkrank-grid-md {
+		display: grid !important;
+	}
+
+	// Flexbox utilities
+	.thinkrank-flex-col-md {
+		flex-direction: column !important;
+	}
+
+	.thinkrank-flex-row-md {
+		flex-direction: row !important;
+	}
+
+	.thinkrank-items-center-md {
+		align-items: center !important;
+	}
+
+	.thinkrank-items-start-md {
+		align-items: flex-start !important;
+	}
+
+	.thinkrank-justify-center-md {
+		justify-content: center !important;
+	}
+
+	.thinkrank-justify-between-md {
+		justify-content: space-between !important;
+	}
+
+	.thinkrank-justify-start-md {
+		justify-content: flex-start !important;
+	}
+
+	.thinkrank-justify-end-md {
+		justify-content: flex-end !important;
+	}
+
+	// Grid utilities
+	.thinkrank-grid-cols-1-md {
+		grid-template-columns: repeat(1, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-2-md {
+		grid-template-columns: repeat(2, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-3-md {
+		grid-template-columns: repeat(3, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-4-md {
+		grid-template-columns: repeat(4, 1fr) !important;
+	}
+
+	.thinkrank-gap-6-md {
+		gap: $spacing-2xl !important;
+	}
+
+	.thinkrank-gap-8-md {
+		gap: $spacing-3xl !important;
+	}
+
+	// Text utilities
+	.thinkrank-text-center-md {
+		text-align: center !important;
+	}
+
+	.thinkrank-text-left-md {
+		text-align: left !important;
+	}
+
+	.thinkrank-text-lg-md {
+		font-size: $font-size-lg !important;
+	}
+
+	// Spacing utilities
+	.thinkrank-p-8-md {
+		padding: $spacing-3xl !important;
+	}
+
+	.thinkrank-px-8-md {
+		padding-left: $spacing-3xl !important;
+		padding-right: $spacing-3xl !important;
+	}
+
+	.thinkrank-py-8-md {
+		padding-top: $spacing-3xl !important;
+		padding-bottom: $spacing-3xl !important;
+	}
+
+	// Width utilities
+	.thinkrank-w-auto-md {
+		width: auto !important;
+	}
+
+	.thinkrank-w-1-2-md {
+		width: 50% !important;
+	}
+
+	.thinkrank-w-1-3-md {
+		width: 33.333333% !important;
+	}
+
+	.thinkrank-w-2-3-md {
+		width: 66.666667% !important;
+	}
+
+	.thinkrank-w-1-4-md {
+		width: 25% !important;
+	}
+
+	.thinkrank-w-3-4-md {
+		width: 75% !important;
+	}
+}
+
+// Large devices (lg: 1024px and up) - Desktop
+@media (min-width: $breakpoint-lg) {
+	// Display utilities
+	.thinkrank-hidden-lg {
+		display: none !important;
+	}
+
+	.thinkrank-block-lg {
+		display: block !important;
+	}
+
+	.thinkrank-flex-lg {
+		display: flex !important;
+	}
+
+	.thinkrank-grid-lg {
+		display: grid !important;
+	}
+
+	// Flexbox utilities
+	.thinkrank-flex-col-lg {
+		flex-direction: column !important;
+	}
+
+	.thinkrank-flex-row-lg {
+		flex-direction: row !important;
+	}
+
+	.thinkrank-items-center-lg {
+		align-items: center !important;
+	}
+
+	.thinkrank-items-start-lg {
+		align-items: flex-start !important;
+	}
+
+	.thinkrank-justify-center-lg {
+		justify-content: center !important;
+	}
+
+	.thinkrank-justify-between-lg {
+		justify-content: space-between !important;
+	}
+
+	.thinkrank-justify-start-lg {
+		justify-content: flex-start !important;
+	}
+
+	.thinkrank-justify-end-lg {
+		justify-content: flex-end !important;
+	}
+
+	// Grid utilities
+	.thinkrank-grid-cols-1-lg {
+		grid-template-columns: repeat(1, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-2-lg {
+		grid-template-columns: repeat(2, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-3-lg {
+		grid-template-columns: repeat(3, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-4-lg {
+		grid-template-columns: repeat(4, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-5-lg {
+		grid-template-columns: repeat(5, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-6-lg {
+		grid-template-columns: repeat(6, 1fr) !important;
+	}
+
+	.thinkrank-gap-8-lg {
+		gap: $spacing-3xl !important;
+	}
+
+	.thinkrank-gap-10-lg {
+		gap: $spacing-4xl !important;
+	}
+
+	// Grid column span utilities for lg
+	.thinkrank-col-span-1-lg {
+		grid-column: span 1 / span 1 !important;
+	}
+
+	.thinkrank-col-span-2-lg {
+		grid-column: span 2 / span 2 !important;
+	}
+
+	.thinkrank-col-span-3-lg {
+		grid-column: span 3 / span 3 !important;
+	}
+
+	// Text utilities
+	.thinkrank-text-center-lg {
+		text-align: center !important;
+	}
+
+	.thinkrank-text-left-lg {
+		text-align: left !important;
+	}
+
+	.thinkrank-text-xl-lg {
+		font-size: $font-size-xl !important;
+	}
+
+	.thinkrank-text-2xl-lg {
+		font-size: $font-size-2xl !important;
+	}
+
+	// Spacing utilities
+	.thinkrank-p-10-lg {
+		padding: $spacing-4xl !important;
+	}
+
+	.thinkrank-px-10-lg {
+		padding-left: $spacing-4xl !important;
+		padding-right: $spacing-4xl !important;
+	}
+
+	.thinkrank-py-10-lg {
+		padding-top: $spacing-4xl !important;
+		padding-bottom: $spacing-4xl !important;
+	}
+}
+
+// Extra large devices (xl: 1200px and up) - Large Desktop
+@media (min-width: $breakpoint-xl) {
+	// Display utilities
+	.thinkrank-hidden-xl {
+		display: none !important;
+	}
+
+	.thinkrank-block-xl {
+		display: block !important;
+	}
+
+	.thinkrank-flex-xl {
+		display: flex !important;
+	}
+
+	.thinkrank-grid-xl {
+		display: grid !important;
+	}
+
+	// Grid utilities
+	.thinkrank-grid-cols-5-xl {
+		grid-template-columns: repeat(5, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-6-xl {
+		grid-template-columns: repeat(6, 1fr) !important;
+	}
+
+	.thinkrank-gap-12-xl {
+		gap: $spacing-5xl !important;
+	}
+
+	// Text utilities
+	.thinkrank-text-3xl-xl {
+		font-size: $font-size-3xl !important;
+	}
+
+	// Spacing utilities
+	.thinkrank-p-12-xl {
+		padding: $spacing-5xl !important;
+	}
+
+	.thinkrank-px-12-xl {
+		padding-left: $spacing-5xl !important;
+		padding-right: $spacing-5xl !important;
+	}
+
+	.thinkrank-py-12-xl {
+		padding-top: $spacing-5xl !important;
+		padding-bottom: $spacing-5xl !important;
+	}
+}
+
+// Legacy responsive utilities (for backward compatibility)
+@media (max-width: #{$breakpoint-md - 1px}) {
+
+	.thinkrank-hidden-mobile {
+		display: none !important;
+	}
+
+	.thinkrank-flex-col-mobile {
+		flex-direction: column !important;
+	}
+
+	.thinkrank-grid-cols-1-mobile {
+		grid-template-columns: repeat(1, 1fr) !important;
+	}
+
+	.thinkrank-text-center-mobile {
+		text-align: center !important;
+	}
+
+	.thinkrank-px-4-mobile {
+		padding-left: $spacing-lg !important;
+		padding-right: $spacing-lg !important;
+	}
+
+	.thinkrank-py-4-mobile {
+		padding-top: $spacing-lg !important;
+		padding-bottom: $spacing-lg !important;
+	}
+
+	.thinkrank-gap-4-mobile {
+		gap: $spacing-lg !important;
+	}
+}
+
+@media (min-width: $breakpoint-md) {
+
+	.thinkrank-hidden-desktop {
+		display: none !important;
+	}
+
+	.thinkrank-flex-row-desktop {
+		flex-direction: row !important;
+	}
+
+	.thinkrank-grid-cols-2-desktop {
+		grid-template-columns: repeat(2, 1fr) !important;
+	}
+
+	.thinkrank-grid-cols-3-desktop {
+		grid-template-columns: repeat(3, 1fr) !important;
+	}
+
+	.thinkrank-text-left-desktop {
+		text-align: left !important;
+	}
+}
+
+/* ==========================================================================
+   UTILITY COMBINATIONS (COMMON PATTERNS)
+   ========================================================================== */
+
+// Common flex patterns
+.thinkrank-flex-center {
+	display: flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+}
+
+.thinkrank-flex-between {
+	display: flex !important;
+	align-items: center !important;
+	justify-content: space-between !important;
+}
+
+.thinkrank-flex-start {
+	display: flex !important;
+	align-items: center !important;
+	justify-content: flex-start !important;
+}
+
+.thinkrank-flex-end {
+	display: flex !important;
+	align-items: center !important;
+	justify-content: flex-end !important;
+}
+
+// Common text patterns
+.thinkrank-break-words {
+	overflow-wrap: break-word !important;
+	word-break: break-word !important;
+}
+
+// Screen reader only
+
+/* ==========================================================================
+   CURSOR UTILITIES
+   ========================================================================== */
+
+.thinkrank-cursor-pointer {
+	cursor: pointer !important;
+}
+
+.thinkrank-cursor-default {
+	cursor: default !important;
+}
+
+.thinkrank-cursor-not-allowed {
+	cursor: not-allowed !important;
+}

@@ -13,6 +13,9 @@ use ThinkRank\Core\Capability_Manager;
 use ThinkRank\Core\Plan_Config;
 use ThinkRank\Database\Database_Schema;
 use ThinkRank\Mcp\Mcp_Manager;
+use ThinkRank\Mcp\Mcp_Scopes;
+use ThinkRank\Mcp\Mcp_Self_Test;
+use ThinkRank\Mcp\Mcp_Session;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -101,11 +104,47 @@ class Connection_Status {
 	 * @return array<string, mixed>
 	 */
 	private static function mcp_info(): array {
-		return [
+		$info = [
 			'enabled'      => class_exists( Mcp_Manager::class ) ? Mcp_Manager::is_enabled() : false,
 			'endpoint'     => home_url( '/thinkrank/mcp' ),
 			'rest_fallback' => rest_url( 'thinkrank/v1/mcp' ),
 		];
+
+		// The connection doctor's last verdict (#717), so an agent can
+		// diagnose its own connection. Read from the cache, never probed
+		// here: a loopback request from inside an MCP call would be slow and
+		// would test the wrong path.
+		if ( class_exists( Mcp_Self_Test::class ) ) {
+			$doctor         = Mcp_Self_Test::cached();
+			$info['doctor'] = null === $doctor ? null : [
+				'ok'              => ! empty( $doctor['ok'] ),
+				'stage'           => (string) ( $doctor['stage'] ?? '' ),
+				'message'         => (string) ( $doctor['message'] ?? '' ),
+				'ran_at'          => isset( $doctor['ran_at'] ) ? gmdate( 'c', (int) $doctor['ran_at'] ) : null,
+				'advertised_base' => (string) ( $doctor['advertised_base'] ?? '' ),
+				'checks'          => array_map(
+					static function ( $check ): array {
+						return [
+							'id'     => (string) ( $check['id'] ?? '' ),
+							'ok'     => ! empty( $check['ok'] ),
+							'detail' => (string) ( $check['detail'] ?? '' ),
+						];
+					},
+					is_array( $doctor['checks'] ?? null ) ? $doctor['checks'] : []
+				),
+			];
+		}
+
+		// What the calling credential may do, when the caller is an MCP client.
+		if ( class_exists( Mcp_Session::class ) && Mcp_Session::active() ) {
+			$info['credential'] = [
+				'kind'   => Mcp_Session::kind(),
+				'name'   => Mcp_Session::client_name(),
+				'levels' => Mcp_Scopes::level_names( Mcp_Session::levels() ),
+			];
+		}
+
+		return $info;
 	}
 
 	/**

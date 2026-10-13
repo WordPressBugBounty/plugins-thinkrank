@@ -1,0 +1,79 @@
+/**
+ * ThinkRank toast styling — on-brand overrides for react-toastify.
+ *
+ * The ToastContainer (components/App.js) portals to <body>, outside the
+ * admin token scope (the tr- and thinkrank- CSS variables), so brand values
+ * are inlined here to mirror _variables.scss.
+ *
+ * react-toastify's own defaults live in a :root block that can load after
+ * this file, so plain :root overrides lose the cascade. We instead set the
+ * variables on .Toastify__toast-container with !important — important custom
+ * properties win regardless of source order, and the toasts (descendants)
+ * inherit them.
+ *
+ * @package ThinkRank
+ */
+
+.Toastify__toast-container {
+
+	/* Type + shape */
+	--toastify-font-family: -apple-system, blinkmacsystemfont, "Segoe UI", roboto, oxygen-sans, ubuntu, cantarell, "Helvetica Neue", sans-serif !important;
+	--toastify-toast-bd-radius: 8px !important;      /* $radius-lg */
+	--toastify-toast-min-height: 56px !important;
+	--toastify-toast-width: 360px !important;
+	--toastify-toast-shadow: 0 10px 15px -3px rgba(29, 29, 29, 0.12), 0 4px 6px -2px rgba(29, 29, 29, 0.06) !important;
+	--toastify-toast-top: 96px !important;           /* clear the WP admin bar + plugin top nav (ends at 88px) */
+	--toastify-z-index: 999999 !important;           /* above WP admin bar */
+
+	/* Status colors — mirror _variables.scss */
+	--toastify-color-success: #027a48 !important;
+	--toastify-color-error: #921c13 !important;
+	--toastify-color-warning: #b54708 !important;
+	--toastify-color-info: #4451ff !important;       /* $primary */
+	--toastify-icon-color-success: #027a48 !important;
+	--toastify-icon-color-error: #921c13 !important;
+	--toastify-icon-color-warning: #b54708 !important;
+	--toastify-icon-color-info: #4451ff !important;
+
+	--toastify-text-color-light: #1d1d1d !important; /* $text-primary */
+}
+
+/* Clean, modern card: uniform hairline border, no accent rail.
+   Compound selector (0,2,0) beats react-toastify's single-class base rule. */
+.Toastify__toast-container .Toastify__toast {
+	border: 1px solid #e2e6f1;                       /* $border-secondary */
+	padding: 12px 14px;
+	align-items: center;
+}
+
+.Toastify__toast-container .Toastify__toast-body {
+	font-size: 14px;
+	line-height: 1.45;
+	font-weight: 500;
+	color: #1d1d1d;
+	padding: 0;
+}
+
+.Toastify__toast-container .Toastify__toast-icon {
+	width: 20px;
+	margin-inline-end: 12px;
+}
+
+/* Slimmer, slightly muted progress bar. */
+.Toastify__toast-container .Toastify__progress-bar {
+	height: 3px;
+	opacity: 0.9;
+}
+
+/* Quieter close affordance until hovered. */
+.Toastify__toast-container .Toastify__close-button {
+	align-self: center;
+	color: #5a5c5e;                                  /* $text-tertiary */
+	opacity: 0.5;
+	transition: opacity 0.15s ease;
+}
+
+.Toastify__toast-container .Toastify__close-button:hover,
+.Toastify__toast-container .Toastify__close-button:focus-visible {
+	opacity: 1;
+}

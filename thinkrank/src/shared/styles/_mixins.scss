@@ -1,0 +1,196 @@
+@use "sass:color";
+
+/**
+ * Shared SCSS Mixins
+ *
+ * Reusable mixins for common patterns across admin and metabox components
+ *
+ * @package ThinkRank
+ * @since 1.0.0
+ */
+
+@use "variables" as *;
+
+// Responsive breakpoints
+@mixin mobile-only {
+
+	@media (max-width: #{$breakpoint-md - 1px}) {
+		@content;
+	}
+}
+
+@mixin tablet-up {
+
+	@media (min-width: #{$breakpoint-md}) {
+		@content;
+	}
+}
+
+@mixin desktop-up {
+
+	@media (min-width: #{$breakpoint-lg}) {
+		@content;
+	}
+}
+
+@mixin large-desktop-up {
+
+	@media (min-width: #{$breakpoint-xl}) {
+		@content;
+	}
+}
+
+// Flexbox utilities
+@mixin flex-center {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+@mixin flex-between {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+@mixin flex-start {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+}
+
+@mixin flex-end {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+}
+
+// Text utilities
+@mixin text-truncate {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+@mixin text-clamp($lines: 2) {
+	display: -webkit-box;
+	-webkit-line-clamp: $lines;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+// Button base styles
+@mixin button-base {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid transparent;
+	border-radius: $thinkrank-radius;
+	font-weight: $font-weight-medium;
+	text-decoration: none;
+	cursor: pointer;
+	transition: all $duration-normal $ease-in-out;
+	outline: none;
+
+	&:focus {
+		box-shadow: 0 0 0 2px rgba($thinkrank-primary, 0.2);
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+		transform: none !important;
+		box-shadow: none !important;
+	}
+}
+
+// Card styles
+@mixin card-base {
+	background: $thinkrank-white;
+	border: 1px solid $thinkrank-border-light;
+	border-radius: 8px;
+	box-shadow: $thinkrank-shadow;
+	overflow: hidden;
+}
+
+@mixin card-elevated {
+	box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+
+	&:hover {
+		box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+	}
+}
+
+// Form elements
+@mixin input-base {
+	width: 100%;
+	padding: $spacing-2 $spacing-3;
+	border: 1px solid $thinkrank-border;
+	border-radius: $thinkrank-radius;
+	font-size: $font-size-sm;
+	line-height: $line-height-normal;
+	transition: border-color $duration-normal $ease-in-out;
+
+	&:focus {
+		border-color: $thinkrank-primary;
+		box-shadow: 0 0 0 1px $thinkrank-primary;
+		outline: none;
+	}
+
+	&:disabled {
+		background-color: $thinkrank-bg;
+		color: $thinkrank-text-secondary;
+		cursor: not-allowed;
+	}
+}
+
+// Loading spinner
+@mixin spinner($size: 20px, $color: $thinkrank-primary) {
+	width: $size;
+	height: $size;
+	border: 2px solid rgba($color, 0.2);
+	border-top: 2px solid $color;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+
+	0% {
+		transform: rotate(0deg);
+	}
+
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
+// Score circle styles
+@mixin score-circle($size: 80px) {
+	width: $size;
+	height: $size;
+	border-radius: 50%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	font-weight: $font-weight-bold;
+	position: relative;
+}
+
+// Gradient backgrounds
+@mixin gradient-primary {
+	background: linear-gradient(135deg, $thinkrank-primary, color.adjust($thinkrank-primary, $lightness: -10%));
+}
+
+@mixin gradient-success {
+	background: linear-gradient(135deg, $thinkrank-success, color.adjust($thinkrank-success, $lightness: -10%));
+}
+
+@mixin gradient-warning {
+	background: linear-gradient(135deg, $thinkrank-warning, color.adjust($thinkrank-warning, $lightness: -10%));
+}
+
+@mixin gradient-error {
+	background: linear-gradient(135deg, $thinkrank-error, color.adjust($thinkrank-error, $lightness: -10%));
+}

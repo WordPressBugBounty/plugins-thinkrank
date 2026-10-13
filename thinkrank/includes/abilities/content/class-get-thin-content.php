@@ -60,10 +60,13 @@ class Get_Thin_Content extends Ability_Base {
 			'additionalProperties' => false,
 			'properties'           => [
 				'post_type' => [
+					// No enum: the post types are the site's, so a list built here
+					// differs between the release manifest and every site, and
+					// the hub stops a tool whose schemas disagree (#1066).
+					// execute() refuses a slug that is not one we report on.
 					'type'        => 'string',
-					'enum'        => array_merge( [ '' ], Thin_Content::post_types() ),
 					'default'     => '',
-					'description' => __( 'Only report this post type. Empty reports every post type that has published content.', 'thinkrank' ),
+					'description' => __( 'Only report this post type (a slug from list-content-types). Empty reports every post type that has published content.', 'thinkrank' ),
 				],
 				'refresh'   => [
 					'type'        => 'boolean',

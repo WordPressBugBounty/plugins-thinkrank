@@ -80,11 +80,6 @@ final class Mcp_Manager {
 	}
 
 	/**
-	 * Query var carrying the token when embedded in the URL path.
-	 */
-	private const TOKEN_QUERY_VAR = 'thinkrank_mcp_token';
-
-	/**
 	 * Query var flagging a /.well-known/ OAuth discovery request.
 	 */
 	private const WELLKNOWN_QUERY_VAR = 'thinkrank_mcp_wellknown';
@@ -125,6 +120,14 @@ final class Mcp_Manager {
 		add_filter( 'query_vars', [ $this, 'register_query_var' ] );
 		add_action( 'parse_request', [ $this, 'maybe_handle_pretty_endpoint' ] );
 
+		// The wp-json fallback holds the same body cap as the pretty path.
+		// Core reads the whole body in serve_request() and decodes it as JSON
+		// before the route callback, so the cap has to act ahead of both:
+		// bound the read before rest_api_loaded() (priority 10) starts the
+		// server, and refuse before dispatch() parses (#1097).
+		add_action( 'parse_request', [ $this, 'cap_rest_body_read' ], 9 );
+		add_filter( 'rest_pre_dispatch', [ $this, 'refuse_oversized_rest_body' ], 10, 3 );
+
 		// The one broken state the server can't see from inside a request:
 		// MCP enabled but the bundled Abilities runtime absent. Everything
 		// else still works — OAuth discovers, tokens mint, clients connect —
@@ -134,6 +137,9 @@ final class Mcp_Manager {
 		// connects and offers nothing, with no signal anywhere. Say it loudly
 		// where an admin will look.
 		add_action( 'admin_notices', [ $this, 'warn_when_runtime_missing' ] );
+
+		// Daily retention prune for the activity log (#717).
+		Mcp_Audit::init();
 	}
 
 	/**
@@ -168,6 +174,29 @@ final class Mcp_Manager {
 	 */
 	public static function is_enabled(): bool {
 		return (bool) Settings::instance()->get( 'enable_mcp', false );
+	}
+
+	/**
+	 * Turn the MCP switch on through the setting's own setter, as the
+	 * settings route does, minting the connection token on the same
+	 * transition (#244) so the connect recipes are ready.
+	 *
+	 * Connecting to ThinkRank Hub calls this (thinkrank#1002). There is
+	 * deliberately no counterpart that turns the switch off from the hub: the
+	 * owner's other assistants may rely on it, and ending the hub's grant is
+	 * what Disconnect does.
+	 *
+	 * @since 2.15.0
+	 *
+	 * @return void
+	 */
+	public static function enable(): void {
+		if ( self::is_enabled() ) {
+			return;
+		}
+
+		Settings::instance()->set( 'enable_mcp', true );
+		Mcp_Pairing::connect();
 	}
 
 	// -- Pretty endpoint: /thinkrank/mcp --
@@ -211,7 +240,7 @@ final class Mcp_Manager {
 		// flushing on every request.
 		$stored = get_option( 'rewrite_rules' );
 		if ( is_array( $stored ) ) {
-			$unwanted = array_diff_key( self::rewrite_rules( true ), $rules );
+			$unwanted = array_diff_key( self::rewrite_rules( true ), $rules ) + self::retired_rules();
 			$stale    = array_intersect_key( $unwanted, $stored );
 			$missing  = array_diff_key( $rules, $stored );
 
@@ -219,6 +248,29 @@ final class Mcp_Manager {
 				flush_rewrite_rules( false );
 			}
 		}
+	}
+
+	/**
+	 * Rules this plugin used to register and must not survive in a stored
+	 * rewrite table.
+	 *
+	 * The token-in-path form, `/thinkrank/mcp/<token>`, is gone (#1001,
+	 * BetterShield A4): a credential in a URL lands in access logs, proxy and
+	 * CDN logs, `Referer` headers and browser history, and the bearer header
+	 * is the only way in now. A site upgraded in place still holds the rule
+	 * in its stored table until something flushes it, and the self-heal in
+	 * add_rewrite() does that once, the first time it sees one of these.
+	 * Afterwards the address matches no rule of ours and answers 404 like any
+	 * unknown path.
+	 *
+	 * @since 2.15.0
+	 *
+	 * @return array<string,string> Regex => the query it used to map to.
+	 */
+	private static function retired_rules(): array {
+		return [
+			'^thinkrank/mcp/([a-f0-9]{64})/?$' => 'index.php?' . self::QUERY_VAR . '=1&thinkrank_mcp_token=$matches[1]',
+		];
 	}
 
 	/**
@@ -243,11 +295,9 @@ final class Mcp_Manager {
 		$endpoint = preg_quote( trim( Mcp_Pairing::SITE_ENDPOINT_PATH, '/' ), '/' );
 
 		$rules = [
-			// Token-in-URL form: /thinkrank/mcp/<token> — a single string the
-			// user pastes into their AI client (no separate token field). The
-			// bare /thinkrank/mcp still works with a Bearer token.
-			'^thinkrank/mcp/([a-f0-9]{64})/?$' =>
-				'index.php?' . self::QUERY_VAR . '=1&' . self::TOKEN_QUERY_VAR . '=$matches[1]',
+			// The endpoint. The bearer header is the only way in: the
+			// token-in-path form (/thinkrank/mcp/<token>) is retired, see
+			// retired_rules().
 			'^thinkrank/mcp/?$' => 'index.php?' . self::QUERY_VAR . '=1',
 
 			// OAuth discovery documents. RFC 9728 §3.1 / RFC 8414 §3.1 place
@@ -375,7 +425,6 @@ final class Mcp_Manager {
 	 */
 	public function register_query_var( array $vars ): array {
 		$vars[] = self::QUERY_VAR;
-		$vars[] = self::TOKEN_QUERY_VAR;
 		$vars[] = self::WELLKNOWN_QUERY_VAR;
 		$vars[] = self::WELLKNOWN_RESOURCE_QUERY_VAR;
 		$vars[] = self::AUTHORIZE_QUERY_VAR;
@@ -605,24 +654,101 @@ final class Mcp_Manager {
 
 		$request = new \WP_REST_Request( 'POST', '/' . self::NS . '/mcp' );
 		$request->set_header( 'content-type', 'application/json' );
-		// Carry the auth header + raw body from the live PHP request.
+		// Carry the auth header + raw body from the live PHP request. The
+		// header is the only place a credential is read from: the token
+		// that used to ride in the URL path is not (#1001).
 		$auth = self::server_header( 'authorization' );
 		if ( null !== $auth ) {
 			$request->set_header( 'authorization', $auth );
 		}
-		// Token embedded in the URL path (/thinkrank/mcp/<token>) — surface it
-		// as a Bearer header so Mcp_Server validates it the same way. A real
-		// Authorization header (if also sent) takes precedence.
-		$path_token = isset( $wp->query_vars[ self::TOKEN_QUERY_VAR ] )
-			? (string) $wp->query_vars[ self::TOKEN_QUERY_VAR ]
-			: '';
-		if ( '' !== $path_token && '' === (string) $request->get_header( 'authorization' ) ) {
-			$request->set_header( 'authorization', 'Bearer ' . $path_token );
-		}
-		$request->set_body( (string) file_get_contents( 'php://input' ) );
+		// One byte past the cap, so the handler can tell a body at the limit
+		// from one over it and refuse the latter, rather than silently
+		// truncating a large request into a malformed small one (#1001).
+		$request->set_body( (string) file_get_contents( 'php://input', false, null, 0, Mcp_Server::MAX_BODY_BYTES + 1 ) );
 
 		$response = Mcp_Server::handle( $request );
 		$this->emit_json( $response );
+	}
+
+	/**
+	 * Whether a REST route is the MCP JSON-RPC fallback.
+	 *
+	 * Case-insensitive and slash-tolerant, as core's own route match is, so
+	 * every spelling that reaches rest_mcp() is caught.
+	 *
+	 * @since 2.15.0
+	 *
+	 * @param string $route REST route, e.g. `/thinkrank/v1/mcp`.
+	 * @return bool
+	 */
+	public static function is_mcp_rest_route( string $route ): bool {
+		return 0 === strcasecmp( untrailingslashit( $route ), '/' . self::NS . '/mcp' );
+	}
+
+	/**
+	 * Bound how much of an MCP wp-json request body core reads.
+	 *
+	 * WP_REST_Server::serve_request() takes the body from get_raw_data(),
+	 * which reads all of php://input unless $HTTP_RAW_POST_DATA is already
+	 * set. Setting it here, from a read one byte past the cap, keeps core
+	 * from reading more than the pretty endpoint does. It works from what
+	 * arrives rather than from Content-Length, so a chunked body is bounded
+	 * too, and refuse_oversized_rest_body() then answers the 413.
+	 *
+	 * Runs on `parse_request` ahead of rest_api_loaded(), only when this is
+	 * a wp-json request for the MCP route.
+	 *
+	 * @since 2.15.0
+	 *
+	 * @param \WP $wp The WP request object.
+	 * @return void
+	 */
+	public function cap_rest_body_read( $wp ): void {
+		$route = $wp->query_vars['rest_route'] ?? '';
+		if ( ! is_string( $route ) || ! self::is_mcp_rest_route( $route ) ) {
+			return;
+		}
+
+		// Already set means something read the body first; core uses that.
+		if ( isset( $GLOBALS['HTTP_RAW_POST_DATA'] ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- deliberate: get_raw_data() reads this before php://input, and PHP 7+ never sets it.
+		$GLOBALS['HTTP_RAW_POST_DATA'] = (string) file_get_contents( 'php://input', false, null, 0, Mcp_Server::MAX_BODY_BYTES + 1 );
+	}
+
+	/**
+	 * Refuse an MCP wp-json request before core parses its body.
+	 *
+	 * Core decodes a JSON body in dispatch(), after this filter and before
+	 * the route callback. An oversized body that was not valid JSON got
+	 * core's 400 rest_invalid_json, and a valid one was decoded in full, only
+	 * then to be refused. This answers what the pretty endpoint answers.
+	 *
+	 * @since 2.15.0
+	 *
+	 * @param mixed            $result  A response already chosen, or null.
+	 * @param \WP_REST_Server  $server  Server instance.
+	 * @param \WP_REST_Request $request The request.
+	 * @return mixed The refusal, or $result unchanged.
+	 */
+	public function refuse_oversized_rest_body( $result, $server, $request ) {
+		if ( null !== $result || ! $request instanceof \WP_REST_Request ) {
+			return $result;
+		}
+
+		if ( 'POST' !== $request->get_method() || ! self::is_mcp_rest_route( (string) $request->get_route() ) ) {
+			return $result;
+		}
+
+		$refused = Mcp_Server::preflight( $request );
+		if ( null === $refused ) {
+			return $result;
+		}
+
+		$refused->header( 'MCP-Protocol-Version', Mcp_Server::PROTOCOL_VERSION );
+		return $refused;
 	}
 
 	// -- REST registration --
@@ -738,6 +864,154 @@ final class Mcp_Manager {
 						'description' => 'The OAuth client_id to revoke.',
 					],
 				],
+			]
+		);
+
+		// --- Governance (#717): activity log, revert, scopes, expiry ------
+		register_rest_route(
+			self::NS,
+			'/mcp/activity',
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'rest_activity' ],
+				'permission_callback' => [ $this, 'admin_permission' ],
+				'args'                => self::activity_args() + [
+					'page'     => [
+						'type'    => 'integer',
+						'minimum' => 1,
+						'default' => 1,
+					],
+					'per_page' => [
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => 100,
+						'default' => 25,
+					],
+				],
+			]
+		);
+		register_rest_route(
+			self::NS,
+			'/mcp/activity/export',
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'rest_activity_export' ],
+				'permission_callback' => [ $this, 'admin_permission' ],
+				'args'                => self::activity_args(),
+			]
+		);
+		register_rest_route(
+			self::NS,
+			'/mcp/activity/(?P<id>\\d+)/revert',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'rest_activity_revert' ],
+				'permission_callback' => [ $this, 'admin_permission' ],
+				'args'                => [
+					'id'    => [
+						'type'     => 'integer',
+						'required' => true,
+					],
+					'force' => [
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Revert even though the value changed after the agent wrote it.',
+					],
+				],
+			]
+		);
+		register_rest_route(
+			self::NS,
+			'/mcp/governance',
+			[
+				[
+					'methods'             => 'GET',
+					'callback'            => [ $this, 'rest_governance' ],
+					'permission_callback' => [ $this, 'admin_permission' ],
+				],
+				[
+					'methods'             => 'POST',
+					'callback'            => [ $this, 'rest_save_governance' ],
+					'permission_callback' => [ $this, 'admin_permission' ],
+					'args'                => [
+						'retention_days' => [
+							'type' => 'integer',
+							'enum' => Mcp_Governance::RETENTION_CHOICES,
+						],
+						'token_ttl_days' => [
+							'type' => 'integer',
+							'enum' => Mcp_Governance::TOKEN_TTL_CHOICES,
+						],
+					],
+				],
+			]
+		);
+		register_rest_route(
+			self::NS,
+			'/mcp/apps/scopes',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'rest_set_scopes' ],
+				'permission_callback' => [ $this, 'admin_permission' ],
+				'args'                => [
+					'client_id' => [
+						'type'        => 'string',
+						'required'    => true,
+						'description' => 'OAuth client_id, or "static" for the connection token.',
+					],
+					'levels'    => [
+						'type'                 => 'object',
+						'required'             => true,
+						'properties'           => array_fill_keys(
+							Mcp_Scopes::AREAS,
+							[
+								'type' => 'string',
+								'enum' => [ 'none', 'read', 'write' ],
+							]
+						),
+						'additionalProperties' => false,
+					],
+					// Saved with the areas so the modal never half-applies.
+					'expiry_days' => [
+						'type'        => 'integer',
+						'enum'        => Mcp_Governance::TOKEN_TTL_CHOICES,
+						'description' => 'Connection token only: days until it expires, counted from now; 0 = never. Omit to keep the current expiry.',
+					],
+				],
+			]
+		);
+		register_rest_route(
+			self::NS,
+			'/mcp/token-expiry',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'rest_token_expiry' ],
+				'permission_callback' => [ $this, 'admin_permission' ],
+				'args'                => [
+					'days' => [
+						'type'     => 'integer',
+						'required' => true,
+						'enum'     => Mcp_Governance::TOKEN_TTL_CHOICES,
+					],
+				],
+			]
+		);
+		register_rest_route(
+			self::NS,
+			'/mcp/revoke-all',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'rest_revoke_all' ],
+				'permission_callback' => [ $this, 'admin_permission' ],
+			]
+		);
+		register_rest_route(
+			self::NS,
+			'/mcp/doctor',
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'rest_doctor' ],
+				'permission_callback' => [ $this, 'admin_permission' ],
 			]
 		);
 
@@ -883,7 +1157,245 @@ final class Mcp_Manager {
 	 * @return \WP_REST_Response
 	 */
 	public function rest_self_test(): \WP_REST_Response {
-		return rest_ensure_response( Mcp_Self_Test::run() );
+		// The button's run is kept too, so the verdict the screen shows on
+		// its next load is this one rather than an older automatic probe.
+		return rest_ensure_response( Mcp_Self_Test::run_and_cache() );
+	}
+
+	/**
+	 * GET /mcp/doctor — the verdict the MCP screen shows on load: the last
+	 * one while it is fresh, otherwise a quick automatic run.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function rest_doctor(): \WP_REST_Response {
+		return rest_ensure_response( Mcp_Self_Test::doctor() );
+	}
+
+	/**
+	 * Areas an owner can grant on this site. The Pro area is only offered
+	 * while ThinkRank Pro is active; a grant stored for it stays as it is.
+	 *
+	 * @return array<string,array{label:string,description:string}>
+	 */
+	private static function visible_areas(): array {
+		$areas = Mcp_Scopes::area_labels();
+		if ( ! defined( 'THINKRANK_PRO_VERSION' ) ) {
+			unset( $areas['pro'] );
+		}
+		return $areas;
+	}
+
+	/**
+	 * Filter arguments shared by the activity list and its export.
+	 *
+	 * @return array<string,array<string,mixed>>
+	 */
+	private static function activity_args(): array {
+		return [
+			'client'       => [
+				'type'    => 'string',
+				'default' => '',
+			],
+			'tool'         => [
+				'type'    => 'string',
+				'default' => '',
+			],
+			'object'       => [
+				'type'    => 'string',
+				'default' => '',
+			],
+			'result'       => [
+				'type'    => 'string',
+				'enum'    => [ '', 'ok', 'error', 'denied' ],
+				'default' => '',
+			],
+			'q'            => [
+				'type'    => 'string',
+				'default' => '',
+			],
+			'changes_only' => [
+				'type'    => 'boolean',
+				'default' => false,
+			],
+		];
+	}
+
+	/**
+	 * Filters from a request.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return array<string,mixed>
+	 */
+	private static function activity_filters( \WP_REST_Request $request ): array {
+		return [
+			'client'       => sanitize_text_field( (string) $request->get_param( 'client' ) ),
+			'tool'         => sanitize_key( (string) $request->get_param( 'tool' ) ),
+			'object'       => sanitize_text_field( (string) $request->get_param( 'object' ) ),
+			'result'       => (string) $request->get_param( 'result' ),
+			'q'            => sanitize_text_field( (string) $request->get_param( 'q' ) ),
+			'changes_only' => (bool) $request->get_param( 'changes_only' ),
+		];
+	}
+
+	/**
+	 * GET /mcp/activity — a page of the activity log plus its filter facets.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function rest_activity( \WP_REST_Request $request ): \WP_REST_Response {
+		$page = Mcp_Audit::query(
+			self::activity_filters( $request ),
+			(int) $request->get_param( 'page' ),
+			(int) $request->get_param( 'per_page' )
+		);
+
+		return rest_ensure_response(
+			$page + Mcp_Audit::facets() + [
+				'available'      => Mcp_Audit::available(),
+				'retention_days' => Mcp_Governance::settings()['retention_days'],
+			]
+		);
+	}
+
+	/**
+	 * GET /mcp/activity/export — the filtered log as a CSV download,
+	 * streamed a chunk at a time rather than built as one string and wrapped
+	 * in JSON.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return void
+	 */
+	public function rest_activity_export( \WP_REST_Request $request ): void {
+		$filename = sprintf( 'thinkrank-mcp-activity-%s.csv', gmdate( 'Y-m-d' ) );
+
+		if ( ! headers_sent() ) {
+			nocache_headers();
+			header( 'Content-Type: text/csv; charset=utf-8' );
+			header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+			header( 'X-Content-Type-Options: nosniff' );
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- the response body, not a file.
+		$out = fopen( 'php://output', 'w' );
+		if ( false !== $out ) {
+			Mcp_Audit::stream_csv( self::activity_filters( $request ), $out );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- the response body, not a file.
+			fclose( $out );
+		}
+		exit;
+	}
+
+	/**
+	 * POST /mcp/activity/{id}/revert — undo one agent write.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function rest_activity_revert( \WP_REST_Request $request ) {
+		$result = Mcp_Audit::revert( (int) $request->get_param( 'id' ), (bool) $request->get_param( 'force' ) );
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * GET /mcp/governance — retention and token lifetime.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function rest_governance(): \WP_REST_Response {
+		return rest_ensure_response( Mcp_Governance::settings() );
+	}
+
+	/**
+	 * POST /mcp/governance — save retention and/or token lifetime.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function rest_save_governance( \WP_REST_Request $request ): \WP_REST_Response {
+		$patch = [];
+		foreach ( [ 'retention_days', 'token_ttl_days' ] as $key ) {
+			if ( null !== $request->get_param( $key ) ) {
+				$patch[ $key ] = (int) $request->get_param( $key );
+			}
+		}
+		return rest_ensure_response( Mcp_Governance::save( $patch ) );
+	}
+
+	/**
+	 * POST /mcp/apps/scopes — change what one connection may do, and for the
+	 * connection token its expiry, in one request so neither half lands
+	 * without the other. Applies on the connection's next request; nobody
+	 * reconnects.
+	 *
+	 * A ThinkRank Hub grant is only narrowed here, never widened: giving the
+	 * hub more goes back through the Hub card and the consent page
+	 * (thinkrank#1088). Mcp_OAuth::set_client_scope() decides,
+	 * under its lock, and its 403 is returned as it is.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function rest_set_scopes( \WP_REST_Request $request ) {
+		$client_id = (string) $request->get_param( 'client_id' );
+		$levels    = (array) $request->get_param( 'levels' );
+
+		if ( Mcp_Session::STATIC_TOKEN === $client_id ) {
+			Mcp_Pairing::set_levels( $levels );
+			if ( null !== $request->get_param( 'expiry_days' ) ) {
+				Mcp_Pairing::set_expiry( (int) $request->get_param( 'expiry_days' ) );
+			}
+			return rest_ensure_response( $this->apps_payload() );
+		}
+
+		$changed = Mcp_OAuth::set_client_scope( $client_id, $levels );
+
+		if ( is_wp_error( $changed ) ) {
+			return $changed;
+		}
+
+		if ( ! $changed ) {
+			return new \WP_Error(
+				'thinkrank_mcp_unknown_client',
+				__( 'That connection no longer has access, so there is nothing to change.', 'thinkrank' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		return rest_ensure_response( $this->apps_payload() );
+	}
+
+	/**
+	 * POST /mcp/token-expiry — set when the connection token expires,
+	 * counted from now, without changing the token.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function rest_token_expiry( \WP_REST_Request $request ): \WP_REST_Response {
+		Mcp_Pairing::set_expiry( (int) $request->get_param( 'days' ) );
+		return rest_ensure_response( $this->apps_payload() );
+	}
+
+	/**
+	 * POST /mcp/revoke-all — the day an owner suspects a leak: every OAuth
+	 * app loses access and the connection token is replaced, in one step.
+	 * MCP stays switched on, so the owner can reconnect the clients they
+	 * trust straight away.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function rest_revoke_all(): \WP_REST_Response {
+		Mcp_OAuth::revoke_all_grants();
+		Mcp_Pairing::rotate_existing();
+
+		return rest_ensure_response(
+			[
+				'connection' => Mcp_Pairing::public_status(),
+				'apps'       => $this->apps_payload(),
+			]
+		);
 	}
 
 	/**
@@ -927,6 +1439,7 @@ final class Mcp_Manager {
 	 * @return array<string,mixed>
 	 */
 	private function apps_payload(): array {
+		$stats      = Mcp_Audit::client_stats( 30 );
 		$oauth_apps = [];
 		foreach ( Mcp_OAuth::connected_apps() as $app ) {
 			$user         = $app['user_id'] > 0 ? get_userdata( $app['user_id'] ) : false;
@@ -934,14 +1447,51 @@ final class Mcp_Manager {
 				'client_id'    => $app['client_id'],
 				'name'         => $app['name'],
 				'read_only'    => $app['read_only'],
+				'levels'       => Mcp_Scopes::level_names( $app['levels'] ),
 				'approved_by'  => $user ? $user->display_name : __( 'Unknown user', 'thinkrank' ),
 				'connected_at' => $app['connected_at'],
 				'last_used'    => $app['last_used'],
+				'expires_at'   => $app['expires_at'],
+				'activity'     => $stats[ $app['client_id'] ] ?? null,
+				// A hub grant is only narrowed from Edit access, so the
+				// modal offers it nothing above what it holds (#1088).
+				'hub'          => '' !== (string) $app['hub'],
 			];
 		}
 
+		// The shared connection token, so its scopes, expiry and activity sit
+		// next to the OAuth apps. Every header-based client (Claude Code,
+		// Cursor, VS Code) uses this one credential.
+		$static = null;
+		if ( Mcp_Pairing::is_connected() ) {
+			$status = Mcp_Pairing::public_status();
+			$state  = Mcp_Pairing::state();
+			$owner  = $state['user_id'] > 0 ? get_userdata( $state['user_id'] ) : false;
+			$static = [
+				'client_id'    => Mcp_Session::STATIC_TOKEN,
+				'levels'       => $status['levels'],
+				'read_only'    => $status['read_only'],
+				'approved_by'  => $owner ? $owner->display_name : __( 'Unknown user', 'thinkrank' ),
+				'connected_at' => $status['connected_at'],
+				'last_used'    => $status['last_used'],
+				'expires_at'   => $status['expires_at'],
+				'expiry_set'   => $status['expiry_set'],
+				'expired'      => $status['expired'],
+				'expires_soon' => $status['expires_soon'],
+				'activity'     => $stats[ Mcp_Session::STATIC_TOKEN ] ?? null,
+			];
+		}
+
+		$areas = [];
+		foreach ( self::visible_areas() as $key => $area ) {
+			$areas[] = [ 'key' => $key ] + $area;
+		}
+
 		return [
-			'oauth_apps' => $oauth_apps,
+			'oauth_apps'   => $oauth_apps,
+			'static_token' => $static,
+			'areas'        => $areas,
+			'governance'   => Mcp_Governance::settings(),
 		];
 	}
 
@@ -1070,52 +1620,237 @@ final class Mcp_Manager {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- compared against a literal after strtoupper(); nothing is stored or echoed.
 		$is_post = isset( $_SERVER['REQUEST_METHOD'] ) && 'POST' === strtoupper( (string) wp_unslash( $_SERVER['REQUEST_METHOD'] ) );
 		// Params come from GET on the consent link and POST on the form submit.
-		// Nonce is verified below before any POST value is acted on.
+		// Nonce is verified in consent_outcome() before any POST value is acted on.
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- read verbatim by oauth_param(); see its docblock for why, and where each value is validated or escaped instead.
 		$source = $is_post ? $_POST : $_GET;
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$params = [];
-		foreach ( [ 'client_id', 'redirect_uri', 'response_type', 'code_challenge', 'code_challenge_method', 'scope', 'state', 'approve', 'deny', '_thinkrank_oauth_nonce' ] as $k ) {
+		foreach ( [ 'client_id', 'redirect_uri', 'response_type', 'code_challenge', 'code_challenge_method', 'scope', 'state', 'resource', 'hub_ticket', 'approve', 'deny', '_thinkrank_oauth_nonce' ] as $k ) {
 			$params[ $k ] = self::oauth_param( $source, $k );
 		}
+		// Per-area choices from the consent form. Each is one of three fixed
+		// words, so anything else simply reads as "none".
+		$granted = [];
+		foreach ( Mcp_Scopes::AREAS as $area ) {
+			$granted[ $area ] = Mcp_Scopes::level_from( self::oauth_param( $source, 'area_' . $area ) );
+		}
+		$has_areas = self::consent_has_areas( $source );
 
-		// Validate the OAuth params before touching the session.
+		$outcome = self::consent_outcome( $params, $granted, $has_areas, $is_post );
+
+		switch ( $outcome['action'] ) {
+			case 'redirect_error':
+				$this->redirect_error( (string) $outcome['redirect_uri'], (string) $outcome['error'], (string) $outcome['description'], (string) $outcome['state'] );
+				return;
+
+			case 'refuse':
+				$this->emit_oauth_error_page( (string) $outcome['message'], (int) $outcome['status'] );
+				return;
+
+			case 'sign_in':
+				// Anonymous → wp-login, back to this URL.
+				$this->redirect_to_login();
+				return;
+
+			case 'deny':
+				$this->redirect_error( (string) $outcome['request']['redirect_uri'], 'access_denied', (string) $outcome['description'], (string) $outcome['request']['state'] );
+				return;
+
+			case 'approve':
+				$code = Mcp_OAuth::issue_code( $outcome['request'], get_current_user_id() );
+				$this->redirect_success( (string) $outcome['request']['redirect_uri'], $code, (string) $outcome['request']['state'] );
+				return;
+
+			default:
+				$this->emit_consent_screen( $outcome['request'] );
+		}
+	}
+
+	/**
+	 * What the consent page should do, decided without doing any of it.
+	 *
+	 * Separated from the page so the decision can be exercised: the page
+	 * itself ends the request in every branch, which is right for a page and
+	 * leaves nothing for a test to hold. Nothing here writes, redirects or
+	 * prints; the caller does all three. The order of the checks is the
+	 * whole of what this returns, and the order is the security property.
+	 *
+	 * For a client whose return address is ThinkRank Hub's, a valid ticket
+	 * minted by the signed-in administrator is required before anything is
+	 * offered: without it, anybody could start a connection in their own hub
+	 * workspace and send the owner a consent page that is genuine in every
+	 * word. A ticket started for reading narrows the grant to read whatever
+	 * the client asks (thinkrank#1002).
+	 *
+	 * @since 2.15.0
+	 *
+	 * @param array<string,string> $params    The request's own parameters, read verbatim.
+	 * @param array<string,int>    $granted   Per-area levels from the form.
+	 * @param bool                 $has_areas Whether the form carried per-area choices.
+	 * @param bool                 $is_post   Whether the form was submitted.
+	 * @return array<string,mixed> `action` plus what that action needs.
+	 */
+	public static function consent_outcome( array $params, array $granted, bool $has_areas, bool $is_post ): array {
 		$req = Mcp_OAuth::validate_authorize_request( $params );
+
 		if ( is_wp_error( $req ) ) {
-			$data         = $req->get_error_data();
-			$redirectable = is_array( $data ) && ! empty( $data['redirectable'] );
+			$data = $req->get_error_data();
+
 			// Only redirect the error back when redirect_uri is verified valid;
 			// otherwise show a page (never bounce to an unverified URL).
-			if ( $redirectable && '' !== $params['redirect_uri'] ) {
-				$this->redirect_error( $params['redirect_uri'], $req->get_error_code(), $req->get_error_message(), $params['state'] );
+			if ( is_array( $data ) && ! empty( $data['redirectable'] ) && '' !== (string) ( $params['redirect_uri'] ?? '' ) ) {
+				return [
+					'action'       => 'redirect_error',
+					'error'        => $req->get_error_code(),
+					'description'  => $req->get_error_message(),
+					'redirect_uri' => (string) $params['redirect_uri'],
+					'state'        => (string) ( $params['state'] ?? '' ),
+				];
 			}
-			$this->emit_oauth_error_page( $req->get_error_message() );
+
+			return [
+				'action'  => 'refuse',
+				'message' => $req->get_error_message(),
+				'status'  => 400,
+			];
 		}
 
-		// Require a logged-in admin. Anonymous → wp-login, back to this URL.
 		if ( ! is_user_logged_in() ) {
-			$this->redirect_to_login();
+			return [ 'action' => 'sign_in' ];
 		}
+
 		if ( ! current_user_can( 'manage_options' ) ) {
-			$this->emit_oauth_error_page(
-				__( 'You must be an administrator to authorize an AI assistant to manage SEO on this site.', 'thinkrank' )
-			);
+			return [
+				'action'  => 'refuse',
+				'message' => __( 'You must be an administrator to authorize an AI assistant to manage SEO on this site.', 'thinkrank' ),
+				'status'  => 403,
+			];
 		}
 
-		// POST = consent form submitted.
-		if ( $is_post ) {
-			if ( ! wp_verify_nonce( $params['_thinkrank_oauth_nonce'], 'thinkrank_oauth_consent' ) ) {
-				$this->emit_oauth_error_page( __( 'Security check failed. Please try connecting again.', 'thinkrank' ) );
-			}
-			if ( '' === $params['approve'] ) {
-				$this->redirect_error( $req['redirect_uri'], 'access_denied', 'The user denied the request.', $req['state'] );
-			}
-			$code = Mcp_OAuth::issue_code( $req, get_current_user_id() );
-			$this->redirect_success( $req['redirect_uri'], $code, $req['state'] );
+		// A code for the hub's return address is issued only against a
+		// ticket this account minted from the MCP screen.
+		$hub_access = '';
+
+		// The public hub, while this site is set to another hub or pinned to
+		// an address it cannot use, is neither the hub nor an ordinary app.
+		if ( Mcp_Hub::is_unchosen_hub_redirect( (string) $req['redirect_uri'] ) ) {
+			return [
+				'action'  => 'refuse',
+				'message' => Mcp_Hub::pin_is_invalid()
+					? __( 'The hub address set in wp-config.php (THINKRANK_HUB_URL) is not an https address this site can use, so it will not connect to any hub until that is corrected.', 'thinkrank' )
+					: __( 'This site is set to connect to a different ThinkRank Hub, so it cannot be connected to this one.', 'thinkrank' ),
+				'status'  => 403,
+			];
 		}
 
-		// GET = render the consent screen.
-		$this->emit_consent_screen( $req );
+		if ( Mcp_Hub::is_hub_redirect( (string) $req['redirect_uri'] ) ) {
+			$ticket = Mcp_Hub::ticket( (string) ( $params['hub_ticket'] ?? '' ), get_current_user_id() );
+
+			if ( null === $ticket ) {
+				return [
+					'action'  => 'refuse',
+					'message' => __( 'Connecting this site to ThinkRank Hub starts from this site’s ThinkRank Hub tab, under ThinkRank > AI Tools > ThinkRank Hub, while signed in as the administrator approving it. Start there and the hub brings you back to this page.', 'thinkrank' ),
+					'status'  => 403,
+				];
+			}
+
+			$req['hub_ticket'] = (string) $params['hub_ticket'];
+			$hub_access        = (string) $ticket['access'];
+
+			// A connection started as read only stays read only whatever the
+			// client asks for.
+			if ( Mcp_Hub::ACCESS_READ === $hub_access ) {
+				$req['scope'] = 'read';
+			}
+		}
+
+		$req['hub_access'] = $hub_access;
+		$req['may_change'] = Mcp_Hub::ACCESS_READ !== $hub_access;
+
+		if ( ! $is_post ) {
+			return [
+				'action'  => 'ask',
+				'request' => $req,
+			];
+		}
+
+		if ( ! wp_verify_nonce( (string) ( $params['_thinkrank_oauth_nonce'] ?? '' ), 'thinkrank_oauth_consent' ) ) {
+			return [
+				'action'  => 'refuse',
+				'message' => __( 'Security check failed. Please try connecting again.', 'thinkrank' ),
+				'status'  => 403,
+			];
+		}
+
+		if ( '' === (string) ( $params['approve'] ?? '' ) ) {
+			return [
+				'action'      => 'deny',
+				'request'     => $req,
+				'description' => 'The user denied the request.',
+			];
+		}
+
+		// The admin's choices on the consent screen are the grant, not the
+		// scope the client asked for: an area the form didn't post a choice
+		// for grants nothing. The screen offers Pro's whenever the client asks
+		// for it, active or not (consent_areas(), #1065). A form posted
+		// without any choices (an older cached page) keeps the requested scope.
+		$levels = $has_areas
+			? Mcp_Scopes::normalize_levels( $granted )
+			: Mcp_Scopes::levels( Mcp_Scopes::parse( (string) $req['scope'] ) );
+
+		if ( ! $req['may_change'] ) {
+			foreach ( $levels as $area => $level ) {
+				$levels[ $area ] = min( $level, Mcp_Scopes::READ );
+			}
+		}
+
+		if ( $has_areas && ! Mcp_Scopes::grants_any_write( $levels ) && ! in_array( Mcp_Scopes::READ, $levels, true ) ) {
+			return [
+				'action'      => 'deny',
+				'request'     => $req,
+				'description' => 'No access was granted.',
+			];
+		}
+
+		// What was actually granted. A hub grant is stored as scope tokens
+		// rather than the `mcp` umbrella, because the hub reads `write` from
+		// the scope it is handed back.
+		if ( '' !== $hub_access ) {
+			$req['scope'] = Mcp_OAuth::hub_scope_for_levels( $levels );
+		} elseif ( $has_areas ) {
+			$req['scope'] = Mcp_OAuth::scope_for_levels( $levels );
+		}
+
+		return [
+			'action'  => 'approve',
+			'request' => $req,
+		];
+	}
+
+	/**
+	 * The areas the consent screen offers a choice for: those the site runs,
+	 * and Pro's whenever the client asks for it, even while Pro is inactive,
+	 * so an app approved before Pro is activated has Pro's level chosen by
+	 * the administrator rather than left at none (#1065). Pro's row then
+	 * says it applies once Pro is active. An area the screen doesn't offer
+	 * is posted no choice, and grants nothing.
+	 *
+	 * @since 2.15.0
+	 *
+	 * @param array<string,int> $requested Per-area levels of the scope the client asked for.
+	 * @return array<string,array{label:string,description:string}>
+	 */
+	public static function consent_areas( array $requested ): array {
+		$areas = self::visible_areas();
+
+		if ( ! isset( $areas['pro'] ) && Mcp_Scopes::NONE !== ( $requested['pro'] ?? Mcp_Scopes::NONE ) ) {
+			$pro                = Mcp_Scopes::area_labels()['pro'];
+			$pro['description'] = trim( $pro['description'] . ' ' . __( 'ThinkRank Pro isn’t active on this site yet: this applies once it is.', 'thinkrank' ) );
+			$areas['pro']       = $pro;
+		}
+
+		return $areas;
 	}
 
 	// -- OAuth browser-response helpers ------------------------------------
@@ -1150,13 +1885,9 @@ final class Mcp_Manager {
 	 * @return void
 	 */
 	private function redirect_success( string $redirect_uri, string $code, string $state ): void {
-		$args = [ 'code' => $code ];
-		if ( '' !== $state ) {
-			$args['state'] = $state;
-		}
 		// Not wp_safe_redirect: redirect_uri is a client-registered off-site
 		// callback, already validated against the client's registered set.
-		wp_redirect( add_query_arg( $args, $redirect_uri ) ); // phpcs:ignore WordPress.Security.SafeRedirect -- validated OAuth redirect_uri.
+		wp_redirect( self::callback_url( $redirect_uri, [ 'code' => $code ], $state ) ); // phpcs:ignore WordPress.Security.SafeRedirect -- validated OAuth redirect_uri.
 		exit;
 	}
 
@@ -1174,11 +1905,73 @@ final class Mcp_Manager {
 			'error'             => $error,
 			'error_description' => $description,
 		];
+		wp_redirect( self::callback_url( $redirect_uri, $args, $state ) ); // phpcs:ignore WordPress.Security.SafeRedirect -- validated OAuth redirect_uri.
+		exit;
+	}
+
+	/**
+	 * The address the client is sent back to, built and not sent.
+	 *
+	 * One builder for the success and the error path, and every value is
+	 * percent-encoded on the way in. The success path used to hand its
+	 * arguments to add_query_arg() raw, which builds its query with encoding
+	 * switched off: a `state` carrying an ampersand appended a second
+	 * parameter to the callback, and a second `code` on the callback is a
+	 * code the client did not ask for, arriving beside the one it did
+	 * (#1001, BetterShield A7).
+	 *
+	 * Appended by hand rather than through add_query_arg(), which re-parses
+	 * the address: RFC 6749 §4.1.2 adds parameters to the query component of
+	 * the registered redirect URI and keeps what is already there, and the
+	 * registered address was matched byte for byte, so it goes back out byte
+	 * for byte. Public and pure so it can be tested; the two redirects above
+	 * end the request.
+	 *
+	 * @since 2.15.0
+	 *
+	 * @param string               $redirect_uri Validated client redirect URI.
+	 * @param array<string,string> $args         Query parameters to add, raw.
+	 * @param string               $state        Client state, added when not empty.
+	 * @return string
+	 */
+	public static function callback_url( string $redirect_uri, array $args, string $state ): string {
 		if ( '' !== $state ) {
 			$args['state'] = $state;
 		}
-		wp_redirect( add_query_arg( array_map( 'rawurlencode', $args ), $redirect_uri ) ); // phpcs:ignore WordPress.Security.SafeRedirect -- validated OAuth redirect_uri.
-		exit;
+
+		$pairs = [];
+		foreach ( $args as $key => $value ) {
+			$pairs[] = rawurlencode( (string) $key ) . '=' . rawurlencode( (string) $value );
+		}
+
+		// A fragment has no place on a redirect URI (RFC 6749 §3.1.2), but
+		// one that carries it is not refused at registration yet, and the
+		// query belongs before it rather than inside it.
+		$fragment = '';
+		$hash     = strpos( $redirect_uri, '#' );
+		if ( false !== $hash ) {
+			$fragment     = substr( $redirect_uri, $hash );
+			$redirect_uri = substr( $redirect_uri, 0, $hash );
+		}
+
+		$separator = false === strpos( $redirect_uri, '?' ) ? '?' : '&';
+
+		return $redirect_uri . $separator . implode( '&', $pairs ) . $fragment;
+	}
+
+	/**
+	 * Whether a consent POST carried the per-area choices.
+	 *
+	 * @param array<string,mixed> $source POST data.
+	 * @return bool
+	 */
+	private static function consent_has_areas( array $source ): bool {
+		foreach ( Mcp_Scopes::AREAS as $area ) {
+			if ( isset( $source[ 'area_' . $area ] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -1186,12 +1979,12 @@ final class Mcp_Manager {
 	 * chrome — this is a client-facing OAuth page). Approve/Deny post back
 	 * to the same authorize URL with a nonce.
 	 *
-	 * @param array<string,string> $req Validated authorize params.
+	 * @param array<string,mixed> $req Validated authorize params.
 	 * @return void
 	 */
 	private function emit_consent_screen( array $req ): void {
 		$read_only    = Mcp_OAuth::scope_is_read_only( $req['scope'] );
-		$access_label = $read_only ? __( 'Read-only', 'thinkrank' ) : __( 'Read & write', 'thinkrank' );
+		$access_label = $read_only ? __( 'Requested: read-only', 'thinkrank' ) : __( 'Requested: read & write', 'thinkrank' );
 		$access_desc  = $read_only
 			? __( 'Review your SEO across posts and site settings metadata, schema, sitemaps, robots, social, and SEO scores. No changes are made.', 'thinkrank' )
 			: __( 'Read and improve your SEO across posts and site settings metadata, schema, sitemaps, robots, social, indexing, and SEO scores.', 'thinkrank' );
@@ -1199,10 +1992,14 @@ final class Mcp_Manager {
 		$action_url = Mcp_OAuth::authorize_url();
 		$nonce      = wp_create_nonce( 'thinkrank_oauth_consent' );
 		$user       = wp_get_current_user();
+		// The hub's connection: started on the MCP screen with the access the
+		// ticket carries, so a read-only one offers no write anywhere.
+		$for_hub    = '' !== (string) ( $req['hub_access'] ?? '' );
+		$may_change = ! empty( $req['may_change'] );
 
 		// Preserve every OAuth param so the POST re-validates identically.
 		$hidden = '';
-		foreach ( [ 'client_id', 'redirect_uri', 'code_challenge', 'scope', 'state' ] as $k ) {
+		foreach ( [ 'client_id', 'redirect_uri', 'code_challenge', 'scope', 'state', 'resource', 'hub_ticket' ] as $k ) {
 			$val     = 'scope' === $k ? $req['scope'] : ( $req[ $k ] ?? '' );
 			$hidden .= sprintf( '<input type="hidden" name="%s" value="%s" />', esc_attr( $k ), esc_attr( (string) $val ) );
 		}
@@ -1254,6 +2051,8 @@ final class Mcp_Manager {
 			. '.badge{display:inline-flex;align-items:center;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;background:rgba(99,102,241,.18);color:#c7cbff;border:1px solid rgba(99,102,241,.4)}'
 			. '.badge.ro{background:rgba(245,158,11,.15);color:#fcd9a1;border-color:rgba(245,158,11,.4)}'
 			. '.access .d{color:#c3ccdd;font-size:13px;margin-top:8px}'
+			. '.areas .area{cursor:default}.areas .k{display:flex;flex-direction:column;gap:2px}.areas .k b{color:#e7ecf3;font-weight:600}.areas .k small{color:#7f8aa3;font-size:12px}'
+			. '.areas select{-webkit-appearance:none;appearance:none;background:#0f1426 url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%239aa6be\' stroke-width=\'2.5\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'m6 9 6 6 6-6\'/%3E%3C/svg%3E") no-repeat right 10px center;color:#e7ecf3;border:1px solid #33405c;border-radius:8px;padding:6px 32px 6px 10px;font-size:13px;min-width:132px;cursor:pointer}'
 			. '.note{display:flex;align-items:center;gap:7px;color:#7f8aa3;font-size:12px;margin:0 0 20px}'
 			. '.actions{display:flex;gap:12px}'
 			. 'button{flex:1;padding:13px;border-radius:12px;border:0;font-size:14px;font-weight:600;cursor:pointer;transition:filter .15s,transform .05s}button:active{transform:translateY(1px)}'
@@ -1273,14 +2072,44 @@ final class Mcp_Manager {
 		echo '<div class="rows">';
 		echo '<div class="row"><span class="k">' . esc_html__( 'Site', 'thinkrank' ) . '</span><span class="v">' . esc_html( $host ) . '</span></div>';
 		echo '<div class="row"><span class="k">' . esc_html__( 'Signed in as', 'thinkrank' ) . '</span><span class="v">' . esc_html( $user->user_login ) . '</span></div>';
+		if ( $for_hub ) {
+			// Where the code goes: the hub this site's MCP screen names.
+			echo '<div class="row"><span class="k">' . esc_html__( 'Sends you back to', 'thinkrank' ) . '</span><span class="v">' . esc_html( Mcp_Hub::host_of( (string) $req['redirect_uri'] ) ) . '</span></div>';
+		}
 		echo '<div class="access"><div class="k">' . esc_html__( 'Access', 'thinkrank' ) . '</div>';
 		echo '<span class="badge ' . ( $read_only ? 'ro' : '' ) . '">' . esc_html( $access_label ) . '</span>';
-		echo '<div class="d">' . esc_html( $access_desc ) . '</div></div>';
+		echo '<div class="d">' . esc_html( $access_desc ) . ' ' . esc_html__( 'Narrow it per area below. You can change it later under ThinkRank > MCP without reconnecting.', 'thinkrank' ) . '</div></div>';
+		echo '</div>';
+
+		// Per-area access, preselected from what the client asked for. The
+		// admin can narrow it (or widen it) before approving, and change it
+		// later under Connected AI apps without the client reconnecting. A
+		// hub connection started for reading only offers no write anywhere.
+		$requested = Mcp_Scopes::levels( Mcp_Scopes::parse( $req['scope'] ) );
+		$choices   = [
+			'none'  => __( 'No access', 'thinkrank' ),
+			'read'  => __( 'Read', 'thinkrank' ),
+			'write' => __( 'Read & Write', 'thinkrank' ),
+		];
+		if ( ! $may_change ) {
+			unset( $choices['write'] );
+		}
+		$names = [ 'none', 'read', 'write' ];
+		echo '<div class="rows areas">';
+		foreach ( self::consent_areas( $requested ) as $area => $info ) {
+			$current = $names[ $requested[ $area ] ?? Mcp_Scopes::NONE ];
+			echo '<label class="row area"><span class="k"><b>' . esc_html( $info['label'] ) . '</b><small>' . esc_html( $info['description'] ) . '</small></span>';
+			echo '<select form="tr-consent" name="' . esc_attr( 'area_' . $area ) . '">';
+			foreach ( $choices as $value => $label ) {
+				echo '<option value="' . esc_attr( $value ) . '"' . selected( $current, $value, false ) . '>' . esc_html( $label ) . '</option>';
+			}
+			echo '</select></label>';
+		}
 		echo '</div>';
 
 		echo '<p class="note">' . $lock . '<span>' . esc_html__( 'Secured with OAuth. Revoke anytime in ThinkRank → MCP.', 'thinkrank' ) . '</span></p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- static icon; text esc_html'd.
 
-		echo '<form method="post" action="' . esc_url( $action_url ) . '">';
+		echo '<form id="tr-consent" method="post" action="' . esc_url( $action_url ) . '">';
 		echo $hidden; // phpcs:ignore WordPress.Security.EscapeOutput -- built from esc_attr() above.
 		echo '<input type="hidden" name="_thinkrank_oauth_nonce" value="' . esc_attr( $nonce ) . '" />';
 		echo '<div class="actions">';
@@ -1294,10 +2123,11 @@ final class Mcp_Manager {
 	 * Render a standalone OAuth error page (no redirect).
 	 *
 	 * @param string $message Error message.
+	 * @param int    $status  HTTP status: 400 for a malformed request, 403 for a refusal.
 	 * @return void
 	 */
-	private function emit_oauth_error_page( string $message ): void {
-		status_header( 400 );
+	private function emit_oauth_error_page( string $message, int $status = 400 ): void {
+		status_header( $status );
 		header( 'Content-Type: text/html; charset=utf-8' );
 		header( 'Cache-Control: no-store' );
 		echo '<!doctype html><html><head><meta charset="utf-8"><title>' . esc_html__( 'Authorization error', 'thinkrank' ) . '</title>';
@@ -1335,6 +2165,7 @@ final class Mcp_Manager {
 	 *   - code_challenge validated against the RFC 7636 character set
 	 *   - scope         intersected with SUPPORTED_SCOPES
 	 *   - state         opaque; escaped at output (esc_attr / rawurlencode)
+	 *   - resource      must name this endpoint, or the request is invalid_target
 	 *   - approve/deny  tested for emptiness only
 	 *   - the nonce     passed to wp_verify_nonce()
 	 *

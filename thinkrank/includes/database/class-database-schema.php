@@ -49,7 +49,7 @@ class Database_Schema {
      * @since 1.0.0
      * @var string
      */
-    private string $db_version = '1.9.2';
+    private string $db_version = '1.10.2';
 
     /**
      * Widest single indexed COLUMN InnoDB accepts on a COMPACT/REDUNDANT row
@@ -251,6 +251,16 @@ class Database_Schema {
             'primary_key' => 'id',
             'indexes' => ['day', 'kind'],
             'foreign_keys' => []
+        ],
+
+        // === GOVERNANCE TABLES (1) ===
+        // One row per MCP write (with before/after for revert), per denied
+        // call, and per client per day for reads (#717).
+        'mcp_audit' => [
+            'description' => 'Activity log of AI-agent calls made through the ThinkRank MCP server',
+            'primary_key' => 'id',
+            'indexes' => ['ts', 'tool'],
+            'foreign_keys' => []
         ]
     ];
 
@@ -274,7 +284,8 @@ class Database_Schema {
         'content' => ['content_briefs'],
         'scoring' => ['seo_scores'],
         'reporting' => ['email_report_logs'],
-        'ai_visibility' => ['ai_traffic']
+        'ai_visibility' => ['ai_traffic'],
+        'governance' => ['mcp_audit']
     ];
 
     /**
@@ -352,6 +363,11 @@ class Database_Schema {
                 $results['errors'][] = "Error creating {$table_name}: " . $e->getMessage();
                 $results['success'] = false;
             }
+        }
+
+        // Read counters written before the MCP log's rollup key existed.
+        if (class_exists(\ThinkRank\Mcp\Mcp_Audit::class)) {
+            \ThinkRank\Mcp\Mcp_Audit::migrate_read_rollups();
         }
 
         // Retire the pre-#298 full-width keys now that their prefixed
@@ -708,6 +724,10 @@ class Database_Schema {
                 // AI Visibility Tables
             case 'ai_traffic':
                 return $this->get_ai_traffic_table_sql($full_table_name, $charset_collate);
+
+                // Governance Tables
+            case 'mcp_audit':
+                return $this->get_mcp_audit_table_sql($full_table_name, $charset_collate);
 
             default:
                 throw new \InvalidArgumentException('Unknown table: ' . esc_html($table_name));
@@ -1784,6 +1804,68 @@ class Database_Schema {
             UNIQUE KEY uniq_bucket (day, kind, source, path),
             KEY idx_day (day),
             KEY idx_kind (kind)
+        ) {$charset_collate};";
+    }
+
+    /**
+     * MCP activity log (#717).
+     *
+     * `client_key` is the OAuth client id, or `static` for the shared
+     * connection token. Reads are folded into one `kind = read` row per client
+     * per day, counted in `calls`, so an agent paging through every post does
+     * not write a row per page. `before_json` / `after_json` hold the redacted
+     * projection of what a write changed, capped at 16 KB each; `meta` holds
+     * how to read and revert it.
+     *
+     * The object a write targeted is `target_type` / `target_id`, not
+     * `object_*`: wpdb::$field_types maps any column called `object_id` to
+     * %d (it is a core term_relationships column), so a settings group name
+     * stored there was silently written as 0. `idx_target` serves the
+     * exact-object filter on the Activity screen and get-mcp-activity.
+     *
+     * `rollup_key` is set on read counters only (`read|{day}|{client_key}`),
+     * so the unique key holds them to one row per client per day while every
+     * other row leaves it NULL.
+     *
+     * @since 2.15.0
+     *
+     * @param string $table_name Full table name.
+     * @param string $charset_collate Charset/collation clause.
+     * @return string CREATE TABLE statement.
+     */
+    private function get_mcp_audit_table_sql(string $table_name, string $charset_collate): string {
+        return "CREATE TABLE `{$table_name}` (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            ts datetime NOT NULL,
+            day date NOT NULL,
+            kind varchar(10) NOT NULL DEFAULT 'write',
+            result varchar(10) NOT NULL DEFAULT 'ok',
+            client_kind varchar(10) NOT NULL DEFAULT '',
+            client_key varchar(100) NOT NULL DEFAULT '',
+            client_name varchar(191) NOT NULL DEFAULT '',
+            user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+            tool varchar(100) NOT NULL DEFAULT '',
+            target_type varchar(20) NOT NULL DEFAULT '',
+            target_id varchar(64) NOT NULL DEFAULT '',
+            input_summary text NULL,
+            before_json mediumtext NULL,
+            after_json mediumtext NULL,
+            meta text NULL,
+            revertable tinyint(1) NOT NULL DEFAULT 0,
+            reverted_by bigint(20) unsigned NOT NULL DEFAULT 0,
+            parent_id bigint(20) unsigned NOT NULL DEFAULT 0,
+            calls int(10) unsigned NOT NULL DEFAULT 1,
+            duration_ms int(10) unsigned NOT NULL DEFAULT 0,
+            ip varchar(45) NOT NULL DEFAULT '',
+            message varchar(255) NOT NULL DEFAULT '',
+            rollup_key varchar(120) NULL DEFAULT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY uniq_rollup (rollup_key),
+            KEY idx_ts (ts),
+            KEY idx_client_day (client_key, day),
+            KEY idx_tool (tool),
+            KEY idx_kind_day (kind, day),
+            KEY idx_target (target_type, target_id)
         ) {$charset_collate};";
     }
 }

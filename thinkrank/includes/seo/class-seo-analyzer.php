@@ -365,6 +365,9 @@ class SEO_Analyzer {
                 'can_auto_fix' => $fixable,
                 'fix_label'    => (string) ($fix['label'] ?? ''),
                 'fix_warning'  => (string) ($fix['warning'] ?? ''),
+                // Whether the fix can be put back through an existing write,
+                // shown beside the warning so a person sees it before agreeing.
+                'fix_undoable' => !empty($fix['undo']),
             ];
         }
 

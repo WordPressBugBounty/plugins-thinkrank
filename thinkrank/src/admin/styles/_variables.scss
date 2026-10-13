@@ -1,0 +1,259 @@
+/**
+* SCSS Variables
+*
+* Centralized design tokens for consistent theming
+*
+* @package ThinkRank
+* @since 1.0.0
+*/
+
+// Color Palette
+$primary: #4451ff;
+$primary-blue: $primary;
+
+$success: #027a48;
+$success-bg: #ecfdf3;
+$success-green: $success;
+
+$warning: #b54708;
+$warning-bg: #fffaeb;
+$warning-orange: $warning;
+
+$error: #921c13;
+$error-bg: #fef3f2;
+$error-red: $error;
+
+$white: #fff;
+$black: #000;
+
+// Background Colors
+$bg-primary: $white;
+$bg-secondary: #f8f8fb;
+$bg-tertiary: #f1f1f5;
+
+// Text Colors
+$text-primary: #1d1d1d;
+$text-secondary: #535353;
+$text-tertiary: #5a5c5e;
+$text-muted: $text-tertiary;
+
+// Border Colors
+$border-primary: #d5d5dd;
+$border-secondary: #e2e6f1;
+$border-light: $border-secondary;
+$border-medium: $border-primary;
+$border-dark: $border-primary;
+
+// Spacing Scale
+$spacing-xs: 0.25rem;   // 4px
+$spacing-sm: 0.5rem;    // 8px
+$spacing-md: 0.75rem;   // 12px
+$spacing-lg: 1rem;      // 16px
+$spacing-xl: 1.25rem;   // 20px
+$spacing-2xl: 1.5rem;   // 24px
+$spacing-3xl: 2rem;     // 32px
+$spacing-4xl: 2.5rem;   // 40px
+$spacing-5xl: 3rem;     // 48px
+
+// Enhanced Spacing Scale Map (for utility generation)
+$spacing-scale: (
+	0: 0,
+	1: $spacing-xs, // 0.25rem
+	2: $spacing-sm, // 0.5rem
+	3: $spacing-md, // 0.75rem
+	4: $spacing-lg, // 1rem
+	5: $spacing-xl, // 1.25rem
+	6: $spacing-2xl, // 1.5rem
+	8: $spacing-3xl, // 2rem
+	10: $spacing-4xl, // 2.5rem
+	12: $spacing-5xl, // 3rem
+	16: 4rem, // 64px
+	20: 5rem, // 80px
+	24: 6rem // 96px
+);
+
+// Typography
+// stylelint-disable-next-line value-keyword-case -- font family names are proper nouns; matching is case-insensitive but the canonical casing stays.
+$font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+$font-family-mono: "SFMono-Regular", "Monaco", "Inconsolata", "Roboto Mono", monospace;
+
+$font-size-xs: 0.75rem;    // 12px
+$font-size-sm: 0.875rem;   // 14px
+$font-size-base: 1rem;     // 16px
+$font-size-lg: 1.125rem;   // 18px
+$font-size-xl: 1.25rem;    // 20px
+$font-size-2xl: 1.5rem;    // 24px
+$font-size-3xl: 1.875rem;  // 30px
+$font-size-4xl: 2.25rem;   // 36px
+
+// Enhanced Typography Scale Map (for utility generation)
+$font-sizes: (
+	xs: $font-size-xs,
+	sm: $font-size-sm,
+	base: $font-size-base,
+	lg: $font-size-lg,
+	xl: $font-size-xl,
+	2xl: $font-size-2xl,
+	3xl: $font-size-3xl,
+	4xl: $font-size-4xl
+);
+
+$font-weight-normal: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+
+$line-height-tight: 1.25;
+$line-height-normal: 1.5;
+$line-height-relaxed: 1.75;
+
+// Border Radius
+$radius-sm: 4px;
+$radius-md: 6px;
+$radius-lg: 8px;
+$radius-xl: 12px;
+$radius-2xl: 16px;
+$radius-3xl: 20px;
+$radius-full: 9999px;
+
+// Enhanced Border Radius Scale Map (for utility generation)
+$border-radius: (
+	none: 0,
+	sm: $radius-sm,
+	base: $radius-md,
+	md: $radius-md,
+	lg: $radius-lg,
+	xl: $radius-xl,
+	2xl: $radius-2xl,
+	3xl: $radius-3xl,
+	full: $radius-full
+);
+
+// Shadows
+$shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+$shadow-md: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+$shadow-lg: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+$shadow-xl: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+$shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+
+// Transitions
+$transition-fast: 0.15s ease-in-out;
+$transition-normal: 0.2s ease-in-out;
+$transition-slow: 0.3s ease-in-out;
+
+// Z-index Scale
+$z-dropdown: 1000;
+$z-sticky: 1020;
+$z-fixed: 1030;
+$z-modal-backdrop: 1040;
+$z-modal: 1050;
+$z-popover: 1060;
+$z-tooltip: 1070;
+
+// Breakpoints
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+$breakpoint-2xl: 1536px;
+
+// Container Widths
+$container-sm: 640px;
+$container-md: 768px;
+$container-lg: 1024px;
+$container-xl: 1280px;
+$container-2xl: 1400px;
+
+// Component Specific Variables
+
+// Buttons
+$button-height-sm: 2rem;
+$button-height-md: 2.5rem;
+$button-height-lg: 3rem;
+
+$button-padding-sm: $spacing-sm $spacing-md;
+$button-padding-md: $spacing-md $spacing-lg;
+$button-padding-lg: $spacing-lg $spacing-xl;
+
+// Cards
+$card-padding: $spacing-2xl;
+$card-border-radius: $radius-xl;
+$card-shadow: $shadow-md;
+
+// Forms
+$input-height: 2.75rem;
+$input-padding: $spacing-md $spacing-lg;
+$input-border-radius: $radius-md;
+
+// Dashboard
+$dashboard-card-min-height: 140px;
+$dashboard-gap: $spacing-2xl;
+$dashboard-icon-size: 3rem;
+
+// Header
+$header-height: 4rem;
+$header-padding: $spacing-lg $spacing-xl;
+
+// Sidebar
+$sidebar-width: 200px;
+$sidebar-gap: $spacing-md;
+
+// Animation Curves
+$ease-in-out-cubic: cubic-bezier(0.4, 0, 0.2, 1);
+$ease-out-cubic: cubic-bezier(0, 0, 0.2, 1);
+$ease-in-cubic: cubic-bezier(0.4, 0, 1, 1);
+
+// Gradients
+$gradient-primary: linear-gradient(135deg, #{$primary} 0%, #{$primary} 100%);
+$gradient-success: linear-gradient(135deg, #{$success} 0%, #{$success-bg} 100%);
+$gradient-warning: linear-gradient(135deg, #{$warning} 0%, #{$warning-bg} 100%);
+$gradient-card: linear-gradient(135deg, #{$white} 0%, #{$bg-secondary} 100%);
+
+// Provider Gradients
+$gradient-openai: linear-gradient(135deg, #{$primary} 0%, #{$primary} 100%);
+$gradient-claude: linear-gradient(135deg, #{$primary} 0%, #{$primary} 100%);
+
+// Utility Mixins
+@mixin flex-center {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+@mixin flex-between {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+@mixin truncate {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+@mixin visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+@mixin focus-ring {
+	outline: none;
+	box-shadow: 0 0 0 2px $primary-blue;
+}
+
+@mixin card-hover {
+	transition: all $transition-normal;
+
+	&:hover {
+		transform: translateY(-2px);
+		box-shadow: $shadow-lg;
+	}
+}

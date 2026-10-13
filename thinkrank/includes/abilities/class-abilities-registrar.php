@@ -83,9 +83,11 @@ use ThinkRank\Abilities\Analysis\Get_Seo_Opportunities;
 use ThinkRank\Abilities\Analysis\Get_Seo_Score;
 use ThinkRank\Abilities\Analysis\Get_Seo_Analyzer;
 use ThinkRank\Abilities\Analysis\Run_Seo_Analyzer;
+use ThinkRank\Abilities\Analysis\Fix_Seo_Check;
 use ThinkRank\Abilities\Analysis\Get_Performance_Data;
 use ThinkRank\Abilities\Analysis\Get_Integrations_Status;
 use ThinkRank\Abilities\Analysis\Get_Connection_Status;
+use ThinkRank\Abilities\Analysis\Get_Mcp_Activity;
 use ThinkRank\Abilities\Analysis\Bulk_Analyze_And_Save;
 use ThinkRank\Core\Settings;
 
@@ -96,9 +98,13 @@ use ThinkRank\Core\Settings;
  * registration is decoupled from the `enable_mcp` toggle (see #187). Each
  * ability is a permission-checked read/write surface (its own
  * `current_user_can()` callback runs on every call), so registration alone
- * exposes nothing; it only makes ThinkRank discoverable to generic WordPress
- * Abilities clients (e.g. an external connector) the same way WordPress core
- * abilities are. The `enable_mcp` toggle gates only ThinkRank's own MCP server
+ * exposes nothing; it only makes ThinkRank discoverable in-process
+ * (`wp_get_abilities()`) and to the MCP server the same way WordPress core
+ * abilities are. Core's Abilities REST route stays off for each ability unless
+ * the `thinkrank_ability_show_in_rest` filter opts it in
+ * ({@see Ability_Base::show_in_rest()}), since that route would run an ability
+ * outside `enable_mcp`, the credential's scope and the rate limiter. The
+ * `enable_mcp` toggle gates only ThinkRank's own MCP server
  * ({@see \ThinkRank\Mcp\Mcp_Manager}) — the endpoint, discovery documents, and
  * OAuth surface. The MCP server reads this abilities registry as its tool
  * catalog. The Abilities API itself ships in `dependencies/` and no-ops
@@ -403,9 +409,11 @@ class Abilities_Registrar {
 			new Get_Seo_Score(),
 			new Get_Seo_Analyzer(),
 			new Run_Seo_Analyzer(),
+			new Fix_Seo_Check(),
 			new Get_Performance_Data(),
 			new Get_Integrations_Status(),
 			new Get_Connection_Status(),
+			new Get_Mcp_Activity(),
 			new Bulk_Analyze_And_Save(),
 			new Generate_Content_Brief(),
 			new Get_Pillar_Content(),

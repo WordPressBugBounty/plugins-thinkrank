@@ -74,6 +74,7 @@ class Setup_Wizard_Endpoint extends WP_REST_Controller {
         'easyjobs'         => 'easyjobs',
         'betterlinks'      => 'betterlinks',
         'embedpress'       => 'embedpress',
+        'xspeed'           => 'xspeed',
     ];
 
     /**
@@ -202,6 +203,13 @@ class Setup_Wizard_Endpoint extends WP_REST_Controller {
                     'methods'             => 'POST',
                     'callback'            => [$this, 'grant_tracking_consent'],
                     'permission_callback' => [$this, 'check_admin_csrf_permissions'],
+                    'args'                => [
+                        'consent' => [
+                            'type'              => 'boolean',
+                            'default'           => false,
+                            'sanitize_callback' => 'rest_sanitize_boolean',
+                        ],
+                    ],
                 ],
             ]
         );
@@ -379,27 +387,47 @@ class Setup_Wizard_Endpoint extends WP_REST_Controller {
     }
 
     /**
-     * Record usage-tracking consent.
+     * Record the Start step and the user's usage-tracking choice.
      *
-     * Triggered when the user clicks "Get Started" on the first wizard step.
-     * Delegates to the usage tracker manager which flags tracking allowed,
-     * schedules the cron and suppresses the opt-in notice. Idempotent.
+     * Triggered when the user clicks "Allow & Continue" (`consent: true`) or
+     * "Skip" (`consent: false`) on the first wizard step. Tracking is enabled
+     * solely by "Allow & Continue" — "Skip" begins setup just the same, so
+     * starting setup is never taken as consent (WordPress.org Guideline 7).
+     * With consent, the usage tracker manager flags tracking allowed, schedules
+     * the cron and suppresses the opt-in notice, and the Start step is
+     * permanently dismissed. Without it, nothing is stored and the Start step
+     * stays reachable, so the user can come back and opt in. Idempotent.
      *
      * @param WP_REST_Request $request Request object.
      * @return WP_REST_Response
      */
     public function grant_tracking_consent(WP_REST_Request $request): WP_REST_Response {
-        // "Get Started" permanently dismisses the Start step. Persist this before
+        if (!rest_sanitize_boolean($request->get_param('consent'))) {
+            return new WP_REST_Response(['success' => true, 'tracking' => false], 200);
+        }
+
+        // Opting in permanently dismisses the Start step. Persist this before
         // anything else so a direct URL hit or refresh can never return to Start.
         update_option(Setup_Wizard::OPT_STARTED, true);
 
-        $manager = function_exists('thinkrank') ? thinkrank()->get_component('usage_tracker') : null;
+        $manager = $this->usage_tracker();
 
-        if ($manager instanceof \ThinkRank\Core\Usage_Tracker_Manager) {
+        if (null !== $manager) {
             $manager->grant_consent();
         }
 
-        return new WP_REST_Response(['success' => true], 200);
+        return new WP_REST_Response(['success' => true, 'tracking' => true], 200);
+    }
+
+    /**
+     * The usage tracker component, when the plugin container has one.
+     *
+     * @return \ThinkRank\Core\Usage_Tracker_Manager|null
+     */
+    protected function usage_tracker(): ?\ThinkRank\Core\Usage_Tracker_Manager {
+        $manager = function_exists('thinkrank') ? thinkrank()->get_component('usage_tracker') : null;
+
+        return $manager instanceof \ThinkRank\Core\Usage_Tracker_Manager ? $manager : null;
     }
 
     /**

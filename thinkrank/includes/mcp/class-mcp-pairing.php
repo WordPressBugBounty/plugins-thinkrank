@@ -3,18 +3,23 @@
  * MCP pairing lifecycle — mint / rotate / revoke the per-site connection token.
  *
  * The primary way an AI assistant connects to ThinkRank: an admin clicks
- * Connect, the plugin mints a 32-byte secret, and the user pastes either the
- * single connect URL (token embedded in the path) or the endpoint + Bearer
- * token into their AI client. The token is validated directly by Mcp_Server —
- * no hosted infrastructure is involved.
+ * Connect, the plugin mints a 32-byte secret, and the user pastes the
+ * endpoint + Bearer token into their AI client. The token travels in the
+ * Authorization header and nowhere else — never in a URL, where it would
+ * land in access logs, proxy logs, Referer headers and browser history
+ * (#1001). It is validated directly by Mcp_Server; no hosted infrastructure
+ * is involved.
  *
  * State is stored in the `thinkrank_mcp_pairing` option:
  *   {
  *     site_token:   string (the secret the client presents),
  *     connected:    bool,
  *     connected_at: int (unix ts),
- *     scopes:       string[] (e.g. ['read','write']),
- *     user_id:      int (admin who minted the token; MCP calls run as them)
+ *     scopes:       string[] (e.g. ['read','write'], or per-area
+ *                   tokens such as ['content:write','analytics:read']),
+ *     user_id:      int (admin who minted the token; MCP calls run as them),
+ *     expires_at:   int (unix ts; 0 = never. Absent on tokens minted before
+ *                   expiry existed, which therefore never expire — #717)
  *   }
  *
  * @package ThinkRank\Mcp
@@ -41,6 +46,14 @@ final class Mcp_Pairing {
 	public const OPTION = 'thinkrank_mcp_pairing';
 
 	/**
+	 * When the static token last authenticated a call. Kept apart from OPTION
+	 * for the reason Mcp_OAuth::LAST_USED_OPTION is (#485): it is written by
+	 * agent traffic, and writing the credential option from there put back a
+	 * copy read before an admin's rotate, scope edit or expiry change.
+	 */
+	public const LAST_USED_OPTION = 'thinkrank_mcp_pairing_last_used';
+
+	/**
 	 * Path segment of the pretty per-site endpoint.
 	 */
 	public const SITE_ENDPOINT_PATH = 'thinkrank/mcp';
@@ -51,10 +64,22 @@ final class Mcp_Pairing {
 	private const DEFAULT_SCOPES = [ 'read', 'write' ];
 
 	/**
+	 * Stored for a token granted no area at all. An empty list reads as
+	 * "never set" to connect() and rotate(), which would mint read+write;
+	 * Mcp_Scopes::levels() ignores this token, so it grants nothing.
+	 */
+	private const NO_ACCESS_SCOPES = [ 'none' ];
+
+	/**
 	 * Throttle window (seconds) for last-used writes — one option write per
 	 * minute at most, so a busy client can't hammer the option on every call.
 	 */
 	private const LAST_USED_THROTTLE = 60;
+
+	/**
+	 * How far ahead "expires soon" is announced, in seconds.
+	 */
+	public const EXPIRY_WARNING = 7 * DAY_IN_SECONDS;
 
 	/**
 	 * The PRIMARY endpoint the user pastes into their AI client — this
@@ -77,24 +102,9 @@ final class Mcp_Pairing {
 	}
 
 	/**
-	 * The SINGLE URL the user pastes into their AI client — the pretty
-	 * endpoint with the connection token embedded as a path segment.
-	 * Empty string when not connected.
-	 *
-	 * @return string
-	 */
-	public static function connect_url(): string {
-		$token = self::site_token();
-		if ( '' === $token ) {
-			return '';
-		}
-		return self::site_endpoint() . '/' . $token;
-	}
-
-	/**
 	 * Current pairing state, defaults merged.
 	 *
-	 * @return array{site_token:string,token_hash:string,token_sealed:bool,connected:bool,connected_at:int,scopes:string[],user_id:int,last_used:int}
+	 * @return array{site_token:string,token_hash:string,token_sealed:bool,connected:bool,connected_at:int,scopes:string[],user_id:int,last_used:int,expires_at:int,expiry_set:bool}
 	 */
 	public static function state(): array {
 		$stored = get_option( self::OPTION, [] );
@@ -132,14 +142,114 @@ final class Mcp_Pairing {
 				? array_values( array_map( 'strval', $stored['scopes'] ) )
 				: [],
 			'user_id'      => isset( $stored['user_id'] ) ? (int) $stored['user_id'] : 0,
-			'last_used'    => isset( $stored['last_used'] ) ? (int) $stored['last_used'] : 0,
+			// Falls back to a stamp written onto the credential option before
+			// it moved to its own.
+			'last_used'    => (int) get_option( self::LAST_USED_OPTION, isset( $stored['last_used'] ) ? (int) $stored['last_used'] : 0 ),
+			// 0 = never. A token minted before expiry existed carries no key
+			// at all and keeps working; `expiry_set` lets the screen say so.
+			'expires_at'   => isset( $stored['expires_at'] ) ? (int) $stored['expires_at'] : 0,
+			'expiry_set'   => array_key_exists( 'expires_at', $stored ),
 		];
+	}
+
+	/**
+	 * Whether the stored token has passed its expiry.
+	 *
+	 * @return bool
+	 */
+	public static function is_expired(): bool {
+		$expires = self::state()['expires_at'];
+		return $expires > 0 && time() >= $expires;
+	}
+
+	/**
+	 * Whether a presented token is the pairing token but has expired, so the
+	 * 401 can say "expired" instead of "invalid" and the owner knows to
+	 * rotate rather than hunt for a typo.
+	 *
+	 * @param string $presented Token presented by the client.
+	 * @return bool
+	 */
+	public static function presented_is_expired( string $presented ): bool {
+		$state = self::state();
+		return '' !== $presented
+			&& '' !== $state['token_hash']
+			&& hash_equals( $state['token_hash'], self::hash( $presented ) )
+			&& self::is_expired();
+	}
+
+	/**
+	 * The granted scope tokens.
+	 *
+	 * @return string[]
+	 */
+	public static function scopes(): array {
+		return self::state()['scopes'];
+	}
+
+	/**
+	 * Replace the granted scopes. Takes effect on the next request: every
+	 * request reads the stored scopes, so no client has to reconnect.
+	 *
+	 * @param array<string,mixed> $levels Area => level.
+	 * @return array<string,mixed> Public status.
+	 */
+	public static function set_levels( array $levels ): array {
+		self::locked(
+			static function () use ( $levels ): void {
+				$stored = get_option( self::OPTION, [] );
+				if ( is_array( $stored ) && ! empty( $stored['connected'] ) ) {
+					$tokens           = Mcp_Scopes::tokens( Mcp_Scopes::normalize_levels( $levels ) );
+					$stored['scopes'] = [] === $tokens ? self::NO_ACCESS_SCOPES : $tokens;
+					update_option( self::OPTION, $stored, false );
+				}
+			}
+		);
+		return self::public_status();
+	}
+
+	/**
+	 * Set the token's expiry, counted from now, without rotating it.
+	 *
+	 * @param int $days Lifetime in days (Mcp_Governance::TOKEN_TTL_CHOICES); 0 = never.
+	 * @return array<string,mixed> Public status.
+	 */
+	public static function set_expiry( int $days ): array {
+		self::locked(
+			static function () use ( $days ): void {
+				$stored = get_option( self::OPTION, [] );
+				if ( is_array( $stored ) && ! empty( $stored['connected'] ) ) {
+					$stored['expires_at'] = Mcp_Governance::expiry_for( $days );
+					update_option( self::OPTION, $stored, false );
+				}
+			}
+		);
+		return self::public_status();
+	}
+
+	/**
+	 * Run a read-modify-write of self::OPTION under the MCP option lock,
+	 * reading the option fresh: an edit of the token's access that read it
+	 * before a rotate wrote it would otherwise put the old token back.
+	 *
+	 * @param callable $work Work to run while the lock is held.
+	 * @return mixed What $work returns.
+	 */
+	private static function locked( callable $work ) {
+		return Mcp_OAuth::with_lock(
+			static function () use ( $work ) {
+				// This request may hold a copy read before the lock.
+				wp_cache_delete( self::OPTION, 'options' );
+				return $work();
+			}
+		);
 	}
 
 	/**
 	 * Record that the static token was just used to authenticate an MCP call.
 	 * Throttled to at most one option write per minute so a busy client can't
 	 * turn every request into a database write. No-op when not connected.
+	 * Writes only LAST_USED_OPTION, never the credential option.
 	 *
 	 * @return void
 	 */
@@ -148,13 +258,11 @@ final class Mcp_Pairing {
 		if ( ! is_array( $stored ) || empty( $stored['site_token'] ) ) {
 			return;
 		}
-		$now  = time();
-		$last = isset( $stored['last_used'] ) ? (int) $stored['last_used'] : 0;
-		if ( $now - $last < self::LAST_USED_THROTTLE ) {
+		$now = time();
+		if ( $now - (int) get_option( self::LAST_USED_OPTION, 0 ) < self::LAST_USED_THROTTLE ) {
 			return;
 		}
-		$stored['last_used'] = $now;
-		update_option( self::OPTION, $stored, false );
+		update_option( self::LAST_USED_OPTION, $now, false );
 	}
 
 	/**
@@ -191,6 +299,12 @@ final class Mcp_Pairing {
 		}
 
 		$state = self::state();
+
+		// An expired token is refused like any other wrong token: the hash
+		// may match, but the credential is no longer valid (#717).
+		if ( $state['expires_at'] > 0 && time() >= $state['expires_at'] ) {
+			return false;
+		}
 
 		if ( '' !== $state['token_hash'] ) {
 			return hash_equals( $state['token_hash'], self::hash( $presented ) );
@@ -268,8 +382,7 @@ final class Mcp_Pairing {
 	 * @return bool
 	 */
 	public static function is_read_only(): bool {
-		$scopes = self::state()['scopes'];
-		return ! in_array( 'write', $scopes, true );
+		return ! Mcp_Scopes::grants_any_write( Mcp_Scopes::levels( self::state()['scopes'] ) );
 	}
 
 	/**
@@ -285,15 +398,20 @@ final class Mcp_Pairing {
 			// Connected, but the token cannot be displayed on this site any
 			// more. The screen offers a rotate instead of a blank recipe.
 			'token_sealed'      => $state['token_sealed'],
-			'connect_url'       => self::connect_url(),
 			'mcp_endpoint'      => self::site_endpoint(),
 			'mcp_endpoint_rest' => self::site_endpoint_fallback(),
 			'connected_at'      => $state['connected_at'],
 			'last_used'         => $state['last_used'],
 			'scopes'            => $state['scopes'],
+			'levels'            => Mcp_Scopes::level_names( Mcp_Scopes::levels( $state['scopes'] ) ),
 			'read_only'         => self::is_read_only(),
-			// Ready-to-paste connection recipes (header-based — token stays out
-			// of the URL, so it can't leak into server/proxy logs).
+			'expires_at'        => $state['expires_at'],
+			'expiry_set'        => $state['expiry_set'],
+			'expired'           => self::is_expired(),
+			'expires_soon'      => $state['expires_at'] > 0 && ! self::is_expired() && $state['expires_at'] - time() <= self::EXPIRY_WARNING,
+			// Ready-to-paste connection recipes, header-based: the token is
+			// never part of a URL this returns, so it can't leak into
+			// server/proxy logs (#1001).
 			'config'            => self::config_snippets(),
 			// A drop-in instruction the user can paste into their AI client so
 			// it sets the connection up itself.
@@ -399,6 +517,20 @@ final class Mcp_Pairing {
 	 * @return array<string,mixed> Public status.
 	 */
 	public static function connect( bool $read_only = false ): array {
+		return self::locked(
+			static function () use ( $read_only ): array {
+				return self::connect_locked( $read_only );
+			}
+		);
+	}
+
+	/**
+	 * connect(), with the option lock held.
+	 *
+	 * @param bool $read_only Grant only the `read` scope on a NEW token.
+	 * @return array<string,mixed> Public status.
+	 */
+	private static function connect_locked( bool $read_only ): array {
 		$state = self::state();
 		// The hash is what decides "is there a pairing", not the decrypted
 		// token: after an auth salt rotation the ciphertext will not open, but
@@ -430,20 +562,39 @@ final class Mcp_Pairing {
 
 		$token = $existing ? $state['site_token'] : self::mint_token();
 
-		update_option(
-			self::OPTION,
-			[
-				'site_token'   => Secret_At_Rest::encrypt( $token ),
-				'token_hash'   => self::hash( $token ),
-				'connected'    => true,
-				'connected_at' => $existing ? $state['connected_at'] : time(),
-				'scopes'       => $scopes,
-				'user_id'      => $existing && $state['user_id'] ? $state['user_id'] : get_current_user_id(),
-			],
-			false
-		);
+		$record = [
+			'site_token'   => Secret_At_Rest::encrypt( $token ),
+			'token_hash'   => self::hash( $token ),
+			'connected'    => true,
+			'connected_at' => $existing ? $state['connected_at'] : time(),
+			'scopes'       => $scopes,
+			'user_id'      => $existing && $state['user_id'] ? $state['user_id'] : get_current_user_id(),
+		];
+
+		// A new token gets the configured lifetime. An existing one keeps
+		// whatever it had, including no expiry at all: re-connecting must not
+		// start a clock on a token clients already rely on.
+		if ( ! $existing ) {
+			$record['expires_at'] = Mcp_Governance::expiry_for();
+		} elseif ( $state['expiry_set'] ) {
+			$record['expires_at'] = $state['expires_at'];
+		}
+
+		update_option( self::OPTION, $record, false );
 
 		return self::public_status();
+	}
+
+	/**
+	 * Rotate the token only when one exists. Revoke all uses this so a site
+	 * that only ever connected over OAuth is not handed a read+write
+	 * connection token it never had.
+	 *
+	 * @since 2.15.0
+	 * @return array<string,mixed>|null Public status with the fresh token, or null when there was none.
+	 */
+	public static function rotate_existing(): ?array {
+		return self::is_connected() ? self::rotate() : null;
 	}
 
 	/**
@@ -451,9 +602,26 @@ final class Mcp_Pairing {
 	 * immediately. The leaked-token remedy. Optionally flips read-only.
 	 *
 	 * @param bool|null $read_only null = keep current scopes; true/false = set.
+	 * @param int|null  $ttl_days  Lifetime of the new token in days; null = the
+	 *                             configured default, 0 = never.
 	 * @return array<string,mixed> Public status with the fresh token.
 	 */
-	public static function rotate( ?bool $read_only = null ): array {
+	public static function rotate( ?bool $read_only = null, ?int $ttl_days = null ): array {
+		return self::locked(
+			static function () use ( $read_only, $ttl_days ): array {
+				return self::rotate_locked( $read_only, $ttl_days );
+			}
+		);
+	}
+
+	/**
+	 * rotate(), with the option lock held.
+	 *
+	 * @param bool|null $read_only null = keep current scopes; true/false = set.
+	 * @param int|null  $ttl_days  Lifetime in days; null = default, 0 = never.
+	 * @return array<string,mixed> Public status with the fresh token.
+	 */
+	private static function rotate_locked( ?bool $read_only, ?int $ttl_days ): array {
 		$state  = self::state();
 		$scopes = null === $read_only
 			? ( ! empty( $state['scopes'] ) ? $state['scopes'] : self::DEFAULT_SCOPES )
@@ -470,9 +638,13 @@ final class Mcp_Pairing {
 				'connected_at' => time(),
 				'scopes'       => $scopes,
 				'user_id'      => get_current_user_id() ? get_current_user_id() : $state['user_id'],
+				'expires_at'   => Mcp_Governance::expiry_for( $ttl_days ),
 			],
 			false
 		);
+
+		// A new token has not been used yet.
+		delete_option( self::LAST_USED_OPTION );
 
 		return self::public_status();
 	}
@@ -485,6 +657,7 @@ final class Mcp_Pairing {
 	 */
 	public static function disconnect(): array {
 		delete_option( self::OPTION );
+		delete_option( self::LAST_USED_OPTION );
 		Mcp_OAuth::revoke_all();
 
 		return self::public_status();

@@ -1,0 +1,142 @@
+/**
+ * Content Brief Component Styles
+ *
+ * Typography for the rendered "Full Article Content" HTML body, which is
+ * injected via dangerouslySetInnerHTML and therefore can't be styled with
+ * utility classes on each element. Gives headings a proper scale and adds
+ * consistent vertical rhythm between blocks.
+ *
+ * @package ThinkRank
+ * @since 1.0.0
+ */
+
+@use "../../../shared/styles/variables" as *;
+
+.tr-content-brief-article {
+	color: $text-secondary;
+	font-size: 14px;
+	line-height: 1.7;
+
+	// Consistent gap between consecutive blocks.
+	> * + * {
+		margin-top: $spacing-lg;
+	}
+
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		margin: 0;
+		color: $text-primary;
+		font-weight: 600;
+		line-height: 1.3;
+	}
+
+	// Extra breathing room above headings that follow body content.
+	* + h1,
+	* + h2,
+	* + h3,
+	* + h4,
+	* + h5,
+	* + h6 {
+		margin-top: $spacing-2xl;
+	}
+
+	h1 {
+		font-size: 24px;
+	}
+
+	h2 {
+		font-size: 20px;
+	}
+
+	h3 {
+		font-size: 17px;
+	}
+
+	h4 {
+		font-size: 15px;
+	}
+
+	h5,
+	h6 {
+		font-size: 14px;
+	}
+
+	p {
+		margin: 0;
+	}
+
+	ul,
+	ol {
+		margin: 0;
+		padding-left: $spacing-2xl;
+
+		li + li {
+			margin-top: $spacing-sm;
+		}
+	}
+
+	li {
+		padding-left: $spacing-xs;
+	}
+
+	a {
+		color: $primary;
+		text-decoration: underline;
+	}
+
+	blockquote {
+		margin: 0;
+		padding: $spacing-md $spacing-lg;
+		border-left: 3px solid $primary;
+		background: color-mix(in srgb, #{$primary} 5%, transparent);
+		color: $text-secondary;
+		font-style: italic;
+	}
+
+	img {
+		max-width: 100%;
+		height: auto;
+		border-radius: $radius-md;
+	}
+
+	code {
+		padding: 2px 6px;
+		border-radius: 4px;
+		background: color-mix(in srgb, #{$text-primary} 6%, transparent);
+		font-size: 13px;
+	}
+
+	pre {
+		margin: 0;
+		padding: $spacing-lg;
+		overflow-x: auto;
+		border-radius: $radius-md;
+		background: color-mix(in srgb, #{$text-primary} 6%, transparent);
+
+		code {
+			padding: 0;
+			background: none;
+		}
+	}
+
+	table {
+		width: 100%;
+		border-collapse: collapse;
+
+		th,
+		td {
+			padding: $spacing-sm $spacing-md;
+			border: 1px solid $border-secondary;
+			text-align: left;
+		}
+
+		th {
+			color: $text-primary;
+			font-weight: 600;
+		}
+	}
+}

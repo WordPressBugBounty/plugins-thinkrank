@@ -19,9 +19,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Updates ThinkRank site identity settings.
  *
- * Only the non-robots identity keys are writable here. The robots.txt keys
- * (robots_txt_enabled, allow_search_engines, robots_txt_content) are never
- * touched so this ability cannot clobber the robots.txt configuration.
+ * The robots.txt body itself (robots_txt_content) is not writable here; it
+ * belongs to update-robots-txt. Three keys this ability does accept still
+ * change what crawlers are told — allow_search_engines, robots_txt_enabled
+ * and ai_crawler_rules, the last two by rewriting or deleting the physical
+ * robots.txt through sync_robots_txt_file() — so a call carrying any of
+ * them also needs indexing:write (Mcp_Scopes::ARGUMENT_AREAS, #1139).
  */
 class Update_Site_Identity_Settings extends Ability_Base {
 	/**
@@ -30,7 +33,7 @@ class Update_Site_Identity_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-site-identity-settings';
 		$this->label       = __( 'Update ThinkRank Site Identity Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank site identity settings: the homepage/category/tag/author/search/archive title templates, site name and description, breadcrumb configuration, brand imagery, homepage hero, and the business details behind LocalBusiness schema. Robots.txt contents and schema toggles are never modified by this ability. Read the current values with get-site-identity-settings first; only the keys you pass are changed.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank site identity settings: the homepage/category/tag/author/search/archive title templates, site name and description, breadcrumb configuration, brand imagery, homepage hero, and the business details behind LocalBusiness schema. The robots.txt body and schema toggles are not modified by this ability (use update-robots-txt and update-schema-settings). Passing allow_search_engines, robots_txt_enabled or ai_crawler_rules changes what crawlers are told and rewrites the served robots.txt, so those keys also need the indexing:write scope. Read the current values with get-site-identity-settings first; only the keys you pass are changed.', 'thinkrank' );
 	}
 
 	/**

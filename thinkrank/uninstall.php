@@ -197,6 +197,8 @@ class ThinkRank_Uninstaller {
             $wpdb->prefix . 'thinkrank_brand_visibility_checks',
             $wpdb->prefix . 'thinkrank_bv_runs',
             $wpdb->prefix . 'thinkrank_bv_tasks',
+            // MCP activity log (#717).
+            $wpdb->prefix . 'thinkrank_mcp_audit',
             // Rank Tracker, Redirections, Broken Links and Local SEO tables are
             // created and dropped by ThinkRank Pro's own uninstaller. Free used to
             // drop them here, which destroyed a still-active Pro install's data
@@ -204,18 +206,13 @@ class ThinkRank_Uninstaller {
         ];
 
         foreach ($tables as $table) {
-            // Check WordPress version for %i support (introduced in 6.2)
-            if (version_compare($GLOBALS['wp_version'], '6.2', '>=')) {
-                // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnsupportedIdentifierPlaceholder,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
-                $wpdb->query($wpdb->prepare("DROP TABLE IF EXISTS %i", $table));
-                // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnsupportedIdentifierPlaceholder,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
-            } else {
-                // Fallback for older WordPress versions - table name is from our controlled list
-                $escaped_table = esc_sql($table);
-                // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
-                $wpdb->query("DROP TABLE IF EXISTS `{$escaped_table}`");
-                // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
-            }
+            // Quoted the way Database::quote_identifier() does (no autoloader
+            // here): backticks, any backtick inside doubled. Not the %i
+            // placeholder, which WordPress 6.0 and 6.1 leave in the SQL (#1140).
+            $quoted = '`' . str_replace('`', '``', $table) . '`';
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+            $wpdb->query("DROP TABLE IF EXISTS {$quoted}");
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
         }
     }
     

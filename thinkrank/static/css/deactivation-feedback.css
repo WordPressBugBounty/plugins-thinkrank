@@ -1,0 +1,241 @@
+/**
+ * ThinkRank deactivation feedback dialog (Plugins screen).
+ *
+ * Every rule is scoped to .thinkrank-deactivation: this stylesheet loads on a
+ * screen full of other plugins' rows, and the form it replaces restyled every
+ * radio button and removed every focus outline on it. Buttons and form
+ * controls are WordPress's own (.button, .button-primary, .large-text); this
+ * file only lays them out.
+ */
+
+.thinkrank-deactivation {
+	width: calc(100% - 32px);
+	max-width: 520px;
+	max-height: calc(100vh - 64px);
+	padding: 0;
+	border: 0;
+	border-radius: 8px;
+	background: #fff;
+	color: #1e1e1e;
+	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 16px 48px rgba(0, 0, 0, 0.2);
+	font-size: 13px;
+	line-height: 1.5;
+	overflow: hidden;
+}
+
+.thinkrank-deactivation::backdrop {
+	background: rgba(0, 0, 0, 0.35);
+}
+
+.thinkrank-deactivation[open] {
+	display: flex;
+	flex-direction: column;
+}
+
+.thinkrank-deactivation__form {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	margin: 0;
+}
+
+.thinkrank-deactivation__header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 24px 24px 4px;
+}
+
+.thinkrank-deactivation__header h2 {
+	margin: 0;
+	font-size: 20px;
+	font-weight: 600;
+	line-height: 1.4;
+	color: #1e1e1e;
+}
+
+.thinkrank-deactivation__close {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	margin: -4px -8px 0 0;
+	padding: 0;
+	border: 0;
+	border-radius: 2px;
+	background: transparent;
+	color: #1e1e1e;
+	cursor: pointer;
+}
+
+.thinkrank-deactivation__close:hover {
+	background: #f0f0f1;
+}
+
+.thinkrank-deactivation__close:focus-visible {
+	outline: 2px solid var(--wp-admin-theme-color, #2271b1);
+	outline-offset: 0;
+}
+
+.thinkrank-deactivation__body {
+	padding: 0 24px 16px;
+	overflow-y: auto;
+}
+
+.thinkrank-deactivation__intro {
+	margin: 0 0 16px;
+	color: #50575e;
+	font-size: 13px;
+}
+
+.thinkrank-deactivation__reasons {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.thinkrank-deactivation__reason {
+	margin: 0 0 8px;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	transition: border-color 0.1s ease-in-out, background-color 0.1s ease-in-out;
+}
+
+.thinkrank-deactivation__reason:hover {
+	border-color: #c3c4c7;
+	background: #f6f7f7;
+}
+
+.thinkrank-deactivation__reason:has(input[type="radio"]:checked) {
+	border-color: var(--wp-admin-theme-color, #2271b1);
+	background: #f0f6fc;
+	box-shadow: 0 0 0 1px var(--wp-admin-theme-color, #2271b1);
+}
+
+.thinkrank-deactivation__reason > label {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 10px 12px;
+	color: #1e1e1e;
+	cursor: pointer;
+}
+
+.thinkrank-deactivation__reason > label input[type="radio"] {
+	flex-shrink: 0;
+	margin: 1px 0 0;
+}
+
+.thinkrank-deactivation__detail {
+	padding: 0 12px 12px 36px;
+}
+
+.thinkrank-deactivation__detail[hidden] {
+	display: none;
+}
+
+.thinkrank-deactivation__detail textarea,
+.thinkrank-deactivation__detail input[type="text"] {
+	width: 100%;
+	max-width: none;
+	margin: 0;
+}
+
+.thinkrank-deactivation__detail textarea {
+	min-height: 64px;
+	resize: vertical;
+}
+
+.thinkrank-deactivation__help {
+	margin: 8px 0 0;
+	color: #50575e;
+}
+
+.thinkrank-deactivation__note {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	margin: 16px 0 0;
+	color: #50575e;
+	font-size: 12px;
+}
+
+.thinkrank-deactivation__note .dashicons {
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+	font-size: 16px;
+	color: #00a32a;
+}
+
+.thinkrank-deactivation__error {
+	margin: 12px 0 0;
+	color: #d63638;
+}
+
+.thinkrank-deactivation__error[hidden] {
+	display: none;
+}
+
+.thinkrank-deactivation__footer {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 16px 24px;
+	border-top: 1px solid #f0f0f1;
+	background: #fff;
+}
+
+.thinkrank-deactivation__skip {
+	color: #50575e;
+}
+
+.thinkrank-deactivation__actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+
+.thinkrank-deactivation__actions .spinner {
+	float: none;
+	margin: 0;
+}
+
+.thinkrank-deactivation[aria-busy="true"] .thinkrank-deactivation__skip {
+	pointer-events: none;
+	opacity: 0.5;
+}
+
+@media screen and (max-width: 600px) {
+
+	.thinkrank-deactivation__header,
+	.thinkrank-deactivation__footer {
+		padding-right: 16px;
+		padding-left: 16px;
+	}
+
+	.thinkrank-deactivation__body {
+		padding-right: 16px;
+		padding-left: 16px;
+	}
+
+	.thinkrank-deactivation__footer {
+		flex-direction: column-reverse;
+		align-items: stretch;
+	}
+
+	.thinkrank-deactivation__actions {
+		justify-content: flex-end;
+		margin-left: 0;
+	}
+
+	.thinkrank-deactivation__skip {
+		text-align: center;
+	}
+}

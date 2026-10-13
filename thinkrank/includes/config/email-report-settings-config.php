@@ -71,5 +71,8 @@ function thinkrank_get_email_report_default_sections(): array {
         'ai_search' => [
             'label' => __('Traffic from AI assistants', 'thinkrank'),
         ],
+        'mcp_access' => [
+            'label' => __('AI assistant access', 'thinkrank'),
+        ],
     ];
 }

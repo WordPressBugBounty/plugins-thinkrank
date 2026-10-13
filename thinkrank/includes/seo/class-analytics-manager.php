@@ -168,8 +168,10 @@ class Analytics_Manager {
      */
     public function __construct(?Settings_Manager $settings_manager = null) {
         $this->settings_manager = $settings_manager ?? new Settings_Manager();
-        // Pro: daily refresh (86400s), Free: 3-day refresh (259200s)
-        $this->cache_duration = defined('THINKRANK_PRO_VERSION') ? 86400 : 259200;
+        // One refresh interval for every plan: cached Google data is kept for a
+        // day, and POST /seo-analytics/refresh clears it at any time. A longer
+        // TTL without Pro would make fresh data a paid feature (Guideline 5, #1104).
+        $this->cache_duration = DAY_IN_SECONDS;
     }
 
     /**

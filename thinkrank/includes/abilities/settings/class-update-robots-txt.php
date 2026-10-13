@@ -65,6 +65,10 @@ class Update_Robots_Txt extends Ability_Base {
 					'type'        => 'string',
 					'description' => __( 'The full robots.txt content to serve. Replaces the generated defaults entirely; seed it from get-robots-txt\'s "rendered" field so default directives are preserved. Pass an empty string to restore auto-generation.', 'thinkrank' ),
 				],
+				'enabled' => [
+					'type'        => 'boolean',
+					'description' => __( 'Whether ThinkRank manages robots.txt. Defaults to true, since a write is meant to be served; false hands robots.txt back to WordPress core while keeping the stored content.', 'thinkrank' ),
+				],
 			],
 			'required'             => [ 'content' ],
 		];
@@ -102,7 +106,7 @@ class Update_Robots_Txt extends Ability_Base {
 		$updated = $mgr->get_settings( 'site', null );
 
 		$updated['robots_txt_content'] = $content;
-		$updated['robots_txt_enabled'] = true;
+		$updated['robots_txt_enabled'] = array_key_exists( 'enabled', (array) $input ) ? (bool) $input['enabled'] : true;
 
 		$result = $mgr->save_settings( 'site', null, $updated );
 

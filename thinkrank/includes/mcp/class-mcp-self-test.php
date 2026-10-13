@@ -97,11 +97,76 @@ final class Mcp_Self_Test {
 	private const HOSTING_DOC_URL = 'https://thinkrank.ai/docs/mcp/hosting-compatibility/';
 
 	/**
+	 * Option holding the last verdict, so the MCP screen can show it on load
+	 * without probing every time (#717, and the shape #489 asked for).
+	 *
+	 * @since 2.15.0
+	 */
+	public const CACHE_OPTION = 'thinkrank_mcp_doctor';
+
+	/**
+	 * How long an automatic verdict is reused before the screen re-probes.
+	 *
+	 * @since 2.15.0
+	 */
+	public const CACHE_TTL = 12 * HOUR_IN_SECONDS;
+
+	/**
+	 * Per-probe timeout for the automatic run. Short on purpose: an
+	 * automatic probe that hangs is worse than none, and the hosts this is
+	 * meant to diagnose are exactly the ones where loopback hangs. The
+	 * manual Test connection button keeps the full 10 seconds.
+	 *
+	 * @since 2.15.0
+	 */
+	public const AUTO_TIMEOUT = 4;
+
+	/**
+	 * How long a failed automatic verdict is reused. A slow host that works
+	 * can miss the short timeout, so a failure is re-checked soon rather than
+	 * shown, and handed to agents, as fact for CACHE_TTL.
+	 *
+	 * @since 2.15.0
+	 */
+	public const FAILED_AUTO_TTL = 15 * MINUTE_IN_SECONDS;
+
+	/**
+	 * Total seconds the automatic run may spend. AUTO_TIMEOUT bounds one
+	 * probe; a run makes a dozen, so the optional ones stop at this budget.
+	 *
+	 * @since 2.15.0
+	 */
+	private const AUTO_BUDGET = 12;
+
+	/**
+	 * Per-probe HTTP timeout for the current run, in seconds.
+	 *
+	 * @var int
+	 */
+	private static $timeout = 10;
+
+	/**
+	 * Whether the current run is the automatic one on screen load.
+	 *
+	 * @var bool
+	 */
+	private static $auto = false;
+
+	/**
+	 * When the automatic run's budget runs out (microtime); 0 = no budget.
+	 *
+	 * @var float
+	 */
+	private static $deadline = 0.0;
+
+	/**
 	 * Run the round-trip self-test.
 	 *
 	 * @return array<string, mixed>
 	 */
-	public static function run(): array {
+	public static function run( int $timeout = 10 ): array {
+		self::$timeout = max( 1, $timeout );
+
 		$endpoint = Mcp_Pairing::site_endpoint();
 		$fallback = Mcp_Pairing::site_endpoint_fallback();
 
@@ -144,6 +209,21 @@ final class Mcp_Self_Test {
 			return $result;
 		}
 
+		// Probing with an expired token would read as a generic auth failure.
+		if ( Mcp_Pairing::is_expired() ) {
+			$result['stage']   = 'expired';
+			$result['message'] = __( 'The connection token has expired, so every client using it is refused. Use Reset token to mint a new one and update your AI apps, or change its expiry under Connected AI apps.', 'thinkrank' );
+			return $result;
+		}
+
+		// A token granted no area lists no tools by design, which the probe
+		// below would report as a missing runtime.
+		if ( Mcp_Scopes::NONE === max( Mcp_Scopes::levels( Mcp_Pairing::scopes() ) ) ) {
+			$result['stage']   = 'no_scope';
+			$result['message'] = __( 'The connection token is set to No access in every area, so clients using it can call no tools. Grant access under Connected AI apps, then run the test again.', 'thinkrank' );
+			return $result;
+		}
+
 		$token = Mcp_Pairing::site_token();
 
 		$pretty = self::probe_jsonrpc( $endpoint, $token );
@@ -151,6 +231,18 @@ final class Mcp_Self_Test {
 
 		// Back-compat top-level fields describe the primary (pretty) endpoint,
 		// falling back to the REST route when the pretty URL never answered.
+		// On the automatic run, a loopback that answers neither URL will not
+		// answer the probes below either; each would only add a timeout to
+		// the page load. The manual test still runs them all.
+		if ( self::$auto && 'unreachable' === $pretty['stage'] && 'unreachable' === $rest['stage'] ) {
+			$result['http_status'] = $pretty['status'];
+			$result['checks'][]    = self::check( 'endpoint', __( 'Connection URL', 'thinkrank' ), $pretty['stage'], $pretty['detail'] );
+			$result['checks'][]    = self::check( 'fallback', __( 'REST fallback URL', 'thinkrank' ), $rest['stage'], $rest['detail'] );
+			$result['stage']       = $pretty['stage'];
+			$result['message']     = $pretty['detail'];
+			return $result;
+		}
+
 		$primary                 = 'unreachable' === $pretty['stage'] ? $rest : $pretty;
 		$result['http_status']   = $primary['status'];
 		$result['redirected']    = 'redirect' === $primary['stage'];
@@ -160,20 +252,43 @@ final class Mcp_Self_Test {
 		$result['checks'][] = self::check( 'endpoint', __( 'Connection URL', 'thinkrank' ), $pretty['stage'], $pretty['detail'] );
 		$result['checks'][] = self::check( 'fallback', __( 'REST fallback URL', 'thinkrank' ), $rest['stage'], $rest['detail'] );
 
+		if ( self::budget_spent() ) {
+			return self::first_failure( $result, $pretty, $rest, [] ) ?? self::out_of_time( $result );
+		}
+
 		$discovery = self::probe_discovery();
 		// The documents themselves, so support can read what the site actually
 		// serves instead of asking the customer for screenshots.
 		$result['discovery_documents'] = $discovery['documents'];
 		$result['checks'][]            = self::check( 'discovery', __( 'OAuth discovery', 'thinkrank' ), $discovery['stage'], $discovery['detail'] );
 
+		if ( self::budget_spent() ) {
+			return self::first_failure( $result, $pretty, $rest, [ $discovery ] ) ?? self::out_of_time( $result );
+		}
+
 		$challenge          = self::probe_challenge( $endpoint, $fallback );
 		$result['checks'][] = self::check( 'challenge', __( 'OAuth challenge', 'thinkrank' ), $challenge['stage'], $challenge['detail'] );
 
+		// The base path the discovery documents advertise. On a subdirectory
+		// install or a multisite subsite an OAuth URL that drops the path
+		// segment sends every client to the main site, while the documents
+		// still agree with each other — so it is compared with home_url().
+		$base                     = self::probe_base_path();
+		$result['advertised_base'] = $base['advertised'];
+		if ( null !== $base['check'] ) {
+			$result['checks'][] = self::check( 'base_path', __( 'Site base path', 'thinkrank' ), $base['check']['stage'], $base['check']['detail'] );
+		}
+
 		// Only reported when it could actually run — claiming a pass we did
 		// not measure is the failure mode this whole test exists to avoid.
-		$user_agent = self::probe_user_agent( $endpoint, $fallback );
+		$user_agent = self::budget_spent() ? null : self::probe_user_agent( $endpoint, $fallback );
 		if ( null !== $user_agent ) {
 			$result['checks'][] = self::check( 'user_agent', __( 'Client access', 'thinkrank' ), $user_agent['stage'], $user_agent['detail'], $user_agent['doc_url'] ?? '' );
+			if ( 'ua_filter' === $user_agent['stage'] ) {
+				// Ready to paste into a support ticket: the screen offers it
+				// with a copy button, because the fix is on the host's side.
+				$result['host_request'] = self::host_request( $endpoint, $fallback );
+			}
 		}
 
 		// Locked-out clients. The loopback below can pass while a REMOTE client
@@ -200,29 +315,9 @@ final class Mcp_Self_Test {
 			);
 		}
 
-		// The pretty URL failing while the fallback works is its own finding:
-		// the site is usable, but only via the REST URL.
-		if ( 'ok' !== $pretty['stage'] && 'ok' === $rest['stage'] ) {
-			$result['stage']   = 'rewrite';
-			$result['message'] = sprintf(
-				/* translators: 1: pretty MCP endpoint URL, 2: REST fallback URL. */
-				__( 'The connection URL %1$s did not answer, but the REST fallback %2$s works. Re-save Settings → Permalinks to rebuild the rewrite rules; until then, give your AI client the fallback URL.', 'thinkrank' ),
-				$endpoint,
-				$fallback
-			);
-			return $result;
-		}
-
-		// Otherwise report the first failing check in order.
-		foreach ( [ $pretty, $rest, $discovery, $challenge, $user_agent ] as $check ) {
-			if ( null === $check ) {
-				continue;
-			}
-			if ( 'ok' !== $check['stage'] ) {
-				$result['stage']   = $check['stage'];
-				$result['message'] = $check['detail'];
-				return $result;
-			}
+		$failed = self::first_failure( $result, $pretty, $rest, [ $discovery, $challenge, $base['check'], $user_agent ] );
+		if ( null !== $failed ) {
+			return $failed;
 		}
 
 		$result['ok']      = true;
@@ -253,7 +348,7 @@ final class Mcp_Self_Test {
 		$response = wp_remote_post(
 			$url,
 			[
-				'timeout'     => 10,
+				'timeout'     => self::probe_timeout(),
 				// Don't follow redirects: a 301/302 here IS the finding (the
 				// classic http<->https scheme bounce), so surface it verbatim.
 				'redirection' => 0,
@@ -487,7 +582,9 @@ final class Mcp_Self_Test {
 			 *
 			 * @param bool $allowed Defaults to whether the install can host them.
 			 */
-			$may_publish = apply_filters( 'thinkrank_mcp_static_discovery_publish', Mcp_Static_Discovery::applicable() );
+			// Never on the automatic run: opening the MCP screen must not write
+			// files into the site root. The manual test keeps the self-heal.
+			$may_publish = ! self::$auto && apply_filters( 'thinkrank_mcp_static_discovery_publish', Mcp_Static_Discovery::applicable() );
 
 			$healed = false;
 			if ( $may_publish && Mcp_Static_Discovery::publish() ) {
@@ -548,7 +645,7 @@ final class Mcp_Self_Test {
 		$response = wp_remote_get(
 			$url,
 			[
-				'timeout'     => 10,
+				'timeout'     => self::probe_timeout(),
 				'redirection' => 0,
 			]
 		);
@@ -654,7 +751,7 @@ final class Mcp_Self_Test {
 			$response = wp_remote_post(
 				$url,
 				[
-					'timeout'     => 10,
+					'timeout'     => self::probe_timeout(),
 					'redirection' => 0,
 					'headers'     => [
 						'Content-Type' => 'application/json',
@@ -718,7 +815,7 @@ final class Mcp_Self_Test {
 			$metadata     = wp_remote_get(
 				$metadata_url,
 				[
-					'timeout'     => 10,
+					'timeout'     => self::probe_timeout(),
 					'redirection' => 2, // A host-level redirect to the real doc is fine.
 				]
 			);
@@ -788,6 +885,11 @@ final class Mcp_Self_Test {
 			++$probed;
 
 			foreach ( self::CLIENT_USER_AGENTS as $agent ) {
+				// A check cut short has not measured every agent; reporting
+				// it as a pass would be exactly the false green it exists for.
+				if ( self::budget_spent() ) {
+					return null;
+				}
 				$status = self::probe_status( $url, $agent );
 				if ( null === $status || $status === $baseline ) {
 					continue;
@@ -820,6 +922,280 @@ final class Mcp_Self_Test {
 			'stage'  => 'ok',
 			'detail' => __( 'Both the connection URL and the REST fallback answer AI-client User-Agents, including a request with no User-Agent at all, the same way they answer WordPress. No bot filter is blocking them. This cannot see an IP-level block of the AI vendor.', 'thinkrank' ),
 		];
+	}
+
+	/**
+	 * Compare the base path the OAuth documents advertise with the site's.
+	 *
+	 * @since 2.15.0
+	 * @return array{advertised:string,check:array{stage:string,detail:string}|null}
+	 */
+	private static function probe_base_path(): array {
+		$home       = untrailingslashit( home_url() );
+		$issuer     = Mcp_OAuth::issuer();
+		$home_path  = (string) wp_parse_url( $home, PHP_URL_PATH );
+		$issuer_dir = (string) wp_parse_url( $issuer, PHP_URL_PATH );
+
+		// The issuer is `{site}/thinkrank/mcp`; the base is what precedes it.
+		$suffix     = '/' . Mcp_Pairing::SITE_ENDPOINT_PATH;
+		$advertised = substr( $issuer_dir, -strlen( $suffix ) ) === $suffix ? substr( $issuer_dir, 0, -strlen( $suffix ) ) : $issuer_dir;
+		$advertised = '' === $advertised ? '/' : $advertised;
+
+		if ( 0 !== strpos( $issuer, $home . '/' ) ) {
+			return [
+				'advertised' => $advertised,
+				'check'      => [
+					'stage'  => 'base_path',
+					'detail' => sprintf(
+						/* translators: 1: OAuth issuer URL, 2: site URL. */
+						__( 'The OAuth documents advertise %1$s, which is not under this site\'s address %2$s, so AI clients would authorize against a different site. This usually means a subdirectory or multisite path is being dropped; check the Site Address in Settings > General and any plugin that filters home_url.', 'thinkrank' ),
+						$issuer,
+						$home
+					),
+				],
+			];
+		}
+
+		// Root installs have nothing to compare; say nothing rather than add
+		// a check that can only ever pass.
+		if ( '' === trim( $home_path, '/' ) ) {
+			return [
+				'advertised' => $advertised,
+				'check'      => null,
+			];
+		}
+
+		return [
+			'advertised' => $advertised,
+			'check'      => [
+				'stage'  => 'ok',
+				'detail' => sprintf(
+					/* translators: 1: base path, e.g. /blog. */
+					__( 'The OAuth documents keep this site\'s base path %1$s, so clients authorize against this site and not the main one.', 'thinkrank' ),
+					'/' . trim( $home_path, '/' )
+				),
+			],
+		];
+	}
+
+	/**
+	 * A message for the host, naming exactly what to exempt from bot
+	 * filtering. Offered with a copy button when the User-Agent check fails.
+	 *
+	 * @since 2.15.0
+	 * @param string $endpoint Pretty endpoint URL.
+	 * @param string $fallback REST endpoint URL.
+	 * @return string
+	 */
+	private static function host_request( string $endpoint, string $fallback ): string {
+		$urls = [
+			$endpoint,
+			$fallback,
+			home_url( '/.well-known/oauth-protected-resource' ),
+			home_url( '/.well-known/oauth-authorization-server' ),
+			rest_url( 'thinkrank/v1/mcp/oauth/' ),
+		];
+
+		return sprintf(
+			/* translators: 1: site host, 2: newline-separated list of URLs. */
+			__( "Hello, please exempt the following URLs on %1\$s from bot and User-Agent filtering. AI assistants such as ChatGPT and Claude connect to them with generic HTTP-client User-Agents (python-requests, Python aiohttp, node-fetch) and sometimes with no User-Agent at all, and the filter is currently answering them with an error before WordPress runs:\n\n%2\$s\n\nAllowlisting individual User-Agent strings is not enough on its own, because each AI vendor sends its own. Thank you.", 'thinkrank' ),
+			(string) wp_parse_url( home_url(), PHP_URL_HOST ),
+			implode( "\n", $urls )
+		);
+	}
+
+	/**
+	 * Run the test and keep the verdict for the screen and for
+	 * get-connection-status.
+	 *
+	 * @since 2.15.0
+	 * @param int  $timeout Per-probe timeout in seconds.
+	 * @param bool $auto    Whether this was the automatic run on screen load.
+	 * @return array<string,mixed> The result, with `ran_at` and `auto`.
+	 */
+	public static function run_and_cache( int $timeout = 10, bool $auto = false ): array {
+		// Taken before the run: a rotation or scope edit while it runs must
+		// not file the old setup's verdict under the new one.
+		$key = self::cache_key();
+
+		self::$auto = $auto;
+		if ( $auto ) {
+			/**
+			 * Filters the automatic connection check's total time budget.
+			 *
+			 * @since 2.15.0
+			 *
+			 * @param int $seconds Seconds every probe of the run shares.
+			 */
+			$budget         = (int) apply_filters( 'thinkrank_mcp_doctor_auto_budget', self::AUTO_BUDGET );
+			self::$deadline = microtime( true ) + max( 0, $budget );
+		} else {
+			self::$deadline = 0.0;
+		}
+
+		try {
+			$result = self::run( $timeout );
+		} finally {
+			self::$auto     = false;
+			self::$deadline = 0.0;
+		}
+
+		$result['ran_at'] = time();
+		$result['auto']   = $auto;
+
+		update_option(
+			self::CACHE_OPTION,
+			[
+				'key'    => $key,
+				'result' => $result,
+			],
+			false
+		);
+
+		return $result;
+	}
+
+	/**
+	 * The last verdict, or null when there is none or it no longer describes
+	 * this configuration (endpoint, switch, token, expiry or scopes changed
+	 * since).
+	 *
+	 * @since 2.15.0
+	 * @return array<string,mixed>|null
+	 */
+	public static function cached(): ?array {
+		$stored = get_option( self::CACHE_OPTION, null );
+		if ( ! is_array( $stored ) || ! is_array( $stored['result'] ?? null ) ) {
+			return null;
+		}
+		if ( ( $stored['key'] ?? '' ) !== self::cache_key() ) {
+			return null;
+		}
+		return $stored['result'];
+	}
+
+	/**
+	 * The verdict the screen shows on load: the cached one while it is
+	 * fresh, otherwise a new automatic run with the short timeout.
+	 *
+	 * @since 2.15.0
+	 * @return array<string,mixed>
+	 */
+	public static function doctor(): array {
+		$cached = self::cached();
+		$ttl    = null !== $cached && ! empty( $cached['auto'] ) && empty( $cached['ok'] ) ? self::FAILED_AUTO_TTL : self::CACHE_TTL;
+		if ( null !== $cached && (int) ( $cached['ran_at'] ?? 0 ) > time() - $ttl ) {
+			$cached['cached'] = true;
+			return $cached;
+		}
+		$result           = self::run_and_cache( self::AUTO_TIMEOUT, true );
+		$result['cached'] = false;
+		return $result;
+	}
+
+	/**
+	 * The timeout for the next probe: the run's own, cut to what is left of
+	 * the automatic budget. Never below one second, because 0 means "no
+	 * timeout" to WP_Http.
+	 *
+	 * @return int
+	 */
+	private static function probe_timeout(): int {
+		if ( self::$deadline <= 0 ) {
+			return self::$timeout;
+		}
+		return max( 1, min( self::$timeout, (int) ceil( self::$deadline - microtime( true ) ) ) );
+	}
+
+	/**
+	 * The verdict of the first failing check, or null when all passed.
+	 *
+	 * Shared by the end of the run and by the budget cut-offs: a run that
+	 * runs out of time after a probe already failed reports that failure,
+	 * not "ran out of time" (#1076).
+	 *
+	 * @param array<string,mixed>            $result Result so far.
+	 * @param array<string,mixed>            $pretty The pretty-URL probe.
+	 * @param array<string,mixed>            $rest   The REST fallback probe.
+	 * @param array<int,array<string,mixed>|null> $checks Later checks, in report order; null = did not run.
+	 * @return array<string,mixed>|null
+	 */
+	private static function first_failure( array $result, array $pretty, array $rest, array $checks ): ?array {
+		// The pretty URL failing while the fallback works is its own finding:
+		// the site is usable, but only via the REST URL.
+		if ( 'ok' !== $pretty['stage'] && 'ok' === $rest['stage'] ) {
+			$result['stage']   = 'rewrite';
+			$result['message'] = sprintf(
+				/* translators: 1: pretty MCP endpoint URL, 2: REST fallback URL. */
+				__( 'The connection URL %1$s did not answer, but the REST fallback %2$s works. Re-save Settings → Permalinks to rebuild the rewrite rules; until then, give your AI client the fallback URL.', 'thinkrank' ),
+				$result['endpoint'],
+				$result['endpoint_rest']
+			);
+			return $result;
+		}
+
+		// Otherwise report the first failing check in order.
+		foreach ( array_merge( [ $pretty, $rest ], $checks ) as $check ) {
+			if ( null === $check ) {
+				continue;
+			}
+			if ( 'ok' !== $check['stage'] ) {
+				$result['stage']   = $check['stage'];
+				$result['message'] = $check['detail'];
+				return $result;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * End an automatic run that spent its budget before every probe ran.
+	 * Reported as a warning, not as the failure a probe would have found:
+	 * nothing was measured past this point.
+	 *
+	 * @param array<string,mixed> $result Result so far.
+	 * @return array<string,mixed>
+	 */
+	private static function out_of_time( array $result ): array {
+		$result['ok']      = false;
+		$result['stage']   = 'incomplete';
+		$result['message'] = __( 'The automatic check ran out of time before it finished, which usually means this site answers its own requests slowly. Use Test connection to run the full check.', 'thinkrank' );
+		return $result;
+	}
+
+	/**
+	 * Whether the automatic run has used up its time budget.
+	 *
+	 * @return bool
+	 */
+	private static function budget_spent(): bool {
+		return self::$deadline > 0 && microtime( true ) >= self::$deadline;
+	}
+
+	/**
+	 * What a cached verdict depends on. Hashed so the token itself is never
+	 * written into the cache option.
+	 *
+	 * @return string
+	 */
+	private static function cache_key(): string {
+		$state = Mcp_Pairing::state();
+		return hash(
+			'sha256',
+			implode(
+				'|',
+				[
+					Mcp_Pairing::site_endpoint(),
+					Mcp_Manager::is_enabled() ? '1' : '0',
+					(string) ( $state['site_token'] ?? '' ),
+					! empty( $state['token_sealed'] ) ? '1' : '0',
+					// A verdict must not outlive the token's expiry or a scope edit.
+					Mcp_Pairing::is_expired() ? '1' : '0',
+					implode( ' ', Mcp_Pairing::scopes() ),
+				]
+			)
+		);
 	}
 
 	/**
@@ -860,7 +1236,7 @@ final class Mcp_Self_Test {
 	 */
 	private static function probe_status( string $url, ?string $agent ): ?int {
 		$args = [
-			'timeout'     => 10,
+			'timeout'     => self::probe_timeout(),
 			'redirection' => 0,
 			'headers'     => [
 				'Content-Type' => 'application/json',

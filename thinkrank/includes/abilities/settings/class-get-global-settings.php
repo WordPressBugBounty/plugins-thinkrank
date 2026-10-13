@@ -125,12 +125,14 @@ class Get_Global_Settings extends Ability_Base {
 
 			return [
 				'post_type' => $post_type,
-				'settings'  => $settings,
+				'settings'  => self::object_value( $settings ),
 			];
 		}
 
+		// Empty on a fresh install, and for a post type with no templates
+		// saved yet: both must still reach the client as `{}` (#1089).
 		return [
-			'settings' => $all,
+			'settings' => self::object_value( $all ),
 		];
 	}
 }

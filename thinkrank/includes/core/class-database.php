@@ -296,34 +296,18 @@ class Database {
      * @return void
      */
     public function cleanup_expired_cache(): void {
-        $cache_table = $this->get_table('ai_cache');
+        $cache_table = self::quote_identifier($this->get_table('ai_cache'));
 
-        // Check WordPress version for %i support (introduced in 6.2)
-        if (version_compare($GLOBALS['wp_version'], '6.2', '>=')) {
-            // Use %i placeholder for table identifier (WordPress 6.2+)
-            // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnsupportedIdentifierPlaceholder
-            $deleted = $this->wpdb->query(
-                $this->wpdb->prepare(
-                    // expires_at is a bigint unix timestamp (see Cache_Manager),
-                    // so compare against time(), not a MySQL datetime string.
-                    'DELETE FROM %i WHERE expires_at < %d',
-                    $cache_table,
-                    time()
-                )
-            );
-            // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnsupportedIdentifierPlaceholder
-        } else {
-            // Fallback for older WordPress versions - table name is escaped and safe
-            $escaped_table = esc_sql($cache_table);
-            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared
-            $deleted = $this->wpdb->query(
-                $this->wpdb->prepare(
-                    "DELETE FROM `{$escaped_table}` WHERE expires_at < %d",
-                    time()
-                )
-            );
-            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared
-        }
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared -- the name is quoted by quote_identifier().
+        $deleted = $this->wpdb->query(
+            $this->wpdb->prepare(
+                // expires_at is a bigint unix timestamp (see Cache_Manager),
+                // so compare against time(), not a MySQL datetime string.
+                "DELETE FROM {$cache_table} WHERE expires_at < %d",
+                time()
+            )
+        );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared
 
         if ($deleted > 0) {
             $this->log_error(
@@ -342,24 +326,31 @@ class Database {
         $stats = [];
 
         foreach ($this->tables as $key => $table) {
-            // Check WordPress version for %i support (introduced in 6.2)
-            if (version_compare($GLOBALS['wp_version'], '6.2', '>=')) {
-                // Use %i placeholder for table identifier (WordPress 6.2+)
-                // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnsupportedIdentifierPlaceholder
-                $count = $this->wpdb->get_var(
-                    $this->wpdb->prepare('SELECT COUNT(*) FROM %i', $table)
-                );
-                // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnsupportedIdentifierPlaceholder
-            } else {
-                // Fallback for older WordPress versions - table name is from our controlled list
-                $escaped_table = esc_sql($table);
-                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Table name is properly escaped and from controlled source
-                $count = $this->wpdb->get_var("SELECT COUNT(*) FROM `{$escaped_table}`");
-            }
+            $quoted = self::quote_identifier($table);
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- the name is quoted by quote_identifier() and comes from our own list.
+            $count = $this->wpdb->get_var("SELECT COUNT(*) FROM {$quoted}");
             $stats[$key] = (int) $count;
         }
 
         return $stats;
+    }
+
+    /**
+     * A table or column name as it is written into SQL: in backticks, with
+     * any backtick inside doubled, which is all MySQL needs for an identifier
+     * (and what wpdb's %i does).
+     *
+     * This is the one way the plugin puts an identifier into a query. The %i
+     * placeholder exists from WordPress 6.2 and the plugin supports 6.0, where
+     * prepare() leaves it in the SQL and the statement fails; the activity log
+     * shipped sixteen of those (#1140). IdentifierPlaceholderGuardTest fails
+     * on any %i in shipped code.
+     *
+     * @param string $name The identifier, unquoted.
+     * @return string
+     */
+    public static function quote_identifier(string $name): string {
+        return '`' . str_replace('`', '``', $name) . '`';
     }
 
     /**

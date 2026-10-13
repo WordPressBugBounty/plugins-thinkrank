@@ -1,0 +1,692 @@
+/**
+ * ThinkRank Meta Box Styles
+ *
+ * Main stylesheet for metabox components, importing shared styles
+ *
+ * @package ThinkRank
+ * @since 1.0.0
+ */
+
+// Import shared styles
+@use "../shared/styles/variables" as *;
+@use "../shared/styles/mixins" as *;
+@use "../shared/styles/components/seo-score";
+@use "../shared/styles/components/serp-preview";
+
+// Import metabox-specific styles
+@use "styles/metabox-tabs";
+@use "styles/social-tab";
+
+/* CSS Variables for WordPress compatibility */
+:root {
+	--thinkrank-primary: #{$thinkrank-primary};
+	--thinkrank-text-primary: #{$thinkrank-text-primary};
+	--thinkrank-text-secondary: #{$thinkrank-text-secondary};
+	--thinkrank-border: #{$thinkrank-border};
+	--thinkrank-border-light: #{$thinkrank-border-light};
+}
+
+/* ==========================================================================
+   Revamped metabox UI — logo launcher + bottom drawer
+   ========================================================================== */
+
+/* The "ThinkRank SEO" postbox is deliberately VISIBLE. It used to be hidden
+   with display:none !important because the drawer replaced its UI and the box
+   held nothing but hidden inputs — but the box now renders the score card
+   (.thinkrank-metabox-panel-card) that opens the drawer, and the blanket hide
+   was silently defeating it in BOTH editors: no card in Classic (#237), and a
+   Screen Options / Preferences→Panels toggle that appeared to do nothing
+   (#225). Visibility is governed by the box's content; do not re-add a hide
+   here. The hidden <input> fields stay in the #post form either way, so
+   saving is unaffected. */
+
+/* Slot injected into the block-editor header (.editor-header / .edit-post-header). */
+.thinkrank-header-slot {
+	display: inline-flex;
+	align-items: center;
+	margin-right: 8px;
+
+	.tr-root {
+		display: inline-flex;
+		align-items: center;
+	}
+}
+
+.thinkrank-header-launcher {
+	line-height: 1;
+}
+
+/* Pinned "Configure SEO" launcher in the block-editor header (plugin API). */
+.thinkrank-configure-seo {
+
+	&__mark {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		line-height: 0;
+	}
+
+	&__score {
+		position: absolute;
+		top: -6px;
+		right: -8px;
+		min-width: 16px;
+		height: 16px;
+		padding: 0 3px;
+		box-sizing: border-box;
+		border-radius: 8px;
+		border: 1.5px solid #fff;
+		font-size: 10px;
+		font-weight: 700;
+		line-height: 13px;
+		text-align: center;
+	}
+}
+
+/* Floating launcher button — fixed near the top-centre of the editor (classic). */
+.thinkrank-metabox-launcher {
+	top: 110px;
+	left: 50%;
+	transform: translateX(-50%);
+}
+
+@media screen and (max-width: 782px) {
+
+	.thinkrank-metabox-launcher {
+		top: 92px;
+	}
+}
+
+/* Elementor editor: the centre-top would sit over the canvas / app bar, so pin
+   the launcher to the bottom-right corner, clear of Elementor's left panel. */
+.elementor-editor-active .thinkrank-metabox-launcher {
+	top: auto;
+	bottom: 24px;
+	left: auto;
+	right: 24px;
+	transform: none;
+}
+
+/* Bottom drawer panel height. */
+.thinkrank-metabox-drawer {
+	height: 82vh;
+	max-height: 82vh;
+}
+
+/* WordPress admin core form CSS shrinks <select> to content width, which both
+   leaves the custom dropdown chevron sitting outside the box and stops the
+   control filling its card. Force selects in the drawer to fill their column. */
+.thinkrank-metabox-drawer select {
+	width: 100% !important;
+	max-width: 100% !important;
+	box-sizing: border-box;
+}
+
+@media screen and (max-width: 782px) {
+
+	.thinkrank-metabox-drawer {
+		height: 92vh;
+		max-height: 92vh;
+	}
+}
+
+/* Schema Form Container */
+.schema-form-container {
+	margin: 16px 0;
+
+	.components-card {
+		box-shadow: none;
+		border: 1px solid #ddd;
+
+		.components-card-header {
+			border-bottom: 1px solid #ddd;
+			padding: 12px 16px;
+
+			h4 {
+				margin: 0;
+				font-size: 14px;
+				font-weight: 600;
+			}
+		}
+
+		.components-card-body {
+			padding: 16px;
+		}
+	}
+}
+
+/* Meta Box Container */
+.thinkrank-metabox {
+
+	/* Ensure proper spacing within WordPress metabox */
+	.inside {
+		margin: 0 !important;
+		padding: 0 !important;
+	}
+}
+
+.thinkrank-metabox-content {
+	padding: 20px;
+
+	/* Ensure text doesn't get cut off */
+	word-wrap: break-word;
+	overflow-wrap: break-word;
+
+	/* Prevent horizontal overflow */
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+/* Card Styling */
+.thinkrank-card {
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	margin-bottom: 20px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.thinkrank-card-header {
+	padding: 16px 20px;
+	border-bottom: 1px solid #eee;
+	background: #f9f9f9;
+	border-radius: 8px 8px 0 0;
+}
+
+.thinkrank-card-header h4 {
+	margin: 0 0 8px 0;
+	font-size: 16px;
+	font-weight: 600;
+	color: #23282d;
+}
+
+.thinkrank-card-header .description {
+	margin: 0;
+	color: #666;
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.thinkrank-card-body {
+	padding: 20px;
+}
+
+/* Metabox Header */
+.thinkrank-metabox-header {
+	padding: 10px 20px;
+	margin: 0 20px;
+	border: 1px solid #eee;
+	background: #f9f9f9;
+	border-radius: 8px;
+
+	h4 {
+		margin: 0 0 8px 0;
+		font-size: 16px;
+		font-weight: 600;
+		color: #23282d;
+	}
+
+	.description {
+		margin: 0;
+		color: #666;
+		font-size: 13px;
+		line-height: 1.4;
+	}
+}
+
+.thinkrank-metabox-content h4 {
+	margin: 0 0 15px 0;
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.thinkrank-metabox-content p {
+	margin: 0 0 15px 0;
+	color: #666;
+	font-size: 13px;
+	line-height: 1.4;
+	word-wrap: break-word;
+}
+
+/* Form Fields */
+.thinkrank-field {
+	margin-bottom: 20px;
+}
+
+.thinkrank-field label {
+	display: block;
+	margin-bottom: 5px;
+	font-weight: 600;
+	font-size: 13px;
+}
+
+.thinkrank-field input[type="text"],
+.thinkrank-field textarea,
+.thinkrank-field select {
+	width: 100%;
+	padding: 8px 12px;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.thinkrank-field textarea {
+	resize: vertical;
+	min-height: 80px;
+}
+
+.thinkrank-field .description {
+	margin-top: 5px;
+	color: #666;
+	font-size: 12px;
+	font-style: italic;
+}
+
+/* Character Counters */
+.character-counter {
+	float: right;
+	font-size: 11px;
+	color: #666;
+	margin-top: 5px;
+}
+
+.character-counter.over-limit {
+	color: #d63638;
+	font-weight: 600;
+}
+
+/* AI Options */
+.ai-controls-row {
+	display: flex;
+	gap: 15px;
+	margin-bottom: 20px;
+	flex-wrap: wrap;
+}
+
+.ai-control-group {
+	flex: 1;
+	min-width: 150px;
+}
+
+.ai-control-group label {
+	display: block;
+	margin-bottom: 5px;
+	font-weight: 600;
+	font-size: 13px;
+}
+
+.ai-control-group select {
+	width: 100%;
+	padding: 8px 12px;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	font-size: 13px;
+}
+
+/* AI Buttons */
+.ai-buttons {
+	display: flex;
+	gap: 10px;
+	margin-bottom: 20px;
+	flex-wrap: wrap;
+}
+
+.ai-buttons .button {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 8px 16px;
+	font-size: 13px;
+}
+
+.ai-buttons .button .dashicons {
+	font-size: 16px;
+	width: 16px;
+	height: 16px;
+}
+
+.ai-buttons .button:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+/* Spinning Animation */
+.spin {
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+
+	from {
+		transform: rotate(0deg);
+	}
+
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Analysis Results Container */
+.thinkrank-analysis-results {
+	margin-top: 20px;
+	padding: 20px;
+	background: #f9f9f9;
+	border: 1px solid #e0e0e0;
+	border-radius: 8px;
+}
+
+/* Analysis Sections */
+.analysis-section {
+	margin-bottom: 25px;
+}
+
+.analysis-section:last-child {
+	margin-bottom: 0;
+}
+
+.analysis-section h4 {
+	margin: 0 0 15px 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: #333;
+	border-bottom: 2px solid #0073aa;
+	padding-bottom: 5px;
+}
+
+.analysis-section h5 {
+	margin: 0 0 10px 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: #555;
+}
+
+/* Content Analysis Grid */
+.analysis-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 15px;
+}
+
+.analysis-item {
+	padding: 15px;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 6px;
+	text-align: center;
+}
+
+.analysis-label {
+	display: block;
+	font-size: 12px;
+	color: #666;
+	margin-bottom: 5px;
+	text-transform: uppercase;
+	font-weight: 600;
+}
+
+.analysis-value {
+	display: block;
+	font-size: 16px;
+	font-weight: 700;
+	color: #333;
+	text-transform: capitalize;
+}
+
+/* Suggestions List */
+.suggestions-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.suggestions-list li {
+	margin-bottom: 10px;
+	padding: 12px 15px;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-left: 4px solid #0073aa;
+	border-radius: 4px;
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.suggestions-list li:last-child {
+	margin-bottom: 0;
+}
+
+/* Strengths & Weaknesses */
+.strengths-weaknesses {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 20px;
+}
+
+.strengths-column,
+.weaknesses-column {
+	padding: 15px;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 6px;
+}
+
+.strengths-list,
+.weaknesses-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.strengths-list li,
+.weaknesses-list li {
+	margin-bottom: 8px;
+	padding: 8px 12px;
+	border-radius: 4px;
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.strengths-list li {
+	background: #e8f5e8;
+	border-left: 3px solid #00a32a;
+	color: #155724;
+}
+
+.weaknesses-list li {
+	background: #f8e8e8;
+	border-left: 3px solid #d63638;
+	color: #721c24;
+}
+
+.strengths-list li:last-child,
+.weaknesses-list li:last-child {
+	margin-bottom: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 782px) {
+
+	.ai-controls-row {
+		flex-direction: column;
+	}
+
+	.ai-buttons {
+		flex-direction: column;
+	}
+
+	.analysis-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.strengths-weaknesses {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* Loading States */
+.thinkrank-field.loading input,
+.thinkrank-field.loading textarea {
+	opacity: 0.6;
+	pointer-events: none;
+}
+
+/* Focus States */
+.thinkrank-field input:focus,
+.thinkrank-field textarea:focus,
+.thinkrank-field select:focus {
+	border-color: #0073aa;
+	box-shadow: 0 0 0 1px #0073aa;
+	outline: none;
+}
+
+/* Utility Classes */
+.hidden {
+	display: none;
+}
+
+/* Suggestion Priority Badges */
+.suggestion-content {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+}
+
+.priority-badge {
+	font-size: 10px;
+	padding: 2px 6px;
+	border-radius: 3px;
+	font-weight: 600;
+	text-transform: uppercase;
+
+	&.priority-high {
+		background-color: #dc3545;
+		color: #fff;
+	}
+
+	&.priority-medium {
+		background-color: #ffc107;
+		color: #212529;
+	}
+
+	&.priority-low {
+		background-color: #28a745;
+		color: #fff;
+	}
+
+	&.priority-critical {
+		background-color: #6f42c1;
+		color: #fff;
+	}
+}
+
+/* Refresh Indicator */
+.thinkrank-refresh-indicator {
+	position: fixed;
+	top: 32px;
+	right: 20px;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	padding: 8px 12px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	z-index: 9999;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	color: #666;
+
+	.spinner {
+		float: none;
+		margin: 0;
+		width: 16px;
+		height: 16px;
+	}
+
+	span:not(.spinner) {
+		white-space: nowrap;
+	}
+}
+
+/* Refreshing state */
+.thinkrank-metabox-schema-tab.is-refreshing {
+	opacity: 0.7;
+	pointer-events: none;
+	transition: opacity 0.2s ease;
+}
+
+/* Normalize select arrows — removes native + WP admin double arrow */
+.tr-root select {
+	-webkit-appearance: none;
+	appearance: none;
+	// stylelint-disable-next-line function-url-quotes -- the data URI contains single quotes, so it has to stay quoted.
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2394a3b8'%3E%3Cpath fill-rule='evenodd' d='M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z' clip-rule='evenodd'/%3E%3C%2Fsvg%3E");
+	background-position: right 0.5rem center;
+	background-repeat: no-repeat;
+	background-size: 1rem 1rem;
+	padding-right: 1.75rem;
+
+	&:focus {
+		outline: none !important;
+		box-shadow: none !important;
+	}
+}
+
+/* ===========================================================================
+   In-flow metabox card
+   ---------------------------------------------------------------------------
+   The SEO drawer is fixed-position, so the "ThinkRank SEO" metabox body would
+   otherwise render empty — and toggling the panel in Screen Options (or the
+   block editor's Preferences → Panels) would appear to do nothing. This card
+   fills the box and gives that toggle a visible effect, plus a second way into
+   the drawer for anyone who never spots the editor-header launcher.
+   ======================================================================== */
+.thinkrank-metabox-panel-card {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 12px;
+	padding: 4px 0;
+
+	.thinkrank-metabox-panel-card-text {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+
+		strong {
+			font-size: 13px;
+			line-height: 1.4;
+		}
+
+		span {
+			font-size: 12px;
+			color: #646970;
+			line-height: 1.4;
+		}
+	}
+
+	.thinkrank-metabox-panel-card-actions {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex-shrink: 0;
+	}
+
+	.thinkrank-metabox-panel-card-score {
+		font-size: 15px;
+		font-weight: 600;
+		line-height: 1;
+		color: #1e1e1e;
+		white-space: nowrap;
+
+		small {
+			font-size: 11px;
+			font-weight: 400;
+			color: #646970;
+		}
+	}
+}

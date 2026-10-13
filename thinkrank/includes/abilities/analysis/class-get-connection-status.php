@@ -32,7 +32,7 @@ class Get_Connection_Status extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-connection-status';
 		$this->label       = __( 'Get Connection Status', 'thinkrank' );
-		$this->description = __( 'Report ThinkRank integration health: plugin/Pro versions and active state, Abilities API availability and the count + names of registered ThinkRank abilities, MCP server toggle and endpoints, the current user and their ThinkRank capabilities, home/siteurl/REST URL scheme agreement and HTTPS state, custom database-table status, and scoring availability. Never returns API keys, OAuth tokens, or connection tokens.', 'thinkrank' );
+		$this->description = __( 'Report ThinkRank integration health: plugin/Pro versions and active state, Abilities API availability and the count + names of registered ThinkRank abilities, MCP server toggle and endpoints, the connection doctor\'s last verdict (mcp_server.doctor: which checks passed, including whether the host blocks AI-client user agents) and, when called over MCP, which areas this connection may read or change (mcp_server.credential.levels), the current user and their ThinkRank capabilities, home/siteurl/REST URL scheme agreement and HTTPS state, custom database-table status, and scoring availability. Never returns API keys, OAuth tokens, or connection tokens.', 'thinkrank' );
 	}
 
 	/**

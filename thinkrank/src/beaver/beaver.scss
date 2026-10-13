@@ -1,0 +1,79 @@
+/**
+ * Beaver Builder — launcher reveal, drawer stacking and reset overrides.
+ *
+ * Every rule here is scoped by enqueue, not by selector: the `beaver` bundle
+ * loads ONLY inside the Beaver Builder editor (Beaver_Metabox gates on
+ * `FLBuilderModel::is_builder_active()`), so the classic/block, Elementor,
+ * Oxygen, Divi and Bricks editors are untouched by all of it.
+ */
+
+/*
+ * Keep the toolbar button out of sight until its mark is mounted.
+ *
+ * The button is server-rendered by Beaver Builder from the
+ * `fl_builder_ui_bar_buttons` entry, and its label is an EMPTY span that the
+ * bundle renders the React LauncherMark into. Between the toolbar painting and
+ * that mount there is a window where the button exists with nothing in it, and
+ * `.fl-builder-button-silent` gives it `min-width: 40px` — so without this it
+ * shows up as a blank 40px hole in the top bar.
+ *
+ * `display: none` rather than `visibility: hidden` so it takes no space either.
+ * A launcher is useless without the JS that opens the drawer, so a bundle that
+ * never boots correctly leaves no button at all rather than a dead one.
+ */
+.fl-builder-button.thinkrank-fl-launcher:not(.thinkrank-is-ready) {
+	display: none !important;
+}
+
+/*
+ * Center the mark inside Beaver Builder's button box.
+ *
+ * `.fl-builder-button-silent` is already `display: inline-flex` with
+ * `justify-content: center`, so this only has to stop the span from inheriting
+ * the button's text line-height and adding a baseline gap under the logo.
+ */
+.thinkrank-fl-launcher .thinkrank-fl-launcher-mark {
+	display: inline-flex;
+	align-items: center;
+	line-height: 0;
+}
+
+/*
+ * Panel — must clear Beaver Builder's chrome.
+ *
+ * The builder's own ceiling is 100000001 (`css/build/builder-css.bundle.css`,
+ * the settings lightbox and its overlay), so the drawer has to sit above that
+ * or a settings modal opened behind it would still paint on top.
+ */
+.thinkrank-metabox-drawer {
+	z-index: 2147483000 !important;
+}
+
+/*
+ * Backdrop (the portaled overlay, aria-hidden) — sits just under the panel but
+ * still above the builder chrome so the dim covers the whole editor.
+ */
+body > .tr-root > [aria-hidden="true"] {
+	z-index: 2147482999 !important;
+}
+
+/*
+ * Restore border rendering inside the drawer.
+ *
+ * The shared drawer's `tr-border*` utilities set only border-width and
+ * border-color; the visible line comes from Tailwind Preflight's global
+ * `*, ::before, ::after { border-style: solid }`, which the build scopes under
+ * `.tr-root`. A host reset that zeroes borders with *type* selectors
+ * (specificity 0,0,1) out-ranks Preflight's universal `*` (0,0,0) regardless of
+ * load order and leaves every drawer element at border-style:none — this is
+ * exactly how the Divi Visual Builder lost its drawer borders. Beaver Builder
+ * ships a large builder stylesheet of its own, so re-assert `solid` under
+ * `.tr-root` (0,1,0) rather than find out in the field. Elements with no
+ * border-width stay invisible, exactly as Preflight intends, and the rule is
+ * scoped to this bundle.
+ */
+.tr-root *,
+.tr-root *::before,
+.tr-root *::after {
+	border-style: solid;
+}

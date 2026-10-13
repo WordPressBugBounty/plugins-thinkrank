@@ -155,14 +155,14 @@ final class Settings_Key_Map {
 			'business_hours'           => self::business_hours(),
 
 			// Indexing.
-			'allow_search_engines'     => self::boolean( __( 'Whether search engines are allowed to index the site.', 'thinkrank' ) ),
+			'allow_search_engines'     => self::boolean( __( 'Whether search engines are allowed to index the site; off, robots.txt disallows every crawler. Also needs the indexing:write scope.', 'thinkrank' ) ),
 			'query_protection'         => self::boolean( __( 'Whether a URL whose content selector resolved to nothing (for example ?post_type=nosuchtype) answers 404 instead of serving the blog listing at 200.', 'thinkrank' ) ),
 			'canonical_scheme'         => [
 				'type'        => 'string',
 				'description' => __( 'Scheme for canonical URLs, og:url, schema @ids and sitemap entries. "automatic" follows WordPress; the other two override it, for a site behind a proxy that terminates TLS and leaves WordPress reporting the wrong scheme.', 'thinkrank' ),
 				'enum'        => \ThinkRank\SEO\Url_Scheme::MODES,
 			],
-			'robots_txt_enabled'       => self::boolean( __( 'Whether ThinkRank manages robots.txt. Its contents are set with thinkrank/update-robots-txt.', 'thinkrank' ) ),
+			'robots_txt_enabled'       => self::boolean( __( 'Whether ThinkRank manages robots.txt; turning it off deletes the file ThinkRank wrote. Its contents are set with thinkrank/update-robots-txt. Also needs the indexing:write scope.', 'thinkrank' ) ),
 
 			// RSS feeds.
 			'feed_excerpt_only'        => self::boolean( __( 'Whether feed entries are shortened to an excerpt instead of carrying the full post.', 'thinkrank' ) ),
@@ -291,8 +291,11 @@ final class Settings_Key_Map {
 				}
 				return $value;
 			case 'object':
-				if ( ! is_array( $value ) ) {
-					return [];
+				// An empty map JSON-encodes as `[]`, which a client validating
+				// against the output schema rejects. business_hours and
+				// ai_crawler_rules are both unset on a fresh install (#1089).
+				if ( ! is_array( $value ) || [] === $value ) {
+					return new \stdClass();
 				}
 				if ( empty( $property['properties'] ) || ! is_array( $property['properties'] ) ) {
 					return $value;
@@ -310,7 +313,8 @@ final class Settings_Key_Map {
 					}
 				}
 
-				return $object;
+				// A closed object holding only undeclared keys ends up empty.
+				return [] === $object ? new \stdClass() : $object;
 			default:
 				$string = is_scalar( $value ) ? (string) $value : '';
 
@@ -457,7 +461,7 @@ final class Settings_Key_Map {
 
 		return [
 			'type'                 => 'object',
-			'description'          => __( 'Per-agent AI crawler rules. "block" writes a User-agent/Disallow pair for that crawler into robots.txt; "allow" (the default for any crawler not listed) writes nothing. Blocking Google-Extended does not affect normal Google Search indexing.', 'thinkrank' ),
+			'description'          => __( 'Per-agent AI crawler rules. "block" writes a User-agent/Disallow pair for that crawler into robots.txt; "allow" (the default for any crawler not listed) writes nothing. Blocking Google-Extended does not affect normal Google Search indexing. Also needs the indexing:write scope.', 'thinkrank' ),
 			'additionalProperties' => false,
 			'properties'           => $properties,
 		];

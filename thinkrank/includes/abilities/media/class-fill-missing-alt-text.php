@@ -104,6 +104,18 @@ class Fill_Missing_Alt_Text extends Image_Alt_Ability_Base {
 					'type'        => 'boolean',
 					'description' => __( 'True when the whole library has been walked. Call again with next_offset while this is false.', 'thinkrank' ),
 				],
+				'changes'     => [
+					'type'        => 'array',
+					'description' => __( 'Each image this batch wrote, with its alt text before and after. The site owner can undo the batch image by image from the MCP activity log.', 'thinkrank' ),
+					'items'       => [
+						'type'       => 'object',
+						'properties' => [
+							'id'     => [ 'type' => 'integer' ],
+							'before' => [ 'type' => 'string' ],
+							'after'  => [ 'type' => 'string' ],
+						],
+					],
+				],
 				'cache'       => $this->cache_property(),
 			],
 		];

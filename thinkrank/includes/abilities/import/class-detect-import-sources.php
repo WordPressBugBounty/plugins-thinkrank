@@ -92,9 +92,11 @@ class Detect_Import_Sources extends Ability_Base {
 	public function execute( $input ) {
 		$detector = new Import_Detector();
 
+		// Both are maps keyed by plugin slug, and both are empty on a site
+		// with no other SEO plugin and no captured snapshot (#1089).
 		return [
-			'detected'  => $detector->detect(),
-			'snapshots' => Snapshot_Store::get_available_snapshots(),
+			'detected'  => self::object_value( $detector->detect() ),
+			'snapshots' => self::object_value( Snapshot_Store::get_available_snapshots() ),
 		];
 	}
 }

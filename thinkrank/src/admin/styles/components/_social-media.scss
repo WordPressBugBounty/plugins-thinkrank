@@ -1,0 +1,105 @@
+/**
+ * Social Media Tab Styles
+ *
+ * Styles for social media settings and preview functionality
+ *
+ * @package ThinkRank
+ * @since 1.0.0
+ */
+
+// Social Media Tab - Properly scoped to avoid conflicts
+.thinkrank-ui .thinkrank-social-media-tab {
+
+	.thinkrank-social-media-tabs {
+
+		.components-tab-panel__tabs {
+			border-bottom: 1px solid var(--thinkrank-border);
+			margin-bottom: 1.5rem;
+		}
+
+		.components-tab-panel__tabs-item {
+			padding: 12px 20px;
+			border: none;
+			border-bottom: 2px solid transparent;
+			background: none;
+			color: var(--thinkrank-text-light);
+			font-weight: 500;
+			transition: all 0.2s ease;
+
+			&:hover {
+				color: var(--thinkrank-primary);
+				background: rgba(37, 99, 235, 0.05);
+			}
+
+			&.active-tab {
+				color: var(--thinkrank-primary);
+				border-bottom-color: var(--thinkrank-primary);
+				background: rgba(37, 99, 235, 0.05);
+			}
+		}
+	}
+
+	.thinkrank-tab-content {
+		min-height: 400px;
+	}
+
+	.thinkrank-settings-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+		gap: 1.5rem;
+		margin-bottom: 1.5rem;
+
+		@media (max-width: 768px) {
+			grid-template-columns: 1fr;
+		}
+	}
+}
+
+// NOTE: The social-media Preview card is rendered entirely with `tr-*`
+// utility classes in SocialMediaTab.js (renderPreviewTab). The previous
+// `.thinkrank-ui .thinkrank-social-preview` / `.preview-*` rules were dead —
+// they were scoped under `.thinkrank-ui`, a wrapper the admin app never
+// renders (the root is `.tr-root`), so the card was unstyled. Removed.
+
+// Form enhancements for social media
+.thinkrank-social-media-tab {
+
+	.components-text-control__input,
+	.components-textarea-control__input {
+		transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
+		&:focus {
+			border-color: var(--thinkrank-primary);
+			box-shadow: 0 0 0 1px var(--thinkrank-primary);
+		}
+	}
+
+
+	.components-select-control__input {
+
+		&:focus {
+			border-color: var(--thinkrank-primary);
+			box-shadow: 0 0 0 1px var(--thinkrank-primary);
+		}
+	}
+}
+
+// Responsive design - Properly scoped
+@media (max-width: 768px) {
+
+	.thinkrank-ui .thinkrank-social-media-tab {
+
+		.thinkrank-social-media-tabs {
+
+			.components-tab-panel__tabs {
+				flex-wrap: wrap;
+				gap: 0.5rem;
+			}
+
+			.components-tab-panel__tabs-item {
+				padding: 8px 12px;
+				font-size: 13px;
+			}
+		}
+	}
+}

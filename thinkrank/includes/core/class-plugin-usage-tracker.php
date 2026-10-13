@@ -91,6 +91,15 @@ class Plugin_Usage_Tracker {
     private $notice_after = 0;
 
     /**
+     * Seconds to wait for the insights endpoint. The daily ping runs in cron
+     * and can wait; the deactivation ping runs while the user waits on the
+     * Plugins screen, so deactivate_this_plugin() lowers it.
+     *
+     * @var int
+     */
+    private $request_timeout = 30;
+
+    /**
      * Get Instance of Plugin_Usage_Tracker
      *
      * @return Plugin_Usage_Tracker
@@ -173,6 +182,9 @@ class Plugin_Usage_Tracker {
         if (!$allow_tracking) {
             return;
         }
+        // The user is waiting on this request: do not hold the Plugins
+        // screen for the full cron timeout if the endpoint is slow.
+        $this->request_timeout    = 5;
         $body                     = $this->get_data();
         $body['status']           = 'Deactivated';
         $body['deactivated_date'] = time();
@@ -215,9 +227,9 @@ class Plugin_Usage_Tracker {
         /**
          * Deactivation Reason Form and Submit Data to Insights.
          */
-        add_filter('plugin_action_links_' . plugin_basename($this->plugin_file), array($this, 'deactivate_action_links'));
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_deactivation_assets'));
         add_action('admin_footer-plugins.php', array($this, 'deactivate_reasons_form'));
-        add_action('wp_ajax_deactivation_form_' . esc_attr($this->plugin_name), array($this, 'deactivate_reasons_form_submit'));
+        add_action('wp_ajax_' . $this->feedback_action(), array($this, 'deactivate_reasons_form_submit'));
     }
 
     /**
@@ -522,14 +534,6 @@ class Plugin_Usage_Tracker {
          * Send Initial Data to API
          */
         if ($site_id == false && $this->item_id !== false) {
-            if (isset($_SERVER['REMOTE_ADDR']) && !empty($_SERVER['REMOTE_ADDR'] && $_SERVER['REMOTE_ADDR'] != '127.0.0.1')) {
-                $country_request = wp_remote_get('https://ip-api.com/json/' . sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) . '?fields=country');
-                if (!is_wp_error($country_request) && $country_request['response']['code'] == 200) {
-                    $ip_data         = json_decode($country_request["body"]);
-                    $body['country'] = isset($ip_data->country) ? $ip_data->country : 'NOT SET';
-                }
-            }
-
             $body['plugin_slug'] = $this->plugin_name;
             $body['url']         = $site_url;
             $body['item_id']     = $this->item_id;
@@ -618,7 +622,7 @@ class Plugin_Usage_Tracker {
 
         $args = wp_parse_args($args, array(
             'method'      => 'POST',
-            'timeout'     => 30,
+            'timeout'     => $this->request_timeout,
             'redirection' => 5,
             'httpversion' => '1.1',
             'blocking'    => true,
@@ -851,7 +855,7 @@ class Plugin_Usage_Tracker {
      * Programmatically opt the site in to tracking.
      *
      * Mirrors the "yes" branch of clicked() without the request redirect, so
-     * other flows (e.g. the Setup Wizard "Get Started" action) can record
+     * other flows (e.g. the Setup Wizard "Allow & Continue" action) can record
      * consent: schedule the cron, flag tracking allowed, send the first
      * payload and suppress the opt-in notice from then on.
      *
@@ -884,414 +888,282 @@ class Plugin_Usage_Tracker {
     }
 
     /**
-     * AJAX callback when the deactivated form is submitted.
+     * Ajax action the deactivation dialog posts to.
+     */
+    private function feedback_action(): string {
+        return 'deactivation_form_' . $this->plugin_name;
+    }
+
+    /**
+     * Whether the deactivation dialog applies on this request.
+     *
+     * Only for someone who agreed to share usage data: the answer travels
+     * with that data, to the same place. Without consent the plain WordPress
+     * Deactivate link is left alone.
+     *
+     * @return bool
+     */
+    public function should_ask_on_deactivation(): bool {
+        return (bool) $this->include_goodbye_form
+            && current_user_can('activate_plugins')
+            && $this->is_tracking_allowed();
+    }
+
+    /**
+     * Load the dialog's stylesheet and script on the Plugins screen.
+     *
+     * @param string $hook_suffix Current admin page.
+     * @return void
+     */
+    public function enqueue_deactivation_assets($hook_suffix): void {
+        if ('plugins.php' !== $hook_suffix || !$this->should_ask_on_deactivation()) {
+            return;
+        }
+
+        $version = defined('THINKRANK_VERSION') ? THINKRANK_VERSION : self::WPINS_VERSION;
+
+        wp_enqueue_style(
+            'thinkrank-deactivation-feedback',
+            THINKRANK_PLUGIN_URL . 'static/css/deactivation-feedback.css',
+            [],
+            $version
+        );
+        wp_enqueue_script(
+            'thinkrank-deactivation-feedback',
+            THINKRANK_PLUGIN_URL . 'static/js/deactivation-feedback.js',
+            [],
+            $version,
+            true
+        );
+        wp_localize_script('thinkrank-deactivation-feedback', 'thinkrankDeactivation', [
+            'plugin'  => plugin_basename($this->plugin_file),
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'action'  => $this->feedback_action(),
+            'nonce'   => wp_create_nonce('wpins_deactivation_nonce'),
+        ]);
+    }
+
+    /**
+     * Ajax: store the reason the user picked, so deactivate_this_plugin()
+     * sends it with the deactivation ping.
      *
      * @since 1.12.0
+     * @return void
      */
     public function deactivate_reasons_form_submit() {
         check_ajax_referer('wpins_deactivation_nonce', 'security');
 
-        // The form is only reachable from the plugins screen; require the same
-        // capability that screen does so the nonce isn't the only control.
+        // The dialog is only reachable from the Plugins screen; require the
+        // same capability that screen does so the nonce is not the only control.
         if (!current_user_can('activate_plugins')) {
             wp_die('', '', ['response' => 403]);
         }
 
-        if (isset($_POST['values'])) {
-            $values = sanitize_text_field(wp_unslash($_POST['values']));
-            update_option('wpins_deactivation_reason_' . $this->plugin_name, $values);
+        $reason  = isset($_POST['reason']) ? sanitize_key(wp_unslash($_POST['reason'])) : '';
+        $details = isset($_POST['details']) ? sanitize_textarea_field(wp_unslash($_POST['details'])) : '';
+
+        if (!$this->record_deactivation_feedback($reason, $details)) {
+            wp_send_json_error(null, 400);
         }
-        if (isset($_POST['details'])) {
-            $details = sanitize_text_field(wp_unslash($_POST['details']));
-            update_option('wpins_deactivation_details_' . $this->plugin_name, $details);
-        }
-        echo 'success';
-        wp_die();
+
+        wp_send_json_success();
     }
 
     /**
-     * Filter the deactivation link to allow us to present a form when the user
-     * deactivates the plugin
+     * Keep a deactivation reason for the deactivation ping.
      *
-     * @since 1.12.0
+     * The reason is stored as its fixed English value, never the label the
+     * user saw: a translated label made the same answer arrive as a dozen
+     * different strings, one per language. An unknown reason is refused, and
+     * nothing is kept for a site that has not agreed to share usage data.
+     *
+     * @param string $reason_key A key from deactivation_reasons().
+     * @param string $details    Optional free text.
+     * @return bool True when stored.
      */
-    public function deactivate_action_links($links) {
-        /**
-         * Check is tracking allowed or not.
-         */
+    public function record_deactivation_feedback(string $reason_key, string $details = ''): bool {
         if (!$this->is_tracking_allowed()) {
-            return $links;
+            return false;
         }
-        if (isset($links['deactivate']) && $this->include_goodbye_form) {
-            $deactivation_link = $links['deactivate'];
-            /**
-             * Change the default deactivate button link.
-             */
-            $deactivation_link   = str_replace('<a ', '<div class="wpinsights-goodbye-form-wrapper-' . esc_attr($this->plugin_name) . '"><div class="wpinsights-goodbye-form-bg"></div><span class="wpinsights-goodbye-form" id="wpinsights-goodbye-form"></span></div><a onclick="javascript:event.preventDefault();" id="wpinsights-goodbye-link-' . esc_attr($this->plugin_name) . '" ', $deactivation_link);
-            $links['deactivate'] = $deactivation_link;
+
+        $reasons = $this->deactivation_reasons()['reasons'] ?? [];
+        if (!isset($reasons[$reason_key]['value'])) {
+            return false;
         }
-        return $links;
+
+        $details = trim($details);
+        $details = function_exists('mb_substr') ? mb_substr($details, 0, 1000) : substr($details, 0, 1000);
+
+        update_option('wpins_deactivation_reason_' . $this->plugin_name, (string) $reasons[$reason_key]['value'], false);
+        if ($details !== '') {
+            update_option('wpins_deactivation_details_' . $this->plugin_name, $details, false);
+        } else {
+            delete_option('wpins_deactivation_details_' . $this->plugin_name);
+        }
+
+        return true;
     }
 
     /**
-     * ALL Deactivate Reasons.
+     * The dialog's copy and reasons.
+     *
+     * Each reason has a stable `value` sent to insights (English, never
+     * translated), the `label` the user reads, and optionally a `detail`
+     * field: `input` or `textarea`, with its own label.
      *
      * @since 1.12.0
+     * @return array{title: string, intro: string, note: string, reasons: array<string, array>}
      */
-    public function deactivation_reasons() {
-        $form            = array();
-        $form['heading'] = __('We Value Your Feedback', 'thinkrank');
-        $form['body']    = __("Could you please tell us why you're deactivating our plugin? Your insights will help us to improve.", 'thinkrank');
+    public function deactivation_reasons(): array {
+        $form = [
+            'title'   => __('Before you go, what happened?', 'thinkrank'),
+            'intro'   => __('Pick the reason that fits best. It goes straight to the team that builds ThinkRank and takes a few seconds.', 'thinkrank'),
+            'note'    => __('Your SEO settings and data stay on your site while ThinkRank is off. Turn it back on any time and everything is where you left it.', 'thinkrank'),
+            'reasons' => [
+                'temporary'   => [
+                    'value' => 'Temporary deactivation',
+                    'label' => __('I am only switching it off for a moment, to troubleshoot or test', 'thinkrank'),
+                ],
+                'switching'   => [
+                    'value'  => 'Switching to another SEO plugin',
+                    'label'  => __('I am moving to another SEO plugin', 'thinkrank'),
+                    'detail' => [
+                        'type'  => 'input',
+                        'label' => __('Which one? (optional)', 'thinkrank'),
+                    ],
+                ],
+                'broken'      => [
+                    'value'  => 'Something did not work',
+                    'label'  => __('Something did not work or caused a problem', 'thinkrank'),
+                    'detail' => [
+                        'type'  => 'textarea',
+                        'label' => __('What happened? A sentence or two helps us fix it.', 'thinkrank'),
+                    ],
+                    'help'   => [
+                        'text' => __('Would you rather have it fixed? Our support team can help.', 'thinkrank'),
+                        'link' => __('Contact support', 'thinkrank'),
+                        'url'  => 'https://wpdeveloper.com/support/new-ticket/',
+                    ],
+                ],
+                'missing'     => [
+                    'value'  => 'Missing a feature',
+                    'label'  => __('It is missing a feature I need', 'thinkrank'),
+                    'detail' => [
+                        'type'  => 'input',
+                        'label' => __('Which feature? (optional)', 'thinkrank'),
+                    ],
+                ],
+                'complicated' => [
+                    'value'  => 'Too hard to use',
+                    'label'  => __('It was harder to use than I expected', 'thinkrank'),
+                    'detail' => [
+                        'type'  => 'textarea',
+                        'label' => __('What got in the way? (optional)', 'thinkrank'),
+                    ],
+                ],
+                'not_needed'  => [
+                    'value' => 'No longer needed',
+                    'label' => __('This site does not need an SEO plugin anymore', 'thinkrank'),
+                ],
+                'other'       => [
+                    'value'  => 'Other',
+                    'label'  => __('Something else', 'thinkrank'),
+                    'detail' => [
+                        'type'  => 'textarea',
+                        'label' => __('Tell us a little more (optional)', 'thinkrank'),
+                    ],
+                ],
+            ],
+        ];
 
-        $form['options'] = array(
-            __('I no longer need the plugin', 'thinkrank'),
-            [
-                'label'       => __('I found a better plugin', 'thinkrank'),
-                'extra_field' => __('Please share which plugin', 'thinkrank'),
-            ],
-            __("I couldn't get the plugin to work", 'thinkrank'),
-            __('It\'s a temporary deactivation', 'thinkrank'),
-            [
-                'label'       => __('Other', 'thinkrank'),
-                'extra_field' => __('Please share the reason', 'thinkrank'),
-                'type'        => 'textarea',
-            ],
-        );
-        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the SDK's long-standing hook name.
         return apply_filters('wpins_form_text_' . $this->plugin_name, $form);
     }
 
     /**
-     * Deactivate Reasons Form.
-     * This form will appears when user wants to deactivate the plugin to send
-     * you deactivated reasons.
+     * Print the deactivation dialog, closed, at the foot of the Plugins screen.
+     *
+     * A native <dialog>: the browser traps focus, closes it on Escape and
+     * draws the backdrop. Styled with WordPress's own buttons and form
+     * controls; static/css/deactivation-feedback.css scopes everything else
+     * to the dialog, so nothing leaks onto the rest of the screen.
      *
      * @since 1.12.0
+     * @return void
      */
     public function deactivate_reasons_form() {
-        $form              = $this->deactivation_reasons();
-        $class_plugin_name = esc_attr($this->plugin_name);
-        $html              = '<div class="tr__modal-close-btn"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M5.29289 5.29289C5.68342 4.90237 6.31658 4.90237 6.70711 5.29289L12 10.5858L17.2929 5.29289C17.6834 4.90237 18.3166 4.90237 18.7071 5.29289C19.0976 5.68342 19.0976 6.31658 18.7071 6.70711L13.4142 12L18.7071 17.2929C19.0976 17.6834 19.0976 18.3166 18.7071 18.7071C18.3166 19.0976 17.6834 19.0976 17.2929 18.7071L12 13.4142L6.70711 18.7071C6.31658 19.0976 5.68342 19.0976 5.29289 18.7071C4.90237 18.3166 4.90237 17.6834 5.29289 17.2929L10.5858 12L5.29289 6.70711C4.90237 6.31658 4.90237 5.68342 5.29289 5.29289Z"/></svg></div><div class="wpinsights-goodbye-form-head"><span><svg width="65" height="64" viewBox="0 0 65 64" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="0.5" width="64" height="64" rx="16" fill="#EDEDFD"/><path d="M41.8346 22.668L45.8346 18.668M19.168 45.3346L23.168 41.3346M26.5013 34.0013L29.8346 30.668M30.5013 38.0013L33.8346 34.668M24.9013 43.068C25.1986 43.3663 25.5518 43.603 25.9408 43.7645C26.3298 43.926 26.7468 44.0092 27.168 44.0092C27.5891 44.0092 28.0062 43.926 28.3951 43.7645C28.7841 43.603 29.1373 43.3663 29.4346 43.068L32.5013 40.0013L24.5013 32.0013L21.4346 35.068C21.1363 35.3653 20.8996 35.7185 20.7381 36.1075C20.5766 36.4964 20.4934 36.9135 20.4934 37.3346C20.4934 37.7558 20.5766 38.1728 20.7381 38.5618C20.8996 38.9508 21.1363 39.304 21.4346 39.6013L24.9013 43.068ZM32.5013 24.0013L40.5013 32.0013L43.568 28.9346C43.8663 28.6373 44.103 28.2841 44.2645 27.8951C44.426 27.5062 44.5092 27.0891 44.5092 26.668C44.5092 26.2468 44.426 25.8298 44.2645 25.4408C44.103 25.0518 43.8663 24.6986 43.568 24.4013L40.1013 20.9346C39.804 20.6363 39.4508 20.3996 39.0618 20.2381C38.6728 20.0766 38.2558 19.9934 37.8346 19.9934C37.4135 19.9934 36.9964 20.0766 36.6075 20.2381C36.2185 20.3996 35.8653 20.6363 35.568 20.9346L32.5013 24.0013Z" stroke="#4451FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><h1>' . esc_html($form['heading']) . '</h1></div>';
-        $html             .= '<div class="wpinsights-goodbye-form-body"><p class="wpinsights-goodbye-form-caption">' . esc_html($form['body']) . '</p>';
-        if (is_array($form['options'])) {
-            $html .= '<div id="wpinsights-goodbye-options" class="wpinsights-goodbye-options"><ul>';
-            foreach ($form['options'] as $option) {
-                if (is_array($option)) {
-                    $id   = strtolower(str_replace(" ", "_", esc_attr($option['label'])));
-                    $id   = $id . '_' . $class_plugin_name;
-                    $html .= '<li class="has-goodbye-extra">';
-                    $html .= '<input type="radio" name="wpinsights-' . esc_attr($class_plugin_name) . '-goodbye-options" id="' . esc_attr($id) . '" value="' . esc_attr($option['label']) . '">';
-                    $html .= '<div><label for="' . $id . '">' . esc_attr($option['label']) . '</label>';
-                    if (isset($option['extra_field']) && !isset($option['type'])) {
-                        $html .= '<input type="text" style="display: none" name="' . esc_attr($id) . '" id="' . str_replace(" ", "", esc_attr($option['extra_field'])) . '" placeholder="' . esc_attr($option['extra_field']) . '">';
-                    }
-                    if (isset($option['extra_field']) && isset($option['type'])) {
-                        $html .= '<' . $option['type'] . ' style="display: none" type="text" name="' . esc_attr($id) . '" id="' . str_replace(" ", "", esc_attr($option['extra_field'])) . '" placeholder="' . esc_attr($option['extra_field']) . '"></' . $option['type'] . '>';
-                    }
-                    $html .= '</div></li>';
-                } else {
-                    $id   = strtolower(str_replace(" ", "_", esc_attr($option)));
-                    $id   = $id . '_' . $class_plugin_name;
-                    $html .= '<li><input type="radio" name="wpinsights-' . $class_plugin_name . '-goodbye-options" id="' . esc_attr($id) . '" value="' . esc_attr($option) . '"> <label for="' . $id . '">' . esc_attr($option) . '</label></li>';
-                }
-            }
-            $html .= '</ul></div><!-- .wpinsights-' . $class_plugin_name . '-goodbye-options -->';
+        if (!$this->should_ask_on_deactivation()) {
+            return;
         }
-        $html .= '</div><!-- .wpinsights-goodbye-form-body -->';
-        $html .= '<p class="deactivating-spinner"><span class="spinner"></span> ' . esc_html__('Submitting form', 'thinkrank') . '</p>';
 
-        $wrapper_class = '.wpinsights-goodbye-form-wrapper-' . $class_plugin_name;
-
-        $styles  = '';
-        $styles .= '<style type="text/css">';
-            $styles .= '.wpinsights-form-active-' . $class_plugin_name . ' .wpinsights-goodbye-form-bg {';
-                $styles .= 'background: rgba( 0, 0, 0, .8 );position: fixed;top: 0;left: 0;width: 100%;height: 100%;z-index: 9;';
-            $styles .= '}';
-            $styles .= $wrapper_class . '{';
-                $styles .= 'position: relative; display: none;';
-            $styles .= '}';
-            $styles .= '.wpinsights-form-active-' . $class_plugin_name . ' ' . $wrapper_class . '{';
-                $styles .= 'display: flex !important; position: fixed;top: 0;left: 0;width: 100%;height: 100%; justify-content: center; align-items: center;';
-            $styles .= '}';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form { display: none; }';
-            $styles .= '.wpinsights-form-active-' . $class_plugin_name . ' .wpinsights-goodbye-form {';
-                $styles .= 'position: relative !important; width: 550px; max-width: 80%; background: #fff; box-shadow: 2px 8px 23px 3px rgba(0,0,0,.2); border-radius: 3px; white-space: normal; overflow: hidden; display: block; z-index: 999999;';
-            $styles .= '}';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-head {';
-                $styles .= 'background: #fff; color: #495157; padding: 18px; box-shadow: 0 0 8px rgba(0,0,0,.1); font-size: 15px;';
-            $styles .= '}';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form .wpinsights-goodbye-form-head strong { font-size: 15px; }';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-body { padding: 8px 18px; color: #333; }';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-body label { padding-left: 5px; color: #6d7882; }';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-body .wpinsights-goodbye-form-caption {';
-                $styles .= 'font-weight: 500; font-size: 15px; color: #495157; line-height: 1.4;';
-            $styles .= '}';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-body #wpinsights-goodbye-options { padding-top: 5px; }';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-body #wpinsights-goodbye-options ul > li { margin-bottom: 15px; }';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-body #wpinsights-goodbye-options ul > li > div { display: inline; padding-left: 3px; }';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-body #wpinsights-goodbye-options ul > li > div > input, ' . $wrapper_class . ' .wpinsights-goodbye-form-body #wpinsights-goodbye-options ul > li > div > textarea {';
-                $styles .= 'margin: 10px 18px; padding: 8px; width: 80%;';
-            $styles .= '}';
-            $styles .= $wrapper_class . ' .deactivating-spinner { display: none; padding-bottom: 20px !important; }';
-            $styles .= $wrapper_class . ' .deactivating-spinner .spinner { float: none; margin: 4px 4px 0 18px; vertical-align: bottom; visibility: visible; }';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-footer { padding: 8px 18px; margin-bottom: 15px; }';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-footer > .wpinsights-goodbye-form-buttons { display: flex; align-items: center; justify-content: space-between; }';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-footer .wpinsights-submit-btn {';
-                $styles .= 'background-color: #4451ff; -webkit-border-radius: 4px; border-radius: 4px; color: #fff; line-height: 1; padding: 10px 20px; font-size: 13px; font-weight: 500; text-transform: uppercase; transition: .3s;';
-            $styles .= '}';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-footer .wpinsights-submit-btn:hover {';
-                $styles .= 'background-color: #3a46e0;';
-            $styles .= '}';
-            $styles .= $wrapper_class . ' .wpinsights-goodbye-form-footer .wpinsights-deactivate-btn {';
-                $styles .= 'font-size: 13px; color: #a4afb7; background: none; float: right; padding-right: 10px; width: auto; text-decoration: underline;';
-            $styles .= '}';
-            $styles .= '
-                    .wpinsights-form-active-' . $class_plugin_name . ' .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' {
-                        display: flex !important;
-                        position: fixed;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        width: 100%;
-                        z-index: 9999;
-                        height: 100%;
-                        justify-content: center;
-                        align-items: center;
-                    }
-                    .wpinsights-form-active-' . $class_plugin_name . ' .wpinsights-goodbye-form {
-                        border-radius: 8px;
-                        width: 563px;
-                        overflow: visible;
-                        position: relative;
-                        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-                    }
-                    .wpinsights-goodbye-form .tr__modal-close-btn {
-                        position: absolute;
-                        top: 0;
-                        right: -55px;
-                        width: 40px;
-                        height: 40px;
-                        background: #fff;
-                        border-radius: 50%;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        font-size: 12px;
-                        font-weight: 500;
-                        color: #475467;
-                        cursor: pointer;
-                    }
-                    .wpinsights-goodbye-form .tr__modal-close-btn svg {
-                        width: 20px;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-head {
-                        background: #fff;
-                        color: #495157;
-                        padding: 24px;
-                        border-radius: 8px 8px 0 0;
-                        box-shadow: none;
-                        border-bottom: 1px solid #EAECF0;
-                        display: flex;
-                        flex-direction: column;
-                        gap: 16px;
-                        align-items: center;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-head > span {
-                        display: inline-flex;
-                    }
-                    .wpinsights-goodbye-form-head h1 {
-                        font-size: 22px;
-                        font-weight: 450;
-                        color: #1D2939;
-                        padding: 0;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-body {
-                        padding: 32px 40px;
-                        max-height: calc(70vh - 230px);
-                        overflow: auto;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-body .wpinsights-goodbye-form-caption {
-                        font-size: 18px;
-                        color: #1D2939;
-                        margin: 0;
-                        padding-bottom: 16px;
-                        font-weight: 400;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-body #wpinsights-goodbye-options {
-                        padding-top: 0px;
-                    }
-                    .widefat td ul {
-                        font-size: 14px;
-                        margin: 0;
-                        color: #475467;
-                        line-height: 1.4em;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-body #wpinsights-goodbye-options ul > li:not(:last-child) {
-                        margin-bottom: 16px;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-body #wpinsights-goodbye-options ul > li:last-child {
-                        margin-bottom: 0;
-                    }
-                    input[type=radio] {
-                        border-radius: 50%;
-                        margin-right: .25rem;
-                        line-height: .71428571;
-                        margin: 0;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-body label {
-                        padding-left: 4px;
-                        color: #475467;
-                        font-size: 14px;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-body #wpinsights-goodbye-options ul > li > div > input, .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-body #wpinsights-goodbye-options ul > li > div > textarea {
-                        padding: 10px 16px;
-                        border-radius: 8px;
-                        width: 100%;
-                        border: 1px solid #D0D5DD;
-                        margin: 0;
-                        margin-top: 16px;
-                        color: #1D2939;
-                        font-size: 14px;
-                        line-height: 1.5em;
-                        resize: none;
-                        max-height: 44px;
-                    }
-                    input[type=radio] {
-                        border: 1px solid #D0D5DD;
-                        box-shadow: none;
-                    }
-                    input[type=radio]:checked::before {
-                        content: "";
-                        border-radius: 50%;
-                        width: .88rem;
-                        height: .88rem;
-                        margin: -.95px;
-                        background-color: #4451ff;
-                        border: 1px solid #c7ccff;
-                        line-height: 1.14285714;
-                        outline: 0;
-                    }
-                    input[type=radio]:focus {
-                        border-color: #D0D5DD;
-                        box-shadow: none;
-                        outline: 0;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-body #wpinsights-goodbye-options ul > li > div > input::placeholder,
-                     .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-body #wpinsights-goodbye-options ul > li > div > textarea::placeholder{
-                        color: #C6CBD2 !important;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-footer {
-                        padding: 16px 36px;
-                        margin-bottom: 0;
-                        border-top: 1px solid #EAECF0;
-                    }
-                    input:focus,
-                    textarea:focus {
-                        box-shadow: none !important;
-                        outline: 0 !important;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-footer > .wpinsights-goodbye-form-buttons {
-                        display: flex;
-                        align-items: center;
-                        justify-content: flex-start;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-footer .wpinsights-submit-btn {
-                        background: #4451ff;
-                        -webkit-border-radius: 8px;
-                        border-radius: 8px;
-                        color: #fff;
-                        padding: 8px 16px;
-                        font-size: 14px;
-                        font-weight: 500;
-                        line-height: 1.5em;
-                        text-transform: capitalize;
-                        transition: .3s;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-footer .wpinsights-submit-btn:hover {
-                        background: #3a46e0;
-                    }
-                    .wpinsights-goodbye-form-wrapper-' . $class_plugin_name . ' .wpinsights-goodbye-form-footer .wpsp-put-deactivate-btn {
-                        font-size: 14px;
-                        font-weight: 500;
-                        color: #344054;
-                        margin-left: 10px;
-                    }
-                    .wp-person a:focus .gravatar, a:focus, a:focus .media-icon img, a:focus .plugin-icon {
-                        color: #043959;
-                        box-shadow: none;
-                        outline: 0;
-                    }
-                ';
-        $styles .= '</style>';
-
-        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-        echo $styles;
+        $form = $this->deactivation_reasons();
+        $id   = 'thinkrank-deactivation';
         ?>
-        <script type="text/javascript">
-            jQuery(document).ready(function($){
-                $("#wpinsights-goodbye-link-<?php echo esc_js($class_plugin_name); ?>").on("click",function(){
-                    // We'll send the user to this deactivation link when they've completed or dismissed the form
-                    var url = document.getElementById("wpinsights-goodbye-link-<?php echo esc_js($class_plugin_name); ?>");
-                    $('body').toggleClass('wpinsights-form-active-<?php echo esc_js($class_plugin_name); ?>');
-                    $(".wpinsights-goodbye-form-wrapper-<?php echo esc_js($class_plugin_name); ?> #wpinsights-goodbye-form").fadeIn();
-                    $(".wpinsights-goodbye-form-wrapper-<?php echo esc_js($class_plugin_name); ?> #wpinsights-goodbye-form").html( '<?php
-                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-                    echo $html; ?>' + '<div class="wpinsights-goodbye-form-footer"><div class="wpinsights-goodbye-form-buttons"><a id="wpinsights-submit-form-<?php echo esc_js($class_plugin_name); ?>" class="wpinsights-submit-btn" href="#"><?php esc_html_e('Submit and Deactivate', 'thinkrank'); ?></a>&nbsp;<a class="wpsp-put-deactivate-btn" href="'+url+'"><?php esc_html_e('Just Deactivate', 'thinkrank'); ?></a></div></div>');
-                    $('#wpinsights-submit-form-<?php echo esc_js($class_plugin_name); ?>').on('click', function(e){
-                        // As soon as we click, the body of the form should disappear
-                        $("#wpinsights-goodbye-form-<?php echo esc_js($class_plugin_name); ?> .wpinsights-goodbye-form-body").fadeOut();
-                        $("#wpinsights-goodbye-form-<?php echo esc_js($class_plugin_name); ?> .wpinsights-goodbye-form-footer").fadeOut();
-                        // Fade in spinner
-                        $("#wpinsights-goodbye-form-<?php echo esc_js($class_plugin_name); ?> .deactivating-spinner").fadeIn();
-                        e.preventDefault();
-                        var checkedInput = $("input[name='wpinsights-<?php echo esc_attr($class_plugin_name); ?>-goodbye-options']:checked"),
-                            checkedInputVal, details;
-                        if( checkedInput.length > 0 ) {
-                            checkedInputVal = checkedInput.val();
-                            details = $('input[name="'+ checkedInput[0].id +'"], textarea[name="'+ checkedInput[0].id +'"]').val();
-                        }
+        <dialog id="<?php echo esc_attr($id); ?>" class="thinkrank-deactivation" aria-labelledby="<?php echo esc_attr($id); ?>-title" aria-describedby="<?php echo esc_attr($id); ?>-intro">
+            <form method="dialog" class="thinkrank-deactivation__form">
+                <div class="thinkrank-deactivation__header">
+                    <h2 id="<?php echo esc_attr($id); ?>-title"><?php echo esc_html($form['title']); ?></h2>
+                    <button type="button" class="thinkrank-deactivation__close" data-thinkrank-action="cancel">
+                        <span class="dashicons dashicons-no-alt" aria-hidden="true"></span>
+                        <span class="screen-reader-text"><?php esc_html_e('Close and keep ThinkRank active', 'thinkrank'); ?></span>
+                    </button>
+                </div>
 
-                        if( typeof details === 'undefined' ) {
-                            details = '';
-                        }
-                        if( typeof checkedInputVal === 'undefined' ) {
-                            checkedInputVal = 'No Reason';
-                        }
+                <div class="thinkrank-deactivation__body">
+                    <p id="<?php echo esc_attr($id); ?>-intro" class="thinkrank-deactivation__intro"><?php echo esc_html($form['intro']); ?></p>
 
-                        var data = {
-                            'action': 'deactivation_form_<?php echo esc_attr($class_plugin_name); ?>',
-                            'values': checkedInputVal,
-                            'details': details,
-                            'security': "<?php
-                            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-                            echo esc_js(wp_create_nonce('wpins_deactivation_nonce')); ?>",
-                            'dataType': "json"
-                        }
+                    <fieldset class="thinkrank-deactivation__reasons">
+                        <legend class="screen-reader-text"><?php esc_html_e('Reason for deactivating', 'thinkrank'); ?></legend>
+                        <?php foreach ($form['reasons'] as $key => $reason) :
+                            $key       = sanitize_key((string) $key);
+                            $detail_id = $id . '-detail-' . $key;
+                            ?>
+                            <div class="thinkrank-deactivation__reason">
+                                <label>
+                                    <input type="radio" name="reason" value="<?php echo esc_attr($key); ?>"<?php echo !empty($reason['detail']) ? ' aria-controls="' . esc_attr($detail_id) . '"' : ''; ?>>
+                                    <?php echo esc_html((string) ($reason['label'] ?? '')); ?>
+                                </label>
+                                <?php if (!empty($reason['detail']) || !empty($reason['help'])) : ?>
+                                    <div class="thinkrank-deactivation__detail" id="<?php echo esc_attr($detail_id); ?>" data-thinkrank-reason="<?php echo esc_attr($key); ?>" hidden>
+                                        <?php if (!empty($reason['detail'])) : ?>
+                                            <label class="screen-reader-text" for="<?php echo esc_attr($detail_id); ?>-field"><?php echo esc_html((string) $reason['detail']['label']); ?></label>
+                                            <?php if (($reason['detail']['type'] ?? 'input') === 'textarea') : ?>
+                                                <textarea id="<?php echo esc_attr($detail_id); ?>-field" class="large-text" rows="3" maxlength="1000" placeholder="<?php echo esc_attr((string) $reason['detail']['label']); ?>" disabled></textarea>
+                                            <?php else : ?>
+                                                <input type="text" id="<?php echo esc_attr($detail_id); ?>-field" class="regular-text" maxlength="200" placeholder="<?php echo esc_attr((string) $reason['detail']['label']); ?>" disabled>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
+                                        <?php if (!empty($reason['help'])) : ?>
+                                            <p class="thinkrank-deactivation__help">
+                                                <?php echo esc_html((string) $reason['help']['text']); ?>
+                                                <a href="<?php echo esc_url((string) $reason['help']['url']); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html((string) $reason['help']['link']); ?><span class="screen-reader-text"> <?php esc_html_e('(opens in a new tab)', 'thinkrank'); ?></span></a>
+                                            </p>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </fieldset>
 
-                        $.post(
-                            ajaxurl,
-                            data,
-                            function(response){
-                                // Redirect to original deactivation URL
-                                window.location.href = url;
-                            }
-                        );
-                    });
-                    $('#wpinsights-goodbye-options > ul ').on('click', 'li label, li > input', function( e ){
-                        var parent = $(this).parents('li');
-                        parent.siblings().find('label').next('input, textarea').css('display', 'none');
-                        parent.find('label').next('input, textarea').css('display', 'block');
-                    });
-                    // If we click outside the form, the form will close
-                    $('.wpinsights-goodbye-form-bg, #wpinsights-goodbye-form > .tr__modal-close-btn').on('click',function(){
-                        $("#wpinsights-goodbye-form").fadeOut();
-                        $('body').removeClass('wpinsights-form-active-<?php echo esc_attr($class_plugin_name); ?>');
-                    });
-                });
-            });
-        </script>
-    <?php }
+                    <p class="thinkrank-deactivation__note">
+                        <span class="dashicons dashicons-yes-alt" aria-hidden="true"></span>
+                        <?php echo esc_html($form['note']); ?>
+                    </p>
+                    <p class="thinkrank-deactivation__error" role="alert" hidden><?php esc_html_e('Your answer could not be sent. ThinkRank will still be deactivated.', 'thinkrank'); ?></p>
+                </div>
+
+                <div class="thinkrank-deactivation__footer">
+                    <a href="#" class="thinkrank-deactivation__skip" data-thinkrank-action="skip"><?php esc_html_e('Skip and deactivate', 'thinkrank'); ?></a>
+                    <span class="thinkrank-deactivation__actions">
+                        <span class="spinner" aria-hidden="true"></span>
+                        <button type="button" class="button" data-thinkrank-action="cancel"><?php esc_html_e('Cancel', 'thinkrank'); ?></button>
+                        <button type="submit" class="button button-primary" data-thinkrank-action="submit" disabled><?php esc_html_e('Submit and deactivate', 'thinkrank'); ?></button>
+                    </span>
+                </div>
+            </form>
+        </dialog>
+        <?php
+    }
 
     /**
      * Get Used Elements Count

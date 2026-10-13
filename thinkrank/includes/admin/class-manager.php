@@ -584,6 +584,9 @@ class Manager {
             'abilities_api_available' => $abilities_api_available,
             'mcp_endpoint' => \ThinkRank\Mcp\Mcp_Pairing::site_endpoint(),
             'mcp_endpoint_rest' => \ThinkRank\Mcp\Mcp_Pairing::site_endpoint_fallback(),
+            // The header's Hub chip. Only administrators can open the Hub
+            // card, so nobody else is told whether a hub holds a grant.
+            'hub_connected' => current_user_can('manage_options') && [] !== \ThinkRank\Mcp\Mcp_Hub::apps(),
         ];
     }
 

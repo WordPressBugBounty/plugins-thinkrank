@@ -1,0 +1,1128 @@
+/**
+ * Admin Styles
+ *
+ * Main stylesheet for ThinkRank admin interface
+ *
+ * @package ThinkRank
+ * @since 1.0.0
+ */
+
+// Import all SCSS modules first (must be at the top)
+@use "../../shared/styles/variables" as *;
+@use "../../shared/styles/mixins" as *;
+@use "./_utilities"; // Add utilities after variables but before components
+@use "./components";
+@use "../../shared/styles/fonts"; // Self-hosted Inter (no Google Fonts request)
+
+// CSS Custom Properties for WordPress compatibility
+// Main layout and header styles that might be missing
+:root {
+	--thinkrank-primary: #{$thinkrank-primary};
+	--thinkrank-secondary: #{$thinkrank-secondary};
+	--thinkrank-success: #{$thinkrank-success};
+	--thinkrank-warning: #{$thinkrank-warning};
+	--thinkrank-error: #{$thinkrank-error};
+	--thinkrank-text: #{$thinkrank-text-primary};
+	--thinkrank-text-primary: #{$thinkrank-text-primary};
+	--thinkrank-text-secondary: #{$thinkrank-text-secondary};
+	--thinkrank-text-light: #{$thinkrank-text-light};
+	--thinkrank-border: #{$thinkrank-border};
+	--thinkrank-border-light: #{$thinkrank-border-light};
+	--thinkrank-bg: #{$thinkrank-bg};
+	--thinkrank-white: #{$thinkrank-white};
+	--thinkrank-shadow: #{$thinkrank-shadow};
+	--thinkrank-radius: #{$thinkrank-radius};
+	--thinkrank-spacing: #{$thinkrank-spacing};
+
+	// ── Component tokens (--tr- prefix) ──────────────────────
+	// WordPress admin palette — matches the colors used inline in JS.
+	// These are the canonical colors for component-level styles.
+
+	// Text hierarchy
+	--tr-text-heading: #1d2327;     // WP admin heading
+	--tr-text-body: #50575e;        // WP admin body
+	--tr-text-secondary: #666;      // WP admin secondary
+	--tr-text-muted: #757575;       // WP admin muted
+	--tr-text-subtle: #9aa1a9;      // Subtle labels
+
+	// Backgrounds
+	--tr-bg-surface: #fff;
+	--tr-bg-subtle: #f8f9fa;
+	--tr-bg-muted: #f6f7f7;
+
+	// Borders
+	--tr-border: #e2e4e7;
+	--tr-border-light: #e2e6f1;
+	--tr-border-card: #d5d5dd;
+
+	// Accent / Brand
+	--tr-accent: #4451ff;
+	--tr-accent-bg: #ededfd;
+	--tr-accent-wp: #0073aa;       // WordPress blue
+
+	// Status colors (alert backgrounds + text)
+	--tr-success-bg: #d4edda;
+	--tr-success-text: #155724;
+	--tr-warning-bg: #fff3cd;
+	--tr-warning-text: #856404;
+	--tr-danger-bg: #f8d7da;
+	--tr-danger-text: #721c24;
+	--tr-info-bg: #d1ecf1;
+	--tr-info-text: #0c5460;
+}
+
+// Base styles
+.thinkrank-app {
+	font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+	color: var(--thinkrank-text);
+	line-height: 1.5;
+	background: #fafbfc; // Subtle page background for better visual connection
+	min-height: 100vh;
+}
+
+// Loading states
+.thinkrank-loading {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: calc(var(--thinkrank-spacing) * 2);
+	text-align: center;
+
+	.spinner {
+		margin-bottom: var(--thinkrank-spacing);
+	}
+
+	p {
+		margin: 0;
+		color: var(--thinkrank-text-light);
+	}
+}
+
+// Error states
+.thinkrank-error {
+	padding: var(--thinkrank-spacing);
+
+	.notice {
+		margin: 0;
+	}
+}
+
+.thinkrank-content .components-notice {
+	margin-bottom: 10px;
+}
+
+// Main layout - matching header container design
+.thinkrank-main {
+	display: flex;
+	gap: var(--thinkrank-spacing);
+	margin: 0 auto; // Remove top/bottom margin
+	padding: 20px; // Consistent padding with header
+
+	@media (max-width: 768px) {
+		padding: 16px; // Match header mobile padding
+	}
+}
+
+// Navigation
+.thinkrank-navigation {
+	flex: 0 0 200px;
+
+	.nav-tab-wrapper {
+		border: none;
+		margin: 0;
+
+		.nav-tab {
+			display: block;
+			width: 100%;
+			margin: 0 0 2px 0;
+			padding: 12px var(--thinkrank-spacing);
+			border: 1px solid var(--thinkrank-border);
+			border-radius: var(--thinkrank-radius);
+			background: var(--thinkrank-white);
+			color: var(--thinkrank-text);
+			text-decoration: none;
+			transition: all 0.2s ease;
+
+			&:hover {
+				background: var(--thinkrank-bg);
+				color: var(--thinkrank-primary);
+			}
+
+			&.nav-tab-active {
+				background: var(--thinkrank-primary);
+				color: var(--thinkrank-white);
+				border-color: var(--thinkrank-primary);
+			}
+		}
+	}
+}
+
+// Content area
+.thinkrank-content {
+	flex: 1;
+	min-width: 0;
+	overflow-x: hidden;
+	background: var(--thinkrank-white);
+	border: 1px solid var(--thinkrank-border);
+	border-radius: var(--thinkrank-radius);
+	box-shadow: var(--thinkrank-shadow);
+	padding: var(--thinkrank-spacing);
+}
+
+// Dashboard specific styles
+.thinkrank-dashboard {
+
+	.thinkrank-dashboard-stats {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: var(--thinkrank-spacing);
+		margin-top: var(--thinkrank-spacing);
+
+		.stat-card {
+			padding: 20px;
+			background: var(--thinkrank-white);
+			border: 1px solid var(--thinkrank-border);
+			border-radius: var(--thinkrank-radius);
+
+			/* Removed text-align: center - using left-aligned design */
+			transition: all 0.2s ease;
+
+			&:hover {
+				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+				transform: translateY(-2px);
+			}
+
+			h3 {
+				margin: 0 0 12px 0;
+				font-size: 14px;
+				font-weight: 500;
+				color: var(--thinkrank-text-light);
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+			}
+
+			.stat-number {
+				margin: 0 0 8px 0;
+				font-size: 32px;
+				font-weight: 700;
+				color: var(--thinkrank-primary);
+				line-height: 1;
+			}
+
+			.stat-label {
+				margin: 0;
+				font-size: 12px;
+				color: var(--thinkrank-text-light);
+			}
+		}
+	}
+
+	// Legacy AI tools grid styles removed - now using utility classes
+}
+
+// Compact Header - matching content container design
+.thinkrank-header-compact {
+	background: var(--thinkrank-white);
+	border-bottom: 1px solid var(--thinkrank-border);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+	margin-bottom: 0; // Remove margin to connect with content
+
+	.header-main {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 16px 20px; // Match content container padding
+		margin: 0 auto;
+		gap: 24px;
+
+		@media (max-width: 768px) {
+			padding: 12px 16px; // Smaller padding on mobile
+		}
+	}
+
+	.header-branding {
+		display: flex;
+		align-items: center;
+		gap: 24px;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.brand-info {
+		flex-shrink: 0;
+
+		.brand-name {
+			display: flex;
+			align-items: center;
+			gap: 10px; // Slightly increased gap
+			margin: 0;
+			font-size: 20px; // Slightly larger for better hierarchy
+			font-weight: 600;
+			color: var(--thinkrank-text);
+
+			.brand-icon {
+				width: 22px;
+				height: 22px;
+				color: var(--thinkrank-primary); // Use primary color for the icon
+				filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1)); // Subtle shadow for depth
+				flex-shrink: 0; // Prevent icon from shrinking
+			}
+		}
+	}
+
+	.page-info {
+		flex: 1;
+		min-width: 0;
+		margin-left: 16px; // Add separation from brand
+
+		.page-title {
+			margin: 0;
+			font-size: 18px; // Increased for better hierarchy
+			font-weight: 500;
+			color: var(--thinkrank-text);
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			line-height: 1.3; // Better line height
+		}
+
+		.page-description {
+			margin: 4px 0 0 0; // Slightly more space
+			font-size: 14px; // Slightly larger for readability
+			color: var(--thinkrank-text-light);
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			line-height: 1.4;
+		}
+	}
+
+	.header-actions {
+		display: flex;
+		align-items: center;
+		flex-shrink: 0;
+	}
+
+	.version-info {
+		font-size: 12px;
+		font-weight: 500; // Slightly bolder
+		color: var(--thinkrank-text-light);
+		background: #f8f9fa; // Subtle background
+		padding: 6px 12px; // More padding for better appearance
+		border-radius: 6px; // More rounded
+		border: 1px solid #e9ecef; // Lighter border
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); // Subtle shadow
+		transition: all 0.2s ease;
+
+		&:hover {
+			background: #e9ecef;
+			border-color: #dee2e6;
+		}
+	}
+
+	// Responsive design for compact header
+	@media (max-width: 768px) {
+
+		.header-main {
+			padding: 10px 16px;
+			flex-wrap: wrap;
+			gap: 12px;
+		}
+
+		.header-branding {
+			gap: 16px;
+			flex: 1;
+			min-width: 0;
+		}
+
+		.brand-info .brand-name {
+			font-size: 16px;
+		}
+
+		.page-info {
+
+			.page-title {
+				font-size: 14px;
+			}
+
+			.page-description {
+				display: none; // Hide description on mobile
+			}
+		}
+
+		.version-info {
+			font-size: 11px;
+			padding: 3px 6px;
+		}
+	}
+
+	@media (max-width: 480px) {
+
+		.header-branding {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 8px;
+		}
+
+		.page-info .page-title {
+			font-size: 13px;
+		}
+
+		.version-info {
+			font-size: 10px;
+			padding: 2px 4px;
+		}
+	}
+}
+
+@keyframes pulse {
+
+	0% {
+		opacity: 1;
+	}
+
+	50% {
+		opacity: 0.5;
+	}
+
+	100% {
+		opacity: 1;
+	}
+}
+
+// Cards
+.thinkrank-card {
+	background: var(--thinkrank-white);
+	border: 1px solid var(--thinkrank-border);
+	border-radius: var(--thinkrank-radius);
+	box-shadow: var(--thinkrank-shadow);
+	margin-bottom: var(--thinkrank-spacing);
+
+	.card-header {
+		padding: var(--thinkrank-spacing);
+		border-bottom: 1px solid var(--thinkrank-border);
+		background: var(--thinkrank-bg);
+
+		h2,
+		h3 {
+			margin: 0;
+			font-size: 18px;
+			font-weight: 600;
+		}
+	}
+
+	.card-body {
+		padding: var(--thinkrank-spacing);
+	}
+
+	.card-footer {
+		padding: var(--thinkrank-spacing);
+		border-top: 1px solid var(--thinkrank-border);
+		background: var(--thinkrank-bg);
+	}
+}
+
+// Buttons
+.thinkrank-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 16px;
+	border: 1px solid var(--thinkrank-border);
+	border-radius: var(--thinkrank-radius);
+	background: var(--thinkrank-white);
+	color: var(--thinkrank-text);
+	text-decoration: none;
+	cursor: pointer;
+	transition: all 0.2s ease;
+
+	&:hover {
+		background: var(--thinkrank-bg);
+		border-color: var(--thinkrank-primary);
+		color: var(--thinkrank-primary);
+	}
+
+	&.is-primary {
+		background: var(--thinkrank-primary);
+		border-color: var(--thinkrank-primary);
+		color: var(--thinkrank-white);
+
+		&:hover {
+			background: var(--thinkrank-secondary);
+			border-color: var(--thinkrank-secondary);
+		}
+	}
+
+	&.is-success {
+		background: var(--thinkrank-success);
+		border-color: var(--thinkrank-success);
+		color: var(--thinkrank-white);
+	}
+
+	&.is-warning {
+		background: var(--thinkrank-warning);
+		border-color: var(--thinkrank-warning);
+		color: var(--thinkrank-text);
+	}
+
+	&.is-danger {
+		background: var(--thinkrank-error);
+		border-color: var(--thinkrank-error);
+		color: var(--thinkrank-white);
+	}
+
+	&:disabled,
+	&.is-disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+
+		&:hover {
+			background: var(--thinkrank-white);
+			border-color: var(--thinkrank-border);
+			color: var(--thinkrank-text);
+		}
+	}
+}
+
+// AI Button Styles
+.thinkrank-ai-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-weight: 500;
+	transition: all 0.2s ease;
+	position: relative;
+
+	.sparkle-icon {
+		font-size: 16px;
+		animation: sparkle 2s ease-in-out infinite;
+	}
+
+	.components-spinner {
+		margin-right: 4px;
+	}
+
+	// Size variants
+	&--small {
+		padding: 6px 12px;
+		font-size: 13px;
+
+		.sparkle-icon {
+			font-size: 14px;
+		}
+	}
+
+	&--medium {
+		padding: 8px 16px;
+		font-size: 14px;
+
+		.sparkle-icon {
+			font-size: 16px;
+		}
+	}
+
+	&--large {
+		padding: 12px 20px;
+		font-size: 16px;
+
+		.sparkle-icon {
+			font-size: 18px;
+		}
+	}
+
+	// Variant styles
+	&--primary {
+		background: linear-gradient(135deg, #4451ff 0%, #4451ff 100%);
+		border-color: #4451ff;
+		color: #fff;
+		box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+
+		&:hover:not(:disabled) {
+			background: linear-gradient(135deg, #4451ff 0%, #4451ff 100%);
+			border-color: #4451ff;
+			transform: translateY(-1px);
+			box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+		}
+
+		&:active {
+			transform: translateY(0);
+			box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+		}
+	}
+
+	&--secondary {
+		background: var(--thinkrank-white);
+		border-color: var(--thinkrank-border);
+		color: var(--thinkrank-text);
+
+		&:hover:not(:disabled) {
+			background: var(--thinkrank-bg);
+			border-color: var(--thinkrank-primary);
+			color: var(--thinkrank-primary);
+			transform: translateY(-1px);
+			box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+		}
+	}
+
+	&:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+		transform: none !important;
+		box-shadow: none !important;
+
+		.sparkle-icon {
+			animation: none;
+		}
+	}
+}
+
+@keyframes sparkle {
+
+	0%,
+	100% {
+		transform: scale(1) rotate(0deg);
+		opacity: 1;
+	}
+
+	25% {
+		transform: scale(1.1) rotate(90deg);
+		opacity: 0.8;
+	}
+
+	50% {
+		transform: scale(1) rotate(180deg);
+		opacity: 1;
+	}
+
+	75% {
+		transform: scale(1.1) rotate(270deg);
+		opacity: 0.8;
+	}
+}
+
+// Forms
+.thinkrank-form {
+
+	.form-group {
+		margin-bottom: var(--thinkrank-spacing);
+
+		label {
+			display: block;
+			margin-bottom: 4px;
+			font-weight: 600;
+		}
+
+		.description {
+			margin-top: 4px;
+			font-size: 13px;
+			color: var(--thinkrank-text-light);
+		}
+	}
+
+	input[type="text"],
+	input[type="email"],
+	input[type="password"],
+	input[type="number"],
+	textarea,
+	select {
+		width: 100%;
+		padding: 8px 12px;
+		border: 1px solid var(--thinkrank-border);
+		border-radius: var(--thinkrank-radius);
+		font-size: 14px;
+
+		&:focus {
+			outline: none;
+			border-color: var(--thinkrank-primary);
+		}
+	}
+}
+
+// Notices
+.thinkrank-notice {
+	padding: 12px var(--thinkrank-spacing);
+	border-left: 4px solid var(--thinkrank-primary);
+	background: var(--thinkrank-white);
+	margin-bottom: var(--thinkrank-spacing);
+
+	&.is-success {
+		border-left-color: var(--thinkrank-success);
+	}
+
+	&.is-warning {
+		border-left-color: var(--thinkrank-warning);
+	}
+
+	&.is-error {
+		border-left-color: var(--thinkrank-error);
+	}
+
+	p {
+		margin: 0;
+	}
+}
+
+// Responsive design
+@media (max-width: 768px) {
+
+	.thinkrank-main {
+		flex-direction: column;
+	}
+
+	.thinkrank-navigation {
+		flex: none;
+
+		.nav-tab-wrapper {
+			display: flex;
+			overflow-x: auto;
+
+			.nav-tab {
+				flex: 0 0 auto;
+				white-space: nowrap;
+			}
+		}
+	}
+}
+
+// WordPress admin compatibility
+.wp-admin {
+
+	.thinkrank-app {
+
+		// Ensure compatibility with WordPress admin styles
+		* {
+			box-sizing: border-box;
+		}
+	}
+}
+
+/* Missing Layout Styles - Ensure main layout works */
+.thinkrank-main-container {
+	max-width: 1400px;
+	margin: 0 auto;
+	padding: 20px;
+
+	@media (min-width: 1600px) {
+		max-width: 1600px;
+	}
+
+	@media (max-width: 768px) {
+		padding: 16px;
+		max-width: 100%;
+	}
+}
+
+/* Fix horizontal overflow issues */
+// stylelint-disable-next-line no-duplicate-selectors -- this section deliberately reopens .thinkrank-app; merging it upward would reorder it against everything declared in between.
+.thinkrank-app {
+
+	pre,
+	code {
+		overflow-wrap: break-word !important;
+		word-wrap: break-word !important;
+		white-space: pre-wrap !important;
+		max-width: 100% !important;
+		overflow-x: auto !important;
+	}
+
+	// Ensure schema preview containers don't overflow
+	.components-card {
+		overflow: hidden;
+
+		pre {
+			max-width: 100%;
+			box-sizing: border-box;
+		}
+	}
+
+	.components-notice {
+		font-size: 14px;
+		border: none;
+		border-radius: 8px;
+
+		.components-notice__content {
+			display: flex;
+			align-items: center;
+			line-height: 24px;
+			margin: 0;
+		}
+
+		&.is-info {
+			background: #e8f2fd;
+			color: #12467b;
+
+			.components-notice__content {
+
+				&::before {
+					content: url(../../shared/assets/info-icon.svg);
+					margin-right: 8px;
+					height: 24px;
+				}
+			}
+		}
+
+		&.is-warning {
+			background: #fffaeb;
+			color: #b54708;
+
+			.components-notice__content {
+
+				&::before {
+					content: url(../../shared/assets/warning-icon.svg);
+					margin-right: 8px;
+					height: 24px;
+				}
+			}
+		}
+
+		&.is-success {
+			background: #ecfdf3;
+			color: #027a48;
+
+			.components-notice__content {
+
+				&::before {
+					content: url(../../shared/assets/success-icon.svg);
+					margin-right: 8px;
+					height: 24px;
+				}
+			}
+		}
+	}
+}
+
+/* Ensure WordPress components work properly */
+.components-card {
+	box-shadow: none !important;
+	border: 1px solid #d5d5dd !important;
+	border-radius: 8px !important;
+	overflow: hidden;
+}
+
+.components-card-header {
+	border-bottom: 1px solid #d5d5dd !important;
+	border-radius: 8px 8px 0 0 !important;
+
+	h2 {
+		color: #1d1d1d;
+		font-size: 20px;
+		font-weight: 600;
+		margin: 0;
+	}
+
+	h3 {
+		color: #1d1d1d;
+		font-weight: 600;
+		font-size: 16px;
+		margin: 0;
+	}
+
+	&.thinkrank-card-header-with-column {
+		flex-direction: column;
+		align-items: flex-start;
+
+		h4 {
+			margin: 0;
+		}
+	}
+}
+
+.components-card-body {
+
+	.components-card-header {
+		border-bottom: none !important;
+		padding-bottom: 0 !important;
+	}
+}
+
+/* Button spacing fixes */
+.components-button + .components-button {
+	margin-left: 0.75rem;
+}
+
+.components-button {
+	font-size: 14px !important;
+	font-weight: 600 !important;
+	border-radius: 4px !important;
+
+	&.is-primary {
+		background: #4451ff !important;
+		border-color: #4451ff !important;
+		color: #fff;
+
+		&.thinkrank-media-picker-button {
+			background: #f5f6fa !important;
+			border: 1px dashed #d5d5dd !important;
+			color: #5a5c5e !important;
+			font-weight: 500 !important;
+
+			img {
+				margin-right: 7px;
+			}
+		}
+
+		&:disabled {
+			background: #e4e6e7 !important;
+			border-color: #e4e6e7 !important;
+			color: #bbbcc9 !important;
+		}
+
+		&:hover:not(:disabled) {
+			background: #0f1fff !important;
+			border-color: #0f1fff !important;
+
+			&.thinkrank-media-picker-button {
+				background: #eff2fe !important;
+				color: #535353 !important;
+				border-color: #d5d5dd !important;
+			}
+		}
+	}
+
+	&.is-secondary {
+		background: #f5f6fa !important;
+		border: 1px solid #4451ff !important;
+		color: #4451ff !important;
+		box-shadow: none !important;
+
+		&:disabled {
+			background: #eeeff0 !important;
+			border-color: #d6d7db !important;
+			color: #bbbcc9 !important;
+		}
+
+		&:hover:not(:disabled) {
+			background: #f5f6fa !important;
+			border-color: #0f1fff !important;
+			color: #0f1fff !important;
+		}
+	}
+
+	&.is-link {
+		color: #535353 !important;
+		text-decoration: none !important;
+		box-shadow: none !important;
+
+		&:hover:not(:disabled) {
+			color: #1d1d1d !important;
+			text-decoration: underline !important;
+		}
+	}
+
+	&.is-tertiary {
+		background: transparent !important;
+		border: none !important;
+		color: #921c13 !important;
+		box-shadow: none !important;
+		font-weight: 500 !important;
+
+		&:hover:not(:disabled) {
+			text-decoration: underline !important;
+		}
+	}
+}
+
+.components-form-toggle {
+	height: 24px !important;
+
+	.components-form-toggle__track {
+		height: 24px !important;
+		width: 44px !important;
+		border-radius: 12px !important;
+		background-color: #d5d5dd !important;
+		border: none !important;
+	}
+
+	.components-form-toggle__thumb {
+		background-color: #fff !important;
+		height: 20px !important;
+		width: 20px !important;
+	}
+
+	&.is-checked {
+
+		.components-form-toggle__track {
+			background-color: #4451ff !important;
+		}
+
+		.components-form-toggle__thumb {
+			transform: translateX(20px) !important;
+		}
+	}
+}
+
+.components-checkbox-control {
+
+	.components-checkbox-control__input-container {
+		width: 20px !important;
+	}
+
+	.components-checkbox-control__input[type="checkbox"] {
+		background-color: #fff !important;
+		border-color: #d5d5dd !important;
+		border-radius: 6px !important;
+		height: 20px !important;
+		width: 20px !important;
+
+		&:checked {
+			background-color: #4451ff !important;
+			border-color: #4451ff !important;
+		}
+	}
+}
+
+.components-base-control {
+
+	.components-base-control__label,
+	.components-input-control__label,
+	.components-toggle-control__label {
+		font-size: 14px !important;
+		font-weight: 500 !important;
+		color: #1d1d1d !important;
+		margin-bottom: 4px !important;
+	}
+
+	.components-text-control__input,
+	.components-textarea-control__input {
+		font-size: 16px !important;
+		color: #1d1d1d !important;
+		border-color: #d5d5dd !important;
+		border-radius: 4px !important;
+		padding: 0 12px !important;
+		line-height: 40px !important;
+
+		&:focus {
+			border-color: #4451ff !important;
+			box-shadow: 0 0 0 1px #4451ff !important;
+		}
+
+		&:disabled {
+			background-color: #f5f6fa !important;
+			border-color: #d5d5dd !important;
+			color: #5a5c5e !important;
+		}
+	}
+
+	.components-base-control__help {
+		color: #6e7073 !important;
+		font-size: 14px !important;
+		margin: 2px 0 18px !important;
+	}
+}
+
+.thinkrank-media-picker {
+
+	.components-base-control__label {
+		font-size: 14px !important;
+		font-weight: 500 !important;
+		color: #1d1d1d !important;
+		margin-bottom: 13px !important;
+	}
+
+	.components-base-control__help {
+		color: #6e7073 !important;
+		font-size: 14px !important;
+		margin-top: 4px !important;
+	}
+
+	+ .thinkrank-media-picker {
+		margin-top: 22px !important;
+	}
+}
+
+/* Pickers laid out in a grid are cells, not a stack — cancel the sibling gap
+   so every cell's label starts on the same line. */
+.tr-grid > .thinkrank-media-picker + .thinkrank-media-picker {
+	margin-top: 0 !important;
+}
+
+.thinkrank-components-base-control__help {
+	color: #6e7073 !important;
+	font-size: 14px !important;
+	margin: 2px 0 18px !important;
+}
+
+.thinkrank-advanced-robots-meta {
+
+	.components-base-control + .components-base-control {
+		margin-top: 5px;
+	}
+}
+
+/* Export options spacing */
+.thinkrank-export-options {
+	margin-top: 2rem;
+	padding-top: 1.5rem;
+	border-top: 1px solid #e5e7eb;
+}
+
+// Variable Tags
+.thinkrank-variable-tag {
+	display: inline-block;
+	// Rendered as a <button> (it inserts a token, so it is one); these three
+	// undo the user-agent button styling that would otherwise show through.
+	border: 0;
+	font-family: inherit;
+	appearance: none;
+	background: #eef0f7;
+	border-radius: 100px;
+	padding: 0 8px;
+	margin-right: 8px;
+	font-size: 14px;
+	cursor: pointer;
+	color: #535353;
+	text-decoration: none;
+	transition: all 0.2s ease;
+	line-height: 22px;
+
+	&:hover {
+		background: #f5f6fa;
+		color: #1d1d1d;
+	}
+
+	// Scoped to .tr-root to outspecify the blanket
+	// `.tr-root button:focus { box-shadow: none }` in src/global/base.css,
+	// which would otherwise swallow the ring.
+	.tr-root &:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px $primary-blue;
+	}
+
+	&.is-disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+		background: #f0f0f0;
+		color: #888;
+		pointer-events: none;
+	}
+}
+
+// Normalize select arrows — removes native browser arrow + WP admin background-image arrow
+// so only one consistent chevron is shown across all plugin selects.
+// Also overrides WP admin's `max-width: 25rem` on selects so tr-w-full works.
+#thinkrank-root select,
+.tr-root select {
+	-webkit-appearance: none;
+	-moz-appearance: none;
+	appearance: none;
+
+	// Firefox paints the dropdown list with the select's computed styles —
+	// pin option colors so entries stay legible there.
+	option {
+		color: #1e293b;
+		background-color: #fff;
+	}
+	// stylelint-disable-next-line function-url-quotes -- the data URI contains single quotes, so it has to stay quoted.
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2394a3b8'%3E%3Cpath fill-rule='evenodd' d='M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z' clip-rule='evenodd'/%3E%3C%2Fsvg%3E");
+	background-position: right 0.5rem center;
+	background-repeat: no-repeat;
+	background-size: 1rem 1rem;
+	padding-right: 1.75rem;
+	max-width: none;
+
+	&:focus {
+		outline: none !important;
+		box-shadow: none !important;
+	}
+}

@@ -1,0 +1,104 @@
+/**
+ * OptimizationButton Component
+ *
+ * Standardized optimization button component for Essential SEO tabs.
+ * AI-type buttons render in brand blue with a sparkle; all others render
+ * as a clean outline/secondary style.
+ *
+ * @package
+ * @since 1.0.0
+ */
+
+import { __ } from '@wordpress/i18n';
+import classnames from 'classnames';
+
+const CONFIGS = {
+	ai: {
+		defaultLabel: __('AI Optimize', 'thinkrank'),
+		defaultLoadingLabel: __('Optimizing…', 'thinkrank'),
+		ai: true,
+	},
+	rule: {
+		defaultLabel: __('Optimize', 'thinkrank'),
+		defaultLoadingLabel: __('Optimizing…', 'thinkrank'),
+		ai: false,
+	},
+	validate: {
+		defaultLabel: __('Validate', 'thinkrank'),
+		defaultLoadingLabel: __('Validating…', 'thinkrank'),
+		ai: false,
+	},
+	test: {
+		defaultLabel: __('Test Connection', 'thinkrank'),
+		defaultLoadingLabel: __('Testing…', 'thinkrank'),
+		ai: false,
+	},
+	generate: {
+		defaultLabel: __('Generate', 'thinkrank'),
+		defaultLoadingLabel: __('Generating…', 'thinkrank'),
+		ai: false,
+	},
+	refresh: {
+		defaultLabel: __('Refresh Data', 'thinkrank'),
+		defaultLoadingLabel: __('Refreshing…', 'thinkrank'),
+		ai: false,
+	},
+};
+
+const OptimizationButton = ({
+	type = 'rule',
+	onClick,
+	isBusy = false,
+	disabled = false,
+	label,
+	loadingLabel,
+	className = '',
+	...rest
+}) => {
+	const config = CONFIGS[type] || CONFIGS.rule;
+	const isDisabled = disabled || isBusy;
+	const text = isBusy
+		? loadingLabel || config.defaultLoadingLabel
+		: label || config.defaultLabel;
+
+	return (
+		<button
+			type="button"
+			disabled={isDisabled}
+			aria-busy={isBusy || undefined}
+			onClick={!isDisabled ? onClick : undefined}
+			className={classnames(
+				'tr-inline-flex tr-items-center tr-gap-1.5',
+				'tr-h-8 tr-px-3 tr-rounded tr-border',
+				'tr-text-xs tr-font-medium tr-whitespace-nowrap',
+				'tr-transition-colors tr-duration-150',
+				'focus:tr-outline-none',
+				'disabled:tr-opacity-50 disabled:tr-cursor-not-allowed',
+				config.ai
+					? 'tr-bg-brand tr-text-white tr-border-transparent hover:tr-bg-brand'
+					: 'tr-bg-white tr-text-secondary tr-border-primary hover:tr-bg-white hover:tr-text-primary',
+				className
+			)}
+			{...rest}
+		>
+			{config.ai && !isBusy && (
+				<svg
+					aria-hidden="true"
+					width="12"
+					height="14"
+					viewBox="0 0 15 18"
+					fill="none"
+					xmlns="http://www.w3.org/2000/svg"
+				>
+					<path
+						d="M5.58072 3.39707L6.0826 4.79082C6.35798 5.55489 6.79852 6.2488 7.37282 6.8231C7.94712 7.3974 8.64103 7.83794 9.4051 8.11332L10.7988 8.6152C10.8264 8.62529 10.8501 8.64359 10.8669 8.66762C10.8837 8.69165 10.8927 8.72026 10.8927 8.74957C10.8927 8.77888 10.8837 8.80749 10.8669 8.83152C10.8501 8.85556 10.8264 8.87385 10.7988 8.88395L9.4051 9.38582C8.64103 9.6612 7.94712 10.1017 7.37282 10.676C6.79852 11.2503 6.35798 11.9443 6.0826 12.7083L5.58072 14.1021C5.57063 14.1296 5.55233 14.1534 5.5283 14.1701C5.50427 14.1869 5.47566 14.1959 5.44635 14.1959C5.41704 14.1959 5.38843 14.1869 5.3644 14.1701C5.34036 14.1534 5.32207 14.1296 5.31197 14.1021L4.8101 12.7083C4.53472 11.9443 4.09418 11.2503 3.51988 10.676C2.94558 10.1017 2.25167 9.6612 1.4876 9.38582L0.093849 8.88395C0.0663279 8.87385 0.0425693 8.85556 0.025785 8.83152C0.00900062 8.80749 0 8.77888 0 8.74957C0 8.72026 0.00900062 8.69165 0.025785 8.66762C0.0425693 8.64359 0.0663279 8.62529 0.093849 8.6152L1.4876 8.11332C2.25167 7.83794 2.94558 7.3974 3.51988 6.8231C4.09418 6.2488 4.53472 5.55489 4.8101 4.79082L5.31197 3.39707C5.32179 3.36927 5.33998 3.3452 5.36405 3.32817C5.38811 3.31115 5.41687 3.302 5.44635 3.302C5.47583 3.302 5.50459 3.31115 5.52865 3.32817C5.55272 3.3452 5.57091 3.36927 5.58072 3.39707ZM11.8545 0.0476961L12.1088 0.753321C12.2484 1.14018 12.4715 1.49151 12.7624 1.78232C13.0532 2.07313 13.4045 2.29625 13.7913 2.43582L14.497 2.6902C14.511 2.69529 14.523 2.70455 14.5316 2.71674C14.5401 2.72893 14.5447 2.74344 14.5447 2.75832C14.5447 2.7732 14.5401 2.78772 14.5316 2.7999C14.523 2.81209 14.511 2.82136 14.497 2.82645L13.7913 3.08082C13.4045 3.22039 13.0532 3.44352 12.7624 3.73432C12.4715 4.02513 12.2484 4.37646 12.1088 4.76332L11.8545 5.46895C11.8494 5.48293 11.8401 5.495 11.8279 5.50353C11.8157 5.51207 11.8012 5.51664 11.7863 5.51664C11.7715 5.51664 11.757 5.51207 11.7448 5.50353C11.7326 5.495 11.7233 5.48293 11.7182 5.46895L11.4639 4.76332C11.3243 4.37646 11.1012 4.02513 10.8103 3.73432C10.5195 3.44352 10.1682 3.22039 9.78135 3.08082L9.07572 2.82645C9.06174 2.82136 9.04967 2.81209 9.04114 2.7999C9.03261 2.78772 9.02803 2.7732 9.02803 2.75832C9.02803 2.74344 9.03261 2.72893 9.04114 2.71674C9.04967 2.70455 9.06174 2.69529 9.07572 2.6902L9.78135 2.43582C10.1682 2.29625 10.5195 2.07313 10.8103 1.78232C11.1012 1.49151 11.3243 1.14018 11.4639 0.753321L11.7182 0.0476961C11.7233 0.0337168 11.7326 0.0216418 11.7448 0.0131093C11.757 0.00457683 11.7715 0 11.7863 0C11.8012 0 11.8157 0.00457683 11.8279 0.0131093C11.8401 0.0216418 11.8494 0.0337168 11.8545 0.0476961ZM11.8545 12.0308L12.1088 12.7364C12.2484 13.1233 12.4715 13.4746 12.7624 13.7654C13.0532 14.0563 13.4045 14.2794 13.7913 14.4189L14.497 14.6733C14.511 14.6784 14.523 14.6877 14.5316 14.6999C14.5401 14.7121 14.5447 14.7266 14.5447 14.7414C14.5447 14.7563 14.5401 14.7708 14.5316 14.783C14.523 14.7952 14.511 14.8045 14.497 14.8096L13.7913 15.0639C13.4045 15.2035 13.0532 15.4266 12.7624 15.7174C12.4715 16.0083 12.2484 16.3596 12.1088 16.7464L11.8545 17.4521C11.8494 17.4661 11.8401 17.4781 11.8279 17.4867C11.8157 17.4952 11.8012 17.4998 11.7863 17.4998C11.7715 17.4998 11.757 17.4952 11.7448 17.4867C11.7326 17.4781 11.7233 17.4661 11.7182 17.4521L11.4639 16.7464C11.3243 16.3596 11.1012 16.0083 10.8103 15.7174C10.5195 15.4266 10.1682 15.2035 9.78135 15.0639L9.07572 14.8096C9.06174 14.8045 9.04967 14.7952 9.04114 14.783C9.03261 14.7708 9.02803 14.7563 9.02803 14.7414C9.02803 14.7266 9.03261 14.7121 9.04114 14.6999C9.04967 14.6877 9.06174 14.6784 9.07572 14.6733L9.78135 14.4189C10.1682 14.2794 10.5195 14.0563 10.8103 13.7654C11.1012 13.4746 11.3243 13.1233 11.4639 12.7364L11.7182 12.0308C11.7413 11.9671 11.832 11.9671 11.8545 12.0308Z"
+						fill="currentColor"
+					/>
+				</svg>
+			)}
+			{text}
+		</button>
+	);
+};
+
+export default OptimizationButton;

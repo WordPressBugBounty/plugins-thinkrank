@@ -48,32 +48,58 @@ class SEO_Analyzer_Fixer {
     private const ALT_FIX_OFFSET_OPTION = 'thinkrank_alt_fix_offset';
 
     /**
-     * The fixable checks, keyed by the analyzer's check id.
+     * The fixes ThinkRank itself ships, keyed by the analyzer's check id,
+     * before the `thinkrank_seo_analyzer_fixable` filter.
      *
      * `warning` is shown in the UI before the user commits when a fix has a
      * consequence worth naming.
      *
-     * @return array<string, array{label: string, warning: string}>
+     * `undo` says whether an existing write ability can put back what the fix
+     * changes, so a person knows before agreeing to it. The
+     * `thinkrank/fix-seo-check` ability answers with that write and its
+     * arguments for exactly the checks marked true. The others cannot be put
+     * back that way:
+     *
+     *  - search_visibility: no ability writes `blog_public`.
+     *  - schema: the save runs the schema auto-deploy pass, which deploys the
+     *    selected site types and retires deployed ones the selection leaves
+     *    out. Writing the previous settings back runs that pass again rather
+     *    than reversing it: what the fix deployed stays deployed, and is on
+     *    the page whenever the master switch is on; what it retired stays
+     *    retired; and with an empty selection the replay deploys every site
+     *    type that validates.
+     *  - image_alt_text: one batch fills up to 50 images, and alt text is
+     *    written back one image per call.
+     *  - llms_txt: no ability takes the document back down without also
+     *    switching the llms.txt feature off.
+     *
+     * @since 2.15.0
+     *
+     * @return array<string, array{label: string, warning: string, undo: bool}>
      */
-    public static function fixable(): array {
-        $fixable = [
+    public static function built_in(): array {
+        return [
             'search_visibility' => [
                 'label'   => __('Allow search engines to index this site', 'thinkrank'),
                 // Worth stating plainly: this is exactly the switch people use
                 // to keep a staging site out of Google.
                 'warning' => __('This makes your site visible to search engines. Do not apply it on a staging or private site.', 'thinkrank'),
+                'undo'    => false,
             ],
             'xml_sitemap' => [
                 'label'   => __('Enable the XML sitemap', 'thinkrank'),
                 'warning' => '',
+                'undo'    => true,
             ],
             'schema' => [
                 'label'   => __('Turn on automatic structured data', 'thinkrank'),
                 'warning' => '',
+                'undo'    => false,
             ],
             'image_alt_text' => [
                 'label'   => __('Fill in missing image alt text', 'thinkrank'),
                 'warning' => __('Runs in batches over your media library. With AI alt text enabled this uses your AI provider key.', 'thinkrank'),
+                'undo'    => false,
             ],
             'ai_crawler_access' => [
                 'label'   => __('Allow AI answer engines to crawl this site', 'thinkrank'),
@@ -81,12 +107,28 @@ class SEO_Analyzer_Fixer {
                 // people block the training crawlers on purpose, and a fix
                 // that quietly reversed that decision would be a betrayal.
                 'warning' => __('Sets the answer-engine crawlers (ChatGPT, Claude, Perplexity, Google-Extended) to Allow. Crawlers that only collect training data keep whatever setting you gave them.', 'thinkrank'),
+                'undo'    => true,
             ],
             'llms_txt' => [
                 'label'   => __('Publish llms.txt', 'thinkrank'),
                 'warning' => __('Publishes /llms.txt from your saved LLMs.txt settings. It needs those fields filled in first.', 'thinkrank'),
+                'undo'    => false,
             ],
         ];
+    }
+
+    /**
+     * The fixable checks, keyed by the analyzer's check id.
+     *
+     * The built-in fixes, after the filter. `undo` is not the filter's to
+     * set: only a built-in fix has an undo the ability can build, so every
+     * other entry carries false, and a built-in entry a filter rewrote keeps
+     * its own answer.
+     *
+     * @return array<string, array{label: string, warning: string, undo: bool}>
+     */
+    public static function fixable(): array {
+        $built_in = self::built_in();
 
         /**
          * Filter the checks the analyzer can fix automatically.
@@ -95,10 +137,21 @@ class SEO_Analyzer_Fixer {
          * `thinkrank_seo_analyzer_checks` can register their fixes here.
          *
          * @since 1.28.0
+         * @since 2.15.0 Each entry carries `undo`, which the filter cannot change.
          *
-         * @param array $fixable Check id => ['label' => string, 'warning' => string].
+         * @param array $fixable Check id => ['label' => string, 'warning' => string, 'undo' => bool].
          */
-        return apply_filters('thinkrank_seo_analyzer_fixable', $fixable);
+        $fixable = apply_filters('thinkrank_seo_analyzer_fixable', $built_in);
+
+        if (is_array($fixable)) {
+            foreach ($fixable as $check_id => $fix) {
+                if (is_array($fix)) {
+                    $fixable[$check_id]['undo'] = !empty($built_in[$check_id]['undo']);
+                }
+            }
+        }
+
+        return $fixable;
     }
 
     /**

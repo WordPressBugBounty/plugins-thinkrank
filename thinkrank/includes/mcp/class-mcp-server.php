@@ -11,6 +11,8 @@
  *   - ping                  → {}
  *   - tools/list            → Mcp_Tools::list()
  *   - tools/call            → Mcp_Tools::invoke() wrapped as MCP content
+ *                             (text, and structuredContent for an object),
+ *                             recorded in the activity log (Mcp_Audit)
  *
  * Auth: either the static pairing token (Mcp_Pairing) or an OAuth 2.1 access
  * token (Mcp_OAuth), both presented as a Bearer token. On success the request
@@ -39,6 +41,26 @@ final class Mcp_Server {
 	 * MCP protocol version this server implements.
 	 */
 	public const PROTOCOL_VERSION = '2025-06-18';
+
+	/**
+	 * How large a request body may be, in bytes: 512 KB.
+	 *
+	 * Generous for any real message, and the point is that without one the
+	 * size of what is read is chosen by the caller. Held here rather than at
+	 * the pretty path alone, because the REST route is the one that is
+	 * always served and it was reading whatever arrived (#1001).
+	 */
+	public const MAX_BODY_BYTES = 524288;
+
+	/**
+	 * How many messages one JSON-RPC batch may carry.
+	 *
+	 * A real client batches a handful: an initialize, a notification, a
+	 * list. ThinkRank Hub sends one message per request. Anything past this
+	 * is not a client working, and the cost of finding that out one message
+	 * at a time is paid by the site (#1001).
+	 */
+	public const MAX_BATCH = 20;
 
 	/**
 	 * JSON-RPC standard error codes.
@@ -71,9 +93,12 @@ final class Mcp_Server {
 			) );
 		}
 
-		// The admin toggle is the master switch: off = no MCP surface at all.
-		if ( ! Mcp_Manager::is_enabled() ) {
-			return self::error_response( null, self::UNAUTHORIZED, 'MCP is disabled on this site. Enable it under ThinkRank → MCP.', 403 );
+		// Never inherit a caller from an earlier request in the same process.
+		Mcp_Session::clear();
+
+		$refused = self::preflight( $request );
+		if ( null !== $refused ) {
+			return $refused;
 		}
 
 		// A request carrying NO credential is the normal opening move of the
@@ -100,7 +125,13 @@ final class Mcp_Server {
 			if ( '' !== $presented ) {
 				Mcp_Rate_Limiter::record_failure();
 			}
-			$response = self::error_response( null, self::UNAUTHORIZED, 'Unauthorized: invalid or missing connection token.', 401 );
+			// An expired pairing token is named as such: "invalid" sends the
+			// owner looking for a typo when the fix is Reset token (#717).
+			$message = '' !== $presented && Mcp_Pairing::presented_is_expired( $presented )
+				? 'Unauthorized: this connection token has expired. Ask the site administrator to reset it under ThinkRank > MCP, then reconnect with the new token.'
+				: 'Unauthorized: invalid or missing connection token.';
+
+			$response = self::error_response( null, self::UNAUTHORIZED, $message, 401 );
 			// RFC 9728 challenge: point OAuth-capable clients at the
 			// protected-resource metadata so they can start the auth flow.
 			$response->header( 'WWW-Authenticate', self::challenge_header() );
@@ -115,6 +146,13 @@ final class Mcp_Server {
 			return self::error_response( null, self::PARSE_ERROR, 'Parse error: body is not valid JSON.', 400 );
 		}
 
+		// An empty array is both the empty batch and the empty object, and
+		// neither is a message. It used to be acknowledged with a 202 as
+		// though a notification had been delivered (#1001).
+		if ( ! is_array( $msg ) || [] === $msg ) {
+			return self::error_response( null, self::INVALID_REQUEST, 'Invalid request: the body carries no message.', 400 );
+		}
+
 		// Batched requests: an array of messages. Handle each; drop
 		// notification (id-less) responses per JSON-RPC.
 		//
@@ -124,10 +162,29 @@ final class Mcp_Server {
 		// batch harms nobody, while refusing one would break any client still
 		// on an older SDK that sends them. Please don't delete this as a spec
 		// violation; that trade is the reason it is here (#488).
-		if ( is_array( $msg ) && array_key_exists( 0, $msg ) ) {
+		if ( array_key_exists( 0, $msg ) ) {
+			if ( count( $msg ) > self::MAX_BATCH ) {
+				return self::error_response(
+					null,
+					self::INVALID_REQUEST,
+					sprintf( 'Invalid request: a batch carries at most %d messages.', self::MAX_BATCH ),
+					400
+				);
+			}
+
 			$responses = [];
 			foreach ( $msg as $one ) {
-				$r = self::dispatch( is_array( $one ) ? $one : [] );
+				// JSON-RPC 2.0 section 6: an element that is not a request
+				// object is answered with its own Invalid Request, id null.
+				// It used to be dispatched as an empty message, which has no
+				// id, so it was taken for a notification and dropped, and
+				// `[1,2,3]` got a 202 with no body (#1096).
+				if ( ! self::is_message_object( $one ) ) {
+					$responses[] = self::error( null, self::INVALID_REQUEST, 'Invalid request: a batch element is not a JSON-RPC message object.' );
+					continue;
+				}
+
+				$r = self::dispatch( $one );
 				if ( null !== $r ) {
 					$responses[] = $r;
 				}
@@ -138,16 +195,60 @@ final class Mcp_Server {
 			return new \WP_REST_Response( $responses, 200 );
 		}
 
-		if ( ! is_array( $msg ) ) {
-			return self::error_response( null, self::INVALID_REQUEST, 'Invalid request.', 400 );
-		}
-
 		$response = self::dispatch( $msg );
 		if ( null === $response ) {
 			// Notification — no response body, 202 Accepted.
 			return new \WP_REST_Response( null, 202 );
 		}
 		return new \WP_REST_Response( $response, 200 );
+	}
+
+	/**
+	 * The refusals that come before the body is parsed or the credential read.
+	 *
+	 * Shared by handle() and the wp-json fallback's `rest_pre_dispatch` hook,
+	 * so the fallback refuses an oversized body with the same 413 the pretty
+	 * endpoint gives, before core decodes it as JSON (#1097).
+	 *
+	 * @since 2.15.0
+	 *
+	 * @param \WP_REST_Request $request Incoming request (raw body).
+	 * @return \WP_REST_Response|null The refusal, or null to go on.
+	 */
+	public static function preflight( \WP_REST_Request $request ): ?\WP_REST_Response {
+		// The admin toggle is the master switch: off = no MCP surface at all.
+		if ( ! Mcp_Manager::is_enabled() ) {
+			return self::error_response( null, self::UNAUTHORIZED, 'MCP is disabled on this site. Enable it under ThinkRank → MCP.', 403 );
+		}
+
+		// Before the credential, because the size of what arrived is decided
+		// by the caller and reading past this point is the cost being refused.
+		if ( strlen( (string) $request->get_body() ) > self::MAX_BODY_BYTES ) {
+			return self::error_response( null, self::INVALID_REQUEST, 'Invalid request: the body is larger than the 512 KB this endpoint accepts.', 413 );
+		}
+
+		return null;
+	}
+
+	/**
+	 * Whether one decoded batch element is a JSON-RPC message object.
+	 *
+	 * The body is decoded to arrays, so an object and a list both arrive as
+	 * one. A scalar or null is not an object; a list (`[]`, `[1]`) is not
+	 * either; and the empty object decodes to the same empty array and is
+	 * no more a message than the empty body is (#1001).
+	 *
+	 * @since 2.15.0
+	 *
+	 * @param mixed $element One element of a decoded batch.
+	 * @return bool
+	 */
+	private static function is_message_object( $element ): bool {
+		if ( ! is_array( $element ) || [] === $element ) {
+			return false;
+		}
+
+		return array_keys( $element ) !== range( 0, count( $element ) - 1 );
 	}
 
 	/**
@@ -257,10 +358,27 @@ final class Mcp_Server {
 	 */
 	private static function instructions(): string {
 		$read_only = Mcp_Tools::is_read_only();
+		$levels    = Mcp_Session::levels();
+		$read_text = __( 'SCOPE: this connection is read-only. Only tools whose readOnlyHint annotation is true are listed, and any other tool will refuse with thinkrank_mcp_read_only. That is the scope this credential was granted, not a fault and not a transient error. Do not retry it; tell the user to reconnect with write access.', 'thinkrank' );
+		$all_text  = __( 'SCOPE: this connection can write. Write tools change a live, public website, so confirm with the user before calls that overwrite existing settings, import from another SEO plugin, publish files, or submit URLs to search engines.', 'thinkrank' );
 
-		$scope = $read_only
-			? __( 'SCOPE: this connection is read-only. Any tool that is not get-* or list-* will refuse with thinkrank_mcp_read_only. That is the scope this credential was granted, not a fault and not a transient error. Do not retry it; tell the user to reconnect with write access.', 'thinkrank' )
-			: __( 'SCOPE: this connection can write. Write tools change a live, public website, so confirm with the user before calls that overwrite existing settings, import from another SEO plugin, publish files, or submit URLs to search engines.', 'thinkrank' );
+		// Every area writable, or every area read-only: the two original
+		// texts, unchanged. Anything narrower names the areas granted.
+		$all_read = ! in_array( Mcp_Scopes::NONE, $levels, true ) && ! Mcp_Scopes::grants_any_write( $levels );
+
+		if ( ! Mcp_Session::active() ) {
+			$scope = $read_only ? $read_text : $all_text;
+		} elseif ( Mcp_Scopes::grants_everything( $levels ) ) {
+			$scope = $all_text;
+		} elseif ( $all_read ) {
+			$scope = $read_text;
+		} else {
+			$scope = sprintf(
+				/* translators: %s: comma-separated list of granted areas, e.g. "content (read and write), analytics (read)". */
+				__( 'SCOPE: the site administrator limited this connection to: %s. Only tools in those areas are listed. A call outside them refuses with thinkrank_mcp_scope_denied and names the scope it needs; that is a granted limitation, not a fault, so tell the user which scope to grant instead of retrying. Write tools change a live, public website, so confirm with the user before calls that overwrite existing settings.', 'thinkrank' ),
+				self::describe_levels( $levels )
+			);
+		}
 
 		$lines = [
 			__( 'ThinkRank is the SEO plugin running this WordPress site. These tools read and change its SEO configuration and per-post SEO metadata, and read its analytics and audits.', 'thinkrank' ),
@@ -285,6 +403,26 @@ final class Mcp_Server {
 	}
 
 	/**
+	 * "content (read and write), analytics (read)" for the instructions.
+	 *
+	 * @param array<string,int> $levels Area => level.
+	 * @return string
+	 */
+	private static function describe_levels( array $levels ): string {
+		$parts = [];
+		foreach ( Mcp_Scopes::normalize_levels( $levels ) as $area => $level ) {
+			if ( Mcp_Scopes::WRITE === $level ) {
+				/* translators: %s: area name. */
+				$parts[] = sprintf( __( '%s (read and write)', 'thinkrank' ), $area );
+			} elseif ( Mcp_Scopes::READ === $level ) {
+				/* translators: %s: area name. */
+				$parts[] = sprintf( __( '%s (read)', 'thinkrank' ), $area );
+			}
+		}
+		return [] === $parts ? __( 'no areas', 'thinkrank' ) : implode( ', ', $parts );
+	}
+
+	/**
 	 * Execute a tools/call request and wrap the result in MCP content.
 	 *
 	 * @param mixed $id     JSON-RPC id.
@@ -299,7 +437,15 @@ final class Mcp_Server {
 			return self::error( $id, self::INVALID_PARAMS, 'Missing tool name.' );
 		}
 
-		$result = Mcp_Tools::invoke( $name, $args );
+		// Every call goes through the activity log, which runs it and records
+		// what it changed. The one place every ability passes through (#717).
+		$result = Mcp_Audit::record(
+			$name,
+			$args,
+			static function () use ( $name, $args ) {
+				return Mcp_Tools::invoke( $name, $args );
+			}
+		);
 
 		if ( is_wp_error( $result ) ) {
 			// Tool-level failure is reported as a successful JSON-RPC
@@ -319,18 +465,25 @@ final class Mcp_Server {
 			);
 		}
 
-		return self::result(
-			$id,
-			[
-				'content' => [
-					[
-						'type' => 'text',
-						'text' => wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ),
-					],
+		$payload = [
+			'content' => [
+				[
+					'type' => 'text',
+					'text' => wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ),
 				],
-				'isError' => false,
-			]
-		);
+			],
+			'isError' => false,
+		];
+
+		// The same answer in the shape the ability's own output schema describes,
+		// which is what a client validates against (#1000). The protocol's
+		// structured result is a JSON object and nothing else, so a list is
+		// carried by the text block alone.
+		if ( $result instanceof \stdClass || ( is_array( $result ) && ! array_key_exists( 0, $result ) ) ) {
+			$payload['structuredContent'] = [] === $result ? (object) [] : $result;
+		}
+
+		return self::result( $id, $payload );
 	}
 
 	// -- Auth --
@@ -358,6 +511,7 @@ final class Mcp_Server {
 		if ( Mcp_Pairing::verify_token( $presented ) ) {
 			Mcp_Tools::set_read_only_override( null );
 			if ( self::impersonate( Mcp_Pairing::user_id() ) ) {
+				Mcp_Session::start( Mcp_Session::STATIC_TOKEN, '', '', Mcp_Pairing::user_id(), Mcp_Pairing::scopes() );
 				// Record activity for the "Static token connections" row.
 				Mcp_Pairing::touch_last_used();
 				return true;
@@ -370,7 +524,17 @@ final class Mcp_Server {
 		$grant = Mcp_OAuth::validate_token( $presented );
 		if ( null !== $grant ) {
 			Mcp_Tools::set_read_only_override( Mcp_OAuth::scope_is_read_only( $grant['scope'] ) );
-			return self::impersonate( $grant['user_id'] );
+			if ( ! self::impersonate( $grant['user_id'] ) ) {
+				return false;
+			}
+			Mcp_Session::start(
+				Mcp_Session::OAUTH,
+				$grant['client_id'],
+				Mcp_OAuth::client_name( $grant['client_id'] ),
+				$grant['user_id'],
+				Mcp_Scopes::parse( $grant['scope'] )
+			);
+			return true;
 		}
 
 		return false;

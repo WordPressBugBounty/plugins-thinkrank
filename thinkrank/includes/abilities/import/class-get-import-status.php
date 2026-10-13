@@ -105,12 +105,13 @@ class Get_Import_Status extends Ability_Base {
 			$manifest = Snapshot_Store::get_manifest( $plugin );
 
 			return [
-				'snapshots' => null === $manifest ? [] : [ $plugin => $manifest ],
+				'snapshots' => self::object_value( null === $manifest ? [] : [ $plugin => $manifest ] ),
 			];
 		}
 
+		// A map keyed by plugin slug, empty until a snapshot is captured (#1089).
 		return [
-			'snapshots' => Snapshot_Store::get_available_snapshots(),
+			'snapshots' => self::object_value( Snapshot_Store::get_available_snapshots() ),
 		];
 	}
 }
