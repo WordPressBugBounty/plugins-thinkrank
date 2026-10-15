@@ -1,7 +1,7 @@
 /**
  * Migration Page
  *
- * Bring SEO data in from another plugin (Yoast, Rank Math, SEOPress, AIOSEO, Squirrly, Slim SEO).
+ * Bring SEO data in from another plugin (Yoast, Rank Math, SEOPress, AIOSEO, Squirrly, Slim SEO, SureRank).
  * Thin page wrapper that renders the import half of ImportExportTab; ThinkRank's
  * own export/restore lives on its own page (see ImportExport.js).
  *

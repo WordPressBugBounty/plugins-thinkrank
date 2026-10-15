@@ -1090,11 +1090,9 @@ body.thinkrank-setup-wizard-active #wpbody-content {
 	display: flex;
 	justify-content: center;
 
-	/* The preview PNG bakes in the illustration's ambient shadow as transparent
-	   padding (~93px top, ~165px bottom of its 769px height). Negative margins
-	   pull the neighbouring content into that empty shadow zone so the visible
-	   dashboard is spaced like the design without altering the asset. */
-	margin: -42px 0 -25px;
+	/* The animated hero (shared with the dashboard welcome card) is cropped
+	   to its content, so it needs no negative margins. */
+	margin: 0 0 8px;
 }
 
 .tr-wizard__start-preview-img {

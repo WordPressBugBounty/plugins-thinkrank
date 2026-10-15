@@ -6,7 +6,10 @@
  */
 import { __ } from '@wordpress/i18n';
 
-import welcomePlaceholder from '../../../shared/assets/dashboard-welcome-placeholder.svg';
+// Animated hero (Remotion render, 760x540 animated WebP, ~360 KB): an assistant
+// asks for SEO fixes, the request travels over MCP, and the SEO score climbs.
+// Shared with the setup wizard's first step.
+import heroAnimation from '../../../shared/assets/thinkrank-hero.webp';
 
 const ArrowRightIcon = () => (
 	<svg
@@ -68,7 +71,7 @@ const WelcomeCard = () => {
 					}}
 				>
 					{__(
-						"ThinkRank is your AI-native SEO co-pilot. Generate metadata, draft content briefs, deploy structured data, and watch what's working all from one place.",
+						"Do your SEO right here, or let Claude or ChatGPT do it for you through ThinkRank's MCP server. Generate metadata with your own AI key, plan content, add schema and watch your SEO score update as you work.",
 						'thinkrank'
 					)}
 				</p>
@@ -94,14 +97,15 @@ const WelcomeCard = () => {
 				</a>
 			</div>
 
-			{/* Visual — placeholder, replace welcomePlaceholder import to swap. */}
 			<img
-				src={welcomePlaceholder}
+				src={heroAnimation}
 				alt=""
+				width="228"
+				height="162"
 				style={{
-					width: '180px',
-					height: '120px',
-					objectFit: 'cover',
+					width: '228px',
+					height: '162px',
+					objectFit: 'contain',
 					borderRadius: '12px',
 					border: '1px solid #e0e7ff',
 					flexShrink: 0,

@@ -11,6 +11,7 @@ namespace ThinkRank\Abilities\Content;
 
 use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\SEO\Object_Redirect;
+use ThinkRank\SEO\Term_Seo_Meta;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -107,23 +108,10 @@ class Get_Term_Seo extends Ability_Base {
 
 		$redirect = Object_Redirect::get( 'term', $term_id );
 
-		$data = [
-			'title'                => (string) get_term_meta( $term_id, '_thinkrank_seo_title', true ),
-			'description'          => (string) get_term_meta( $term_id, '_thinkrank_meta_description', true ),
-			'canonical_url'        => (string) get_term_meta( $term_id, '_thinkrank_canonical_url', true ),
-			// Not term meta: the rule in Pro's redirections table is the value.
-			'redirect_url'         => $redirect['url'],
-			'redirect_type'        => $redirect['type'],
-			'focus_keyword'        => (string) get_term_meta( $term_id, '_thinkrank_focus_keyword', true ),
-			'robots_meta_enabled'  => get_term_meta( $term_id, '_thinkrank_robots_meta_enabled', true ),
-			'robots_meta'          => $this->decode_json_field( get_term_meta( $term_id, '_thinkrank_robots_meta', true ) ),
-			'advanced_robots_meta' => $this->decode_json_field( get_term_meta( $term_id, '_thinkrank_advanced_robots_meta', true ) ),
-			'og_title'             => (string) get_term_meta( $term_id, '_thinkrank_og_title', true ),
-			'og_description'       => (string) get_term_meta( $term_id, '_thinkrank_og_description', true ),
-			'og_image'             => (string) get_term_meta( $term_id, '_thinkrank_og_image', true ),
-			'twitter_title'        => (string) get_term_meta( $term_id, '_thinkrank_twitter_title', true ),
-			'twitter_description'  => (string) get_term_meta( $term_id, '_thinkrank_twitter_description', true ),
-			'twitter_image'        => (string) get_term_meta( $term_id, '_thinkrank_twitter_image', true ),
+		// Not term meta: the rule in Pro's redirections table is the value.
+		$data = Term_Seo_Meta::read( $term_id ) + [
+			'redirect_url'  => $redirect['url'],
+			'redirect_type' => $redirect['type'],
 		];
 
 		return [
@@ -131,25 +119,5 @@ class Get_Term_Seo extends Ability_Base {
 			'taxonomy' => (string) $term->taxonomy,
 			'data'     => $data,
 		];
-	}
-
-	/**
-	 * Decode a JSON-encoded meta field into an array.
-	 *
-	 * @param mixed $value Raw stored value.
-	 * @return array<string, mixed>
-	 */
-	private function decode_json_field( $value ) {
-		if ( is_array( $value ) ) {
-			return $value;
-		}
-
-		if ( ! is_string( $value ) || '' === $value ) {
-			return [];
-		}
-
-		$decoded = json_decode( $value, true );
-
-		return is_array( $decoded ) ? $decoded : [];
 	}
 }

@@ -39,6 +39,18 @@ export const loadSettings = async (ctx) => {
 			ctx.setResolvedDeliveryMode(
 				response.data.resolved_delivery_mode || null
 			);
+			// Children whose post type or taxonomy is no longer registered
+			// publish nothing, so the rows say so rather than linking to a 404.
+			// The server names them by URL, but what it judges is the type, so
+			// the screen keeps the types: a row stays marked while the admin
+			// edits its URL, and stops being marked once its type is changed.
+			const unregisteredUrls =
+				response.data.unregistered_child_urls || [];
+			ctx.setUnregisteredTypes(
+				(loadedSettings.sitemap_urls || [])
+					.filter((sitemap) => unregisteredUrls.includes(sitemap.url))
+					.map((sitemap) => sitemap.type)
+			);
 		} else {
 			const defaultSettings = ctx.getDefaultSettings();
 			ctx.setSettings(defaultSettings);

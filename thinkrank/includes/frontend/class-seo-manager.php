@@ -497,8 +497,9 @@ class SEO_Manager {
         }
 
         // Term archives. Category, tag and custom-taxonomy pages store their SEO
-        // title and description as term meta — written by the term UI, by the
-        // abilities API and by the Yoast/RankMath/AIOSEO/SEOPress importer — but
+        // title and description as term meta — written by the term edit screen
+        // (Term_Seo_Fields, #885), by the abilities API and by the
+        // Yoast/RankMath/AIOSEO/SEOPress importer — but
         // nothing here ever read them, so the whole title/description cascade
         // fell through to the theme default and no description tag was printed
         // at all. Term robots was fixed for the same reason in 1.31.0 (#290);
@@ -2094,6 +2095,24 @@ class SEO_Manager {
             }
         } else {
             $canonical_url = self::get_non_singular_canonical_url();
+
+            // A term's own canonical override. It was stored by the importers
+            // and the update-term-seo ability but never read, so it changed
+            // nothing until the term edit screen gave it a field (#885). Like
+            // the post override it is used exactly as typed, on every page of
+            // the archive, unless it is just the archive's own URL: people
+            // paste that, and taken literally it pointed /page/2/ at page 1.
+            if ('' !== $canonical_url && $this->current_term_id) {
+                $custom_canonical = trim((string) get_term_meta($this->current_term_id, '_thinkrank_canonical_url', true));
+                if ('' !== $custom_canonical) {
+                    $term_link = get_term_link(get_queried_object());
+                    $is_own_url = !is_wp_error($term_link) && self::is_same_url($custom_canonical, (string) $term_link);
+
+                    if (!$is_own_url) {
+                        $canonical_url = $custom_canonical;
+                    }
+                }
+            }
         }
 
         /**
@@ -2259,6 +2278,36 @@ class SEO_Manager {
 
         // Point paginated archives at their own page, not page 1.
         return self::with_pagination($canonical_url, (int) get_query_var('paged'));
+    }
+
+    /**
+     * Whether two URLs name the same address.
+     *
+     * Ignores the scheme (Url_Scheme rewrites it anyway), the host's case
+     * and a trailing slash on the path. The query string must match.
+     *
+     * @since 2.16.0
+     *
+     * @param string $a First URL.
+     * @param string $b Second URL.
+     * @return bool
+     */
+    private static function is_same_url(string $a, string $b): bool {
+        $key = static function (string $url): ?string {
+            $parts = wp_parse_url($url);
+            if (!is_array($parts) || empty($parts['host'])) {
+                return null;
+            }
+
+            return strtolower($parts['host'])
+                . (isset($parts['port']) ? ':' . $parts['port'] : '')
+                . trailingslashit($parts['path'] ?? '/')
+                . (isset($parts['query']) && '' !== $parts['query'] ? '?' . $parts['query'] : '');
+        };
+
+        $key_a = $key($a);
+
+        return null !== $key_a && $key_a === $key($b);
     }
 
     /**

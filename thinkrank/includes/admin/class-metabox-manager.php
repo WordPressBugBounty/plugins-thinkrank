@@ -1241,7 +1241,7 @@ JS;
     /**
      * Transient holding the last redirect error for the current user.
      */
-    private const REDIRECT_ERROR_TRANSIENT = 'thinkrank_redirect_error_';
+    public const REDIRECT_ERROR_TRANSIENT = 'thinkrank_redirect_error_';
 
     /**
      * Why the redirect field was refused on the most recent persist, if it was.

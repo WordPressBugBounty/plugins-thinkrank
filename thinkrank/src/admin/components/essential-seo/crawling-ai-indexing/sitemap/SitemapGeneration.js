@@ -27,6 +27,7 @@ import FormField from '../../../common/FormField';
 import OptimizationButton from '../../../common/OptimizationButton';
 
 import RegenerationHealth from './RegenerationHealth';
+import { getSitemapTypeOptions } from './typeOptions';
 import { validateInput, validateSitemapUrl } from './validators';
 import { getDefaultSettings, applyPreset, applyUrlPattern } from './presets';
 import {
@@ -255,14 +256,6 @@ const PRESET_OPTIONS = [
 	},
 ];
 
-const SITEMAP_TYPE_OPTIONS = [
-	{ value: 'index', label: __('Index', 'thinkrank') },
-	{ value: 'general', label: __('General', 'thinkrank') },
-	{ value: 'posts', label: __('Posts', 'thinkrank') },
-	{ value: 'pages', label: __('Pages', 'thinkrank') },
-	{ value: 'categories', label: __('Categories', 'thinkrank') },
-];
-
 const statusStyle = (s) => {
 	if (s === 'active')
 		return 'tr-bg-success-bg tr-text-success tr-border-success';
@@ -313,6 +306,15 @@ const SitemapGeneration = () => {
 	// 'static' | 'dynamic' | null — the server's resolution of delivery_mode,
 	// which may be stored as 'auto'.
 	const [resolvedDeliveryMode, setResolvedDeliveryMode] = useState(null);
+	// Child sitemaps the generator skips because their post type or taxonomy is
+	// no longer registered (a deactivated plugin's). They stay configured, so
+	// reactivating the plugin brings them back, but nothing is published.
+	// Held as the types of the rows the server flagged, not their URLs: the
+	// server's verdict is per type, and a row's URL and type are both editable
+	// here, so matching by URL went stale as soon as either one changed.
+	const [unregisteredTypes, setUnregisteredTypes] = useState([]);
+	const isUnregistered = (sitemap) =>
+		unregisteredTypes.includes(sitemap.type);
 
 	// A sitemap URL is live either because a file was written (static) or
 	// because WordPress answers the URL from PHP (dynamic). Dynamic delivery
@@ -320,6 +322,19 @@ const SitemapGeneration = () => {
 	// so gating the links on it alone disabled them forever on those sites.
 	const sitemapsAreLive =
 		Boolean(settings.last_generated) || resolvedDeliveryMode === 'dynamic';
+
+	// Every row's type as loaded, so a row whose type is changed can be set
+	// back to a custom post type or taxonomy the fixed options lack (#1052).
+	// One list for the screen rather than a map by URL, which lost the type
+	// as soon as the admin edited the URL.
+	const [loadedTypes, setLoadedTypes] = useState(null);
+	useEffect(() => {
+		if (!isLoading && loadedTypes === null) {
+			setLoadedTypes(
+				(settings.sitemap_urls || []).map((sitemap) => sitemap.type)
+			);
+		}
+	}, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// Sitemap generation and sitemap styling are feature switches, so flipping
 	// either one is the save (see hooks/useAutosaveSettings.js). Everything else
@@ -556,6 +571,7 @@ const SitemapGeneration = () => {
 		setIsPinging,
 		setHealth,
 		setResolvedDeliveryMode,
+		setUnregisteredTypes,
 		getDefaultSettings,
 		updateSitemap,
 	});
@@ -719,7 +735,7 @@ const SitemapGeneration = () => {
 									(sitemap, index) => (
 										<div
 											key={index}
-											className="tr-flex tr-items-end tr-gap-2 tr-border tr-border-secondary tr-rounded-lg tr-p-3"
+											className="tr-flex tr-flex-wrap tr-items-end tr-gap-2 tr-border tr-border-secondary tr-rounded-lg tr-p-3"
 										>
 											<div className="tr-flex-1">
 												{/*
@@ -763,9 +779,10 @@ const SitemapGeneration = () => {
 														'thinkrank'
 													)}
 													value={sitemap.type}
-													options={
-														SITEMAP_TYPE_OPTIONS
-													}
+													options={getSitemapTypeOptions(
+														sitemap.type,
+														loadedTypes || []
+													)}
 													onChange={(e) =>
 														updateSitemap(index, {
 															...sitemap,
@@ -789,6 +806,16 @@ const SitemapGeneration = () => {
 											>
 												<IconTrash />
 											</button>
+											{/* Full-width second line, so the URL, Type and
+											     delete controls stay aligned on the first. */}
+											{isUnregistered(sitemap) && (
+												<p className="tr-w-full tr-text-xs tr-text-warning tr-m-0">
+													{__(
+														'Not published: this content type is no longer registered. Remove this URL, or reactivate the plugin that adds it.',
+														'thinkrank'
+													)}
+												</p>
+											)}
 										</div>
 									)
 								)}
@@ -819,7 +846,8 @@ const SitemapGeneration = () => {
 									<div className="tr-flex tr-flex-col tr-gap-1">
 										{settings.sitemap_urls.map(
 											(sitemap, index) =>
-												sitemapsAreLive ? (
+												sitemapsAreLive &&
+												!isUnregistered(sitemap) ? (
 													<a
 														key={index}
 														href={`${siteUrl}${sitemap.url}`}
@@ -836,10 +864,19 @@ const SitemapGeneration = () => {
 												) : (
 													<span
 														key={index}
-														title={__(
-															'Generate the sitemap to enable this link',
-															'thinkrank'
-														)}
+														title={
+															isUnregistered(
+																sitemap
+															)
+																? __(
+																		'Not published: this content type is no longer registered',
+																		'thinkrank'
+																	)
+																: __(
+																		'Generate the sitemap to enable this link',
+																		'thinkrank'
+																	)
+														}
 														className="tr-inline-flex tr-items-center tr-gap-1 tr-text-sm tr-text-tertiary tr-cursor-not-allowed"
 													>
 														{sitemap.url}{' '}

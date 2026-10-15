@@ -22,6 +22,7 @@ import aioseo from '../assets/migration/aioseo.png';
 import seopress from '../assets/migration/seopress.svg';
 import squirrly from '../assets/migration/squirrly.svg';
 import slimseo from '../assets/migration/slimseo.svg';
+import surerank from '../assets/migration/surerank.svg';
 
 /**
  * Supported plugins shown in the step. The `slug` must match the import
@@ -34,6 +35,7 @@ const SUPPORTED_PLUGINS = [
 	{ slug: 'seopress', name: 'SEOPress', logo: seopress },
 	{ slug: 'squirrly', name: 'Squirrly SEO', logo: squirrly },
 	{ slug: 'slimseo', name: 'Slim SEO', logo: slimseo },
+	{ slug: 'surerank', name: 'SureRank', logo: surerank },
 ];
 
 export default function Step2Migration({

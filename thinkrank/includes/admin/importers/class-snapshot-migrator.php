@@ -1416,7 +1416,8 @@ class Snapshot_Migrator {
      *
      * Same two rules as the post path — never overwrite an existing payload,
      * and never turn the override on for an all-false set, which is just
-     * ThinkRank's default index/follow spelled out.
+     * ThinkRank's default index/follow spelled out, unless the record asks
+     * for an explicit index (wants_explicit_index()).
      *
      * @param int   $term_id Target term ID.
      * @param array $data    Canonical record data.
@@ -1448,7 +1449,10 @@ class Snapshot_Migrator {
         }
 
         if (!$has_active_directive) {
-            return false;
+            if (!self::wants_explicit_index($data)) {
+                return false;
+            }
+            $robots = ['noindex' => false];
         }
 
         $robots['index'] = empty($robots['noindex']);
@@ -1457,6 +1461,26 @@ class Snapshot_Migrator {
         update_term_meta($term_id, '_thinkrank_robots_meta_enabled', 1);
 
         return true;
+    }
+
+    /**
+     * Whether a record asks for an explicit index.
+     *
+     * A source can mark one object indexable against a content type or
+     * taxonomy it noindexes as a whole (SureRank's 'no' robots row). An
+     * all-false set is otherwise never written, because it only restates
+     * ThinkRank's default, so the record says so with `index` = 1 and the
+     * robots writers store `noindex: false` with the override switched on.
+     * Exporters set it only when the object's type is noindexed; anywhere
+     * else it would be a needless override.
+     *
+     * @since 2.16.0
+     *
+     * @param array $data Canonical record data.
+     * @return bool
+     */
+    private static function wants_explicit_index(array $data): bool {
+        return !empty($data['index']) && empty($data['noindex']);
     }
 
     /**
@@ -1659,7 +1683,8 @@ class Snapshot_Migrator {
      * Folds the canonical robots flags into JSON-encoded
      * `_thinkrank_robots_meta` and `_thinkrank_advanced_robots_meta`
      * post meta and flips the override toggle when at least one
-     * directive is present. Never overwrites existing ThinkRank data.
+     * directive is present, or when the record asks for an explicit index
+     * (wants_explicit_index()). Never overwrites existing ThinkRank data.
      *
      * @param int   $post_id Target post ID
      * @param array $data    Canonical record data
@@ -1720,7 +1745,12 @@ class Snapshot_Migrator {
             }
         }
         if (!$has_active_directive && empty($advanced)) {
-            return false;
+            if (!self::wants_explicit_index($data)) {
+                return false;
+            }
+            // Only the index decision is written, so the content type's
+            // other directives still apply.
+            $robots = ['noindex' => false];
         }
 
         // Default index=true unless noindex was explicitly imported.
@@ -2417,17 +2447,33 @@ class Snapshot_Migrator {
         $current = $manager->get_settings('site');
         $updates = [];
 
-        if ($type === 'person') {
-            if (empty($current['person_name'])) {
-                $updates['person_name'] = $name;
+        // get_settings() fills an unsaved organization name and description
+        // from Site Identity's site name and tagline, so on any site with a
+        // title the name always looked set and was never imported. What was
+        // actually saved decides; a manager without that accessor falls back
+        // to the merged view.
+        $stored = method_exists($manager, 'get_stored_settings') ? (array) $manager->get_stored_settings('site') : $current;
+
+        // The entity's other fields, when the source has them (SureRank's
+        // onboarding does, #1051). Each lands in the matching organization_* or
+        // person_* field while ThinkRank still holds none.
+        $fields = $type === 'person'
+            ? ['name' => 'person_name', 'description' => 'person_description', 'phone' => 'person_telephone', 'logo' => 'person_image']
+            : ['name' => 'organization_name', 'description' => 'organization_description', 'phone' => 'organization_contact_phone', 'logo' => 'organization_logo'];
+        foreach ($fields as $source => $field) {
+            $value = trim((string) ($kg[$source] ?? ''));
+            if ($value !== '' && empty($stored[$field])) {
+                $updates[$field] = $value;
             }
-        } else {
-            // 'organization' — organization_type's default ('Organization')
-            // already matches Rank Math's 'company', so only the name needs
-            // a home. Fill it while ThinkRank still holds none.
-            if (empty($current['organization_name'])) {
-                $updates['organization_name'] = $name;
-            }
+        }
+
+        // organization_type defaults to 'Organization', which already matches
+        // Rank Math's 'company'; a source naming a subtype replaces only that
+        // default.
+        $org_type = trim((string) ($kg['organization_type'] ?? ''));
+        if ($type !== 'person' && $org_type !== '' && in_array($current['organization_type'] ?? 'Organization', ['', 'Organization'], true)
+            && $org_type !== ($current['organization_type'] ?? 'Organization')) {
+            $updates['organization_type'] = $org_type;
         }
 
         if (empty($updates)) {
@@ -3211,6 +3257,23 @@ class Snapshot_Migrator {
                     ];
                     continue;
                 }
+                // Counted per page, so the warning says how many carry one.
+                if ($key === 'object_schemas' && is_array($value)) {
+                    $buckets[] = [
+                        'key'   => 'settings.object_schemas',
+                        'label' => (string) self::extended_bucket_label('object_schemas'),
+                        'count' => max(1, (int) array_sum(array_map('intval', $value))),
+                    ];
+                    continue;
+                }
+                if ($key === 'author_seo' && is_array($value)) {
+                    $buckets[] = [
+                        'key'   => 'settings.author_seo',
+                        'label' => (string) self::extended_bucket_label('author_seo'),
+                        'count' => max(1, (int) ($value['users'] ?? 0)),
+                    ];
+                    continue;
+                }
                 if ($key === 'schema_templates' && is_array($value)) {
                     $buckets[] = [
                         'key'   => 'settings.schema_templates',
@@ -3325,18 +3388,30 @@ class Snapshot_Migrator {
      */
     public static function extended_bucket_label(string $key): ?string {
         $labels = [
-            'code_injection'             => __('Header, body and footer code', 'thinkrank'),
-            'redirect_settings'          => __('Redirect behaviour settings', 'thinkrank'),
-            'taxonomy_settings'          => __('Taxonomy templates and images', 'thinkrank'),
-            'post_type_archive_settings' => __('Post type archive templates and images', 'thinkrank'),
-            'no_category_base'           => __('Removing /category/ from category URLs', 'thinkrank'),
-            'webmaster_tools'            => __('Webmaster tools verification codes', 'thinkrank'),
-            'access_control'             => __('Role access settings', 'thinkrank'),
-            'og_frontpage_title'         => __('Homepage social title', 'thinkrank'),
-            'og_frontpage_desc'          => __('Homepage social description', 'thinkrank'),
-            'og_frontpage_image'         => __('Homepage social image', 'thinkrank'),
-            'custom_schemas'             => __('Custom schemas (need ThinkRank Pro)', 'thinkrank'),
-            'schema_templates'           => __('Schema templates with no ThinkRank equivalent', 'thinkrank'),
+            'code_injection'               => __('Header, body and footer code', 'thinkrank'),
+            'redirect_settings'            => __('Redirect behaviour settings', 'thinkrank'),
+            'taxonomy_settings'            => __('Taxonomy templates and images', 'thinkrank'),
+            'post_type_archive_settings'   => __('Post type archive templates and images', 'thinkrank'),
+            'no_category_base'             => __('Removing /category/ from category URLs', 'thinkrank'),
+            'webmaster_tools'              => __('Webmaster tools verification codes', 'thinkrank'),
+            'access_control'               => __('Role access settings', 'thinkrank'),
+            'og_frontpage_title'           => __('Homepage social title', 'thinkrank'),
+            'og_frontpage_desc'            => __('Homepage social description', 'thinkrank'),
+            'og_frontpage_image'           => __('Homepage social image', 'thinkrank'),
+            'custom_schemas'               => __('Custom schemas (need ThinkRank Pro)', 'thinkrank'),
+            'schema_templates'             => __('Schema templates with no ThinkRank equivalent', 'thinkrank'),
+            // SureRank (#1051).
+            'taxonomy_robots'              => __('Nofollow and noarchive rules for taxonomies', 'thinkrank'),
+            'archive_description_template' => __('Description template for term and author archives', 'thinkrank'),
+            'date_archive_redirect'        => __('Date archives redirected to the homepage', 'thinkrank'),
+            'homepage_social'              => __('Homepage social titles, descriptions and images', 'thinkrank'),
+            'paginated_robots'             => __('Noindex rules for paginated pages', 'thinkrank'),
+            'removed_feeds'                => __('Removed RSS feeds', 'thinkrank'),
+            'social_output_off'            => __('Social tags switched off', 'thinkrank'),
+            'attachment_redirect'          => __('Attachment pages redirected to their parent post', 'thinkrank'),
+            'unmapped_settings'            => __('Other settings with no ThinkRank equivalent', 'thinkrank'),
+            'object_schemas'               => __('Schema changes on individual pages', 'thinkrank'),
+            'author_seo'                   => __('Robots, canonical and social settings of individual authors', 'thinkrank'),
         ];
 
         return $labels[$key] ?? null;

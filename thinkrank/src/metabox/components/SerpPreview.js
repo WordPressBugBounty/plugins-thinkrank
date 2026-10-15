@@ -2,7 +2,20 @@ import { __ } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
 import classnames from 'classnames';
 
-const SerpPreview = ({ title, description, postTitle, homeUrl, slug }) => {
+const SerpPreview = ({
+	title,
+	description,
+	postTitle,
+	homeUrl,
+	slug,
+	// Overrides for screens without the post metabox's localized config (the
+	// term edit screen): site name, favicon, mobile thumbnail, and the
+	// breadcrumb shown under the site name.
+	siteName: siteNameProp,
+	faviconUrl: faviconUrlProp,
+	imageUrl,
+	displayUrl,
+}) => {
 	const [viewMode, setViewMode] = useState('desktop');
 
 	const displayTitle =
@@ -14,13 +27,17 @@ const SerpPreview = ({ title, description, postTitle, homeUrl, slug }) => {
 			'thinkrank'
 		);
 
-	const siteName = window.thinkrankMetabox?.siteName || 'Your Site';
+	const siteName =
+		siteNameProp || window.thinkrankMetabox?.siteName || 'Your Site';
 	const domain = homeUrl
 		? new URL(homeUrl).hostname
 		: window.location.hostname;
 	const faviconUrl =
-		window.thinkrankMetabox?.faviconUrl || `${homeUrl}/favicon.ico`;
-	const featuredImageUrl = window.thinkrankMetabox?.featuredImageUrl;
+		faviconUrlProp ||
+		window.thinkrankMetabox?.faviconUrl ||
+		`${homeUrl}/favicon.ico`;
+	const featuredImageUrl =
+		imageUrl || window.thinkrankMetabox?.featuredImageUrl;
 	const currentDate = new Date().toLocaleDateString('en-US', {
 		month: 'short',
 		day: 'numeric',
@@ -34,7 +51,7 @@ const SerpPreview = ({ title, description, postTitle, homeUrl, slug }) => {
 				.replace(/^-|-$/g, '')
 		: 'your-post-slug';
 	const postSlug = slug && slug.trim() ? slug.trim() : derivedSlug;
-	const postUrl = `${domain} › ${postSlug}`;
+	const postUrl = displayUrl || `${domain} › ${postSlug}`;
 
 	return (
 		<div className="tr-bg-white tr-rounded-lg tr-border tr-border-secondary">

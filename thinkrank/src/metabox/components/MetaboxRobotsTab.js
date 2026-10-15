@@ -15,6 +15,7 @@ import {
 	Flex,
 	FlexItem,
 	Notice,
+	VisuallyHidden,
 } from '@wordpress/components';
 import RobotMetaSettings from '../../admin/components/essential-seo/RobotMetaSettings';
 import Select from '../../admin/components/ui/Select';
@@ -42,6 +43,8 @@ const MetaboxRobotsTab = ({
 	advancedRobotsMeta,
 	robotsEnabled,
 	onChange,
+	description,
+	noindexNotice,
 }) => {
 	const robots = { ...DEFAULT_ROBOTS, ...(robotsMeta || {}) };
 	const advanced = { ...DEFAULT_ADVANCED, ...(advancedRobotsMeta || {}) };
@@ -61,14 +64,25 @@ const MetaboxRobotsTab = ({
 								{__('Robots Meta Override', 'thinkrank')}
 							</h4>
 							<p className="tr-text-xs tr-text-tertiary tr-m-0 tr-mt-1">
-								{__(
-									'Override the global and post-type robots meta directives for this single post. When disabled, defaults apply.',
-									'thinkrank'
-								)}
+								{description ||
+									__(
+										'Override the global and post-type robots meta directives for this single post. When disabled, defaults apply.',
+										'thinkrank'
+									)}
 							</p>
 						</FlexItem>
 						<FlexItem>
 							<ToggleControl
+								// The heading beside the switch is not its
+								// label, so give it one a screen reader reads.
+								label={
+									<VisuallyHidden>
+										{__(
+											'Enable robots meta override',
+											'thinkrank'
+										)}
+									</VisuallyHidden>
+								}
 								checked={!!robotsEnabled}
 								onChange={setEnabled}
 								__nextHasNoMarginBottom
@@ -227,10 +241,11 @@ const MetaboxRobotsTab = ({
 								isDismissible={false}
 								style={{ marginTop: '16px' }}
 							>
-								{__(
-									'This post will not be indexed by search engines.',
-									'thinkrank'
-								)}
+								{noindexNotice ||
+									__(
+										'This post will not be indexed by search engines.',
+										'thinkrank'
+									)}
 							</Notice>
 						)}
 					</div>

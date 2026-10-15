@@ -214,6 +214,9 @@ class Manager {
         // Initialize Post List Filters
         $this->post_list_filters->init();
 
+        // SEO panel on the taxonomy term edit screens (#885)
+        (new Term_Seo_Fields())->init();
+
         // Initialize Setup Wizard (onboarding) controller
         (new Setup_Wizard())->init();
 

@@ -3389,6 +3389,69 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     }
 
     /**
+     * Configured child sitemaps that publish nothing because nothing streams
+     * their type.
+     *
+     * In practice a custom post type or taxonomy whose plugin was deactivated:
+     * the saved child list outlives it, generate_multiple_sitemaps() skips it,
+     * and the admin would otherwise list it as a live sitemap whose link 404s
+     * (#1049). The entry is kept so reactivating the plugin brings it back.
+     *
+     * @since 2.15.0
+     *
+     * @param array|null $settings Sitemap settings (falls back to saved ones).
+     * @return string[] The `url` of each such child, as stored.
+     */
+    public function unregistered_child_urls(?array $settings = null): array {
+        $settings = $settings ?? $this->get_settings('site');
+        $urls     = [];
+
+        foreach ((is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : []) as $child) {
+            if (!is_array($child) || empty($child['url'])) {
+                continue;
+            }
+
+            if (!$this->child_type_is_registered((string) ($child['type'] ?? ''))) {
+                $urls[] = (string) $child['url'];
+            }
+        }
+
+        return $urls;
+    }
+
+    /**
+     * Is the object a child sitemap streams currently registered?
+     *
+     * The one answer generate_multiple_sitemaps() and unregistered_child_urls()
+     * both ask, so what the admin is told is never published and what is
+     * published is never reported as missing (#1049).
+     *
+     * The built-in types always are. `products` and the aliased WooCommerce
+     * children stand for an object a plugin registers, so they are only while
+     * it does. Anything else is a post type or taxonomy slug.
+     *
+     * @since 2.15.0
+     *
+     * @param string $type Child sitemap type.
+     * @return bool
+     */
+    private function child_type_is_registered(string $type): bool {
+        if (in_array($type, ['index', 'general', 'wordpress', 'posts', 'pages', 'categories', 'tags'], true)) { // phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- lowercase on purpose: this is the stored type slug.
+            return true;
+        }
+
+        if ('products' === $type) {
+            return post_type_exists('product');
+        }
+
+        if (isset(self::CHILD_TYPE_ALIASES[$type])) {
+            return taxonomy_exists(self::CHILD_TYPE_ALIASES[$type]);
+        }
+
+        return post_type_exists($type) || taxonomy_exists($type);
+    }
+
+    /**
      * Does this site publish a document under that name?
      *
      * Not a plain membership test against {@see self::published_document_names()}:
@@ -3962,12 +4025,26 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                     continue;
                 }
 
+                // The object behind this child is gone: in practice a custom
+                // post type, taxonomy or WooCommerce child whose plugin was
+                // deactivated, since the saved child list outlives it. An
+                // unknown type used to fall back to the whole-site sitemap,
+                // written under the child's name and listed in the index, so
+                // crawlers saw every URL twice (#1049). Publish nothing; the
+                // stored entry stays, so reactivating the plugin brings the
+                // child back, and prune_orphaned_segments() removes a file an
+                // earlier run left. unregistered_child_urls() asks the same
+                // question, so the admin names exactly these children.
+                if (!$this->child_type_is_registered($type)) {
+                    continue;
+                }
+
                 $source = $this->stream_type_entries($type, $settings);
 
-                // Unknown type — fall back to a single general sitemap file.
+                // A registered type nothing can stream still publishes
+                // nothing rather than the whole site. The whole-site file is
+                // what 'general' asks for, and that is handled above.
                 if ($source === null) {
-                    $xml = $this->generate_sitemap($settings);
-                    $this->write_sitemap_page($sitemap_config['url'], $xml, $type, $this->count_urls_in_xml($xml), $results, $index_children);
                     continue;
                 }
 
@@ -4130,7 +4207,19 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             return $removed;
         }
 
-        $candidates = array_merge($this->publishable_segment_filenames($settings), $stale_primaries);
+        // The configured children too, not only names derived from registered
+        // types: a child whose type is no longer registered is skipped by the
+        // generator, and its earlier file was otherwise never a candidate
+        // (#1049). The ownership test below still decides.
+        $configured = [];
+        foreach ((is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : []) as $child) {
+            $path = is_array($child) ? (string) wp_parse_url((string) ($child['url'] ?? ''), PHP_URL_PATH) : '';
+            if ('' !== $path) {
+                $configured[] = basename($path);
+            }
+        }
+
+        $candidates = array_unique(array_merge($this->publishable_segment_filenames($settings), $configured, $stale_primaries));
 
         foreach ($candidates as $candidate) {
             if (isset($kept[strtolower($candidate)])) {
@@ -4175,8 +4264,9 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      *
      * @param string $type     Sitemap config type (posts, pages, categories, …)
      * @param array  $settings Sitemap settings
-     * @return array{entries: array<string>, image_ns: bool}|null Null for an
-     *         unknown type (caller falls back to a general sitemap).
+     * @return array{entries: array<string>, image_ns: bool}|null Null for a
+     *         type nothing streams, such as an unregistered post type; the
+     *         caller publishes nothing for it (#1049).
      */
     /**
      * Write (or remove) the physical local-sitemap.xml file.
@@ -4335,17 +4425,15 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 }
 
                 // An aliased child whose object is gone (WooCommerce deactivated)
-                // keeps writing the empty file it always wrote. Returning null
-                // here would hand it the whole-site fallback instead, dumping
-                // every URL on the site into a file named for products.
+                // streams nothing. generate_multiple_sitemaps() skips it before
+                // it gets here (#1049); null used to hand it the whole-site
+                // fallback, dumping every URL on the site into a file named
+                // for products, so an empty stream stays the answer here.
                 //
                 // A registered taxonomy this generator will not emit
-                // (`post_format`, `nav_menu`, a non-public one) needs the same
-                // answer for the same reason. generate_multiple_sitemaps()
-                // skips those before they reach here, so nothing takes this
-                // path today — but it is the one branch where falling through
-                // to null is silently catastrophic rather than merely wrong,
-                // and the guard keeping it unreachable lives in another method.
+                // (`post_format`, `nav_menu`, a non-public one) gets the same
+                // answer. generate_multiple_sitemaps() skips those before they
+                // reach here, so nothing takes this path today.
                 if ($alias !== null || taxonomy_exists($object)) {
                     return ['entries' => [], 'image_ns' => false];
                 }

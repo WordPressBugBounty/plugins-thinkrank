@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.15.0
+Stable tag: 2.16.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -17,7 +17,7 @@ WordPress SEO plugin with AI SEO: meta descriptions, schema, XML sitemaps, Searc
 Two things make ThinkRank different, and both are checkable:
 
 * **Your assistant runs it directly.** A built-in, self-hosted MCP server connects your AI assistant - no companion plugin, no terminal. No other WordPress SEO plugin ships one.
-* **Every AI feature is included at a flat price, with no credit meter.** Bring your own API key (OpenAI, Anthropic Claude, Google Gemini, OpenRouter): no monthly AI credits to buy, meter, or watch expire - in free and in Pro alike.
+* **Every AI feature is included at a flat price, with no credit meter.** Bring your own API key (OpenAI, Anthropic Claude, Google Gemini, OpenRouter) or run your own OpenAI-compatible model: no monthly AI credits to buy, meter, or watch expire - in free and in Pro alike.
 
 Switching? The Setup Wizard **imports your data from Yoast SEO, Rank Math, AIOSEO, SEOPress, Squirrly SEO, and Slim SEO**. ThinkRank works where you build - **Gutenberg, Elementor, Divi, Oxygen/Breakdance, and the Classic Editor** - and on multilingual sites running **WPML, Polylang or TranslatePress**.
 
@@ -31,10 +31,14 @@ https://youtu.be/gdU3TwA1fPM
 
 ThinkRank's self-contained **Model Context Protocol (MCP) server** turns your AI assistant into an **SEO operator, not just an SEO copywriter**.
 
-* **Connect Claude, ChatGPT, Cursor** or any MCP-compatible AI assistant: Claude in one click through a guided OAuth 2.1 flow, others with an Application Password and ready-made configuration.
+* **Connect Claude, ChatGPT, Cursor** or any MCP-compatible AI assistant: Claude in one click through a guided OAuth 2.1 flow, others with a connection token and ready-made configuration.
 * **Ask for SEO in plain language:** "Write an SEO title and meta description for this post", "Which posts are missing SEO metadata?", "Add FAQ schema to this page", "Check Search Console opportunities for pages with high impressions and low CTR."
-* **35+ SEO tools** exposed over MCP - metadata, schema, site identity, sitemaps, robots.txt and robots meta, image SEO, social meta, instant indexing, llms.txt, SEO scores and opportunities.
-* **Safe by default** - off until an admin enables it, revocable in one click, with a connection health check and dry-run previews of SEO imports.
+* **70+ SEO tools** exposed over MCP - metadata, schema, site identity, sitemaps, robots.txt and robots meta, image SEO, social meta, instant indexing, llms.txt, SEO scores and opportunities, and the Site SEO Analyzer's one-click fixes.
+* **Safe by default, with every change on record** - off until an admin enables it, Read or Read & Write access per area, expiring tokens, and an MCP Activity log where one click reverts any change.
+
+= ThinkRank Hub: Every Site's SEO in One Place =
+
+Running more than one site? Connect each one to **ThinkRank Hub** (hub.thinkrank.ai) with one button and one approval. The Hub shows every connected site's SEO reports in one view, and one AI connection there can work across all of them, within the access you approved on each site. It is optional, and Disconnect ends its access at any time.
 
 = Migrate from Rank Math, Yoast SEO, AIOSEO, SEOPress, Squirrly or Slim SEO =
 
@@ -52,12 +56,12 @@ Looking for a **Rank Math, Yoast SEO, AIOSEO or SEOPress alternative** because o
 * Real-time on-page SEO content analysis with a 13-factor SEO score.
 * Focus keyword tracking (up to 5 focus keywords per post) with cannibalization warnings.
 * Recommendations for titles, meta descriptions, headings, links, readability, and structure - with one-click "Apply" and **"Explain with AI"**.
-* **Bulk SEO Optimization** - fix titles, descriptions, and keywords across many posts from one screen.
+* **Bulk SEO Optimization** - edit every post's SEO title, meta description and focus keyword in one table, find duplicate titles and descriptions sitewide, and list thin content, page-builder pages included.
 
 = Site SEO Analyzer: Whole-Site Audit With No Google Connection =
 
-* The Site SEO Analyzer is a crawl-free, whole-site SEO audit with a **0–100 score and letter grade** across Basic SEO, Advanced SEO, Content, Performance & Technical, and Security.
-* "How to fix" guidance that deep-links to the relevant setting - works on staging, new sites, and client audits.
+* The Site SEO Analyzer is a crawl-free, whole-site SEO audit with a **0–100 score and letter grade** across Basic SEO, Advanced SEO, Content, Performance & Technical, Security, and AI Search (GEO).
+* "How to fix" guidance that deep-links to the relevant setting, and one-click fixes for common problems - works on staging, new sites, and client audits.
 
 = Schema Markup and Structured Data for Rich Snippets =
 
@@ -188,11 +192,19 @@ Enable the MCP server in ThinkRank, copy your site's MCP URL, add it to Claude, 
 
 = Does ThinkRank work with ChatGPT, Cursor and other MCP clients? =
 
-Yes. ThinkRank is designed for MCP-compatible clients. Claude has a guided one-click-style setup, and ChatGPT, Cursor, and other compatible tools can connect using the Application Password fallback and ready-made configuration details provided by ThinkRank.
+Yes. ThinkRank is designed for MCP-compatible clients. Claude has a guided one-click-style setup, and ChatGPT, Cursor, and other compatible tools connect with a connection token and the ready-made configuration details ThinkRank provides.
 
 = Is the MCP connection secure? =
 
-Yes. The MCP server is off by default, admin-controlled, and designed for authorized users only. Connections are tied to WordPress authorization and Application Passwords. If you delete the connected Application Password, access is revoked immediately.
+Yes. The MCP server is off by default and only an administrator can turn it on. Every connection is approved by an administrator, gets Read or Read & Write access per area (Content, Settings, Indexing, Analytics), and uses tokens that expire and are only accepted in the request header. Every change an assistant makes is recorded in the MCP Activity log with the value it replaced, so you can see who changed what and revert it in one click. You can narrow or revoke any connection under Connected AI apps.
+
+= What is ThinkRank Hub? =
+
+ThinkRank Hub (hub.thinkrank.ai) is an optional service for people who look after several sites. Connect a site from ThinkRank > AI Tools > ThinkRank Hub, or from the Setup Wizard, and approve it on your own site the way you approve any AI app, choosing Read or Read & Write per area. The Hub then shows every connected site's SEO reports in one view and lets one AI connection work across all of them. No license key, AI key or Google token is shared, the Hub never stores your posts' content, and Disconnect ends its access at any time. Every ThinkRank feature works without it.
+
+= Is ThinkRank beginner friendly? =
+
+Yes. The Setup Wizard configures the essentials and imports from your previous SEO plugin, and a Basic / Advanced switch in the Essential SEO header lets each user keep the menu to the sections a site owner needs day to day. Switching changes no settings, and every screen still opens when you need it.
 
 = Does ThinkRank work with Elementor, Divi and Oxygen? =
 
@@ -204,7 +216,7 @@ Yes. ThinkRank detects WPML and Polylang automatically. SEO fields appear in the
 
 = What is the Site SEO Analyzer? =
 
-The Site SEO Analyzer is a crawl-free, whole-site audit that gives your site a 0–100 score and a letter grade without requiring a Google connection. It runs checks across Basic SEO, Advanced SEO, Content, Performance & Technical, and Security, and shows per-category results with "how to fix" guidance that deep-links to the relevant setting.
+The Site SEO Analyzer is a crawl-free, whole-site audit that gives your site a 0–100 score and a letter grade without requiring a Google connection. It runs checks across Basic SEO, Advanced SEO, Content, Performance & Technical, Security, and AI Search (GEO), and shows per-category results with "how to fix" guidance that deep-links to the relevant setting. Common problems, such as a missing sitemap, schema that is switched off, or images without alt text, can be fixed in one click.
 
 = Can I control which team members access ThinkRank? =
 
@@ -212,11 +224,11 @@ Yes. The Role Manager lets you decide which roles can access Essential SEO, AI T
 
 = Do I need an AI API key to use ThinkRank? =
 
-You don't need an AI key for every core SEO feature. Metadata fields, schema controls, XML sitemaps, robots meta, canonical URLs, breadcrumbs, Open Graph, the Site SEO Analyzer, multilingual output, page-builder integrations, and the Search Console connection work without AI generation. AI-powered features - AI metadata generation, content briefs, AI insights, and generative MCP tools - require your own OpenAI, Claude, Gemini, or OpenRouter API key.
+You don't need an AI key for every core SEO feature. Metadata fields, schema controls, XML sitemaps, robots meta, canonical URLs, breadcrumbs, Open Graph, the Site SEO Analyzer, multilingual output, page-builder integrations, and the Search Console connection work without AI generation. AI-powered features - AI metadata generation, content briefs, AI insights, and generative MCP tools - require your own OpenAI, Claude, Gemini, or OpenRouter API key, or an OpenAI-compatible endpoint you run.
 
 = Which AI providers and models does ThinkRank support? =
 
-ThinkRank supports OpenAI, Anthropic Claude, Google Gemini, and OpenRouter. Model availability depends on your provider account and configured API key.
+ThinkRank supports OpenAI, Anthropic Claude, Google Gemini, and OpenRouter, plus a custom endpoint for any OpenAI-compatible server such as Ollama, LM Studio, vLLM or Azure OpenAI, so content can stay on your own infrastructure. Model availability depends on your provider account and configured API key. A daily request limit and a Pause all AI switch keep AI spending under your control.
 
 = Does ThinkRank generate SEO titles and meta descriptions? =
 
@@ -337,6 +349,17 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.16.0 =
+Release Date: 2026-10-15
+
+- New: SEO title, description, social, canonical and robots fields on category, tag and term screens
+- New: Import your SEO titles, descriptions, robots and settings from SureRank
+- Improved: The dashboard and setup wizard show how Claude or ChatGPT can do your SEO over MCP
+- Fixed: Term archives now output the canonical URL set for them
+- Fixed: Sitemap URL rows show the right type for custom post types, taxonomies and WooCommerce
+- Fixed: Sitemaps for a deactivated plugin's content are no longer published, and are flagged
+- Fixed: Migration snapshot details count the records actually exported
+
 = 2.15.0 =
 Release Date: 2026-10-13
 
@@ -393,26 +416,12 @@ Release Date: 2026-10-07
 - Fixed: Email reports flag Search Console errors and stay accurate on large sites
 - Fixed: SureRank is now detected as a second SEO plugin
 
-= 2.14.0 =
-Release Date: 2026-10-06
-
-- New: Optional FAQ schema from Oxygen and Breakdance accordions, switched on in Schema Settings
-- Improved: Role Manager keeps role and capability names in view, with a card layout on phones
-- Improved: Clearer screen reader labels in Bulk Snippets, Thin Content and Advanced Robots Meta
-- Fixed: The editor SEO score now updates when you edit the title, description or keywords on any tab
-- Fixed: Content Analysis word count, readability and content quality now match the calculated score
-- Fixed: Content Type Matrix No-index can be set back to Inherit, and pinned rows are counted
-- Fixed: robots.txt now lists exactly the sitemaps your site currently publishes
-- Fixed: Alt text updates now clear five more page caches, including Cache Enabler and SiteGround
-- Fixed: Media no longer appears in Bulk SEO Optimization when attachment pages are turned off
-- Fixed: MCP connection check catches more host blocks, and FAQ tools no longer write to Oxygen pages
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.16.0 =
+SEO fields on every category, tag and term edit screen, import from SureRank, and the right sitemap types for custom post types and WooCommerce. Recommended for all sites.
+
 = 2.15.0 =
 Connect to ThinkRank Hub, an MCP activity log with revert, per-area access and expiring tokens for every AI connection. The token-in-path MCP address is removed: any client still using it must reconnect with the bearer header. Recommended for all sites.
-
-= 2.14.3 =
-Schema names and breadcrumbs drop stray HTML entities, Organization schema keeps the Site Identity logo, LocalBusiness subtypes deploy, and sitemap image captions stay valid XML. Recommended for all sites.

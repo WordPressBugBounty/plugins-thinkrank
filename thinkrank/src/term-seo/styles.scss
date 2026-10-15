@@ -1,0 +1,13 @@
+// The panel sits in the term form between the core fields table and the
+// Update button, which is wider than the table's 95% inputs — match it.
+.thinkrank-term-seo {
+	max-width: 960px;
+	margin: 24px 0;
+
+	// wp-admin's form styles target bare inputs inside the edit form.
+	input[type="text"],
+	input[type="url"],
+	textarea {
+		max-width: none;
+	}
+}

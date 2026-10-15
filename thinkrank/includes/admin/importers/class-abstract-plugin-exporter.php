@@ -419,7 +419,7 @@ abstract class Abstract_Plugin_Exporter {
         $total = $types[$type] ?? 0;
 
         // Update manifest
-        $this->update_manifest($type, $page, $exported_count, $has_more, $total);
+        $this->update_manifest($type, $page, $exported_count, $has_more);
 
         return [
             'status'   => $has_more ? 'processing' : 'complete',
@@ -439,14 +439,23 @@ abstract class Abstract_Plugin_Exporter {
     /**
      * Update the snapshot manifest after writing a chunk
      *
+     * `total_records` is the number of records the snapshot holds for the
+     * type: page 1 sets it and each later page adds its own count. It used to
+     * be get_available_types()'s figure, which counts every object carrying
+     * the source plugin's meta, including the ones a page method drops (a
+     * SureRank row that only repeats the fallback template, an author with no
+     * title or description). The snapshot card and the migration progress
+     * then promised records the snapshot did not contain.
+     *
+     * @since 2.16.0 Counts the records written, not the detected objects.
+     *
      * @param string $type Data type
      * @param int $page Current page
      * @param int $count Records in this chunk
      * @param bool $has_more Whether more pages remain
-     * @param int $total Total records for this type
      * @return void
      */
-    private function update_manifest(string $type, int $page, int $count, bool $has_more, int $total): void {
+    private function update_manifest(string $type, int $page, int $count, bool $has_more): void {
         $manifest = Snapshot_Store::get_manifest($this->plugin_slug) ?? [
             'plugin'       => $this->plugin_slug,
             'plugin_name'  => $this->plugin_name,
@@ -461,13 +470,15 @@ abstract class Abstract_Plugin_Exporter {
         // Update type info
         if (!isset($manifest['types'][$type])) {
             $manifest['types'][$type] = [
-                'total_records' => $total,
+                'total_records' => 0,
                 'total_chunks'  => 0,
             ];
         }
 
+        $written = $page > 1 ? (int) ($manifest['types'][$type]['total_records'] ?? 0) : 0;
+
         $manifest['types'][$type]['total_chunks'] = $page;
-        $manifest['types'][$type]['total_records'] = $total;
+        $manifest['types'][$type]['total_records'] = $written + $count;
         $manifest['status'] = 'exporting';
         $manifest['exported_at'] = gmdate('c');
 

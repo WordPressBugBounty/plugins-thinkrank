@@ -85,6 +85,14 @@ class Import_Detector {
             'option_keys'  => ['slim_seo', 'ss_redirects', 'slim_seo_pro', 'slim_seo_schemas'],
             'plugin_files' => ['slim-seo/slim-seo.php', 'slim-seo-pro/slim-seo-pro.php'],
         ],
+        'surerank' => [
+            'name'         => 'SureRank',
+            // Grouped `surerank_settings_*` rows on posts, terms and users
+            // (#1051), counted by the exporter so users are included.
+            'meta_prefix'  => 'surerank_settings_',
+            'option_keys'  => ['surerank_settings', 'surerank_settings_onboarding', 'surerank_robots_txt_content'],
+            'plugin_files' => ['surerank/surerank.php'],
+        ],
     ];
 
     /**
@@ -200,6 +208,10 @@ class Import_Detector {
             // Slim SEO's redirects and 404 log live outside postmeta, and its
             // primary terms under a second key; the exporter counts all of it.
             $counts = $this->detect_slimseo();
+        } elseif ($slug === 'surerank') {
+            // SureRank keeps author SEO in user meta and its rows apply only
+            // to viewable post types; the exporter counts both.
+            $counts = $this->detect_surerank();
         } else {
             // Standard postmeta-based plugins
             $prefix = $config['meta_prefix'];
@@ -407,6 +419,21 @@ class Import_Detector {
      */
     private function detect_slimseo(): array {
         $counts = (new Slim_SEO_Exporter())->get_available_types();
+        // Settings are added by the caller from option_keys.
+        unset($counts['settings']);
+
+        return $counts;
+    }
+
+    /**
+     * Detect SureRank data: per-post, per-term and per-author SEO rows.
+     *
+     * @since 2.15.0
+     *
+     * @return array Counts array
+     */
+    private function detect_surerank(): array {
+        $counts = (new SureRank_Exporter())->get_available_types();
         // Settings are added by the caller from option_keys.
         unset($counts['settings']);
 

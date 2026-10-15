@@ -11,7 +11,7 @@ namespace ThinkRank\Abilities\Content;
 
 use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\SEO\Object_Redirect;
-use ThinkRank\SEO\Pattern_Resolver;
+use ThinkRank\SEO\Term_Seo_Meta;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -90,6 +90,10 @@ class Update_Term_Seo extends Ability_Base {
 				'success' => [ 'type' => 'boolean' ],
 				'message' => [ 'type' => 'string' ],
 				'term_id' => [ 'type' => 'integer' ],
+				'data'    => [
+					'type'        => 'object',
+					'description' => __( 'The term SEO fields as stored after the update, which may differ from what was sent once sanitized.', 'thinkrank' ),
+				],
 			],
 		];
 	}
@@ -128,7 +132,7 @@ class Update_Term_Seo extends Ability_Base {
 			);
 		}
 
-		$touched = $this->save_term_meta( $term_id, $settings );
+		$touched = Term_Seo_Meta::write( $term_id, $settings );
 
 		// The redirect is not term meta — Pro's rules table holds it — so it is
 		// saved separately, and unlike the meta fields it can be refused.
@@ -158,101 +162,17 @@ class Update_Term_Seo extends Ability_Base {
 			);
 		}
 
+		$redirect = Object_Redirect::get( 'term', $term_id );
+
 		return [
 			'success' => true,
 			'message' => __( 'Term SEO metadata updated.', 'thinkrank' ),
 			'term_id' => $term_id,
+			// What was stored, not what was sent: sanitizing can reduce a value.
+			'data'    => Term_Seo_Meta::read( $term_id ) + [
+				'redirect_url'  => $redirect['url'],
+				'redirect_type' => $redirect['type'],
+			],
 		];
-	}
-
-	/**
-	 * Persist provided term SEO meta, sanitizing per field type.
-	 *
-	 * @param int                  $term_id  Term ID.
-	 * @param array<string, mixed> $settings Normalized settings payload.
-	 * @return bool Whether any meta key was written or deleted.
-	 */
-	private function save_term_meta( $term_id, array $settings ) {
-		$touched = false;
-
-		// The title/description fields are variable-tag templates — the frontend
-		// runs each through Pattern_Resolver::resolve_term_value() — so they are
-		// sanitized as templates. sanitize_text_field() would strip %date% and
-		// %category% as percent-encoding and store "te%" / "tegory%" (#521).
-		$template_fields = [
-			'title'         => '_thinkrank_seo_title',
-			'og_title'      => '_thinkrank_og_title',
-			'twitter_title' => '_thinkrank_twitter_title',
-		];
-		foreach ( $template_fields as $key => $meta_key ) {
-			if ( array_key_exists( $key, $settings ) ) {
-				$this->save_meta( $term_id, $meta_key, Pattern_Resolver::sanitize_template( (string) $settings[ $key ] ) );
-				$touched = true;
-			}
-		}
-
-		// Plain text, not a template.
-		if ( array_key_exists( 'focus_keyword', $settings ) ) {
-			$this->save_meta( $term_id, '_thinkrank_focus_keyword', sanitize_text_field( (string) $settings['focus_keyword'] ) );
-			$touched = true;
-		}
-
-		$textarea_fields = [
-			'description'         => '_thinkrank_meta_description',
-			'og_description'      => '_thinkrank_og_description',
-			'twitter_description' => '_thinkrank_twitter_description',
-		];
-		foreach ( $textarea_fields as $key => $meta_key ) {
-			if ( array_key_exists( $key, $settings ) ) {
-				$this->save_meta( $term_id, $meta_key, Pattern_Resolver::sanitize_template_textarea( (string) $settings[ $key ] ) );
-				$touched = true;
-			}
-		}
-
-		$url_fields = [
-			'canonical_url' => '_thinkrank_canonical_url',
-			'og_image'      => '_thinkrank_og_image',
-			'twitter_image' => '_thinkrank_twitter_image',
-		];
-		foreach ( $url_fields as $key => $meta_key ) {
-			if ( array_key_exists( $key, $settings ) ) {
-				$this->save_meta( $term_id, $meta_key, esc_url_raw( (string) $settings[ $key ] ) );
-				$touched = true;
-			}
-		}
-
-		if ( array_key_exists( 'robots_meta_enabled', $settings ) ) {
-			update_term_meta( $term_id, '_thinkrank_robots_meta_enabled', (int) (bool) $settings['robots_meta_enabled'] );
-			$touched = true;
-		}
-
-		if ( array_key_exists( 'robots_meta', $settings ) ) {
-			update_term_meta( $term_id, '_thinkrank_robots_meta', (string) wp_json_encode( (array) $settings['robots_meta'] ) );
-			$touched = true;
-		}
-
-		if ( array_key_exists( 'advanced_robots_meta', $settings ) ) {
-			update_term_meta( $term_id, '_thinkrank_advanced_robots_meta', (string) wp_json_encode( (array) $settings['advanced_robots_meta'] ) );
-			$touched = true;
-		}
-
-		return $touched;
-	}
-
-	/**
-	 * Update a term meta value, deleting it when the sanitized value is empty.
-	 *
-	 * @param int    $term_id  Term ID.
-	 * @param string $meta_key Meta key.
-	 * @param string $value    Sanitized value.
-	 * @return void
-	 */
-	private function save_meta( $term_id, $meta_key, $value ) {
-		if ( '' === $value ) {
-			delete_term_meta( $term_id, $meta_key );
-			return;
-		}
-
-		update_term_meta( $term_id, $meta_key, $value );
 	}
 }

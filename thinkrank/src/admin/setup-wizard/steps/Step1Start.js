@@ -14,7 +14,7 @@
 import { Button } from '@wordpress/components';
 import { useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import welcomePreview from '../assets/welcome-preview.png';
+import welcomePreview from '../../../shared/assets/thinkrank-hero.webp';
 
 export default function Step1Start({ onStart, isSaving }) {
 	const [showDetails, setShowDetails] = useState(false);
@@ -33,6 +33,8 @@ export default function Step1Start({ onStart, isSaving }) {
 					className="tr-wizard__start-preview-img"
 					src={welcomePreview}
 					alt=""
+					width="380"
+					height="270"
 				/>
 			</div>
 

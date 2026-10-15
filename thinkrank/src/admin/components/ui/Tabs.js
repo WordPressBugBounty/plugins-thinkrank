@@ -70,6 +70,9 @@ export default function Tabs({
 				return (
 					<button
 						key={tab.id}
+						// Never a submit button: a tab strip inside a <form> (the
+						// term edit screen) would otherwise submit it on click.
+						type="button"
 						id={tabId}
 						ref={(el) => {
 							tabRefs.current[index] = el;

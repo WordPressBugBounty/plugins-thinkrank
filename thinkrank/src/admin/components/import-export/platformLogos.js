@@ -16,6 +16,7 @@ import aioseoLogo from '../../setup-wizard/assets/migration/aioseo.png';
 import seoPressLogo from '../../setup-wizard/assets/migration/seopress.svg';
 import squirrlyLogo from '../../setup-wizard/assets/migration/squirrly.svg';
 import slimSeoLogo from '../../setup-wizard/assets/migration/slimseo.svg';
+import sureRankLogo from '../../setup-wizard/assets/migration/surerank.svg';
 
 /** Slug → logo asset, for looking up a detected plugin's mark by slug. */
 export const PLATFORM_LOGOS = {
@@ -25,6 +26,7 @@ export const PLATFORM_LOGOS = {
 	aioseo: aioseoLogo,
 	squirrly: squirrlyLogo,
 	slimseo: slimSeoLogo,
+	surerank: sureRankLogo,
 };
 
 /** Full supported roster, in display order, for the empty-state showcase. */
@@ -35,4 +37,5 @@ export const SUPPORTED_PLATFORMS = [
 	{ slug: 'aioseo', name: 'All in One SEO', logo: aioseoLogo },
 	{ slug: 'squirrly', name: 'Squirrly SEO', logo: squirrlyLogo },
 	{ slug: 'slimseo', name: 'Slim SEO', logo: slimSeoLogo },
+	{ slug: 'surerank', name: 'SureRank', logo: sureRankLogo },
 ];

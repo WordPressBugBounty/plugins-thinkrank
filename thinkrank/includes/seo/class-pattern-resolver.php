@@ -234,6 +234,26 @@ class Pattern_Resolver {
     }
 
     /**
+     * Token => value map for a term, keyed WITHOUT the surrounding percents.
+     *
+     * The term counterpart of variables(), for the term edit screen's live
+     * preview. Built from placeholders_for_term() so the preview and the
+     * published archive resolve the same tokens to the same values.
+     *
+     * @since 2.16.0
+     *
+     * @param int $term_id Term ID.
+     * @return array<string,string> Variable map.
+     */
+    public static function term_variables(int $term_id): array {
+        $map = [];
+        foreach (self::placeholders_for_term($term_id) as $token => $value) {
+            $map[trim($token, '%')] = (string) $value;
+        }
+        return $map;
+    }
+
+    /**
      * Token => value map for a post, keyed WITHOUT the surrounding percents
      * (e.g. 'title' => 'My Post'). Used by the editor for live client-side
      * preview of a pattern as the user types.

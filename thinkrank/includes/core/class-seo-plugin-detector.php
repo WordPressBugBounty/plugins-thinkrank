@@ -93,13 +93,15 @@ class SEO_Plugin_Detector {
         // from SureRank kept both running: every head tag doubled and no
         // conflict notice or deactivate action appeared (#916). The class is
         // declared by loader.php, which surerank.php requires directly.
+        // SureRank_Exporter reads its data (#1051), so the notice offers the
+        // migration step for it like the other importable plugins.
         'surerank' => [
             'name' => 'SureRank',
             'class' => 'SureRank\\Loader',
             'function' => '',
             'file' => 'surerank/surerank.php',
             'extra_files' => [],
-            'importable' => false,
+            'importable' => true,
         ],
     ];
     

@@ -106,7 +106,7 @@ export function getMigratedSiteData() {
  * wizard-only — the standalone Migration page never calls it and always allows
  * a deliberate re-run.
  *
- * @param {string} plugin Source-plugin slug (yoast|rankmath|aioseo|seopress|squirrly|slimseo).
+ * @param {string} plugin Source-plugin slug (yoast|rankmath|aioseo|seopress|squirrly|slimseo|surerank).
  * @return {Promise<Object>} Response with the updated `migrated_plugins` list.
  */
 export function markWizardPluginMigrated(plugin) {
@@ -126,7 +126,7 @@ export function markWizardPluginMigrated(plugin) {
  * reports the outcome (`deactivated` / `success`) but the caller always lets
  * the wizard advance.
  *
- * @param {string} plugin Source-plugin slug (yoast|rankmath|aioseo|seopress|squirrly|slimseo).
+ * @param {string} plugin Source-plugin slug (yoast|rankmath|aioseo|seopress|squirrly|slimseo|surerank).
  * @return {Promise<Object>} Response with `success`, `deactivated`, `name`.
  */
 export function deactivateMigratedPlugin(plugin) {

@@ -1029,7 +1029,14 @@ class Sitemap_Endpoint extends WP_REST_Controller {
                     // permanently disabled.
                     'resolved_delivery_mode' => $context_type === 'site'
                         ? $this->sitemap_generator->resolve_delivery_mode($settings)
-                        : null
+                        : null,
+                    // Children the generator skips because their post type or
+                    // taxonomy is no longer registered, so the screen can say
+                    // so instead of linking to a 404 (#1049). Also generator
+                    // state, so also outside `settings`.
+                    'unregistered_child_urls' => $context_type === 'site'
+                        ? $this->sitemap_generator->unregistered_child_urls($settings)
+                        : []
                 ],
                 'message' => 'Sitemap settings retrieved successfully'
             ], 200);

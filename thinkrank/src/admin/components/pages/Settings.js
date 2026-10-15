@@ -33,6 +33,7 @@ import aioseoLogo from '../../setup-wizard/assets/migration/aioseo.png';
 import seoPressLogo from '../../setup-wizard/assets/migration/seopress.svg';
 import squirrlyLogo from '../../setup-wizard/assets/migration/squirrly.svg';
 import slimSeoLogo from '../../setup-wizard/assets/migration/slimseo.svg';
+import sureRankLogo from '../../setup-wizard/assets/migration/surerank.svg';
 import { getPageUrl } from '../../utils/router';
 
 // Canonical default AI model per provider — the JS mirror of the
@@ -90,6 +91,12 @@ const MIGRATION_PLATFORMS = [
 		name: 'Slim SEO',
 		logo: slimSeoLogo,
 		detail: __('Titles, meta, social, redirects & 404 logs', 'thinkrank'),
+	},
+	{
+		slug: 'surerank',
+		name: 'SureRank',
+		logo: sureRankLogo,
+		detail: __('Titles, meta, social, robots & site entity', 'thinkrank'),
 	},
 ];
 

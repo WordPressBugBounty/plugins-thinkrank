@@ -42,7 +42,7 @@ class Import_Controller extends \WP_REST_Controller {
      * plugin's live data: the native ThinkRank slug must never reach it, or the
      * endpoint gains a path that wipes our own meta and options.
      */
-    private const SOURCE_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly', 'slimseo'];
+    private const SOURCE_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly', 'slimseo', 'surerank'];
 
     /**
      * Snapshot slug for ThinkRank's own data (export / backup / restore).
@@ -53,7 +53,7 @@ class Import_Controller extends \WP_REST_Controller {
      * Allowed plugin slugs for the snapshot endpoints (export, migrate,
      * snapshot delete). Includes the native slug; cleanup uses SOURCE_PLUGINS.
      */
-    private const ALLOWED_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly', 'slimseo', 'thinkrank'];
+    private const ALLOWED_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly', 'slimseo', 'surerank', 'thinkrank'];
 
     /**
      * Allowed export/migrate types. Must cover every type the exporters and
@@ -389,6 +389,9 @@ class Import_Controller extends \WP_REST_Controller {
             // Slim SEO is cleaned by exact key below: a `slim_seo` prefix also
             // matches Slim SEO Pro's and its add-ons' own keys (#886).
             'slimseo'  => null,
+            // Only the SEO rows: SureRank's other `surerank_*` meta is its
+            // own bookkeeping (#1051).
+            'surerank' => SureRank_Exporter::META_PREFIX,
         ];
 
         $prefix = $prefix_map[$plugin] ?? null;
@@ -435,6 +438,7 @@ class Import_Controller extends \WP_REST_Controller {
                 'rankmath' => ['rank-math-options-general', 'rank-math-options-titles', 'rank-math-options-sitemap', 'rank-math-options-instant-indexing'],
                 'seopress' => ['seopress_titles_option_name', 'seopress_social_option_name', 'seopress_advanced_option_name', 'seopress_xml_sitemap_option_name', 'seopress_instant_indexing_option_name'],
                 'squirrly' => ['sq_options'],
+                'surerank' => [SureRank_Exporter::OPTION, SureRank_Exporter::ONBOARDING_OPTION, SureRank_Exporter::ROBOTS_TXT_OPTION],
             ];
             foreach ($option_keys_map[$plugin] ?? [] as $option_name) {
                 if (delete_option($option_name)) {
@@ -632,6 +636,8 @@ class Import_Controller extends \WP_REST_Controller {
                 return new Squirrly_Exporter();
             case Slim_SEO_Exporter::SLUG:
                 return new Slim_SEO_Exporter();
+            case SureRank_Exporter::SLUG:
+                return new SureRank_Exporter();
             case Thinkrank_Exporter::SLUG:
                 return new Thinkrank_Exporter();
             default:

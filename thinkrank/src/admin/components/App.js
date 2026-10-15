@@ -156,7 +156,7 @@ function getPageInfo(page) {
 			return {
 				title: __('Migration', 'thinkrank'),
 				description: __(
-					'Import SEO data from Yoast, Rank Math, SEOPress, All in One SEO, Squirrly SEO or Slim SEO',
+					'Import SEO data from Yoast, Rank Math, SEOPress, All in One SEO, Squirrly SEO, Slim SEO or SureRank',
 					'thinkrank'
 				),
 			};
