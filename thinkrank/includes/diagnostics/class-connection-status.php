@@ -12,6 +12,7 @@ namespace ThinkRank\Diagnostics;
 use ThinkRank\Core\Capability_Manager;
 use ThinkRank\Core\Plan_Config;
 use ThinkRank\Database\Database_Schema;
+use ThinkRank\Mcp\Mcp_Hub;
 use ThinkRank\Mcp\Mcp_Manager;
 use ThinkRank\Mcp\Mcp_Scopes;
 use ThinkRank\Mcp\Mcp_Self_Test;
@@ -49,7 +50,7 @@ class Connection_Status {
 			'abilities'    => self::abilities_info(),
 			'mcp_server'   => self::mcp_info(),
 			'user'         => self::user_info(),
-			'urls'         => self::analyze_schemes( home_url(), site_url(), rest_url() ),
+			'urls'         => self::urls_info(),
 			'database'     => self::database_info(),
 			'scoring'      => self::scoring_info(),
 		];
@@ -66,6 +67,18 @@ class Connection_Status {
 			'pro_active'        => Plan_Config::is_pro(),
 			'pro_version'       => defined( 'THINKRANK_PRO_VERSION' ) ? THINKRANK_PRO_VERSION : null,
 		];
+	}
+
+	/**
+	 * Home/siteurl/REST scheme agreement, plus the site icon's address. The
+	 * icon rides here as well as in the connect claim, so the hub's refresh
+	 * sees a changed icon without a reconnect (#1125).
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function urls_info(): array {
+		return self::analyze_schemes( home_url(), site_url(), rest_url() )
+			+ [ 'icon_url' => Mcp_Hub::icon_url() ];
 	}
 
 	/**

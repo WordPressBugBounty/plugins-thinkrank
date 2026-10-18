@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.16.0
+Stable tag: 2.17.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -309,7 +309,7 @@ Clicking Connect Google (Search Console, GA4) signs in through api.thinkrank.ai,
 
 = ThinkRank Hub (hub.thinkrank.ai, optional) =
 
-Only if you click Connect to ThinkRank Hub under ThinkRank > AI Tools > ThinkRank Hub, or on the Setup Wizard's ThinkRank Hub step. Connecting turns on MCP access and sends your browser to hub.thinkrank.ai with this site's address and a one-time ticket. You then approve the hub on this site's own approval page, the way any AI client is approved, choosing for each area whether the hub can read only or also make changes it can undo. At the approval the site tells the hub its address, its blog ID and the ThinkRank (and ThinkRank Pro) versions.
+Only if you click Connect to ThinkRank Hub under ThinkRank > AI Tools > ThinkRank Hub, or on the Setup Wizard's ThinkRank Hub step. Connecting turns on MCP access and sends your browser to hub.thinkrank.ai with this site's address and a one-time ticket. You then approve the hub on this site's own approval page, the way any AI client is approved, choosing for each area whether the hub can read only or also make changes it can undo. At the approval the site tells the hub its address, its blog ID, the ThinkRank (and ThinkRank Pro) versions and its public WordPress site icon URL. MCP initialization repeats these public facts so the hub can refresh them without another connection, which means every MCP client you have approved also receives them.
 
 Under that approval, within the areas you approve, the hub and the AI assistants you connect to the hub can read over MCP: SEO Analyzer reports, settings, posts' and pages' content and SEO fields, Search Console, Google Analytics and PageSpeed data, indexing history and the MCP activity log. The hub keeps the reports and figures it reads, never your posts' content. With changes allowed, they make only the changes the approval and ThinkRank allow, each recorded in the MCP activity log where it can be reverted. The hub also checks this site's public pages from outside (the home page, robots.txt, the sitemap and llms.txt) to report uptime and crawlability. No license key, AI provider key or Google token travels. Connecting is optional: every feature works without the hub, and you can end its access at any time with Disconnect on the same screen. [Terms](https://thinkrank.ai/terms-and-conditions/), [Privacy](https://thinkrank.ai/privacy-policy/)
 
@@ -348,6 +348,20 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 9. AI Content Brief Generator with competitor analysis and content gaps.
 
 == Changelog ==
+
+= 2.17.0 =
+Release Date: 2026-10-18
+
+- New: Choose whether Media Library alt text comes from your format or from AI on the Image SEO tab
+- New: AI assistants can preview, draft, apply and restore image alt text over MCP
+- Improved: Alt text fills skip filler such as "1", "image", camera and screenshot file names
+- Improved: The SEO Analyzer finds every search engine block and offers Fix only where it works
+- Improved: The sitemap screen names custom types by their label and greys out empty sitemaps
+- Improved: The dashboard, top bar and wide tables fit on phones and narrow screens
+- Improved: With reduced motion on, the dashboard and setup wizard show a still image
+- Fixed: Canonical and social image URLs are saved and printed as full URLs
+- Fixed: ThinkRank no longer overwrites or deletes a robots.txt it did not write
+- Fixed: Minor Image SEO, term preview, import preview and ThinkRank Hub issues
 
 = 2.16.0 =
 Release Date: 2026-10-15
@@ -402,26 +416,12 @@ Release Date: 2026-10-08
 - Fixed: Uninstall now also removes cached Search Console data
 - Fixed: Minor content brief and admin date range issues
 
-= 2.14.1 =
-Release Date: 2026-10-07
-
-- Improved: AI Provider settings no longer repeat the sidebar's setup and privacy cards
-- Fixed: Redeploying schema no longer removes your Organization when a logo is set
-- Fixed: Sitemaps and IndexNow no longer submit noindexed or redirected URLs
-- Fixed: The sitemap index drops sitemaps from a plugin that was just deactivated
-- Fixed: Breakdance and Oxygen 6 pages are read as page text, not raw data
-- Fixed: Page builder content keeps its page order in descriptions and scoring
-- Fixed: Bricks and Elementor headings on their default tag now count as subheadings
-- Fixed: SEO Analyzer AI Search checks now read pages built with a page builder
-- Fixed: Email reports flag Search Console errors and stay accurate on large sites
-- Fixed: SureRank is now detected as a second SEO plugin
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.17.0 =
+Choose AI or your own format for Media Library alt text, filler alt text is skipped everywhere, and the SEO Analyzer names the real source of a search block. Recommended for all sites.
+
 = 2.16.0 =
 SEO fields on every category, tag and term edit screen, import from SureRank, and the right sitemap types for custom post types and WooCommerce. Recommended for all sites.
-
-= 2.15.0 =
-Connect to ThinkRank Hub, an MCP activity log with revert, per-area access and expiring tokens for every AI connection. The token-in-path MCP address is removed: any client still using it must reconnect with the bearer header. Recommended for all sites.

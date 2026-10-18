@@ -503,7 +503,11 @@ const ContentTypeMatrix = () => {
 					}
 				/>
 			) : (
-				<div className="tr-overflow-x-auto tr-max-h-[70vh] tr-overflow-y-auto">
+				// tr-relative makes the scroller the containing block of the
+				// cells' visually hidden labels. They are absolutely positioned,
+				// so without it they escape the overflow clip and widen the whole
+				// page on a phone, which then pans sideways (#1256).
+				<div className="tr-relative tr-overflow-x-auto tr-max-h-[70vh] tr-overflow-y-auto">
 					<table className="tr-w-full tr-border-collapse tr-text-sm">
 						<thead className="tr-sticky tr-top-0 tr-z-10 tr-bg-white">
 							<tr className="tr-border-b tr-border-slate-200">

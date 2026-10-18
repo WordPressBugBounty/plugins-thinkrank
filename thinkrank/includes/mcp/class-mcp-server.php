@@ -302,6 +302,9 @@ final class Mcp_Server {
 					],
 				];
 
+				// Public facts refresh without reconnecting; never credentials or a license.
+				$init['_meta'] = [ 'ai.thinkrank/site' => Mcp_Hub::site_facts() ];
+
 				// Clients surface `instructions` to the model as the session's
 				// orientation. Without it an assistant connects, sees ~95 tool
 				// names and no statement of what this server is, where to

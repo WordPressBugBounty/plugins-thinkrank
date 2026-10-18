@@ -1213,7 +1213,7 @@ final class Mcp_Audit {
 			);
 		}
 
-		$input  = Mcp_Audit_Snapshot::revert_input( $plan, $before );
+		$input  = Mcp_Audit_Snapshot::revert_input( $plan, $before, $current );
 		$result = self::run( (string) $row['tool'], $input );
 		if ( is_wp_error( $result ) ) {
 			return new \WP_Error( $result->get_error_code(), $result->get_error_message(), [ 'status' => 400 ] );

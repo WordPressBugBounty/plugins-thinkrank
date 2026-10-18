@@ -16,6 +16,7 @@ import {
 	Card,
 	Input,
 	Toggle,
+	Select,
 	Button,
 	Alert,
 	Container,
@@ -197,6 +198,7 @@ const ImageSEOTab = () => {
 		setFillProgress(0);
 		let offset = 0;
 		let totalUpdated = 0;
+		let totalLowQuality = 0;
 		let completed = false;
 		try {
 			// Loop batches until the server reports it has processed the whole
@@ -214,6 +216,7 @@ const ImageSEOTab = () => {
 					},
 				});
 				totalUpdated += res.updated || 0;
+				totalLowQuality += res.skipped_low_quality || 0;
 				offset = res.next_offset;
 				if (res.total > 0) {
 					setFillProgress(
@@ -242,16 +245,33 @@ const ImageSEOTab = () => {
 				return;
 			}
 
+			// Images the format would only have given filler ("1", "image", or
+			// a default name like "IMG_1234") are left empty on purpose, so say
+			// how many (#1124, #1211).
+			const lowQualityNote =
+				totalLowQuality > 0
+					? ' ' +
+						sprintf(
+							/* translators: %d: number of images left without alt text */
+							__(
+								'%d image(s) were left unchanged because your format would only give them filler: a number, a word like "image", or a default name such as "IMG_1234" or "Screenshot". Review their alt text by hand, or set Alt text source to AI.',
+								'thinkrank'
+							),
+							totalLowQuality
+						)
+					: '';
+
 			setNotice({
 				status: 'success',
-				message: sprintf(
-					/* translators: %d: number of images updated */
-					__(
-						'Done. Alt text saved for %d image(s) in the Media Library.',
-						'thinkrank'
-					),
-					totalUpdated
-				),
+				message:
+					sprintf(
+						/* translators: %d: number of images updated */
+						__(
+							'Done. Alt text saved for %d image(s) in the Media Library.',
+							'thinkrank'
+						),
+						totalUpdated
+					) + lowQualityNote,
 			});
 			await loadMediaStats();
 		} catch (error) {
@@ -360,9 +380,10 @@ const ImageSEOTab = () => {
 		}
 	};
 
-	// The alt/title feature switches ARE the save: flipping either persists
-	// immediately and rolls back if the request fails. The formats and the
-	// Media Library options keep using the Save Settings button.
+	// The alt, title and Media Library feature switches ARE the save:
+	// flipping one persists immediately and rolls back if the request fails.
+	// The formats and the Media Library options under the switch keep using
+	// the Save Settings button.
 	const { update: updateFeature, isSaving: isTogglingFeature } =
 		useAutosaveSettings({
 			settings,
@@ -384,6 +405,42 @@ const ImageSEOTab = () => {
 			logLabel: 'Image SEO',
 		});
 
+	// AI alt text needs a provider that can read images and AI not paused.
+	// The stats response says whether it can run; until it arrives, and
+	// whenever it cannot, AI is listed but not selectable, with the reason
+	// shown under the control (#1215).
+	const aiUnavailable = mediaStats ? mediaStats.ai_unavailable : undefined;
+	const aiReady = Boolean(mediaStats) && !aiUnavailable;
+	const altSource = settings.alt_source || 'template';
+	const altSourceOptions = [
+		{
+			value: 'template',
+			label: __('Alt attribute format', 'thinkrank'),
+		},
+		{
+			value: 'ai',
+			label: aiReady
+				? __('AI description', 'thinkrank')
+				: __('AI description (not available)', 'thinkrank'),
+			disabled: !aiReady,
+		},
+	];
+
+	let altSourceHelp;
+	if (aiUnavailable) {
+		altSourceHelp = aiUnavailable;
+	} else if ('ai' === altSource) {
+		altSourceHelp = __(
+			'Your AI provider describes each image: one paid request per image, 10 images per batch. An image it cannot describe gets the alt attribute format instead.',
+			'thinkrank'
+		);
+	} else {
+		altSourceHelp = __(
+			'Alt text is built from the alt attribute format above. Choose AI description to have your AI provider describe each image instead, one paid request per image.',
+			'thinkrank'
+		);
+	}
+
 	/**
 	 * Handle reset settings
 	 */
@@ -404,6 +461,7 @@ const ImageSEOTab = () => {
 				save_alt_to_media: false,
 				auto_fill_on_upload: false,
 				media_alt_overwrite: false,
+				alt_source: 'template',
 			};
 			setSettings(defaultSettings);
 			saveSettings(defaultSettings);
@@ -779,11 +837,24 @@ const ImageSEOTab = () => {
 								<Toggle
 									checked={settings.save_alt_to_media}
 									onChange={(val) =>
-										handleSettingChange(
-											'save_alt_to_media',
+										updateFeature(
+											{ save_alt_to_media: val },
 											val
+												? __(
+														'Media Library alt text is on.',
+														'thinkrank'
+													)
+												: __(
+														'Media Library alt text is off.',
+														'thinkrank'
+													)
 										)
 									}
+									label={__(
+										'Save alt text to the Media Library',
+										'thinkrank'
+									)}
+									disabled={isTogglingFeature}
 								/>
 							}
 						/>
@@ -824,9 +895,9 @@ const ImageSEOTab = () => {
 											>
 												{mediaStats.missing > 0
 													? sprintf(
-															/* translators: 1: images missing alt, 2: total images */
+															/* translators: 1: images missing descriptive alt text, 2: total images */
 															__(
-																'%1$d of %2$d images in your Media Library are missing alt text.',
+																'%1$d of %2$d images in your Media Library have missing or non-descriptive alt text.',
 																'thinkrank'
 															),
 															mediaStats.missing,
@@ -835,13 +906,56 @@ const ImageSEOTab = () => {
 													: sprintf(
 															/* translators: %d: total images */
 															__(
-																'All %d images in your Media Library have alt text.',
+																'All %d images in your Media Library have descriptive alt text.',
 																'thinkrank'
 															),
 															mediaStats.total
 														)}
 											</Alert>
 										))}
+
+									<FormField
+										id="tr-is-alt-source"
+										label={__(
+											'Alt text source',
+											'thinkrank'
+										)}
+										description={__(
+											'Where Media Library alt text comes from when it is filled.',
+											'thinkrank'
+										)}
+										className="tr-pt-6"
+									>
+										<div style={{ maxWidth: '320px' }}>
+											<Select
+												id="tr-is-alt-source"
+												value={
+													settings.alt_source ||
+													'template'
+												}
+												options={altSourceOptions}
+												disabled={isTogglingFeature}
+												description={altSourceHelp}
+												onChange={(e) =>
+													updateFeature(
+														{
+															alt_source:
+																e.target.value,
+														},
+														'ai' === e.target.value
+															? __(
+																	'Alt text will be written by AI.',
+																	'thinkrank'
+																)
+															: __(
+																	'Alt text will be built from your alt attribute format.',
+																	'thinkrank'
+																)
+													)
+												}
+											/>
+										</div>
+									</FormField>
 
 									<FormField
 										id="tr-is-auto-fill"

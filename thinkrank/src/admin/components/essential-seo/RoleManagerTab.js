@@ -139,7 +139,7 @@ const RoleManagerTab = () => {
 						    what stops the scrolling rows showing through it,
 						    and the height cap gives the header something to
 						    stick against. */}
-						<div className="tr-hidden md:tr-block tr-overflow-auto tr-max-h-[70vh]">
+						<div className="tr-hidden md:tr-block tr-relative tr-overflow-auto tr-max-h-[70vh]">
 							<table className="tr-w-full tr-border-collapse tr-text-sm">
 								<thead>
 									<tr className="tr-border-b tr-border-slate-200">

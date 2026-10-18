@@ -336,6 +336,13 @@ final class Mcp_Audit_Snapshot {
 					if ( array_key_exists( 'sitemap_include', $item ) ) {
 						$values['sitemap_include'] = $item['sitemap_include'];
 					}
+					$state = \ThinkRank\SEO\Content_Type_Robots_State::validate( $item['robots_state'] ?? null );
+					$fingerprint = $item['robots_state_fingerprint'] ?? null;
+					if ( null !== $state && is_string( $fingerprint ) && preg_match( '/^[a-f0-9]{64}$/D', $fingerprint ) ) {
+						// Normalize empty objects for the audit's associative JSON decode.
+						$values['robots_state'] = $state;
+						$values['expected_robots_state'] = $fingerprint;
+					}
 					return $values;
 				}
 			}
@@ -350,9 +357,15 @@ final class Mcp_Audit_Snapshot {
 	 *
 	 * @param array<string,mixed> $plan   Plan with its view resolved.
 	 * @param array<string,mixed> $before Projected before-values.
+	 * @param array<string,mixed> $current Fresh projected values for guarded restores.
 	 * @return array<string,mixed>
 	 */
-	public static function revert_input( array $plan, array $before ): array {
+	public static function revert_input( array $plan, array $before, array $current = [] ): array {
+		if ( 'matrix' === ( $plan['view'] ?? '' ) && array_key_exists( 'robots_state', $before ) ) {
+			// The old state is the destination, but the lock must compare the
+			// current read. A missing guard must fail closed in the writer.
+			$before['expected_robots_state'] = $current['expected_robots_state'] ?? '';
+		}
 		$input = (array) ( $plan['identity'] ?? [] );
 
 		if ( ! empty( $plan['wrapped'] ) ) {

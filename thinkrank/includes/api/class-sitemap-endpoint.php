@@ -534,7 +534,10 @@ class Sitemap_Endpoint extends WP_REST_Controller {
                         'sitemaps_generated' => $results['sitemaps_generated'],
                         'total_sitemaps' => count($results['sitemaps_generated']),
                         'url_count' => $results['total_urls'],
-                        'last_generated' => $this->record_generation()
+                        'last_generated' => $this->record_generation(),
+                        // What this build published nothing for, so the
+                        // screen updates its links without a reload (#1219).
+                        'unpublished_children' => $this->sitemap_generator->unpublished_children($options),
                     ]
                 ]);
             } else {
@@ -1036,7 +1039,18 @@ class Sitemap_Endpoint extends WP_REST_Controller {
                     // state, so also outside `settings`.
                     'unregistered_child_urls' => $context_type === 'site'
                         ? $this->sitemap_generator->unregistered_child_urls($settings)
-                        : []
+                        : [],
+                    // Children whose type is registered but that the last
+                    // build published nothing for (no content yet, or
+                    // excluded), each with its `reason`, for the same reason
+                    // (#1219).
+                    'unpublished_children' => $context_type === 'site'
+                        ? $this->sitemap_generator->unpublished_children($settings)
+                        : [],
+                    // Registered labels for the custom post type, taxonomy and
+                    // WooCommerce children, for the Type dropdown (#1221).
+                    // An object so an empty map stays `{}` in JSON.
+                    'child_type_labels' => (object) $this->sitemap_generator->child_type_labels($settings),
                 ],
                 'message' => 'Sitemap settings retrieved successfully'
             ], 200);

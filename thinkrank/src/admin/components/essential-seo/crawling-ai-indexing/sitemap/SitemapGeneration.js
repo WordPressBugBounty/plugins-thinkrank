@@ -315,6 +315,36 @@ const SitemapGeneration = () => {
 	const [unregisteredTypes, setUnregisteredTypes] = useState([]);
 	const isUnregistered = (sitemap) =>
 		unregisteredTypes.includes(sitemap.type);
+	// Registered children the last build published nothing for, as a
+	// type => reason ('empty' | 'excluded') map, keyed by type for the same
+	// reason (#1219).
+	const [unpublishedTypes, setUnpublishedTypes] = useState({});
+	// Registered post type / taxonomy label by child type, for the Type
+	// dropdown (#1221).
+	const [typeLabels, setTypeLabels] = useState({});
+	const unpublishedReason = (sitemap) =>
+		isUnregistered(sitemap) || sitemap.type === 'index'
+			? null
+			: unpublishedTypes[sitemap.type] || null;
+	const unpublishedHint = (sitemap) => {
+		if (isUnregistered(sitemap)) {
+			return __(
+				'Not published: this content type is no longer registered',
+				'thinkrank'
+			);
+		}
+		switch (unpublishedReason(sitemap)) {
+			case 'empty':
+				return __('No content to publish yet', 'thinkrank');
+			case 'excluded':
+				return __(
+					'Not published: this content type is excluded from the sitemap',
+					'thinkrank'
+				);
+			default:
+				return null;
+		}
+	};
 
 	// A sitemap URL is live either because a file was written (static) or
 	// because WordPress answers the URL from PHP (dynamic). Dynamic delivery
@@ -572,6 +602,8 @@ const SitemapGeneration = () => {
 		setHealth,
 		setResolvedDeliveryMode,
 		setUnregisteredTypes,
+		setUnpublishedTypes,
+		setTypeLabels,
 		getDefaultSettings,
 		updateSitemap,
 	});
@@ -744,6 +776,7 @@ const SitemapGeneration = () => {
 												 * the field. The URL is validated/normalised on blur.
 												 */}
 												<Input
+													id={`tr-sitemap-url-${index}`}
 													label={__(
 														'URL',
 														'thinkrank'
@@ -774,6 +807,7 @@ const SitemapGeneration = () => {
 											</div>
 											<div className="tr-w-36">
 												<Select
+													id={`tr-sitemap-type-${index}`}
 													label={__(
 														'Type',
 														'thinkrank'
@@ -781,7 +815,8 @@ const SitemapGeneration = () => {
 													value={sitemap.type}
 													options={getSitemapTypeOptions(
 														sitemap.type,
-														loadedTypes || []
+														loadedTypes || [],
+														typeLabels
 													)}
 													onChange={(e) =>
 														updateSitemap(index, {
@@ -812,6 +847,24 @@ const SitemapGeneration = () => {
 												<p className="tr-w-full tr-text-xs tr-text-warning tr-m-0">
 													{__(
 														'Not published: this content type is no longer registered. Remove this URL, or reactivate the plugin that adds it.',
+														'thinkrank'
+													)}
+												</p>
+											)}
+											{unpublishedReason(sitemap) ===
+												'empty' && (
+												<p className="tr-w-full tr-text-xs tr-text-tertiary tr-m-0">
+													{__(
+														'Not published: there is no content of this type to list yet. It is published once there is.',
+														'thinkrank'
+													)}
+												</p>
+											)}
+											{unpublishedReason(sitemap) ===
+												'excluded' && (
+												<p className="tr-w-full tr-text-xs tr-text-tertiary tr-m-0">
+													{__(
+														'Not published: this content type is excluded from the sitemap in its content type settings.',
 														'thinkrank'
 													)}
 												</p>
@@ -847,7 +900,7 @@ const SitemapGeneration = () => {
 										{settings.sitemap_urls.map(
 											(sitemap, index) =>
 												sitemapsAreLive &&
-												!isUnregistered(sitemap) ? (
+												!unpublishedHint(sitemap) ? (
 													<a
 														key={index}
 														href={`${siteUrl}${sitemap.url}`}
@@ -865,17 +918,13 @@ const SitemapGeneration = () => {
 													<span
 														key={index}
 														title={
-															isUnregistered(
+															unpublishedHint(
 																sitemap
+															) ||
+															__(
+																'Generate the sitemap to enable this link',
+																'thinkrank'
 															)
-																? __(
-																		'Not published: this content type is no longer registered',
-																		'thinkrank'
-																	)
-																: __(
-																		'Generate the sitemap to enable this link',
-																		'thinkrank'
-																	)
 														}
 														className="tr-inline-flex tr-items-center tr-gap-1 tr-text-sm tr-text-tertiary tr-cursor-not-allowed"
 													>

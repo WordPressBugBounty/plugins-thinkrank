@@ -2,6 +2,8 @@ import classnames from 'classnames';
 import { useState, useRef, useEffect, useMemo } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
+import useControlId from './useControlId';
+
 // Combobox sibling of Select — same "outlined modern" control style, but the
 // field is a text input that filters the option list as you type. With an
 // empty query it lists every option, so it degrades to a plain dropdown.
@@ -20,7 +22,7 @@ export default function SearchableSelect({
 	className,
 	id,
 }) {
-	const selectId = id || label?.toLowerCase().replace(/\s+/g, '-');
+	const selectId = useControlId(id, label, 'tr-combobox');
 	const borderClass = error ? 'tr-border-danger' : 'tr-border-primary';
 	const isClearable = clearable && !disabled && !!value;
 

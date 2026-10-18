@@ -24,7 +24,7 @@ const UsageBreakdownTable = ({ records, isLoading }) => {
 	}
 
 	return (
-		<div className="tr-overflow-x-auto">
+		<div className="tr-relative tr-overflow-x-auto">
 			<table className="tr-w-full tr-text-sm">
 				<thead>
 					<tr className="tr-border-b tr-border-secondary">

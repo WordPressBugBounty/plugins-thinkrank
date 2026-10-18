@@ -6,10 +6,9 @@
  */
 import { __ } from '@wordpress/i18n';
 
-// Animated hero (Remotion render, 760x540 animated WebP, ~360 KB): an assistant
-// asks for SEO fixes, the request travels over MCP, and the SEO score climbs.
+// Animated hero, swapped for a still when the visitor asks for reduced motion.
 // Shared with the setup wizard's first step.
-import heroAnimation from '../../../shared/assets/thinkrank-hero.webp';
+import HeroImage from '../../../shared/components/HeroImage';
 
 const ArrowRightIcon = () => (
 	<svg
@@ -47,7 +46,7 @@ const WelcomeCard = () => {
 				flexWrap: 'wrap',
 			}}
 		>
-			<div style={{ flex: 1, minWidth: '280px' }}>
+			<div style={{ flex: 1, minWidth: 'min(280px, 100%)' }}>
 				<h2
 					style={{
 						fontSize: '22px',
@@ -97,18 +96,21 @@ const WelcomeCard = () => {
 				</a>
 			</div>
 
-			<img
-				src={heroAnimation}
-				alt=""
+			<HeroImage
+				pictureStyle={{
+					display: 'block',
+					flexShrink: 0,
+					maxWidth: '100%',
+				}}
 				width="228"
 				height="162"
 				style={{
 					width: '228px',
-					height: '162px',
+					maxWidth: '100%',
+					height: 'auto',
 					objectFit: 'contain',
 					borderRadius: '12px',
 					border: '1px solid #e0e7ff',
-					flexShrink: 0,
 					display: 'block',
 				}}
 			/>

@@ -76,6 +76,62 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
     private ?array $bulk_alt_changes = null;
 
     /**
+     * Images a bulk fill left alone because the template produced filler,
+     * or null outside a bulk run.
+     *
+     * @since 2.17.0
+     * @var int[]|null
+     */
+    private ?array $bulk_low_quality = null;
+
+    /**
+     * True while a bulk fill is only previewing: values are worked out and
+     * listed, nothing is written and no AI call is made.
+     *
+     * @since 2.17.0
+     * @var bool
+     */
+    private bool $bulk_dry_run = false;
+
+    /**
+     * Why the most recent fill_attachment_alt() call wrote nothing, or ''.
+     *
+     * @since 2.17.0
+     * @var string
+     */
+    private string $last_fill_skip_reason = '';
+
+
+    /**
+     * Alt source for the current call, overriding the saved `alt_source`,
+     * or null to use the setting.
+     *
+     * Lets an ability ask for AI alt text on one call without changing the
+     * site's default (#1123).
+     *
+     * @since 2.17.0
+     * @var string|null
+     */
+    private ?string $alt_source_override = null;
+
+    /**
+     * Why the last explicit AI alt request wrote nothing, or '' when it did.
+     *
+     * @since 2.17.0
+     * @var string
+     */
+    private string $last_ai_alt_error = '';
+
+    /**
+     * Images an explicit AI batch could not describe, keyed by attachment ID
+     * with the reason, or null outside bulk_fill_missing_alt().
+     *
+     * @since 2.17.0
+     * @var array<int, string>|null
+     */
+    private ?array $bulk_ai_failures = null;
+
+    /**
      * What the most recent purge_alt_caches() call did.
      *
      * Read by the MCP abilities, which have to report the cache outcome
@@ -280,8 +336,20 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             // Parse attributes (keys lower-cased; quoted and unquoted values supported)
             $attributes = $this->parse_attributes($attributes_str);
 
-            $alt_missing   = !empty($settings['add_missing_alt']) && trim((string) ($attributes['alt'] ?? '')) === '';
-            $title_missing = !empty($settings['add_missing_title']) && trim((string) ($attributes['title'] ?? '')) === '';
+            // The block editor writes alt="" on every image saved without alt
+            // text, so an empty alt is usually "not written yet" and stays
+            // fillable. An image marked decorative with role="presentation",
+            // role="none" or aria-hidden="true" is left as it is (#1206),
+            // title included: screen readers and hover tooltips expose a
+            // title too, so it would undo the decorative marking (#1252).
+            $decorative    = $this->is_marked_decorative($attributes);
+            $has_alt       = $this->has_attribute($attributes_str, 'alt');
+            $alt_missing   = !empty($settings['add_missing_alt'])
+                && trim((string) ($attributes['alt'] ?? '')) === ''
+                && !$decorative;
+            $title_missing = !empty($settings['add_missing_title'])
+                && trim((string) ($attributes['title'] ?? '')) === ''
+                && !$decorative;
 
             // Nothing to inject on this image — skip before any source/attachment work.
             if (!$alt_missing && !$title_missing) {
@@ -311,15 +379,25 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
 
             // Handle ALT attribute
             if ($alt_missing) {
-                $alt_val = $this->generate_attribute_value($settings['alt_format'] ?? '', $attachment_id, $id_to_pass, $count, $src);
-                if ($alt_val !== '') {
-                    $img_tag = $this->inject_attribute($img_tag, 'alt', $alt_val, isset($attributes['alt']));
+                $alt_format = (string) ($settings['alt_format'] ?? '');
+                // Sanitized like the Media Library value and the gate's own
+                // input, so the gate judges exactly the text that is injected
+                // (#1251) and a post title's markup never lands in the alt.
+                $alt_val    = sanitize_text_field($this->generate_attribute_value($alt_format, $attachment_id, $id_to_pass, $count, $src));
+
+                // The same gate the Media Library fill uses: "1", "IMG 1234"
+                // or "image" read out by a screen reader is worse than no alt,
+                // so filler is not injected either (#1206, #1124).
+                // %title% is the post title here, the same on every image of
+                // the page, so it cannot vouch for any one of them (#1249).
+                if ($alt_val !== '' && $this->template_alt_is_descriptive($alt_format, $attachment_id, $id_to_pass, $count, $src, false)) {
+                    $img_tag = $this->inject_attribute($img_tag, 'alt', $alt_val, $has_alt);
                 }
             }
 
             // Handle TITLE attribute
             if ($title_missing) {
-                $title_val = $this->generate_attribute_value($settings['title_format'] ?? '', $attachment_id, $id_to_pass, $count, $src);
+                $title_val = sanitize_text_field($this->generate_attribute_value($settings['title_format'] ?? '', $attachment_id, $id_to_pass, $count, $src));
                 if ($title_val !== '') {
                     $img_tag = $this->inject_attribute($img_tag, 'title', $title_val, isset($attributes['title']));
                 }
@@ -371,6 +449,40 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         }
 
         return $attributes;
+    }
+
+    /**
+     * Whether an <img> attribute string carries an attribute, with or without a value.
+     *
+     * parse_attributes() only sees `name=value` pairs, so a bare `alt` (valid
+     * HTML for an empty alt) would otherwise look absent and get a second alt
+     * attribute instead of having its own replaced.
+     *
+     * @since 2.17.0
+     * @param string $attributes_str The raw attribute portion of the tag.
+     * @param string $name           Attribute name.
+     * @return bool
+     */
+    private function has_attribute(string $attributes_str, string $name): bool {
+        // Drop quoted values first so text inside another attribute ("data-x=' alt'")
+        // cannot be mistaken for the attribute itself.
+        $names_only = (string) preg_replace('/=\s*(?:"[^"]*"|\'[^\']*\'|[^\s"\'>]+)/', '=', $attributes_str);
+
+        return 1 === preg_match('/(?:^|\s)' . preg_quote($name, '/') . '(?=[\s=\/]|$)/i', $names_only);
+    }
+
+    /**
+     * Whether the markup says outright that an image is decorative.
+     *
+     * @since 2.17.0
+     * @param array<string,string> $attributes Parsed attributes.
+     * @return bool
+     */
+    private function is_marked_decorative(array $attributes): bool {
+        $role = strtolower(trim((string) ($attributes['role'] ?? '')));
+
+        return in_array($role, ['presentation', 'none'], true)
+            || 'true' === strtolower(trim((string) ($attributes['aria-hidden'] ?? '')));
     }
 
     /**
@@ -453,13 +565,22 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         $attr = $name . '="' . esc_attr($value) . '"';
 
         if ($replace) {
-            return preg_replace_callback(
-                '/(^|\s)' . preg_quote($name, '/') . '\s*=\s*(["\'])[^"\']*\2/i',
-                static function ($m) use ($attr) {
+            // Walk the attributes one whole name[=value] at a time, so a word
+            // inside another value (title="no alt here") is never matched and a
+            // bare `alt` with no value is replaced the same way as alt="".
+            $done = false;
+
+            return (string) preg_replace_callback(
+                '/(\s)([a-zA-Z][a-zA-Z0-9:-]*)(\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s"\'>]+))?/',
+                static function ($m) use ($attr, $name, &$done) {
+                    if ($done || strtolower($m[2]) !== $name) {
+                        return $m[0];
+                    }
+                    $done = true;
+
                     return $m[1] . $attr;
                 },
-                $img_tag,
-                1
+                $img_tag
             );
         }
 
@@ -502,8 +623,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
 
         // Get filename from src
         if ($src) {
-            $filename = pathinfo($src, PATHINFO_FILENAME);
-            $replacements['%filename%'] = str_replace(['-', '_'], ' ', $filename);
+            $replacements['%filename%'] = str_replace(['-', '_'], ' ', $this->filename_from_src($src));
         }
 
         // Get attachment data if ID exists
@@ -537,6 +657,30 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * The file name a person gave an image, read from its URL.
+     *
+     * The rendered `src` is a URL, not a file name: it can be percent-encoded
+     * (`my%20red%20car.jpg`), carry a query string, and point at a size or
+     * copy WordPress made, whose name ends in `-150x150`, `-scaled`,
+     * `-rotated` or the `-e{timestamp}` of an edit. Those suffixes ended up
+     * in the alt text as "purple tulip field 150x150" (#1251).
+     *
+     * @since 2.17.0
+     * @param string $src Image source URL.
+     * @return string File name without extension, decoded and without WordPress's suffixes.
+     */
+    private function filename_from_src(string $src): string {
+        $path     = (string) wp_parse_url($src, PHP_URL_PATH);
+        $filename = rawurldecode(pathinfo('' !== $path ? $path : $src, PATHINFO_FILENAME));
+
+        // One pass per suffix, outermost first: "photo-scaled-e1700000000000".
+        $stripped = (string) preg_replace('/(?:-(?:\d+x\d+|scaled|rotated|e\d{13}))+$/i', '', $filename);
+
+        // A name that is nothing but a suffix ("150x150.jpg") keeps it.
+        return '' !== $stripped ? $stripped : $filename;
+    }
+
+    /**
      * Get site separator
      *
      * @since 1.0.0
@@ -554,6 +698,131 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
     // ─────────────────────────────────────────────────────────────────────
 
     /**
+     * Render a Media Library template candidate without AI or metadata writes.
+     *
+     * @since 2.17.0
+     * @param int         $attachment_id Image attachment ID.
+     * @param string|null $format Already-read format, or null to read settings.
+     * @return array{format: string, proposed: string, status: string}
+     */
+    public function preview_attachment_alt(int $attachment_id, ?string $format = null): array {
+        if (null === $format) {
+            // A draft may finish after another request changed these settings.
+            wp_cache_delete($this->get_cache_key('site', null), 'thinkrank_seo');
+            wp_cache_delete($this->get_stored_cache_key('site', null), 'thinkrank_seo');
+            $this->separator = null;
+            $settings = $this->get_settings('site');
+            $format = (string) ($settings['alt_format'] ?? '%filename%');
+        }
+        $value = sanitize_text_field($this->generate_attribute_value(
+            $format,
+            $attachment_id,
+            $attachment_id,
+            0,
+            (string) wp_get_attachment_url($attachment_id)
+        ));
+
+        $status = 'empty';
+        if ('' !== $value) {
+            $status = $this->template_alt_is_descriptive($format, $attachment_id, $attachment_id, 0, (string) wp_get_attachment_url($attachment_id), true)
+                ? 'candidate'
+                : 'low_quality';
+        }
+
+        return [
+            'format' => $format,
+            'proposed' => $value,
+            'status' => $status,
+        ];
+    }
+
+    /**
+     * Whether the per-image part of a template says anything about the image.
+     *
+     * Only %filename%, %title%, %image_title% and %image_caption% change from
+     * one image to the next. The site name, the counter, the separator and any
+     * literal text in the format are the same on every image, so gating the
+     * whole string let "1 - Site Name" through on the strength of the site
+     * name alone (#1205). A format with no per-image token gives every image
+     * the same alt text, which describes none of them.
+     *
+     * %title% is per-image only in the Media Library, where it resolves to the
+     * attachment's own title. In rendered content it is the post title, the
+     * same on every image of the page, so there it is a fixed part like the
+     * site name and "1 - Post Title" is filler (#1249).
+     *
+     * @since 2.17.0
+     * @param string $format             The alt format.
+     * @param int    $attachment_id      Attachment ID, or 0.
+     * @param int    $post_id            Post the image is shown in, or the attachment itself.
+     * @param int    $count              Image counter.
+     * @param string $src                Image source URL.
+     * @param bool   $title_is_per_image Whether %title% is the image's own title (Media Library)
+     *                                   rather than the title of the post it is shown in.
+     * @return bool
+     */
+    private function template_alt_is_descriptive(string $format, int $attachment_id, int $post_id, int $count, string $src, bool $title_is_per_image): bool {
+        $per_image = $title_is_per_image
+            ? '/%(?:filename|title|image_title|image_caption)%/'
+            : '/%(?:filename|image_title|image_caption)%/';
+
+        if (!preg_match_all($per_image, $format, $tokens)) {
+            return false;
+        }
+
+        $variable = sanitize_text_field($this->generate_attribute_value(
+            implode(' ', $tokens[0]),
+            $attachment_id,
+            $post_id,
+            $count,
+            $src
+        ));
+
+        return Alt_Text_Quality::is_descriptive($variable);
+    }
+
+    /**
+     * Make at most one vision request, without saving or falling back to a template.
+     *
+     * Callers must obtain cost consent before entering this method. Provider
+     * errors are deliberately not returned: their messages can contain secrets.
+     *
+     * @since 2.17.0
+     * @param int $attachment_id Image attachment ID.
+     * @return string|\WP_Error Unsaved description, or a safe error.
+     */
+    public function draft_attachment_alt(int $attachment_id) {
+        if (!wp_attachment_is_image($attachment_id)) {
+            return new \WP_Error('thinkrank_not_an_image', __('The image is no longer available.', 'thinkrank'), ['status' => 404]);
+        }
+        $reason = $this->ai_alt_unavailable_reason();
+        if (null !== $reason) {
+            return new \WP_Error('thinkrank_ai_alt_unavailable', $reason, ['status' => 409]);
+        }
+        $this->last_ai_alt_error = '';
+        try {
+            $value = sanitize_text_field($this->generate_ai_alt($attachment_id));
+        } catch (\Throwable $error) {
+            $value = '';
+        }
+        if ('' !== trim($value) && !Alt_Text_Quality::is_descriptive($value)) {
+            return new \WP_Error(
+                'thinkrank_ai_alt_draft_low_quality',
+                __('The AI provider returned filler, such as a number or "image", instead of a description. No alt text was saved. A provider request may have been charged; check your budget before trying again.', 'thinkrank'),
+                ['status' => 502]
+            );
+        }
+        if ('' === trim($value)) {
+            return new \WP_Error(
+                'thinkrank_ai_alt_draft_failed',
+                __('The AI provider could not produce a draft. No alt text was saved. A provider request may have been charged; check your budget before trying again.', 'thinkrank'),
+                ['status' => 502]
+            );
+        }
+        return $value;
+    }
+
+    /**
      * Generate and save alt text onto a single attachment's Media Library record.
      *
      * Uses the same `alt_format` token pipeline as output injection, so the value
@@ -568,6 +837,9 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
      * @return bool True when the attachment now has the generated alt text; false when skipped or on failure.
      */
     public function fill_attachment_alt(int $attachment_id, bool $overwrite = false, bool $purge = true): bool {
+        $this->last_fill_skip_reason = '';
+        $this->last_ai_alt_error = '';
+
         if (!wp_attachment_is_image($attachment_id)) {
             return false;
         }
@@ -575,29 +847,62 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         $existing = (string) get_post_meta($attachment_id, '_wp_attachment_image_alt', true);
 
         // Non-destructive by default: never clobber hand-written alt text.
-        if (!$overwrite && trim($existing) !== '') {
+        // Stored filler such as "1" or "image" is not a description anyone
+        // meant to keep, and the coverage stats and the analyzer already
+        // count it as missing. Skipping it left those images out of every
+        // fill, so the one-click fix failed on each run (#1209).
+        if (!$overwrite && trim($existing) !== '' && Alt_Text_Quality::is_descriptive($existing)) {
             return false;
         }
 
         $settings = $this->get_settings('site');
         $format   = $settings['alt_format'] ?? '%filename%';
-        $src      = (string) wp_get_attachment_url($attachment_id);
 
-        $value = '';
+        $value   = '';
+        $from_ai = false;
 
         // AI describes the picture; the template can only rewrite its filename.
-        // Falls back to the template on any failure so a provider outage
-        // degrades to the old behaviour instead of leaving images bare.
-        if ('ai' === ($settings['alt_source'] ?? 'template')) {
-            $value = $this->generate_ai_alt($attachment_id);
+        // With AI chosen by the saved setting, any failure falls back to the
+        // template so a provider outage degrades to the old behaviour instead
+        // of leaving images bare. A call that asked for AI itself gets no
+        // fallback: the template text is the filler it asked AI to avoid, and
+        // with overwrite on it would replace a real description (#1185 review).
+        if (!$this->bulk_dry_run && 'ai' === $this->resolve_alt_source($settings)) {
+            $value   = $this->ai_alt_or_empty($this->generate_ai_alt($attachment_id));
+            $from_ai = '' !== $value;
+
+            if ('' === $value && 'ai' === $this->alt_source_override) {
+                if ('' === $this->last_ai_alt_error) {
+                    $this->last_ai_alt_error = __('The AI provider returned no description for this image.', 'thinkrank');
+                }
+
+                if (null !== $this->bulk_ai_failures) {
+                    $this->bulk_ai_failures[$attachment_id] = $this->last_ai_alt_error;
+                }
+
+                return false;
+            }
         }
 
         if ('' === $value) {
             // Pass the attachment ID as the post context so %title% falls back to the
             // attachment's own title (there is no surrounding post here).
-            $value = sanitize_text_field(
-                $this->generate_attribute_value($format, $attachment_id, $attachment_id, 0, $src)
-            );
+            $preview = $this->preview_attachment_alt($attachment_id, $format);
+            $value = $preview['proposed'];
+
+            // The template only rewrites a file name or a title. On a library
+            // of `1.jpg`, `3-4.png` and `image.jpg` that is "1", "3 4" and
+            // "image", which a screen reader reads out and the analyzer
+            // counted as covered. An empty alt is the better of the two, so
+            // leave the image for a person or the AI source (#1124).
+            if ('low_quality' === $preview['status']) {
+                $this->last_fill_skip_reason = 'low_quality';
+                if (null !== $this->bulk_low_quality) {
+                    $this->bulk_low_quality[] = $attachment_id;
+                }
+
+                return false;
+            }
         }
 
         if ($value === '') {
@@ -609,16 +914,52 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             return true;
         }
 
-        $written = update_post_meta($attachment_id, '_wp_attachment_image_alt', $value) !== false;
+        if ($this->bulk_dry_run) {
+            if (null !== $this->bulk_alt_changes) {
+                $this->bulk_alt_changes[$attachment_id] = ['before' => $existing, 'after' => $value];
+            }
+
+            return false;
+        }
+
+        // WordPress unslashes meta values; the saved text must match its template/AI candidate.
+        $written = update_post_meta($attachment_id, '_wp_attachment_image_alt', wp_slash($value)) !== false;
 
         if ($written) {
             if (null !== $this->bulk_alt_changes) {
-                $this->bulk_alt_changes[$attachment_id] = ['before' => $existing, 'after' => $value];
+                $this->bulk_alt_changes[$attachment_id] = [
+                    'before' => $existing,
+                    'after'  => $value,
+                    'source' => $from_ai ? 'ai' : 'template',
+                ];
             }
             $this->record_alt_write($attachment_id, $purge);
         }
 
         return $written;
+    }
+
+    /**
+     * fill_attachment_alt() with the alt source chosen for this call only.
+     *
+     * The saved `alt_source` stays as it is, so an agent can ask for AI alt
+     * text on one image without switching the whole site over (#1123).
+     *
+     * @since 2.17.0
+     * @param int    $attachment_id The attachment ID.
+     * @param bool   $overwrite     Replace alt text the image already has.
+     * @param string $alt_source    'template' or 'ai'.
+     * @return bool As fill_attachment_alt().
+     */
+    public function fill_attachment_alt_from(int $attachment_id, bool $overwrite, string $alt_source): bool {
+        $previous                  = $this->alt_source_override;
+        $this->alt_source_override = $this->normalize_alt_source($alt_source);
+
+        try {
+            return $this->fill_attachment_alt($attachment_id, $overwrite);
+        } finally {
+            $this->alt_source_override = $previous;
+        }
     }
 
     /**
@@ -710,21 +1051,177 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * Why the most recent fill_attachment_alt() call wrote nothing.
+     *
+     * 'low_quality' when the template produced a value that describes
+     * nothing ("1", "image", "IMG 1234"); '' otherwise.
+     *
+     * @since 2.17.0
+     * @return string
+     */
+    public function last_fill_skip_reason(): string {
+        return $this->last_fill_skip_reason;
+    }
+
+    /**
+     * The alt source in force: this call's override, else the saved setting.
+     *
+     * @since 2.17.0
+     * @param array<string, mixed> $settings Saved image SEO settings.
+     * @return string 'template' or 'ai'.
+     */
+    private function resolve_alt_source(array $settings): string {
+        return $this->alt_source_override
+            ?? $this->normalize_alt_source((string) ($settings['alt_source'] ?? 'template'));
+    }
+
+    /**
+     * Coerce a value to one of ALT_SOURCES, defaulting to the template.
+     *
+     * @since 2.17.0
+     * @param string $source Requested source.
+     * @return string
+     */
+    private function normalize_alt_source(string $source): string {
+        return in_array($source, self::ALT_SOURCES, true) ? $source : 'template';
+    }
+
+    /**
+     * Why AI alt text cannot be produced right now, or null when it can.
+     *
+     * An explicit request for AI alt text must not quietly come back as
+     * template text: that is the filler the caller asked AI to avoid. The
+     * abilities check this first and refuse with the reason.
+     *
+     * @since 2.17.0
+     * @return string|null User-facing reason, or null when AI is ready.
+     */
+    public function ai_alt_unavailable_reason(): ?string {
+        $blocked = \ThinkRank\AI\Spend_Guard::blocked_reason();
+        if (null !== $blocked) {
+            return \ThinkRank\AI\Spend_Guard::message_for($blocked);
+        }
+
+        try {
+            $available = (new \ThinkRank\AI\Vision_Client())->is_available();
+        } catch (\Throwable $e) {
+            $available = false;
+        }
+
+        if (!$available) {
+            return __('AI alt text needs an AI provider that can read images (OpenAI, Anthropic or Gemini, or an OpenAI-compatible model marked as able to describe images) with its API key set under Settings > AI Provider.', 'thinkrank');
+        }
+
+        return null;
+    }
+
+    /**
+     * Why switching the saved alt source to AI must be refused, or null.
+     *
+     * Saving `ai` with no provider that can read images left every later
+     * fill on the template while reporting AI (#1208). Only a switch is
+     * refused: a payload that resends the source already stored is let
+     * through, so it cannot block saving the other settings beside it.
+     *
+     * @since 2.17.0
+     * @param array<string, mixed> $settings Settings about to be saved.
+     * @return string|null User-facing reason, or null when the save may go ahead.
+     */
+    public function ai_alt_source_save_error(array $settings): ?string {
+        if ('ai' !== ($settings['alt_source'] ?? null)) {
+            return null;
+        }
+
+        $stored = $this->get_settings('site');
+        if ('ai' === ($stored['alt_source'] ?? null)) {
+            return null;
+        }
+
+        return $this->ai_alt_unavailable_reason();
+    }
+
+    /**
+     * Why the last explicit AI alt request wrote nothing.
+     *
+     * Set when a call that asked for AI itself (fill_attachment_alt_from(),
+     * or a batch with `alt_source`) could not get a description, and cleared
+     * at the start of every fill. A source taken from the saved setting falls
+     * back to the template instead and leaves this empty.
+     *
+     * @since 2.17.0
+     * @return string The reason, or '' when the last fill did not fail that way.
+     */
+    public function last_ai_alt_error(): string {
+        return $this->last_ai_alt_error;
+    }
+
+    /**
+     * The AI budget after a call, with how many requests the call itself used.
+     *
+     * @since 2.17.0
+     * @param int $used_before Requests used today before the call began.
+     * @return array<string, mixed>
+     */
+    public function ai_budget_report(int $used_before): array {
+        $status = \ThinkRank\AI\Spend_Guard::status();
+
+        return [
+            'requests_used'   => max(0, (int) $status['used_today'] - $used_before),
+            'used_today'      => (int) $status['used_today'],
+            'daily_limit'     => (int) $status['daily_limit'],
+            'remaining_today' => $status['remaining_today'],
+            'blocked'         => (bool) $status['blocked'],
+            'message'         => (string) $status['message'],
+        ];
+    }
+
+    /**
+     * An AI description, or '' when it is filler.
+     *
+     * A provider can answer "image" or a file name as readily as a template
+     * can, and the AI path skipped the quality gate, so an explicit AI batch
+     * wrote "image" to every image it was given (#1211). Filler is treated as
+     * a failed description: the reason is recorded for the caller to report,
+     * and the usual AI-failure handling (a failure, or the template fallback
+     * for the saved setting) takes over.
+     *
+     * @since 2.17.0
+     * @param string $value What generate_ai_alt() returned.
+     * @return string
+     */
+    private function ai_alt_or_empty(string $value): string {
+        if ('' === $value || Alt_Text_Quality::is_descriptive($value)) {
+            return $value;
+        }
+
+        $this->last_ai_alt_error = sprintf(
+            /* translators: %s: the text the AI provider returned. */
+            __('The AI provider returned "%s", which does not describe the image.', 'thinkrank'),
+            $value
+        );
+
+        return '';
+    }
+
+    /**
      * Describe an attachment with the vision model.
      *
      * Never throws: alt text generation runs in batches over a whole media
      * library, and one unreadable image or a rate-limit blip must not abort
-     * the run. Returns '' so the caller falls back to the template.
+     * the run. Returns '' and records the reason in $last_ai_alt_error, so
+     * the caller can fall back to the template or report the failure.
      *
      * @since 1.28.0
+     * @since 2.17.0 Protected, and records why it returned ''.
      * @param int $attachment_id Attachment to describe.
      * @return string Alt text, or '' when unavailable.
      */
-    private function generate_ai_alt(int $attachment_id): string {
+    protected function generate_ai_alt(int $attachment_id): string {
         try {
             $vision = new \ThinkRank\AI\Vision_Client();
 
             if (!$vision->is_available()) {
+                $this->last_ai_alt_error = __('No AI provider that can read images is configured.', 'thinkrank');
                 return '';
             }
 
@@ -738,6 +1235,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
 
             return sanitize_text_field($vision->describe_attachment($attachment_id, $context));
         } catch (\Throwable $e) {
+            $this->last_ai_alt_error = $e->getMessage();
             return '';
         }
     }
@@ -753,6 +1251,9 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
      *     @type int  $offset    Starting offset into the image set. Default 0.
      *     @type int  $limit     Batch size (clamped 1–200). Default 50.
      *     @type bool $overwrite Overwrite existing alt text. Default false.
+     *     @type bool $dry_run   Work out the values and return them as `proposed`
+     *                           without writing anything or calling the AI. Default false.
+     *     @type string $alt_source 'template' or 'ai' for this batch only. Default: the saved setting.
      * }
      * @return array {
      *     @type int  $total       Total images in the library.
@@ -763,18 +1264,72 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
      *     @type int  $next_offset The offset to pass for the next batch.
      *     @type int  $remaining   Images still to process after this batch.
      *     @type bool $done        True when the whole library has been processed.
+     *     @type int  $skipped_low_quality Images the template would only have given
+     *                                     filler ("1", "image"), left without alt text.
+     *     @type int  $skipped_no_permission Images the current user cannot edit, left unchanged.
+     *     @type string $alt_source The source this batch used.
+     *     @type int    $failed     Only when the batch asked for AI: images it could not describe, left unchanged.
+     *     @type array  $failures   Only when the batch asked for AI: each of those images, with the reason.
+     *     @type array  $ai_budget  Only when the source is AI: requests this batch used and what is left today.
+     *     @type int    $template_fallbacks Only when the source is AI: changes written from the template
+     *                                      because the provider could not describe the image.
+     *     @type string $ai_unavailable Only when the saved source is AI but AI cannot run: why, and the
+     *                                  batch ran as a template batch.
      * }
      */
     public function bulk_fill_missing_alt(array $args = []): array {
+        $previous_override = $this->alt_source_override;
+        if (isset($args['alt_source']) && is_string($args['alt_source'])) {
+            $this->alt_source_override = $this->normalize_alt_source($args['alt_source']);
+        }
+        // Dry runs preview only template output, even on a site whose saved source is AI.
+        if (!empty($args['dry_run'])) {
+            $this->alt_source_override = 'template';
+        }
+        try {
+            return $this->run_alt_batch($args);
+        } finally {
+            $this->alt_source_override = $previous_override;
+        }
+    }
+
+    /**
+     * Run one bounded batch under its temporary source selection.
+     *
+     * @param array<string, mixed> $args Batch inputs.
+     * @return array<string, mixed>
+     */
+    private function run_alt_batch(array $args): array {
         $offset    = max(0, (int) ($args['offset'] ?? 0));
         $limit     = min(200, max(1, (int) ($args['limit'] ?? 50)));
         $overwrite = !empty($args['overwrite']);
+        $dry_run   = !empty($args['dry_run']);
+
+        $source = $this->resolve_alt_source($this->get_settings('site'));
+
+        // AI chosen by the saved setting, with no provider that can read
+        // images (or the AI budget paused): every image would fall back to
+        // the template anyway. Run the batch as a template batch and say so,
+        // instead of reporting AI, an AI budget and the AI batch cap for text
+        // the template wrote (#1208). A batch that asked for AI itself is
+        // refused by the abilities before it gets here.
+        $ai_unavailable = null;
+        if (!$dry_run && 'ai' === $source && null === $this->alt_source_override) {
+            $ai_unavailable = $this->ai_alt_unavailable_reason();
+            if (null !== $ai_unavailable) {
+                // bulk_fill_missing_alt() restores the override afterwards.
+                $this->alt_source_override = 'template';
+                $source                    = 'template';
+            }
+        }
+
+        $used_before = 'ai' === $source ? \ThinkRank\AI\Spend_Guard::used_today() : 0;
 
         // In AI mode every image is a paid provider call that takes seconds,
         // so a 200-image batch would both surprise the user's bill and blow
         // past max_execution_time. Cap the batch and let the caller page —
         // `remaining` already drives that loop.
-        if ('ai' === ($this->get_settings('site')['alt_source'] ?? 'template')) {
+        if (!$dry_run && 'ai' === $source) {
             $limit = min($limit, self::AI_BATCH_LIMIT);
         }
 
@@ -802,18 +1357,80 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         // Hold every purge until the batch is done: see $deferred_alt_purge.
         $this->deferred_alt_purge = [];
         $this->bulk_alt_changes   = [];
+        $this->bulk_low_quality   = [];
+        $this->bulk_dry_run       = $dry_run;
+        $this->bulk_ai_failures   = [];
+
+        // The REST route only asks for thinkrank_image_seo, which a site
+        // owner can grant to an author. Without a per-image check that author
+        // could rewrite alt text on everyone's media, overwrite included
+        // (#1210). Only a request with a logged-in user is checked: the upload
+        // hook, cron and WP-CLI without --user act for the site itself.
+        $check_edit    = get_current_user_id() > 0;
+        $not_permitted = 0;
 
         try {
             foreach ($ids as $id) {
                 $processed++;
+
+                if ($check_edit && !current_user_can('edit_post', (int) $id)) {
+                    $not_permitted++;
+                    continue;
+                }
+
                 $this->fill_attachment_alt((int) $id, $overwrite);
             }
         } finally {
-            $written                  = array_values(array_unique($this->deferred_alt_purge ?? []));
-            $changes                  = $this->bulk_alt_changes ?? [];
-            $this->deferred_alt_purge = null;
-            $this->bulk_alt_changes   = null;
-            $cache                    = $this->purge_alt_caches($written);
+            $written                   = array_values(array_unique($this->deferred_alt_purge ?? []));
+            $changes                   = $this->bulk_alt_changes ?? [];
+            $low_quality               = count(array_unique($this->bulk_low_quality ?? []));
+            $failures                  = $this->bulk_ai_failures ?? [];
+            $this->deferred_alt_purge  = null;
+            $this->bulk_alt_changes    = null;
+            $this->bulk_ai_failures    = null;
+            $this->bulk_low_quality    = null;
+            $this->bulk_dry_run        = false;
+            $cache                     = $this->purge_alt_caches($written);
+        }
+
+        // An AI batch names the source of every change: an image the provider
+        // could not describe falls back to the template (#1208).
+        $with_source = 'ai' === $source;
+        $change_rows = array_map(
+            static function (int $id, array $change) use ($with_source): array {
+                $row = ['id' => $id, 'before' => $change['before'], 'after' => $change['after']];
+                if ($with_source) {
+                    $row['source'] = $change['source'] ?? 'template';
+                }
+
+                return $row;
+            },
+            array_keys($changes),
+            array_values($changes)
+        );
+
+        // A dry run previews template candidates only. It is not a preview of
+        // the saved AI source, and its offsets are not an exact-write selection.
+        if ($dry_run) {
+            $next_offset = $offset + count($ids);
+
+            return [
+                'dry_run'             => true,
+                'alt_source'          => 'template',
+                'total'               => $total,
+                'processed'           => $processed,
+                'updated'             => 0,
+                'skipped'             => max(0, $processed - count($change_rows)),
+                'skipped_low_quality' => $low_quality,
+                'skipped_no_permission' => $not_permitted,
+                'offset'              => $offset,
+                'next_offset'         => $next_offset,
+                'remaining'           => empty($ids) ? 0 : max(0, $total - $next_offset),
+                'done'                => empty($ids) || $next_offset >= $total,
+                'proposed'            => $change_rows,
+                'changes'             => [],
+                'cache'               => ['posts_purged' => 0, 'warnings' => []],
+            ];
         }
 
         // Counted from the writes that actually happened, not from what
@@ -825,7 +1442,8 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         // `skipped` have documented the write, not the return value, since
         // this method was added.
         $updated = count($written);
-        $skipped = max(0, $processed - $updated);
+        $failed  = count($failures);
+        $skipped = max(0, $processed - $updated - $failed);
 
         $next_offset = $offset + count($ids);
 
@@ -842,7 +1460,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             $this->flush_analyzer_cache();
         }
 
-        return [
+        $report = [
             'total'       => $total,
             'processed'   => $processed,
             'updated'     => $updated,
@@ -851,18 +1469,48 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             'next_offset' => $next_offset,
             'remaining'   => $remaining,
             'done'        => $exhausted || $next_offset >= $total,
-            'changes'     => array_map(
-                static function (int $id, array $change): array {
-                    return ['id' => $id, 'before' => $change['before'], 'after' => $change['after']];
-                },
-                array_keys($changes),
-                array_values($changes)
-            ),
+            'skipped_low_quality' => $low_quality,
+            'skipped_no_permission' => $not_permitted,
+            'changes'     => $change_rows,
             'cache'       => [
                 'posts_purged' => count($cache['posts']),
                 'warnings'     => $cache['warnings'],
             ],
+            'alt_source'  => $source,
         ];
+
+        if (null !== $ai_unavailable) {
+            $report['ai_unavailable'] = $ai_unavailable;
+        }
+
+        // Only a batch that asked for AI itself records failures; one run
+        // from the saved setting falls back to the template instead. Those
+        // images keep the alt text they had.
+        if ([] !== $failures || 'ai' === ($args['alt_source'] ?? null)) {
+            $report['failed']   = $failed;
+            $report['failures'] = array_map(
+                static function (int $id, string $reason): array {
+                    return ['id' => $id, 'reason' => $reason];
+                },
+                array_keys($failures),
+                array_values($failures)
+            );
+        }
+
+        // Each AI image is a paid request. Report what this batch spent and
+        // what is left today, so an agent paging through a library can stop
+        // before the budget runs out rather than after (#1123).
+        if ('ai' === $source) {
+            $report['ai_budget']          = $this->ai_budget_report($used_before);
+            $report['template_fallbacks'] = count(array_filter(
+                $change_rows,
+                static function (array $row): bool {
+                    return 'template' === $row['source'];
+                }
+            ));
+        }
+
+        return $report;
     }
 
     /**
@@ -934,7 +1582,10 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
     }
 
     /**
-     * Number of image attachments that already have non-empty alt text.
+     * Number of image attachments that already have descriptive alt text.
+     *
+     * Filler such as "1", "3-4", "image" or "IMG_1234" does not count
+     * (#1124, #1207): see Alt_Text_Coverage::count_covered().
      *
      * Carries the same `post_status != 'trash'` filter as count_images(), so a
      * trashed image can never be counted as covered against a total it is not
@@ -945,18 +1596,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
      * @return int
      */
     private function count_images_with_alt(): int {
-        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- indexed COUNT via postmeta meta_key index; short-lived admin action
-        return (int) $this->wpdb->get_var(
-            "SELECT COUNT(DISTINCT p.ID) FROM {$this->wpdb->posts} p
-             INNER JOIN {$this->wpdb->postmeta} pm
-                ON pm.post_id = p.ID
-               AND pm.meta_key = '_wp_attachment_image_alt'
-               AND pm.meta_value != ''
-             WHERE p.post_type = 'attachment'
-               AND p.post_mime_type LIKE 'image/%'
-               AND p.post_status != 'trash'"
-        );
-        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        return Alt_Text_Coverage::count_covered($this->wpdb);
     }
 
     /**

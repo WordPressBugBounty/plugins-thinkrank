@@ -1,6 +1,8 @@
 import { useEffect, useRef } from '@wordpress/element';
 import classnames from 'classnames';
 
+import useControlId from './useControlId';
+
 // "Outlined modern" control style — no shadows, just border.
 // See memory/feedback_form_control_style.md.
 const CONTROL_BASE = [
@@ -55,7 +57,7 @@ export default function Input({
 	hideLabelFromVision = false,
 	...props
 }) {
-	const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
+	const inputId = useControlId(id, label, 'tr-input');
 	const messageId = inputId ? `${inputId}-description` : undefined;
 	const hasMessage = Boolean((description && !error) || error);
 
@@ -135,7 +137,7 @@ export function Textarea({
 	autoGrow = false,
 	...props
 }) {
-	const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
+	const inputId = useControlId(id, label, 'tr-textarea');
 	const messageId = inputId ? `${inputId}-description` : undefined;
 	const hasMessage = Boolean((description && !error) || error);
 	const ref = useRef(null);

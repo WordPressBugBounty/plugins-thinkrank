@@ -339,7 +339,7 @@ const History = ({ onNavigate }) => {
 						)}
 
 						{!isLoading && !isEmpty && (
-							<div className="tr-overflow-x-auto">
+							<div className="tr-relative tr-overflow-x-auto">
 								<table className="tr-w-full tr-text-sm tr-border-collapse">
 									<thead>
 										<tr className="tr-bg-[#FAFBFC] tr-border-b tr-border-secondary">
@@ -479,7 +479,7 @@ const History = ({ onNavigate }) => {
 							</div>
 						</div>
 						{isHelpOpen && (
-							<div className="tr-overflow-x-auto">
+							<div className="tr-relative tr-overflow-x-auto">
 								<table className="tr-w-full tr-text-sm tr-border-collapse">
 									<thead>
 										<tr className="tr-bg-[#FAFBFC] tr-border-b tr-border-secondary">

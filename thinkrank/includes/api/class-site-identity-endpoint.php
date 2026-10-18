@@ -388,11 +388,11 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
             // ai_crawler_rules counts as a robots.txt change even though it is
             // not the body: the directives it produces are composed into the
             // served output at render time, so a physical file left alone here
-            // would keep serving the previous allow/block set (#657).
+            // would keep serving the previous allow/block set (#657). The same
+            // goes for allow_search_engines (#1201). The key list lives on the
+            // manager, shared with the update-site-identity-settings ability.
             if ($context_type === 'site'
-                && (array_key_exists('robots_txt_content', $settings)
-                    || array_key_exists('robots_txt_enabled', $settings)
-                    || array_key_exists('ai_crawler_rules', $settings))
+                && Site_Identity_Manager::changes_robots_output($settings)
             ) {
                 $this->identity_manager->sync_robots_txt_file();
             }

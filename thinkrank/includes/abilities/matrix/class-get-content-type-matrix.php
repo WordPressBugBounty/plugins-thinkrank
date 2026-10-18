@@ -11,6 +11,7 @@ namespace ThinkRank\Abilities\Matrix;
 
 use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\SEO\Content_Type_Settings;
+use ThinkRank\SEO\Content_Type_Robots_State;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -41,7 +42,7 @@ class Get_Content_Type_Matrix extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-content-type-matrix';
 		$this->label       = __( 'Get ThinkRank Content Type Matrix', 'thinkrank' );
-		$this->description = __( 'Read the per-content-type SEO feature matrix: for each post type, taxonomy, archive and special page, whether metas, schema, Open Graph, Twitter cards and analytics are inherited, forced on, or forced off, plus its robots directives and sitemap inclusion. Also returns the site-wide value each "inherit" resolves to. Use this to discover valid entity keys, then update-content-type-matrix to change one.', 'thinkrank' );
+		$this->description = __( 'Read the per-content-type SEO feature matrix: inherited or pinned features, resolved robots directives, exact stored robots_state and its fingerprint, and sitemap inclusion. Null robots_state means unsupported stored values that cannot be restored here. Also returns site-wide feature defaults. Use update-content-type-matrix with the exact state and fingerprint to change or restore one row, including inherited mode.', 'thinkrank' );
 	}
 
 	/**
@@ -112,6 +113,10 @@ class Get_Content_Type_Matrix extends Ability_Base {
 								'type'                 => 'object',
 								'additionalProperties' => true,
 							],
+							'robots_meta_enabled' => [ 'type' => 'boolean' ],
+							'default_noindex' => [ 'type' => 'boolean' ],
+							'robots_state' => array_merge( Content_Type_Robots_State::schema(), [ 'type' => [ 'object', 'null' ] ] ),
+							'robots_state_fingerprint' => [ 'type' => [ 'string', 'null' ], 'pattern' => '^[a-f0-9]{64}$' ],
 							'sitemap_include'  => [ 'type' => [ 'boolean', 'null' ] ],
 							'supports_sitemap' => [ 'type' => 'boolean' ],
 						],

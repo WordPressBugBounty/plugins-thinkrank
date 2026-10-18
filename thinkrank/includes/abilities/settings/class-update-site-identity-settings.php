@@ -22,9 +22,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * The robots.txt body itself (robots_txt_content) is not writable here; it
  * belongs to update-robots-txt. Three keys this ability does accept still
  * change what crawlers are told — allow_search_engines, robots_txt_enabled
- * and ai_crawler_rules, the last two by rewriting or deleting the physical
- * robots.txt through sync_robots_txt_file() — so a call carrying any of
- * them also needs indexing:write (Mcp_Scopes::ARGUMENT_AREAS, #1139).
+ * and ai_crawler_rules, all three by rewriting or deleting the physical
+ * robots.txt through sync_robots_txt_file() (#1201) — so a call carrying any
+ * of them also needs indexing:write (Mcp_Scopes::ARGUMENT_AREAS, #1139).
  */
 class Update_Site_Identity_Settings extends Ability_Base {
 	/**
@@ -143,11 +143,9 @@ class Update_Site_Identity_Settings extends Ability_Base {
 			// get_robots_txt_delivery() strips the AI block before comparing, on
 			// the assumption the two are identical by construction, so the admin
 			// screen reported "in sync" over the drift. Only the keys that
-			// change the served output trigger the write.
-			if ( array_key_exists( 'robots_txt_content', $patch )
-				|| array_key_exists( 'robots_txt_enabled', $patch )
-				|| array_key_exists( 'ai_crawler_rules', $patch )
-			) {
+			// change the served output trigger the write, and the list lives
+			// on the manager so this path and the REST route agree (#1201).
+			if ( Site_Identity_Manager::changes_robots_output( $patch ) ) {
 				$mgr->sync_robots_txt_file();
 			}
 

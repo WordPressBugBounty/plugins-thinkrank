@@ -2,6 +2,8 @@ import { useEffect, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import classnames from 'classnames';
 
+import useControlId from './useControlId';
+
 /**
  * Whether a string is a hex colour this control will hand back.
  *
@@ -67,8 +69,11 @@ export default function ColorPicker({
 	disabled = false,
 	id,
 }) {
-	const fieldId =
-		id || `tr-color-${label?.toLowerCase().replace(/\s+/g, '-')}`;
+	const fieldId = useControlId(
+		id,
+		typeof label === 'string' ? `tr-color ${label}` : undefined,
+		'tr-color'
+	);
 
 	// Typing "#1a2" passes through states that are not colours yet, so the box
 	// keeps its own text and only reports upward once it reads as one.

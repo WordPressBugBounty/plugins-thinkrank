@@ -570,6 +570,33 @@ const IconUpgrade = () => (
 	</svg>
 );
 
+/*
+ * The header's secondary items give way as the header itself gets narrower.
+ *
+ * These are container queries on the <nav> (it is the size container), not
+ * viewport breakpoints: the viewport includes the WordPress admin menu, which
+ * is 160px wide, 36px when folded and gone on phones, so a viewport breakpoint
+ * cannot say how much room the header really has. Each width is the header's
+ * content width at which that item fits next to everything shown before it,
+ * measured with the bundled Inter font for the widest case (free with the
+ * Upgrade button, and Pro with its badge and the connected Hub dot), plus a
+ * few pixels of slack. In order, as the header grows:
+ *
+ *   search box, Upgrade label, Hub label, "ThinkRank" name,
+ *   Book a Free Call label, version.
+ *
+ * Below its width a label collapses to its icon (the link keeps an
+ * aria-label) and the search box, name and version are hidden. Class names
+ * are written out in full so Tailwind can find them.
+ */
+const SHOW_SEARCH = 'tr-hidden [@container_(min-width:936px)]:tr-block';
+const SHOW_UPGRADE_LABEL =
+	'tr-hidden [@container_(min-width:1000px)]:tr-inline';
+const SHOW_HUB_LABEL = 'tr-hidden [@container_(min-width:1088px)]:tr-inline';
+const SHOW_BRAND_NAME = 'tr-hidden [@container_(min-width:1184px)]:tr-block';
+const SHOW_BOOK_LABEL = 'tr-hidden [@container_(min-width:1288px)]:tr-inline';
+const SHOW_VERSION = 'tr-hidden [@container_(min-width:1340px)]:tr-block';
+
 const NAV_ITEMS = [
 	{ id: 'dashboard', label: __('Dashboard', 'thinkrank') },
 	{ id: 'essential-seo', label: __('Essential SEO', 'thinkrank') },
@@ -608,9 +635,10 @@ const HubChip = () => {
 					? __('This site is connected to ThinkRank Hub', 'thinkrank')
 					: __('Connect this site to ThinkRank Hub', 'thinkrank')
 			}
+			aria-label={label}
 		>
 			<HubIcon size={14} />
-			{label}
+			<span className={SHOW_HUB_LABEL}>{label}</span>
 			{connected && (
 				<span
 					className="tr-w-1.5 tr-h-1.5 tr-rounded-full tr-bg-success"
@@ -629,7 +657,7 @@ export default function TopNav({ currentPage }) {
 
 	return (
 		<nav
-			className="tr-flex tr-items-center tr-h-14 tr-shrink-0 tr-bg-white tr-border-b tr-border-secondary tr-px-4 tr-gap-3"
+			className="tr-flex tr-items-center tr-h-14 tr-shrink-0 tr-bg-white tr-border-b tr-border-secondary tr-px-4 tr-gap-3 [container-type:inline-size]"
 			style={{ boxShadow: '0 1px 3px 0 rgba(0,0,0,0.04)' }}
 			aria-label={__('ThinkRank navigation', 'thinkrank')}
 		>
@@ -639,7 +667,10 @@ export default function TopNav({ currentPage }) {
 					<ThinkRankLogo />
 				</span>
 				<span
-					className="tr-hidden md:tr-block tr-text-sm tr-font-bold tr-text-primary"
+					className={classnames(
+						SHOW_BRAND_NAME,
+						'tr-text-sm tr-font-bold tr-text-primary'
+					)}
 					style={{ letterSpacing: '-0.01em' }}
 				>
 					ThinkRank
@@ -658,7 +689,10 @@ export default function TopNav({ currentPage }) {
 			/>
 
 			{/* Nav links */}
-			<ul className="tr-flex tr-items-stretch tr-gap-0.5 tr-list-none tr-m-0 tr-p-0 tr-flex-1 tr-h-full">
+			{/* The links are the one part allowed to shrink: if the header is
+			    still too narrow after the items above give way, they scroll
+			    sideways inside the header instead of widening the page. */}
+			<ul className="tr-flex tr-items-stretch tr-gap-0.5 tr-list-none tr-m-0 tr-p-0 tr-flex-1 tr-min-w-0 tr-h-full tr-overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:tr-hidden">
 				{NAV_ITEMS.filter((item) => canAccess(item.id)).map((item) => {
 					const isActive = currentPage === item.id;
 					const prefetch = () => {
@@ -694,7 +728,7 @@ export default function TopNav({ currentPage }) {
 								{isActive && (
 									<span
 										className="tr-absolute tr-left-2 tr-right-2 tr-h-0.5 tr-bg-brand"
-										style={{ bottom: '-1px' }}
+										style={{ bottom: 0 }}
 										aria-hidden="true"
 									/>
 								)}
@@ -705,7 +739,7 @@ export default function TopNav({ currentPage }) {
 			</ul>
 
 			{/* Search */}
-			<div className="tr-shrink-0">
+			<div className={classnames(SHOW_SEARCH, 'tr-shrink-0')}>
 				<NavSearch currentPage={currentPage} />
 			</div>
 
@@ -723,9 +757,12 @@ export default function TopNav({ currentPage }) {
 						'Book a free 30-minute onboarding call',
 						'thinkrank'
 					)}
+					aria-label={__('Book a Free Call', 'thinkrank')}
 				>
 					<IconCalendar />
-					{__('Book a Free Call', 'thinkrank')}
+					<span className={SHOW_BOOK_LABEL}>
+						{__('Book a Free Call', 'thinkrank')}
+					</span>
 				</a>
 
 				{/* Help */}
@@ -747,13 +784,22 @@ export default function TopNav({ currentPage }) {
 						rel="noopener noreferrer"
 						className="tr-hidden lg:tr-inline-flex tr-items-center tr-gap-1.5 tr-px-2.5 tr-py-1.5 tr-rounded-md tr-bg-[linear-gradient(90deg,#4c4cff_58%,#3535b0_118%)] tr-text-white tr-text-xs tr-font-semibold tr-no-underline tr-transition-all hover:tr-brightness-110"
 						style={{ boxShadow: '0 1px 4px rgba(68,81,255,0.3)' }}
+						title={__('Upgrade to ThinkRank Pro', 'thinkrank')}
+						aria-label={__('Upgrade', 'thinkrank')}
 					>
 						<IconUpgrade />
-						{__('Upgrade', 'thinkrank')}
+						<span className={SHOW_UPGRADE_LABEL}>
+							{__('Upgrade', 'thinkrank')}
+						</span>
 					</a>
 				)}
 
-				<span className="tr-hidden xl:tr-block tr-text-[11px] tr-text-tertiary tr-pl-1">
+				<span
+					className={classnames(
+						SHOW_VERSION,
+						'tr-text-[11px] tr-text-tertiary tr-pl-1'
+					)}
+				>
 					v{version}
 				</span>
 			</div>

@@ -15,6 +15,11 @@ const SerpPreview = ({
 	faviconUrl: faviconUrlProp,
 	imageUrl,
 	displayUrl,
+	// Archives carry no publish date in a search result, so the term screen
+	// turns the date off. It also names its subject ("page", not "post") in
+	// the empty-description hint.
+	showDate = true,
+	emptyDescriptionHint,
 }) => {
 	const [viewMode, setViewMode] = useState('desktop');
 
@@ -22,6 +27,7 @@ const SerpPreview = ({
 		title || postTitle || __('Your SEO Title', 'thinkrank');
 	const displayDescription =
 		description ||
+		emptyDescriptionHint ||
 		__(
 			"Please provide a meta description. If you don't, Google will try to find a relevant part of your post to show in search results.",
 			'thinkrank'
@@ -123,9 +129,11 @@ const SerpPreview = ({
 						)}
 					>
 						<p className="tr-text-xs tr-text-secondary tr-m-0 tr-flex-1 tr-leading-relaxed">
-							<span className="tr-text-tertiary">
-								{currentDate}{' '}
-							</span>
+							{showDate && (
+								<span className="tr-text-tertiary">
+									{currentDate}{' '}
+								</span>
+							)}
 							{displayDescription}
 						</p>
 						{viewMode === 'mobile' && (

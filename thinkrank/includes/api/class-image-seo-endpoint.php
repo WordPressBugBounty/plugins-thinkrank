@@ -202,6 +202,17 @@ class Image_SEO_Endpoint extends WP_REST_Controller {
         $allowed_keys = array_keys($this->image_manager->get_settings_schema('site'));
         $settings = array_intersect_key($request->get_params(), array_flip($allowed_keys));
 
+        // Same rule as update-image-seo-settings: no switch to AI alt text
+        // while AI cannot run, or every fill reports AI for template text (#1208).
+        $unavailable = $this->image_manager->ai_alt_source_save_error($settings);
+        if (null !== $unavailable) {
+            return new WP_REST_Response([
+                'success' => false,
+                'code'    => 'thinkrank_ai_alt_unavailable',
+                'message' => $unavailable,
+            ], 400);
+        }
+
         $success = $this->image_manager->save_settings('site', 0, $settings);
 
         if ($success) {
@@ -225,7 +236,13 @@ class Image_SEO_Endpoint extends WP_REST_Controller {
      * @return WP_REST_Response API response
      */
     public function get_media_alt_stats(WP_REST_Request $request): WP_REST_Response {
-        return new WP_REST_Response($this->image_manager->get_media_alt_stats(), 200);
+        $stats = $this->image_manager->get_media_alt_stats();
+
+        // The Image SEO tab offers the AI alt source only when it can run,
+        // and otherwise says why (#1215).
+        $stats['ai_unavailable'] = $this->image_manager->ai_alt_unavailable_reason();
+
+        return new WP_REST_Response($stats, 200);
     }
 
     /**

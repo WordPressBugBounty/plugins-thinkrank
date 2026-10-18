@@ -23,6 +23,7 @@ declare(strict_types=1);
 namespace ThinkRank\API;
 
 use ThinkRank\SEO\Content_Type_Settings;
+use ThinkRank\SEO\Content_Type_Robots_State;
 use ThinkRank\SEO\Sitemap_Generator;
 use WP_Error;
 use WP_REST_Controller;
@@ -92,6 +93,10 @@ class Content_Type_Matrix_Endpoint extends WP_REST_Controller {
                             'required'    => true,
                             'type'        => 'object',
                             'description' => 'Feature states, robots directives, and sitemap inclusion for this entity',
+                            'properties' => [
+                                'robots_state' => Content_Type_Robots_State::schema(),
+                                'expected_robots_state' => ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$'],
+                            ],
                         ],
                     ],
                 ],
@@ -131,6 +136,7 @@ class Content_Type_Matrix_Endpoint extends WP_REST_Controller {
             $entity['values']              = $values;
             $entity['robots_meta_enabled'] = !empty($stored['robots_meta_enabled']);
             $entity['robots_meta']         = Content_Type_Settings::resolve_robots_meta($entity['key']);
+            $entity = array_merge($entity, Content_Type_Robots_State::inspect($entity['key'], $stored));
             // What the row falls back to with the pin off, so the matrix can
             // label its Inherit option per row rather than guessing. It is not
             // the same for every row: search and 404 default to noindex (#838).
@@ -173,6 +179,19 @@ class Content_Type_Matrix_Endpoint extends WP_REST_Controller {
 
         if (!is_array($settings)) {
             return new WP_Error('invalid_settings', 'Settings must be provided as an object', ['status' => 400]);
+        }
+
+        if (array_key_exists('robots_state', $settings) || array_key_exists('expected_robots_state', $settings)) {
+            if (!$this->check_manage_permissions()) {
+                return new WP_Error('rest_forbidden', __('You cannot change these settings.', 'thinkrank'), ['status' => 403]);
+            }
+            // An exact-state restoration is one mutation, never mixed with a
+            // second settings store or a convenience input that pins the row.
+            if (count($settings) !== 2 || !array_key_exists('robots_state', $settings) || !is_string($settings['expected_robots_state'] ?? null)) {
+                return new WP_Error('thinkrank_robots_invalid_state', __('Send only robots_state and its expected_robots_state fingerprint for an exact robots change.', 'thinkrank'), ['status' => 400]);
+            }
+            $saved = Content_Type_Robots_State::save($entity_key, $settings['robots_state'], $settings['expected_robots_state']);
+            return is_wp_error($saved) ? $saved : new WP_REST_Response(['success' => true, 'entity' => $entity_key, 'data' => $saved], 200);
         }
 
         $descriptor = $this->find_entity($entity_key);
@@ -227,6 +246,8 @@ class Content_Type_Matrix_Endpoint extends WP_REST_Controller {
                 ),
                 'robots_meta_enabled' => !empty(Content_Type_Settings::get_entity_settings($entity_key)['robots_meta_enabled']),
                 'robots_meta'         => Content_Type_Settings::resolve_robots_meta($entity_key),
+                'robots_state'        => Content_Type_Robots_State::inspect($entity_key, Content_Type_Settings::get_entity_settings($entity_key))['robots_state'],
+                'robots_state_fingerprint' => Content_Type_Robots_State::inspect($entity_key, Content_Type_Settings::get_entity_settings($entity_key))['robots_state_fingerprint'],
                 'default_noindex'     => !empty(Content_Type_Settings::default_robots_meta($entity_key)['noindex']),
                 'sitemap_include'     => $descriptor['supports_sitemap']
                     ? Content_Type_Settings::is_included_in_sitemap($descriptor['group'], $descriptor['object'], $sitemap_settings)

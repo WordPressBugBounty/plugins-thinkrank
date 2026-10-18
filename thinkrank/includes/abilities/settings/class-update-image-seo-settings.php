@@ -48,7 +48,7 @@ class Update_Image_Seo_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-image-seo-settings';
 		$this->label       = __( 'Update ThinkRank Image SEO Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank image SEO settings, which control automatic alt/title injection, the token-based formats used to generate them, and whether generated alt text is persisted to the Media Library. Read the current values with get-image-seo-settings first; only the keys you pass are changed.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank image SEO settings, which control automatic alt/title injection, the token-based formats used to generate them, and whether generated alt text is persisted to the Media Library, and alt_source. Setting alt_source to ai makes every later alt text fill (fill-missing-alt-text, the analyzer fix, auto-fill on upload) send each image to the AI provider, which costs money per image: ask the user before switching it on, and check get-ai-budget. Switching to ai is refused while no AI provider that can read images is set up, or while AI is paused. Read the current values with get-image-seo-settings first; only the keys you pass are changed, and settings in the result is what was stored.', 'thinkrank' );
 	}
 
 	/**
@@ -94,6 +94,11 @@ class Update_Image_Seo_Settings extends Ability_Base {
 						'save_alt_to_media'   => [ 'type' => 'boolean' ],
 						'auto_fill_on_upload' => [ 'type' => 'boolean' ],
 						'media_alt_overwrite' => [ 'type' => 'boolean' ],
+						'alt_source'          => [
+							'type'        => 'string',
+							'enum'        => Image_SEO_Manager::ALT_SOURCES,
+							'description' => __( 'template builds alt text from the file name or title; ai has the AI provider describe each image, one paid request per image.', 'thinkrank' ),
+						],
 					],
 				],
 			],
@@ -110,8 +115,11 @@ class Update_Image_Seo_Settings extends Ability_Base {
 		return [
 			'type'       => 'object',
 			'properties' => [
-				'success' => [ 'type' => 'boolean' ],
-				'message' => [ 'type' => 'string' ],
+				'success'  => [ 'type' => 'boolean' ],
+				'message'  => [ 'type' => 'string' ],
+				'settings' => ( new Get_Image_Seo_Settings() )->get_output_schema()['properties']['settings'] + [
+					'description' => __( 'The settings as stored after the save, read back the same way get-image-seo-settings reads them.', 'thinkrank' ),
+				],
 			],
 		];
 	}
@@ -150,6 +158,30 @@ class Update_Image_Seo_Settings extends Ability_Base {
 			}
 		}
 
+		if ( array_key_exists( 'alt_source', $settings ) ) {
+			$source = (string) $settings['alt_source'];
+
+			if ( ! in_array( $source, Image_SEO_Manager::ALT_SOURCES, true ) ) {
+				return new \WP_Error(
+					'thinkrank_invalid_alt_source',
+					sprintf(
+						/* translators: %s: accepted values. */
+						__( 'alt_source must be one of: %s.', 'thinkrank' ),
+						implode( ', ', Image_SEO_Manager::ALT_SOURCES )
+					),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$unavailable = $mgr->ai_alt_source_save_error( [ 'alt_source' => $source ] );
+			if ( null !== $unavailable ) {
+				return new \WP_Error( 'thinkrank_ai_alt_unavailable', $unavailable, [ 'status' => 400 ] );
+			}
+
+			$merged['alt_source'] = $source;
+			$found                = true;
+		}
+
 		if ( ! $found ) {
 			return new \WP_Error(
 				'thinkrank_no_valid_image_seo_setting_keys',
@@ -160,11 +192,14 @@ class Update_Image_Seo_Settings extends Ability_Base {
 
 		$result = $mgr->save_settings( 'site', null, $merged );
 
+		// What was stored, not what was sent: a value the save reduces away
+		// is otherwise reported as saved (CLAUDE.md, pitfall 7).
 		return [
-			'success' => (bool) $result,
-			'message' => (bool) $result
+			'success'  => (bool) $result,
+			'message'  => (bool) $result
 				? __( 'Image SEO settings updated.', 'thinkrank' )
 				: __( 'Failed to update image SEO settings.', 'thinkrank' ),
+			'settings' => ( new Get_Image_Seo_Settings() )->execute( [] )['settings'],
 		];
 	}
 }

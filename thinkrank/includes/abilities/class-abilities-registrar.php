@@ -57,6 +57,10 @@ use ThinkRank\Abilities\Content\Get_FAQ;
 use ThinkRank\Abilities\Content\Update_FAQ;
 use ThinkRank\Abilities\Media\List_Images;
 use ThinkRank\Abilities\Media\Get_Image_Alt_Text;
+use ThinkRank\Abilities\Media\Get_Image_Alt_Preview;
+use ThinkRank\Abilities\Media\Generate_Image_Alt_Draft;
+use ThinkRank\Abilities\Media\Apply_Image_Alt_Text;
+use ThinkRank\Abilities\Media\Restore_Image_Alt_Text;
 use ThinkRank\Abilities\Media\Update_Image_Alt_Text;
 use ThinkRank\Abilities\Media\Fill_Missing_Alt_Text;
 use ThinkRank\Abilities\Content\Get_Post_Content;
@@ -381,6 +385,10 @@ class Abilities_Registrar {
 			new Update_Content_Type_Matrix(),
 			new List_Images(),
 			new Get_Image_Alt_Text(),
+			new Get_Image_Alt_Preview(),
+			new Generate_Image_Alt_Draft(),
+			new Apply_Image_Alt_Text(),
+			new Restore_Image_Alt_Text(),
 			new Update_Image_Alt_Text(),
 			new Fill_Missing_Alt_Text(),
 			new Get_Post_Content(),

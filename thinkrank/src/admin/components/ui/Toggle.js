@@ -1,5 +1,7 @@
 import classnames from 'classnames';
 
+import useControlId from './useControlId';
+
 export default function Toggle({
 	checked,
 	onChange,
@@ -8,11 +10,7 @@ export default function Toggle({
 	disabled = false,
 	id,
 }) {
-	const toggleId =
-		id ||
-		(typeof label === 'string'
-			? label.toLowerCase().replace(/\s+/g, '-')
-			: undefined);
+	const toggleId = useControlId(id, label, 'tr-toggle');
 
 	return (
 		<div className="tr-flex tr-items-start tr-gap-3">

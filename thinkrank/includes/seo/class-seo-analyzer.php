@@ -343,8 +343,14 @@ class SEO_Analyzer {
             $status = (string) $outcome['status'];
 
             // Only offer a fix on a finding that still needs one — a passing
-            // check with a Fix button reads as "did this even work?".
-            $fixable = self::PASSED !== $status && SEO_Analyzer_Fixer::can_fix($id);
+            // check with a Fix button reads as "did this even work?". A check
+            // can also withhold its fix by returning can_auto_fix false, when
+            // what it found is something the registered fix cannot change
+            // (#1204). It can only withhold one, never offer one that has no
+            // fixer.
+            $fixable = self::PASSED !== $status
+                && SEO_Analyzer_Fixer::can_fix($id)
+                && false !== ($outcome['can_auto_fix'] ?? true);
             $fix     = $fixable ? (SEO_Analyzer_Fixer::fixable()[$id] ?? []) : [];
 
             // The list can be capped below the number of items the finding is
@@ -460,7 +466,8 @@ class SEO_Analyzer {
          * Each entry is an array with keys: id, category (basic|advanced|
          * content|performance|security|geo), weight (float), and callback (callable
          * returning ['status' => passed|warning|failed, 'label', 'message',
-         * 'how_to_fix']).
+         * 'how_to_fix'], plus optionally 'can_auto_fix' => false to withhold
+         * a registered fix that cannot change what the check found).
          *
          * @since 1.18.0
          *
@@ -574,26 +581,232 @@ class SEO_Analyzer {
     }
 
     /**
-     * "Discourage search engines from indexing this site" must be OFF.
+     * Search engines must be allowed to crawl and index the site.
+     *
+     * Three separate things can take a site out of search, and checking only
+     * the first of them passed this check while ThinkRank was serving a full
+     * `Disallow: /` (#967):
+     *
+     *  - WordPress's "Discourage search engines" (Settings → Reading).
+     *  - ThinkRank's own Allow Search Engines switch, which renders a full
+     *    block whenever robots.txt management is on.
+     *  - The robots.txt actually served: a physical file in the web root or a
+     *    custom robots.txt body that disallows the whole site for every
+     *    crawler, Googlebot or Bingbot.
      *
      * @return array
      */
     public function check_search_visibility(): array {
-        // blog_public = 0 means the WP "Discourage search engines" box is ticked.
-        if (!get_option('blog_public')) {
+        $label = __('Site is visible to search engines', 'thinkrank');
+        $block = $this->search_engine_block();
+
+        if (empty($block)) {
             return [
-                'label'      => __('Site is visible to search engines', 'thinkrank'),
-                'status'     => self::FAILED,
-                'message'    => __('Your site is telling search engines not to index it, so it will not appear in search results.', 'thinkrank'),
-                'how_to_fix' => __('Untick "Discourage search engines from indexing this site" under Settings → Reading.', 'thinkrank'),
+                'label'   => $label,
+                'status'  => self::PASSED,
+                'message' => __('Your site allows search engines to index it.', 'thinkrank'),
             ];
         }
 
+        $agents = implode(', ', $block['agents']);
+
+        switch ($block['source']) {
+            case 'blog_public':
+                $message    = __('Your site is telling search engines not to index it, so it will not appear in search results.', 'thinkrank');
+                $how_to_fix = __('Untick "Discourage search engines from indexing this site" under Settings → Reading.', 'thinkrank');
+                break;
+
+            case 'allow_search_engines':
+                $message    = __('ThinkRank\'s Allow Search Engines setting is off, so your robots.txt blocks every crawler and your site will not appear in search results.', 'thinkrank');
+                $how_to_fix = __('Turn on Allow Search Engines under Essential SEO → Crawling and AI Indexing → Robots.txt.', 'thinkrank');
+                break;
+
+            case 'file':
+                if (!empty($block['thinkrank_file'])) {
+                    // ThinkRank wrote this file and manages it, so it is stale
+                    // rather than hand-written: one rewrite from the current
+                    // settings unblocks the site (#1202).
+                    /* translators: %s: comma-separated crawler names. */
+                    $message    = sprintf(__('The robots.txt file ThinkRank wrote in your site root is out of date and still blocks %s from the whole site, so your pages will not appear in search results.', 'thinkrank'), $agents);
+                    $how_to_fix = __('Use Fix, or save the Robots.txt settings under Essential SEO → Crawling and AI Indexing → Robots.txt, to rewrite the file from your current settings.', 'thinkrank');
+                    break;
+                }
+
+                /* translators: %s: comma-separated crawler names. */
+                $message    = sprintf(__('The robots.txt file in your site root blocks %s from the whole site, so your pages will not appear in search results.', 'thinkrank'), $agents);
+                $how_to_fix = __('Edit or remove the robots.txt file in your site root. Your web server serves that file directly, so ThinkRank\'s robots.txt settings do not apply while it is there.', 'thinkrank');
+                break;
+
+            default:
+                /* translators: %s: comma-separated crawler names. */
+                $message    = sprintf(__('Your custom robots.txt content blocks %s from the whole site, so your pages will not appear in search results.', 'thinkrank'), $agents);
+                $how_to_fix = __('Remove the "Disallow: /" rule from your robots.txt content under Essential SEO → Crawling and AI Indexing → Robots.txt.', 'thinkrank');
+                break;
+        }
+
         return [
-            'label'   => __('Site is visible to search engines', 'thinkrank'),
-            'status'  => self::PASSED,
-            'message' => __('Your site allows search engines to index it.', 'thinkrank'),
+            'label'        => $label,
+            'status'       => self::FAILED,
+            'message'      => $message,
+            'how_to_fix'   => $how_to_fix,
+            'value'        => $block['source'],
+            'can_auto_fix' => self::search_block_is_fixable($block),
         ];
+    }
+
+    /**
+     * Whether the search visibility fix can lift this block.
+     *
+     * The fix turns on blog_public and the Allow Search Engines switch, and
+     * rewrites a physical robots.txt only when ThinkRank wrote it under
+     * robots management. A custom robots.txt body, a generated block from
+     * elsewhere, or a hand-written file is left as it is, so offering Fix
+     * for those only led to "This makes your site visible to search
+     * engines" followed by an error (#1204).
+     *
+     * @since 2.17.0
+     * @param array $block Output of search_engine_block().
+     * @return bool
+     */
+    public static function search_block_is_fixable(array $block): bool {
+        switch ((string) ($block['source'] ?? '')) {
+            case 'blog_public':
+            case 'allow_search_engines':
+                return true;
+
+            case 'file':
+                return !empty($block['thinkrank_file']);
+
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * What is keeping search engines out of the site, if anything.
+     *
+     * Ordered by what the site owner has to change: the WordPress setting
+     * first (it also sends a noindex robots meta tag), then ThinkRank's switch,
+     * then the robots.txt that is actually served. The served file is read
+     * through get_effective_robots_txt() and parse_robots_disallow_all(), the
+     * same pair the AI crawler check uses, so the two checks never disagree on
+     * what a robots.txt says.
+     *
+     * Public so the one-click fix can ask again after changing the settings,
+     * rather than reporting a success the served file contradicts.
+     *
+     * @since 2.17.0
+     * @return array{source?: string, agents?: string[], thinkrank_file?: bool}
+     *         Empty when search engines can crawl the site. Otherwise
+     *         `source` is `blog_public`, `allow_search_engines`, `file`,
+     *         `custom` or `generated`, and `agents` names the crawlers the
+     *         served robots.txt shuts out. For `file`, `thinkrank_file` says
+     *         whether ThinkRank wrote the file while it manages robots.txt
+     *         and a sync from the current settings would lift the block. A
+     *         ThinkRank file whose fresh render still blocks is reported as
+     *         `custom` or `generated`, since the settings are the cause.
+     */
+    public function search_engine_block(): array {
+        if (!get_option('blog_public')) {
+            return ['source' => 'blog_public', 'agents' => []];
+        }
+
+        if (!class_exists('ThinkRank\\SEO\\Site_Identity_Manager')) {
+            return [];
+        }
+
+        $manager  = new Site_Identity_Manager();
+        $settings = $manager->get_settings('site');
+
+        // The switch only shapes the output while ThinkRank manages robots.txt;
+        // with management off WordPress serves its own default and the switch
+        // does nothing, so failing on it would send the user to a dead control.
+        // The same holds for a physical robots.txt someone wrote: the web server
+        // serves it as it stands, so it is judged below on what it says. Only a
+        // file ThinkRank wrote follows the switch.
+        $switch_off = !empty($settings['enabled'] ?? true) && !empty($settings['robots_txt_enabled']) && empty($settings['allow_search_engines'] ?? true);
+
+        if ($switch_off && (!file_exists(ABSPATH . 'robots.txt') || $manager->robots_file_written_by_thinkrank())) {
+            return ['source' => 'allow_search_engines', 'agents' => []];
+        }
+
+        $effective = $manager->get_effective_robots_txt();
+        $groups    = $this->parse_robots_disallow_all((string) ($effective['content'] ?? ''));
+        $agents    = $this->search_engines_blocked_by($groups);
+
+        if (empty($agents)) {
+            return [];
+        }
+
+        $source = (string) ($effective['source'] ?? 'custom');
+        $block  = [
+            'source' => $source,
+            'agents' => $agents,
+        ];
+
+        if ('file' === $source) {
+            $block['thinkrank_file'] = false;
+
+            if (!empty($settings['robots_txt_enabled']) && $manager->robots_file_written_by_thinkrank()) {
+                // ThinkRank wrote this file, but that alone does not make it
+                // stale: every save under robots management writes the custom
+                // body here too. Render what a rewrite would put in the file.
+                // If that still blocks, the settings are the cause and the
+                // block is reported as theirs, so the user is sent to the
+                // robots.txt content rather than offered a rewrite that
+                // changes nothing (#1247). If it does not, the file was
+                // written while the switch was off and never rewritten (#1202).
+                // With the switch off the render is the switch's own block,
+                // which the fix lifts by turning the switch on, so it says
+                // nothing about the custom body and the file stays fixable.
+                $fresh_agents = [];
+                if (!empty($settings['allow_search_engines'] ?? true)) {
+                    $fresh        = $this->parse_robots_disallow_all($manager->render_robots_txt_file());
+                    $fresh_agents = $this->search_engines_blocked_by($fresh);
+                }
+
+                if (!empty($fresh_agents)) {
+                    $custom = trim((string) ($settings['robots_txt_content'] ?? ''));
+
+                    return [
+                        'source' => '' === $custom ? 'generated' : 'custom',
+                        'agents' => $fresh_agents,
+                    ];
+                }
+
+                $block['thinkrank_file'] = true;
+            }
+        }
+
+        return $block;
+    }
+
+    /**
+     * The search crawlers a parsed robots.txt shuts out of the whole site.
+     *
+     * The wildcard group is reported on its own because it reaches every
+     * search engine without a group of its own. Googlebot and Bingbot are
+     * reported when a group naming them disallows everything; when they have
+     * no group they fall under the wildcard, which is already reported.
+     *
+     * @since 2.17.0
+     * @param array<string,bool> $groups Output of parse_robots_disallow_all().
+     * @return string[] Crawler labels, empty when none is blocked.
+     */
+    private function search_engines_blocked_by(array $groups): array {
+        $blocked = [];
+
+        if (!empty($groups['*'])) {
+            $blocked[] = __('every crawler (User-agent: *)', 'thinkrank');
+        }
+
+        foreach (['googlebot' => 'Googlebot', 'bingbot' => 'Bingbot'] as $token => $name) {
+            if (!empty($groups[$token])) {
+                $blocked[] = $name;
+            }
+        }
+
+        return $blocked;
     }
 
     /**
@@ -939,17 +1152,10 @@ class SEO_Analyzer {
             ];
         }
 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- indexed COUNT via postmeta meta_key index
-        $with_alt = (int) $wpdb->get_var(
-            "SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
-             INNER JOIN {$wpdb->postmeta} pm
-                ON pm.post_id = p.ID
-               AND pm.meta_key = '_wp_attachment_image_alt'
-               AND pm.meta_value != ''
-             WHERE p.post_type = 'attachment'
-               AND p.post_mime_type LIKE 'image/%'
-               AND p.post_status != 'trash'"
-        );
+        // Filler a template wrote out of a file name ("1", "3-4", "image",
+        // "IMG_1234") is not alt text, so it does not count toward coverage.
+        // The verdict is the fill's own check, not a looser SQL copy (#1124, #1207).
+        $with_alt = Alt_Text_Coverage::count_covered($wpdb);
 
         $coverage = (int) round(($with_alt / $total) * 100);
         $missing  = $total - $with_alt;
@@ -969,7 +1175,7 @@ class SEO_Analyzer {
             'label'      => $label,
             'status'     => $coverage >= self::COVERAGE_WARN ? self::WARNING : self::FAILED,
             /* translators: 1: images missing alt text, 2: total images. */
-            'message'    => sprintf(__('%1$d of your %2$d images are missing alt text. Alt text drives image search rankings and is an accessibility requirement.', 'thinkrank'), $missing, $total),
+            'message'    => sprintf(__('%1$d of your %2$d images are missing alt text or have alt text that describes nothing, such as a number or "image". Alt text drives image search rankings and is an accessibility requirement.', 'thinkrank'), $missing, $total),
             'how_to_fix'     => __('Under Essential SEO → Image SEO, turn on "Save alt text to the Media Library" and run "Fill missing alt text" to populate them from your format, or add alt text manually in the Media Library.', 'thinkrank'),
             'value'          => $value,
             'affected_posts' => $this->affected_posts($this->image_ids_without_alt()),
@@ -981,7 +1187,7 @@ class SEO_Analyzer {
      * The most recent images with no alt text, capped at AFFECTED_LIMIT.
      *
      * Mirrors the counts above: an image counts as having alt text when any
-     * `_wp_attachment_image_alt` row for it is non-empty.
+     * `_wp_attachment_image_alt` row for it passes Alt_Text_Quality::is_descriptive().
      *
      * @since 2.6.0
      * @return int[]
@@ -989,27 +1195,7 @@ class SEO_Analyzer {
     private function image_ids_without_alt(): array {
         global $wpdb;
 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- bounded id list for a cached analysis; no core API filters on a missing meta value
-        $ids = $wpdb->get_col(
-            $wpdb->prepare(
-                "SELECT p.ID FROM {$wpdb->posts} p
-                 WHERE p.post_type = 'attachment'
-                   AND p.post_mime_type LIKE %s
-                   AND p.post_status != 'trash'
-                   AND NOT EXISTS (
-                       SELECT 1 FROM {$wpdb->postmeta} pm
-                        WHERE pm.post_id = p.ID
-                          AND pm.meta_key = '_wp_attachment_image_alt'
-                          AND pm.meta_value != ''
-                   )
-                 ORDER BY p.post_date DESC
-                 LIMIT %d",
-                $wpdb->esc_like('image/') . '%',
-                self::AFFECTED_LIMIT
-            )
-        );
-
-        return array_map('intval', (array) $ids);
+        return Alt_Text_Coverage::uncovered_ids($wpdb, self::AFFECTED_LIMIT);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1597,17 +1783,100 @@ class SEO_Analyzer {
         $known = count($this->known_answer_agents());
         $all   = $known > 0 && count($blocked) >= $known;
 
+        // The fix only sets the answer engines to Allow in ThinkRank's crawler
+        // rules. A block from anywhere else outlives it, so Fix is offered
+        // only when the rules are the whole cause (#1248).
+        $source = $this->answer_agent_block_outside_rules();
+
         return [
-            'label'      => $label,
-            'status'     => $all ? self::FAILED : self::WARNING,
-            'message'    => $all
+            'label'        => $label,
+            'status'       => $all ? self::FAILED : self::WARNING,
+            'message'      => $all
                 /* translators: %s: comma-separated crawler names. */
                 ? sprintf(__('Your robots.txt blocks every AI answer engine (%s), so your pages cannot be cited in AI answers at all.', 'thinkrank'), $names)
                 /* translators: %s: comma-separated crawler names. */
                 : sprintf(__('Your robots.txt blocks these AI answer engines: %s. Their assistants cannot read or cite your pages.', 'thinkrank'), $names),
-            'how_to_fix' => __('Under Essential SEO → Crawling & AI Indexing → Robots.txt, set the answer-engine crawlers to Allow. Blocking the training-only crawlers (GPTBot, ClaudeBot, CCBot) is a separate choice and does not cost you citations.', 'thinkrank'),
-            'value'      => $names,
+            'how_to_fix'   => $this->answer_agent_block_advice($source),
+            'value'        => $names,
+            'can_auto_fix' => '' === $source,
         ];
+    }
+
+    /**
+     * Where an answer-engine block comes from, when the crawler rules are not
+     * the whole cause.
+     *
+     * Mirrors what the fix does: it saves the answer engines as Allow and
+     * syncs the physical file, which rewrites a file ThinkRank wrote under
+     * robots management and removes one it wrote outside it. Whatever is
+     * still served after that is what this reads, with the crawler rules
+     * region taken out because the fix leaves no answer engine in it.
+     *
+     * @since 2.17.0
+     * @return string Empty when the fix lifts every answer-engine block.
+     *                Otherwise `file` (a robots.txt ThinkRank did not write),
+     *                `blog_public`, `allow_search_engines` or `custom` (the
+     *                robots.txt content, or a rule another plugin adds).
+     */
+    private function answer_agent_block_outside_rules(): string {
+        if (!class_exists('ThinkRank\\SEO\\Site_Identity_Manager')) {
+            return '';
+        }
+
+        $manager  = new Site_Identity_Manager();
+        $settings = $manager->get_settings('site');
+
+        if (file_exists(ABSPATH . 'robots.txt')) {
+            if (!$manager->robots_file_written_by_thinkrank()) {
+                return 'file';
+            }
+
+            if (empty($settings['robots_txt_enabled'])) {
+                // The sync removes a file ThinkRank wrote once it no longer
+                // manages robots.txt, and WordPress serves its default.
+                return '';
+            }
+        }
+
+        // A site-wide block renders `Disallow: /` for everyone and leaves the
+        // crawler rules out of the file entirely.
+        if (!get_option('blog_public')) {
+            return 'blog_public';
+        }
+
+        if (empty($settings['allow_search_engines'] ?? true)) {
+            return 'allow_search_engines';
+        }
+
+        $after_fix = $manager->strip_ai_crawler_block($manager->render_robots_txt_file());
+
+        return empty($this->answer_agents_blocked_in($after_fix)) ? '' : 'custom';
+    }
+
+    /**
+     * What to change for an answer-engine block, by where it comes from.
+     *
+     * @since 2.17.0
+     * @param string $source Output of answer_agent_block_outside_rules().
+     * @return string
+     */
+    private function answer_agent_block_advice(string $source): string {
+        switch ($source) {
+            case 'file':
+                return __('The robots.txt file in your site root blocks them. Your web server serves that file directly, so ThinkRank\'s crawler rules do not apply while it is there. Edit or remove it.', 'thinkrank');
+
+            case 'blog_public':
+                return __('Your site is set to discourage search engines, so robots.txt blocks every crawler. Untick "Discourage search engines from indexing this site" under Settings → Reading.', 'thinkrank');
+
+            case 'allow_search_engines':
+                return __('ThinkRank\'s Allow Search Engines setting is off, so robots.txt blocks every crawler. Turn it on under Essential SEO → Crawling and AI Indexing → Robots.txt.', 'thinkrank');
+
+            case 'custom':
+                return __('Your robots.txt content blocks them outside the AI crawler rules, for example with a "User-agent: *" group that disallows "/". Remove that rule under Essential SEO → Crawling and AI Indexing → Robots.txt.', 'thinkrank');
+
+            default:
+                return __('Under Essential SEO → Crawling & AI Indexing → Robots.txt, set the answer-engine crawlers to Allow. Blocking the training-only crawlers (GPTBot, ClaudeBot, CCBot) is a separate choice and does not cost you citations.', 'thinkrank');
+        }
     }
 
     /**
@@ -1625,7 +1894,23 @@ class SEO_Analyzer {
         }
 
         $effective = (new Site_Identity_Manager())->get_effective_robots_txt();
-        $groups    = $this->parse_robots_disallow_all((string) ($effective['content'] ?? ''));
+
+        return $this->answer_agents_blocked_in((string) ($effective['content'] ?? ''));
+    }
+
+    /**
+     * The answer-engine crawlers a robots.txt body disallows entirely.
+     *
+     * @since 2.17.0
+     * @param string $body Robots.txt content.
+     * @return string[] Crawler labels, empty when all are allowed.
+     */
+    private function answer_agents_blocked_in(string $body): array {
+        if (!class_exists('ThinkRank\\SEO\\AI_Crawlers')) {
+            return [];
+        }
+
+        $groups = $this->parse_robots_disallow_all($body);
 
         if (empty($groups)) {
             return [];

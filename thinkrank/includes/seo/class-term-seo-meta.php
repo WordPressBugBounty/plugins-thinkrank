@@ -102,6 +102,13 @@ class Term_Seo_Meta {
 			$data[ $key ] = (string) get_term_meta( $term_id, $meta_key, true );
 		}
 
+		// A URL stored before write() made it absolute reads back absolute,
+		// so the term form's `type="url"` field accepts it and the next save
+		// stores it that way (#1220).
+		foreach ( self::URL_FIELDS as $key => $meta_key ) {
+			$data[ $key ] = Absolute_Url::from( $data[ $key ] );
+		}
+
 		$data['robots_meta_enabled'] = (bool) get_term_meta( $term_id, self::ROBOTS_ENABLED_KEY, true );
 
 		foreach ( self::JSON_FIELDS as $key => $meta_key ) {
@@ -140,7 +147,9 @@ class Term_Seo_Meta {
 
 		foreach ( self::URL_FIELDS as $key => $meta_key ) {
 			if ( array_key_exists( $key, $settings ) ) {
-				self::save_string( $term_id, $meta_key, esc_url_raw( trim( (string) $settings[ $key ] ) ) );
+				// Absolute, or nothing: a canonical or og:image printed as
+				// `/relative/path/` is not one (#1220).
+				self::save_string( $term_id, $meta_key, Absolute_Url::from( (string) $settings[ $key ] ) );
 				$touched = true;
 			}
 		}

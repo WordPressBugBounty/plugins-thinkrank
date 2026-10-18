@@ -76,10 +76,7 @@ export default function Dashboard() {
 
 	if (isLoading) {
 		return (
-			<div
-				className="tr-grid tr-gap-6"
-				style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}
-			>
+			<div className="tr-grid tr-grid-cols-1 tr-gap-6">
 				<SkeletonCard lines={3} />
 				<SkeletonCard lines={4} />
 				<SkeletonCard lines={4} />
@@ -88,12 +85,10 @@ export default function Dashboard() {
 	}
 
 	return (
-		<div
-			className="tr-grid tr-gap-6"
-			style={{
-				gridTemplateColumns: 'minmax(0, 1fr) minmax(300px, 360px)',
-			}}
-		>
+		// One column until the viewport is wide enough to fit the sidebar next
+		// to a usable main column. The breakpoint is xl, not lg, because the
+		// WordPress admin menu takes about 160px of the viewport.
+		<div className="tr-grid tr-grid-cols-1 tr-gap-6 xl:tr-grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
 			{/* ── Main column ──────────────────────────── */}
 			<div className="tr-flex tr-flex-col tr-gap-6 tr-min-w-0">
 				<WelcomeCard />

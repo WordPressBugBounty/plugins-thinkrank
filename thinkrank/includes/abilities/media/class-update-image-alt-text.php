@@ -33,7 +33,7 @@ class Update_Image_Alt_Text extends Image_Alt_Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-image-alt-text';
 		$this->label       = __( 'Update ThinkRank Image Alt Text', 'thinkrank' );
-		$this->description = __( 'Set one image\'s alt text in the Media Library. Pass alt_text to write specific words, or generate: true to build one from the site\'s alt text template. Existing alt text is kept unless overwrite is true, so a sweep never replaces what an author wrote. Returns the stored value. Call get-image-alt-text to read the current value first, list-images to find ids, or fill-missing-alt-text to do the whole library at once. Caches holding the old alt text are cleared where possible; check cache.warnings and pass on anything the user still has to clear by hand.', 'thinkrank' );
+		$this->description = __( 'Set one image\'s alt text in the Media Library. Pass alt_text to write specific words, or generate: true to build one from the site\'s alt text template (or with alt_source ai, have the AI provider describe the image: one paid request, so ask the user first; if it cannot, the call fails with thinkrank_ai_alt_failed and the alt text is left as it was). Existing alt text is kept unless overwrite is true, so a sweep never replaces what an author wrote. Returns the stored value. Call get-image-alt-text to read the current value first, list-images to find ids, or fill-missing-alt-text to do the whole library at once. Caches holding the old alt text are cleared where possible; check cache.warnings and pass on anything the user still has to clear by hand.', 'thinkrank' );
 	}
 
 	/**
@@ -74,6 +74,7 @@ class Update_Image_Alt_Text extends Image_Alt_Ability_Base {
 					'type'        => 'boolean',
 					'description' => __( 'Build the alt text from the site\'s alt_format template instead of supplying it. Ignored when alt_text is given.', 'thinkrank' ),
 				],
+				'alt_source'    => $this->alt_source_property(),
 				'overwrite'     => [
 					'type'        => 'boolean',
 					'description' => __( 'Replace alt text this image already has. Default false, which skips such images and reports skipped: true.', 'thinkrank' ),
@@ -99,7 +100,10 @@ class Update_Image_Alt_Text extends Image_Alt_Ability_Base {
 					],
 				],
 				$this->image_properties(),
-				[ 'cache' => $this->cache_property() ]
+				[
+					'cache'     => $this->cache_property(),
+					'ai_budget' => $this->ai_budget_property(),
+				]
 			),
 		];
 	}
@@ -132,6 +136,15 @@ class Update_Image_Alt_Text extends Image_Alt_Ability_Base {
 
 		$overwrite = ! empty( $input['overwrite'] );
 
+		// Only generate reads the source; alt_text is written as given.
+		$source = ( $generate && ! $has_text ) ? $this->requested_alt_source( $input ) : null;
+		if ( $generate && ! $has_text ) {
+			$rejection = $this->reject_unknown_or_unavailable_alt_source( $source );
+			if ( null !== $rejection ) {
+				return $rejection;
+			}
+		}
+
 		if ( ! $overwrite && '' !== trim( $this->stored_alt( $attachment_id ) ) ) {
 			return array_merge(
 				[
@@ -146,20 +159,57 @@ class Update_Image_Alt_Text extends Image_Alt_Ability_Base {
 			// sanitize_text_field(), matching what the Media Library itself
 			// stores: alt text is a plain-text attribute, and markup in it is
 			// escaped into visible noise rather than rendered.
-			update_post_meta( $attachment_id, self::ALT_META_KEY, sanitize_text_field( (string) $input['alt_text'] ) );
+			// WordPress unslashes meta values; preserve literal backslashes in the reviewed words.
+			update_post_meta( $attachment_id, self::ALT_META_KEY, wp_slash( sanitize_text_field( (string) $input['alt_text'] ) ) );
 
 			// fill_attachment_alt() purges for itself; this branch writes the
 			// meta directly, so it has to ask for the same thing (#763).
 			$this->manager()->purge_alt_caches( [ $attachment_id ] );
-		} elseif ( ! $this->manager()->fill_attachment_alt( $attachment_id, true ) ) {
-			return new \WP_Error(
-				'thinkrank_alt_generation_failed',
-				__( 'The alt text template produced no value for this image. Set alt_text explicitly, or review the template under Essential SEO → Image SEO.', 'thinkrank' ),
-				[ 'status' => 422 ]
-			);
+		} else {
+			$used_before = 'ai' === $source ? \ThinkRank\AI\Spend_Guard::used_today() : 0;
+			$filled      = null === $source
+				? $this->manager()->fill_attachment_alt( $attachment_id, true )
+				: $this->manager()->fill_attachment_alt_from( $attachment_id, true, $source );
+
+			if ( 'ai' === $source ) {
+				$budget = $this->manager()->ai_budget_report( $used_before );
+			}
+
+			// A call that asked for AI gets no template fallback, so its
+			// failure is the provider's, not the template's (#1185 review).
+			if ( ! $filled && 'ai' === $source && '' !== $this->manager()->last_ai_alt_error() ) {
+				return new \WP_Error(
+					'thinkrank_ai_alt_failed',
+					sprintf(
+						/* translators: %s: the reason the AI provider gave. */
+						__( 'The AI provider could not describe this image, so its alt text was left as it was: %s', 'thinkrank' ),
+						$this->manager()->last_ai_alt_error()
+					),
+					[
+						'status'    => 502,
+						'ai_budget' => $budget ?? null,
+					]
+				);
+			}
+
+			if ( ! $filled && 'low_quality' === $this->manager()->last_fill_skip_reason() ) {
+				return new \WP_Error(
+					'thinkrank_alt_generation_low_quality',
+					__( 'The alt text template only gives this image filler, such as a number or "image", so nothing was written. Look at the image and pass alt_text that describes it.', 'thinkrank' ),
+					[ 'status' => 422 ]
+				);
+			}
+
+			if ( ! $filled ) {
+				return new \WP_Error(
+					'thinkrank_alt_generation_failed',
+					__( 'The alt text template produced no value for this image. Set alt_text explicitly, or review the template under Essential SEO → Image SEO.', 'thinkrank' ),
+					[ 'status' => 422 ]
+				);
+			}
 		}
 
-		return array_merge(
+		$result = array_merge(
 			[
 				'success' => true,
 				'skipped' => false,
@@ -167,5 +217,11 @@ class Update_Image_Alt_Text extends Image_Alt_Ability_Base {
 			$this->describe_image( $attachment_id ),
 			[ 'cache' => $this->cache_outcome() ]
 		);
+
+		if ( isset( $budget ) ) {
+			$result['ai_budget'] = $budget;
+		}
+
+		return $result;
 	}
 }

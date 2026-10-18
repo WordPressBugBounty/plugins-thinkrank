@@ -22,6 +22,7 @@ declare(strict_types=1);
 
 namespace ThinkRank\Admin\Importers;
 
+use ThinkRank\SEO\Absolute_Url;
 use ThinkRank\SEO\Focus_Keywords;
 use ThinkRank\SEO\Metadata_Pending;
 use ThinkRank\SEO\Object_Redirect;
@@ -65,9 +66,19 @@ class Snapshot_Migrator {
     ];
 
     /**
+     * META_MAP fields that hold a URL a crawler or a social card reads, so
+     * they are stored absolute, through Absolute_Url (#1220).
+     */
+    private const URL_KEYS = [
+        'canonical_url' => true,
+        'og_image'      => true,
+        'twitter_image' => true,
+    ];
+
+    /**
      * Canonical robots meta fields. Composed into JSON-encoded
      * `_thinkrank_robots_meta` / `_thinkrank_advanced_robots_meta`
-     * post meta by build_robots_payload().
+     * post meta by compose_post_robots() / compose_term_robots().
      */
     private const ROBOTS_FIELDS = [
         'noindex', 'nofollow', 'noarchive', 'noimageindex', 'nosnippet',
@@ -276,14 +287,7 @@ class Snapshot_Migrator {
             // exported and then dropped. Fold them in for terms, without
             // letting them win over a value the record already carries.
             if ($object_type === 'term') {
-                $extended = is_array($record['extended'] ?? null) ? $record['extended'] : [];
-                foreach (['og_title', 'og_description', 'og_image', 'twitter_title', 'twitter_description', 'twitter_image'] as $social_key) {
-                    if (!isset($data[$social_key]) || $data[$social_key] === '') {
-                        if (isset($extended[$social_key]) && $extended[$social_key] !== '') {
-                            $data[$social_key] = $extended[$social_key];
-                        }
-                    }
-                }
+                $data = self::fold_term_social_fields($data, $record);
             }
 
             foreach ($data as $canonical_key => $value) {
@@ -311,6 +315,14 @@ class Snapshot_Migrator {
                 // Skip zero values for integer fields that are "not set"
                 if ($value === 0 && in_array($canonical_key, ['primary_category'], true)) {
                     continue;
+                }
+
+                // A canonical or social image has to be absolute (#1220).
+                if (isset(self::URL_KEYS[$canonical_key])) {
+                    $value = Absolute_Url::from((string) $value);
+                    if ($value === '') {
+                        continue;
+                    }
                 }
 
                 // The meta writers unslash their value, so every write below
@@ -1039,6 +1051,12 @@ class Snapshot_Migrator {
             $writes = [];
             $conflicts = [];
 
+            // The run folds a term's social fields in from `extended`, so the
+            // preview has to see them too (see migrate_chunk()).
+            if ($object_type === 'term') {
+                $data = self::fold_term_social_fields($data, $record);
+            }
+
             foreach ($data as $canonical_key => $value) {
                 if (!isset(self::META_MAP[$canonical_key])) {
                     continue;
@@ -1048,6 +1066,12 @@ class Snapshot_Migrator {
                 }
                 if ($value === 0 && in_array($canonical_key, ['primary_category'], true)) {
                     continue;
+                }
+                if (isset(self::URL_KEYS[$canonical_key])) {
+                    $value = Absolute_Url::from((string) $value);
+                    if ($value === '') {
+                        continue;
+                    }
                 }
 
                 $existing = $this->get_object_meta($object_type, $object_id, self::META_MAP[$canonical_key]);
@@ -1060,6 +1084,13 @@ class Snapshot_Migrator {
                     }
                 }
             }
+
+            // Robots directives are not in META_MAP: the run composes them
+            // into one JSON payload. Without this a noindex-only record showed
+            // as skipped and the run then took the object out of search.
+            $robots = $this->preview_robots($object_type, $object_id, $data);
+            $writes = array_merge($writes, $robots['writes']);
+            $conflicts = array_merge($conflicts, $robots['conflicts']);
 
             if (!empty($writes)) {
                 $summary['would_write']++;
@@ -1081,6 +1112,115 @@ class Snapshot_Migrator {
         $summary['has_more'] = $page < $total_chunks;
 
         return $summary;
+    }
+
+    /**
+     * How the run would treat a record's robots directives, by the rules the
+     * robots writers apply: nothing to announce when the record carries no
+     * directive worth an override; a write when the object has no
+     * `_thinkrank_robots_meta` yet; otherwise the writers leave the object
+     * alone, which is a conflict when the stored override is off or says
+     * something else, and a match when it already holds the same directives.
+     *
+     * Users have no robots override, so a user record never reports one.
+     *
+     * @since 2.17.0
+     *
+     * @param string $object_type One of post|term|user.
+     * @param int    $object_id   Object id.
+     * @param array  $data        Canonical record data.
+     * @return array{writes: string[], conflicts: string[]}
+     */
+    private function preview_robots(string $object_type, int $object_id, array $data): array {
+        $none = ['writes' => [], 'conflicts' => []];
+
+        if ($object_type === 'post') {
+            $payload = self::compose_post_robots($data);
+        } elseif ($object_type === 'term') {
+            $payload = ['robots' => self::compose_term_robots($data), 'advanced' => []];
+        } else {
+            return $none;
+        }
+
+        if (empty($payload['robots']) && empty($payload['advanced'])) {
+            return $none;
+        }
+
+        // The directives the run would switch on, by name. An explicit index
+        // is all false, so it is announced as `index`.
+        $fields = array_keys(array_filter(
+            array_intersect_key($payload['robots'], array_flip(self::ROBOTS_FIELDS))
+        ));
+        if (!empty($payload['robots']['index']) && empty($fields)) {
+            $fields[] = 'index';
+        }
+        foreach (self::ADVANCED_ROBOTS_FIELDS as $field) {
+            if (array_key_exists($field, $payload['advanced'])) {
+                $fields[] = $field;
+            }
+        }
+        $existing = $this->get_object_meta($object_type, $object_id, '_thinkrank_robots_meta');
+        if (!is_string($existing) || $existing === '') {
+            return ['writes' => $fields, 'conflicts' => []];
+        }
+
+        // The writers never overwrite a stored payload. Say so when that
+        // leaves the object with directives other than the source's.
+        $stored = json_decode($existing, true);
+        $stored = is_array($stored) ? $stored : [];
+        $differs = [];
+        foreach ($payload['robots'] as $field => $value) {
+            if ($field === 'index') {
+                continue;
+            }
+            if ((bool) ($stored[$field] ?? false) !== $value) {
+                $differs[] = $field;
+            }
+        }
+
+        if (!empty($payload['advanced'])) {
+            $stored_advanced = $this->get_object_meta($object_type, $object_id, '_thinkrank_advanced_robots_meta');
+            $stored_advanced = is_string($stored_advanced) ? json_decode($stored_advanced, true) : null;
+            $stored_advanced = is_array($stored_advanced) ? $stored_advanced : [];
+            foreach (self::ADVANCED_ROBOTS_FIELDS as $field) {
+                if (array_key_exists($field, $payload['advanced'])
+                    && (string) ($stored_advanced[$field] ?? '') !== (string) $payload['advanced'][$field]) {
+                    $differs[] = $field;
+                }
+            }
+        }
+
+        $enabled = $this->get_object_meta($object_type, $object_id, '_thinkrank_robots_meta_enabled');
+        if (empty($enabled)) {
+            // The stored override is off, so none of the source's directives
+            // would apply after the run.
+            return ['writes' => [], 'conflicts' => $fields];
+        }
+
+        return ['writes' => [], 'conflicts' => $differs];
+    }
+
+    /**
+     * A term record's social fields, folded in from `extended` where `data`
+     * has none. Four of the five exporters put them there; see migrate_chunk().
+     *
+     * @since 2.17.0
+     *
+     * @param array $data   Canonical record data.
+     * @param array $record Full snapshot record.
+     * @return array
+     */
+    private static function fold_term_social_fields(array $data, array $record): array {
+        $extended = is_array($record['extended'] ?? null) ? $record['extended'] : [];
+        foreach (['og_title', 'og_description', 'og_image', 'twitter_title', 'twitter_description', 'twitter_image'] as $social_key) {
+            if (!isset($data[$social_key]) || $data[$social_key] === '') {
+                if (isset($extended[$social_key]) && $extended[$social_key] !== '') {
+                    $data[$social_key] = $extended[$social_key];
+                }
+            }
+        }
+
+        return $data;
     }
 
     /**
@@ -1429,6 +1569,29 @@ class Snapshot_Migrator {
             return false;
         }
 
+        $robots = self::compose_term_robots($data);
+        if (empty($robots)) {
+            return false;
+        }
+
+        update_term_meta($term_id, '_thinkrank_robots_meta', wp_slash(wp_json_encode($robots)));
+        update_term_meta($term_id, '_thinkrank_robots_meta_enabled', 1);
+
+        return true;
+    }
+
+    /**
+     * The `_thinkrank_robots_meta` payload a term record would be given, or
+     * an empty array when the record has nothing to write. Pure: shared by
+     * migrate_term_robots_payload() and preview_chunk(), so the preview
+     * announces exactly what the run writes.
+     *
+     * @since 2.17.0
+     *
+     * @param array $data Canonical record data.
+     * @return array<string,bool>
+     */
+    private static function compose_term_robots(array $data): array {
         $robots = [];
         $has_active_directive = false;
 
@@ -1450,17 +1613,14 @@ class Snapshot_Migrator {
 
         if (!$has_active_directive) {
             if (!self::wants_explicit_index($data)) {
-                return false;
+                return [];
             }
             $robots = ['noindex' => false];
         }
 
         $robots['index'] = empty($robots['noindex']);
 
-        update_term_meta($term_id, '_thinkrank_robots_meta', wp_slash(wp_json_encode($robots)));
-        update_term_meta($term_id, '_thinkrank_robots_meta_enabled', 1);
-
-        return true;
+        return $robots;
     }
 
     /**
@@ -1696,6 +1856,39 @@ class Snapshot_Migrator {
             return false;
         }
 
+        $payload = self::compose_post_robots($data);
+        $robots = $payload['robots'];
+        $advanced = $payload['advanced'];
+
+        $wrote = false;
+        if (!empty($robots)) {
+            update_post_meta($post_id, '_thinkrank_robots_meta', wp_slash(wp_json_encode($robots)));
+            $wrote = true;
+        }
+        if (!empty($advanced)) {
+            update_post_meta($post_id, '_thinkrank_advanced_robots_meta', wp_slash(wp_json_encode($advanced)));
+            $wrote = true;
+        }
+        if ($wrote) {
+            update_post_meta($post_id, '_thinkrank_robots_meta_enabled', 1);
+        }
+
+        return $wrote;
+    }
+
+    /**
+     * The robots payloads a post record would be given: `robots` for
+     * `_thinkrank_robots_meta` and `advanced` for
+     * `_thinkrank_advanced_robots_meta`, both empty when the record has
+     * nothing to write. Pure: shared by migrate_robots_payload() and
+     * preview_chunk(), so the preview announces exactly what the run writes.
+     *
+     * @since 2.17.0
+     *
+     * @param array $data Canonical record data.
+     * @return array{robots: array<string,bool>, advanced: array<string,mixed>}
+     */
+    private static function compose_post_robots(array $data): array {
         $robots = [];
         foreach (self::ROBOTS_FIELDS as $field) {
             if (!array_key_exists($field, $data)) {
@@ -1737,16 +1930,10 @@ class Snapshot_Migrator {
         // one directive is actually active (or an advanced directive exists);
         // an all-false array equals ThinkRank's default index/follow and must
         // not flip robots_meta_enabled on for posts that had no directive.
-        $has_active_directive = false;
-        foreach ($robots as $flag) {
-            if ($flag) {
-                $has_active_directive = true;
-                break;
-            }
-        }
+        $has_active_directive = in_array(true, $robots, true);
         if (!$has_active_directive && empty($advanced)) {
             if (!self::wants_explicit_index($data)) {
-                return false;
+                return ['robots' => [], 'advanced' => []];
             }
             // Only the index decision is written, so the content type's
             // other directives still apply.
@@ -1758,20 +1945,7 @@ class Snapshot_Migrator {
             $robots['index'] = empty($robots['noindex']);
         }
 
-        $wrote = false;
-        if (!empty($robots)) {
-            update_post_meta($post_id, '_thinkrank_robots_meta', wp_slash(wp_json_encode($robots)));
-            $wrote = true;
-        }
-        if (!empty($advanced)) {
-            update_post_meta($post_id, '_thinkrank_advanced_robots_meta', wp_slash(wp_json_encode($advanced)));
-            $wrote = true;
-        }
-        if ($wrote) {
-            update_post_meta($post_id, '_thinkrank_robots_meta_enabled', 1);
-        }
-
-        return $wrote;
+        return ['robots' => $robots, 'advanced' => $advanced];
     }
 
     /**

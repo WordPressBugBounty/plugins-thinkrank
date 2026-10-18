@@ -1,5 +1,7 @@
 import classnames from 'classnames';
 
+import useControlId from './useControlId';
+
 // "Outlined modern" control style — no shadows, just border.
 // See memory/feedback_form_control_style.md.
 
@@ -22,7 +24,7 @@ export default function Select({
 	hideLabelFromVision = false,
 	...props
 }) {
-	const selectId = id || label?.toLowerCase().replace(/\s+/g, '-');
+	const selectId = useControlId(id, label, 'tr-select');
 	const borderClass = error ? 'tr-border-danger' : 'tr-border-primary';
 	const messageId = selectId ? `${selectId}-description` : undefined;
 	const hasMessage = Boolean((description && !error) || error);
@@ -72,7 +74,11 @@ export default function Select({
 					}
 				>
 					{options.map((opt) => (
-						<option key={opt.value} value={opt.value}>
+						<option
+							key={opt.value}
+							value={opt.value}
+							disabled={opt.disabled}
+						>
 							{opt.label}
 						</option>
 					))}

@@ -1618,7 +1618,10 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                     (string) get_post_meta($post->ID, '_thinkrank_og_description', true),
                     $post->ID
                 );
-                $og_image_override = get_post_meta($post->ID, '_thinkrank_og_image', true);
+                // Absolute at output too: a value stored before #1220, or written
+                // straight to post meta, can still be root-relative, and
+                // crawlers ignore a relative og:image (#1253).
+                $og_image_override = Absolute_Url::from((string) get_post_meta($post->ID, '_thinkrank_og_image', true));
 
                 // Per-post Twitter-specific title override (metabox Social tab).
                 // Twitter Cards fall back to the og:title when this is empty, so
@@ -1746,12 +1749,12 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                     $term_id
                 );
 
-                $term_og_image = (string) get_term_meta($term_id, '_thinkrank_og_image', true);
+                $term_og_image = Absolute_Url::from((string) get_term_meta($term_id, '_thinkrank_og_image', true));
                 if ('' !== $term_og_image) {
                     $data['image'] = $term_og_image;
                 }
 
-                $term_twitter_image = (string) get_term_meta($term_id, '_thinkrank_twitter_image', true);
+                $term_twitter_image = Absolute_Url::from((string) get_term_meta($term_id, '_thinkrank_twitter_image', true));
                 if ('' !== $term_twitter_image) {
                     $data['twitter_image'] = $term_twitter_image;
                 }
@@ -1918,7 +1921,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         // For posts, check for post-specific Twitter image meta first (if implemented)
         if ($post) {
             // Check for post-specific Twitter image meta (future enhancement)
-            $post_twitter_image = get_post_meta($post->ID, '_thinkrank_twitter_image', true);
+            $post_twitter_image = Absolute_Url::from((string) get_post_meta($post->ID, '_thinkrank_twitter_image', true));
             if (!empty($post_twitter_image)) {
                 return $post_twitter_image;
             }

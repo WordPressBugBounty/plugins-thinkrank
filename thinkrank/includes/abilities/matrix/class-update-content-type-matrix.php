@@ -11,6 +11,7 @@ namespace ThinkRank\Abilities\Matrix;
 
 use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\SEO\Content_Type_Settings;
+use ThinkRank\SEO\Content_Type_Robots_State;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -41,7 +42,7 @@ class Update_Content_Type_Matrix extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-content-type-matrix';
 		$this->label       = __( 'Update ThinkRank Content Type Matrix', 'thinkrank' );
-		$this->description = __( 'Set the SEO features for one content type: metas, schema, Open Graph, Twitter cards and analytics, each "inherit", "on" or "off", plus robots noindex and sitemap inclusion. Call get-content-type-matrix first for valid entity keys; a post type is its bare slug, other entities are prefixed with taxonomy:, archive: or special:.', 'thinkrank' );
+		$this->description = __( 'Set SEO features for one discovered content type, each "inherit", "on" or "off", plus noindex and sitemap inclusion. For an exactly restorable robots change, send robots_state and expected_robots_state from a fresh get-content-type-matrix read, with no other change fields. This preserves inactive directives and can restore inherited mode. Omitted keys in robots_state remove those stored keys; null read state is not editable through this contract.', 'thinkrank' );
 	}
 
 	/**
@@ -87,6 +88,11 @@ class Update_Content_Type_Matrix extends Ability_Base {
 			'type'        => 'boolean',
 			'description' => __( 'Whether this entity belongs in the XML sitemap. Only accepted for entities the sitemap generator emits.', 'thinkrank' ),
 		];
+		$properties['robots_state'] = Content_Type_Robots_State::schema();
+		$properties['expected_robots_state'] = [
+			'type' => 'string', 'pattern' => '^[a-f0-9]{64}$',
+			'description' => __( 'robots_state_fingerprint from the same row read. Required with robots_state; stale values are refused before saving.', 'thinkrank' ),
+		];
 
 		return [
 			'type'                 => 'object',
@@ -123,6 +129,9 @@ class Update_Content_Type_Matrix extends Ability_Base {
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function execute( $input ) {
+		if ( ! $this->permission_callback() ) {
+			return new \WP_Error( 'rest_forbidden', __( 'You cannot change these settings.', 'thinkrank' ), [ 'status' => 403 ] );
+		}
 		$input  = (array) $input;
 		$entity = (string) ( $input['entity'] ?? '' );
 
@@ -150,6 +159,13 @@ class Update_Content_Type_Matrix extends Ability_Base {
 		}
 
 		$settings = [];
+
+		if ( array_key_exists( 'robots_state', $input ) || array_key_exists( 'expected_robots_state', $input ) ) {
+			if ( count( $input ) !== 3 || ! array_key_exists( 'robots_state', $input ) || ! is_string( $input['expected_robots_state'] ?? null ) || null === Content_Type_Robots_State::validate( $input['robots_state'] ) ) {
+				return new \WP_Error( 'thinkrank_robots_invalid_state', __( 'Send the entity, exact robots_state and its expected_robots_state fingerprint without other change fields.', 'thinkrank' ), [ 'status' => 400 ] );
+			}
+			$settings = [ 'robots_state' => $input['robots_state'], 'expected_robots_state' => $input['expected_robots_state'] ];
+		}
 
 		foreach ( Content_Type_Settings::FEATURES as $feature ) {
 			if ( ! array_key_exists( $feature, $input ) ) {

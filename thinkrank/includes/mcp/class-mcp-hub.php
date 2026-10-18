@@ -638,20 +638,34 @@ final class Mcp_Hub {
 	}
 
 	/**
-	 * What this site says about itself at the token exchange, so the hub can
+	 * What this site says about itself at the token exchange and initialize, so the hub can
 	 * refuse a code that came back from somewhere other than where it began,
-	 * and learn which versions run here. Pro's version is null without Pro.
-	 * Never a license.
+	 * and learn which versions run here and where its icon is. Pro's version
+	 * is null without Pro. Never a license.
 	 *
-	 * @return array{home_url:string,blog_id:int,version:string,pro_version:string|null}
+	 * @return array{home_url:string,blog_id:int,version:string,pro_version:string|null,icon_url:string}
 	 */
 	public static function site_facts(): array {
 		return [
 			'home_url'    => untrailingslashit( home_url( '/' ) ),
 			'blog_id'     => get_current_blog_id(),
+			'icon_url'    => self::icon_url(),
 			'version'     => defined( 'THINKRANK_VERSION' ) ? (string) constant( 'THINKRANK_VERSION' ) : '',
 			'pro_version' => defined( 'THINKRANK_PRO_VERSION' ) ? (string) constant( 'THINKRANK_PRO_VERSION' ) : null,
 		];
+	}
+
+	/**
+	 * The site icon at 64px, or an empty string when none is set. This is what
+	 * get_site_icon_url() returns, so a favicon uploaded under ThinkRank's
+	 * Site Identity wins over the icon set under Settings → General
+	 * (SEO_Manager::filter_site_icon_url). Only the address: the hub fetches
+	 * and checks the image itself (thinkrank-hub#71).
+	 *
+	 * @return string
+	 */
+	public static function icon_url(): string {
+		return (string) get_site_icon_url( 64 );
 	}
 
 	/**

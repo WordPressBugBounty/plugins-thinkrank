@@ -757,7 +757,9 @@ const BulkSnippetsTab = () => {
 						/>
 					</div>
 				) : (
-					<div className="tr-overflow-x-auto">
+					// tr-relative keeps the caption's hidden text inside the
+					// scroller, so it cannot widen the page (#1256).
+					<div className="tr-relative tr-overflow-x-auto">
 						<table className="tr-w-full tr-min-w-[940px] tr-text-sm tr-border-collapse">
 							<colgroup>
 								<col className="tr-w-10" />

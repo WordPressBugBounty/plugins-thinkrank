@@ -1738,7 +1738,9 @@ class SEO_Manager {
                 (string) get_post_meta($this->current_post_id, '_thinkrank_og_description', true),
                 $this->current_post_id
             );
-            $og_image_override = get_post_meta($this->current_post_id, '_thinkrank_og_image', true);
+            // Absolute at output: a value stored before #1220 can still be
+            // root-relative, and crawlers ignore a relative og:image (#1253).
+            $og_image_override = \ThinkRank\SEO\Absolute_Url::from((string) get_post_meta($this->current_post_id, '_thinkrank_og_image', true));
         } elseif ($this->current_term_id) {
             // Terms carry the same social override keys — the abilities API
             // writes them — so honour them here rather than letting the term's
@@ -1751,7 +1753,7 @@ class SEO_Manager {
                 (string) get_term_meta($this->current_term_id, '_thinkrank_og_description', true),
                 $this->current_term_id
             );
-            $og_image_override = get_term_meta($this->current_term_id, '_thinkrank_og_image', true);
+            $og_image_override = \ThinkRank\SEO\Absolute_Url::from((string) get_term_meta($this->current_term_id, '_thinkrank_og_image', true));
         }
 
         // Get title using priority system: OG override > post-specific > Global SEO > Site Identity > default
@@ -2077,7 +2079,9 @@ class SEO_Manager {
         if (is_singular()) {
             // Check for custom canonical URL override
             if ($this->current_post_id) {
-                $custom_canonical = get_post_meta($this->current_post_id, '_thinkrank_canonical_url', true);
+                // Stored before the writers made it absolute, a root-relative
+                // value is resolved here; one with no host is ignored (#1220).
+                $custom_canonical = \ThinkRank\SEO\Absolute_Url::from((string) get_post_meta($this->current_post_id, '_thinkrank_canonical_url', true));
                 if (!empty($custom_canonical)) {
                     $canonical_url = $custom_canonical;
                 }
@@ -2103,7 +2107,7 @@ class SEO_Manager {
             // the archive, unless it is just the archive's own URL: people
             // paste that, and taken literally it pointed /page/2/ at page 1.
             if ('' !== $canonical_url && $this->current_term_id) {
-                $custom_canonical = trim((string) get_term_meta($this->current_term_id, '_thinkrank_canonical_url', true));
+                $custom_canonical = \ThinkRank\SEO\Absolute_Url::from((string) get_term_meta($this->current_term_id, '_thinkrank_canonical_url', true));
                 if ('' !== $custom_canonical) {
                     $term_link = get_term_link(get_queried_object());
                     $is_own_url = !is_wp_error($term_link) && self::is_same_url($custom_canonical, (string) $term_link);
@@ -2648,24 +2652,8 @@ class SEO_Manager {
     private function get_title_placeholders(): array {
         global $post, $wp_query;
 
-        $settings = $this->site_identity_manager->get_settings('site');
-        $separator = $this->get_title_separator($settings['title_separator'] ?? 'pipe');
-
-        $placeholders = [
-            // first_non_empty(), not `??`: Site Identity persists these as ''
-            // rather than leaving them unset, and '' is not null — so the
-            // null-coalesce stopped dead on the empty string and the WordPress
-            // fallback was unreachable. A site with a tagline set in Settings →
-            // General rendered "%site_description%" as nothing (#398). This is
-            // the same reasoning first_non_empty()'s own docblock records.
-            '%site_title%' => $this->first_non_empty($settings['site_name'] ?? '', get_bloginfo('name')),
-            '%site_name%' => $this->first_non_empty($settings['site_name'] ?? '', get_bloginfo('name')),
-            '%site_description%' => $this->first_non_empty($settings['site_description'] ?? '', get_bloginfo('description')),
-            '%tagline%' => $this->first_non_empty($settings['tagline'] ?? '', get_bloginfo('description')),
-            '%separator%' => ' ' . $separator . ' ',
-            '%sep%' => ' ' . $separator . ' ',
-            '%date%' => gmdate('F Y'),
-        ];
+        $settings     = $this->site_identity_manager->get_settings('site');
+        $placeholders = self::base_title_placeholders($settings);
 
         // Context-specific placeholders
         switch ($this->current_context) {
@@ -2688,18 +2676,13 @@ class SEO_Manager {
                 break;
 
             case 'category':
-                $category = get_queried_object();
-                if ($category) {
-                    $placeholders['%category_title%'] = $category->name;
-                    $placeholders['%category%'] = $category->name;
-                }
-                break;
-
             case 'tag':
-                $tag = get_queried_object();
-                if ($tag) {
-                    $placeholders['%tag_title%'] = $tag->name;
-                    $placeholders['%tag%'] = $tag->name;
+                $term = get_queried_object();
+                if ($term) {
+                    $placeholders = array_merge(
+                        $placeholders,
+                        self::term_name_placeholders($this->current_context, (string) $term->name)
+                    );
                 }
                 break;
 
@@ -2740,6 +2723,155 @@ class SEO_Manager {
     }
 
     /**
+     * Placeholders every title template can use, whatever the context.
+     *
+     * @since 2.17.0
+     *
+     * @param array $settings Site Identity settings.
+     * @return array<string, string> Placeholder values.
+     */
+    private static function base_title_placeholders(array $settings): array {
+        $separator = self::get_title_separator($settings['title_separator'] ?? 'pipe');
+
+        return [
+            // first_non_empty(), not `??`: Site Identity persists these as ''
+            // rather than leaving them unset, and '' is not null — so the
+            // null-coalesce stopped dead on the empty string and the WordPress
+            // fallback was unreachable. A site with a tagline set in Settings →
+            // General rendered "%site_description%" as nothing (#398). This is
+            // the same reasoning first_non_empty()'s own docblock records.
+            '%site_title%' => self::first_non_empty($settings['site_name'] ?? '', get_bloginfo('name')),
+            '%site_name%' => self::first_non_empty($settings['site_name'] ?? '', get_bloginfo('name')),
+            '%site_description%' => self::first_non_empty($settings['site_description'] ?? '', get_bloginfo('description')),
+            '%tagline%' => self::first_non_empty($settings['tagline'] ?? '', get_bloginfo('description')),
+            '%separator%' => ' ' . $separator . ' ',
+            '%sep%' => ' ' . $separator . ' ',
+            '%date%' => gmdate('F Y'),
+        ];
+    }
+
+    /**
+     * The name placeholders of a category or tag archive.
+     *
+     * @since 2.17.0
+     *
+     * @param string $context 'category' or 'tag'.
+     * @param string $name    Term name.
+     * @return array<string, string> Placeholder values.
+     */
+    private static function term_name_placeholders(string $context, string $name): array {
+        if ('category' === $context) {
+            return ['%category_title%' => $name, '%category%' => $name];
+        }
+
+        if ('tag' === $context) {
+            return ['%tag_title%' => $name, '%tag%' => $name];
+        }
+
+        return ['%archive_title%' => $name];
+    }
+
+    /**
+     * The <title> a term archive prints while the term has no SEO title.
+     *
+     * The term edit screen previews this when its SEO Title field is empty. It
+     * used to preview the bare term name, while the archive printed the Site
+     * Identity template ("Clothing - Media Wipe"), because nothing passed the
+     * template to the screen (#1217). This follows the same chain as
+     * override_document_title() on a term archive: a Global SEO template only
+     * applies to singular content, so it is the Site Identity category, tag or
+     * archive template, and without one WordPress's own "Name - Site".
+     *
+     * On a custom taxonomy the archive's %archive_title% is the term name as
+     * WordPress prints it, so filters on `single_term_title` can change it on
+     * the live page; the preview uses the stored name.
+     *
+     * @since 2.17.0
+     *
+     * @param \WP_Term $term Term.
+     * @return string Title, without markup.
+     */
+    public static function term_archive_fallback_title(\WP_Term $term): string {
+        $name     = (string) $term->name;
+        $identity = new \ThinkRank\SEO\Site_Identity_Manager();
+        $settings = $identity->get_settings('site');
+
+        if (!empty($settings['enabled'] ?? true)) {
+            $context  = self::term_archive_context($term);
+            $template = (string) ($settings[$context . '_title'] ?? '');
+
+            if ('' !== trim($template)) {
+                $title = self::process_title_template(
+                    $template,
+                    array_merge(self::base_title_placeholders($settings), self::term_name_placeholders($context, $name))
+                );
+
+                if ('' !== $title) {
+                    return self::strip_title_tags($title);
+                }
+            }
+        }
+
+        // What wp_get_document_title() prints for a term archive when no
+        // ThinkRank title applies.
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook, not ours to name.
+        $separator = (string) apply_filters('document_title_separator', '-');
+
+        return self::strip_title_tags(
+            wptexturize(implode(' ' . $separator . ' ', array_filter([$name, (string) get_bloginfo('name')])))
+        );
+    }
+
+    /**
+     * The meta description a term archive prints while the term has none.
+     *
+     * Same chain as get_meta_description() on a term archive: the term's own
+     * description, then the Site Identity default meta description. Empty when
+     * the archive prints no description at all.
+     *
+     * @since 2.17.0
+     *
+     * @param \WP_Term $term Term.
+     * @return string Description, or ''.
+     */
+    public static function term_archive_fallback_description(\WP_Term $term): string {
+        $description = trim(wp_strip_all_tags((string) $term->description));
+        if ('' !== $description) {
+            return \ThinkRank\Core\Seo_Text::trim_to_length($description);
+        }
+
+        $identity = new \ThinkRank\SEO\Site_Identity_Manager();
+        $settings = $identity->get_settings('site');
+        if (empty($settings['enabled'] ?? true)) {
+            return '';
+        }
+
+        return trim((string) ($settings['default_meta_description'] ?? ''));
+    }
+
+    /**
+     * The title context a term's archive renders in: detect_current_context()
+     * reports category and post_tag archives as 'category' and 'tag', and
+     * every other taxonomy as a generic 'archive'.
+     *
+     * @since 2.17.0
+     *
+     * @param \WP_Term $term Term.
+     * @return string 'category', 'tag' or 'archive'.
+     */
+    private static function term_archive_context(\WP_Term $term): string {
+        if ('category' === $term->taxonomy) {
+            return 'category';
+        }
+
+        if ('post_tag' === $term->taxonomy) {
+            return 'tag';
+        }
+
+        return 'archive';
+    }
+
+    /**
      * Whether this request is a static posts page rather than the front page.
      *
      * @since 2.0.1
@@ -2757,7 +2889,7 @@ class SEO_Manager {
      * @param array $placeholders Placeholder values
      * @return string Processed title
      */
-    private function process_title_template(string $template, array $placeholders): string {
+    private static function process_title_template(string $template, array $placeholders): string {
         $title = str_replace(array_keys($placeholders), array_values($placeholders), $template);
 
         // Clean up multiple separators and extra spaces
@@ -2784,7 +2916,7 @@ class SEO_Manager {
      * @param string $separator_type Separator type
      * @return string Separator symbol
      */
-    private function get_title_separator(string $separator_type): string {
+    private static function get_title_separator(string $separator_type): string {
         return \ThinkRank\SEO\Site_Identity_Manager::$title_separators[$separator_type]['symbol'] ?? \ThinkRank\SEO\Site_Identity_Manager::$title_separators['pipe']['symbol'];
     }
 
@@ -3438,7 +3570,7 @@ class SEO_Manager {
      * @param string|null ...$values Candidate values in priority order.
      * @return string First non-empty value, or '' if none.
      */
-    private function first_non_empty(...$values): string {
+    private static function first_non_empty(...$values): string {
         foreach ($values as $value) {
             if (is_string($value) && trim($value) !== '') {
                 return $value;
@@ -4095,8 +4227,11 @@ class SEO_Manager {
      * engines" setting (blog_public) changes.
      *
      * Only acts when ThinkRank robots management is enabled AND a physical
-     * robots.txt already exists — a stale physical file is the failure being
-     * fixed. When no file exists the virtual robots_txt filter already reflects
+     * robots.txt that ThinkRank wrote already exists — a stale physical file
+     * is the failure being fixed. A file someone wrote by hand is theirs: the
+     * setting change says nothing about who wrote it, so it is left alone
+     * (#1023 review). The search visibility fix flips blog_public through
+     * here. When no file exists the virtual robots_txt filter already reflects
      * blog_public live (render_robots_txt() enforces the full block), so there is
      * nothing to re-sync and no reason to create a file the user never generated.
      *
@@ -4117,7 +4252,7 @@ class SEO_Manager {
             return;
         }
 
-        if (file_exists(ABSPATH . 'robots.txt')) {
+        if ($this->site_identity_manager->robots_file_written_by_thinkrank()) {
             $this->site_identity_manager->sync_robots_txt_file();
         }
     }
@@ -4557,12 +4692,12 @@ class SEO_Manager {
     private function get_twitter_image_with_fallback(): ?string {
         // Cascade: post-specific Twitter image > post-specific OG image > featured image.
         if (is_singular() && $this->current_post_id) {
-            $post_twitter_image = get_post_meta($this->current_post_id, '_thinkrank_twitter_image', true);
+            $post_twitter_image = \ThinkRank\SEO\Absolute_Url::from((string) get_post_meta($this->current_post_id, '_thinkrank_twitter_image', true));
             if (!empty($post_twitter_image)) {
                 return $post_twitter_image;
             }
 
-            $post_og_image = get_post_meta($this->current_post_id, '_thinkrank_og_image', true);
+            $post_og_image = \ThinkRank\SEO\Absolute_Url::from((string) get_post_meta($this->current_post_id, '_thinkrank_og_image', true));
             if (!empty($post_og_image)) {
                 return $post_og_image;
             }

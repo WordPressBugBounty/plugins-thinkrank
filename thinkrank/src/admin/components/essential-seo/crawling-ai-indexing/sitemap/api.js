@@ -11,6 +11,36 @@ import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 
 /**
+ * The rows the last build published nothing for, as a type => reason map.
+ *
+ * The server names them by URL with a `reason` ('empty' or 'excluded'), but,
+ * as with unregistered children, what it judges is the type, so the screen
+ * keys them by type: a row stays marked while its URL is edited and stops
+ * being marked once its type is changed (#1219).
+ *
+ * @param {Array} sitemapUrls Configured child rows.
+ * @param {Array} children    `unpublished_children` from the server.
+ * @return {Object} Type => reason.
+ */
+export const unpublishedTypesFrom = (sitemapUrls, children) => {
+	const byUrl = {};
+	(children || []).forEach((child) => {
+		if (child && child.url) {
+			byUrl[child.url] = child.reason;
+		}
+	});
+
+	const types = {};
+	(sitemapUrls || []).forEach((sitemap) => {
+		if (byUrl[sitemap.url]) {
+			types[sitemap.type] = byUrl[sitemap.url];
+		}
+	});
+
+	return types;
+};
+
+/**
  * Load sitemap settings
  * @param ctx
  */
@@ -50,6 +80,18 @@ export const loadSettings = async (ctx) => {
 				(loadedSettings.sitemap_urls || [])
 					.filter((sitemap) => unregisteredUrls.includes(sitemap.url))
 					.map((sitemap) => sitemap.type)
+			);
+			// Registered labels for the custom children, so the Type dropdown
+			// names them as WordPress does rather than by slug (#1221).
+			ctx.setTypeLabels(response.data.child_type_labels || {});
+			// Registered children the last build published nothing for: no
+			// content yet, or excluded in the content type settings. Their
+			// URLs 404 too, so they get the same treatment (#1219).
+			ctx.setUnpublishedTypes(
+				unpublishedTypesFrom(
+					loadedSettings.sitemap_urls,
+					response.data.unpublished_children
+				)
 			);
 		} else {
 			const defaultSettings = ctx.getDefaultSettings();
@@ -235,6 +277,15 @@ export const generateSitemap = async (ctx) => {
 						response.data.last_generated ||
 						new Date().toISOString(),
 				}));
+			}
+
+			if (Array.isArray(response.data.unpublished_children)) {
+				ctx.setUnpublishedTypes(
+					unpublishedTypesFrom(
+						ctx.settings.sitemap_urls,
+						response.data.unpublished_children
+					)
+				);
 			}
 
 			// This generation wrote what the automatic rebuild was queued for,

@@ -244,7 +244,7 @@ class Oembed_Manager {
      * @return array
      */
     private function with_social_image(array $data, \WP_Post $post, array $settings): array {
-        $image = trim((string) get_post_meta($post->ID, '_thinkrank_og_image', true));
+        $image = Absolute_Url::from((string) get_post_meta($post->ID, '_thinkrank_og_image', true));
 
         if ('' === $image) {
             // WordPress already put the featured image here, and it is a

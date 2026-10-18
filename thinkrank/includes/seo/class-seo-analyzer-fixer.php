@@ -167,13 +167,20 @@ class SEO_Analyzer_Fixer {
     /**
      * Apply the fix for a check.
      *
+     * Exception messages thrown from here and the fix methods are plain text,
+     * not HTML. They only travel as JSON, from the REST endpoint to the audit
+     * toast and from the fix-seo-check ability to MCP clients, and both render
+     * them as text. Escaping them with esc_html() showed entities such as
+     * &quot; to the user (#1203), so escaping is left to whatever renders them.
+     *
      * @param string $check_id Analyzer check id.
      * @return array{fixed: bool, message: string, data: array} Outcome.
      * @throws \Exception When the check is unknown or unfixable.
      */
     public function fix(string $check_id): array {
         if (!self::can_fix($check_id)) {
-            throw new \Exception(esc_html__('This issue cannot be fixed automatically.', 'thinkrank'));
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            throw new \Exception(__('This issue cannot be fixed automatically.', 'thinkrank'));
         }
 
         switch ($check_id) {
@@ -205,22 +212,127 @@ class SEO_Analyzer_Fixer {
             return array_merge(['fixed' => false, 'message' => '', 'data' => []], $result);
         }
 
-        throw new \Exception(esc_html__('No handler is registered for this fix.', 'thinkrank'));
+        // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+        throw new \Exception(__('No handler is registered for this fix.', 'thinkrank'));
     }
 
     /**
-     * Untick "Discourage search engines from indexing this site".
+     * Let search engines crawl the site again.
+     *
+     * Unticks "Discourage search engines" and turns ThinkRank's Allow Search
+     * Engines switch back on. Setting blog_public alone reported success while
+     * the switch kept serving `Disallow: /` (#967).
+     *
+     * A physical robots.txt is rewritten only when ThinkRank wrote it
+     * (Site_Identity_Manager::robots_file_written_by_thinkrank()) under robots
+     * management, and only when this fix turned the switch on or the file
+     * still blocks with both settings on. The second case is a stale file the
+     * switch was turned on without rewriting, for example through a save that
+     * did not sync (#1202). Turning on the switch says nothing about who
+     * wrote the file, and a hand-written one is never overwritten: one that
+     * still blocks is reported instead, as is a custom robots.txt body that
+     * blocks. A blog_public change re-syncs a ThinkRank file through
+     * SEO_Manager::on_blog_public_changed(), under the same rule, so a file
+     * that hook already repaired no longer blocks and is not synced again.
      *
      * @return array
+     * @throws \Exception When the setting cannot be saved, or when the served
+     *                    robots.txt still blocks search engines afterwards.
      */
     private function fix_search_visibility(): array {
-        update_option('blog_public', 1);
+        $has_manager = class_exists('ThinkRank\\SEO\\Site_Identity_Manager');
+
+        if (!get_option('blog_public')) {
+            update_option('blog_public', 1);
+        }
+
+        $analyzer = new SEO_Analyzer();
+
+        if ($has_manager) {
+            $manager  = $this->site_identity_manager();
+            $settings = $manager->get_settings('site');
+            $settings = is_array($settings) ? $settings : [];
+            $turned_on = false;
+
+            if (empty($settings['allow_search_engines'] ?? true)) {
+                // Only the one key: save_settings() writes key by key, so the
+                // rest of the robots configuration is left exactly as it was.
+                if (!$manager->save_settings('site', null, ['allow_search_engines' => true])) {
+                    // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+                    throw new \Exception(__('The Allow Search Engines setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause.', 'thinkrank'));
+                }
+
+                $turned_on = true;
+            }
+
+            // Re-read from a fresh manager: the one above holds the pre-save
+            // settings. Only a file ThinkRank wrote is rewritten, and only
+            // under robots management. Creating a file nobody generated, or
+            // deleting one ThinkRank does not manage, is not part of this fix.
+            $fresh = $this->site_identity_manager();
+            $now   = $fresh->get_settings('site');
+
+            if (!empty($now['robots_txt_enabled']) && $fresh->robots_file_written_by_thinkrank()) {
+                $still_blocks = !$turned_on && 'file' === ($analyzer->search_engine_block()['source'] ?? '');
+
+                if ($turned_on || $still_blocks) {
+                    $fresh->sync_robots_txt_file();
+                }
+            }
+        }
+
+        $block = $analyzer->search_engine_block();
+
+        if (!empty($block)) {
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            throw new \Exception($this->search_block_error($block));
+        }
 
         return [
             'fixed'   => true,
             'message' => __('Search engines can now index this site.', 'thinkrank'),
             'data'    => [],
         ];
+    }
+
+    /**
+     * Name what is still blocking search engines after the fix ran.
+     *
+     * @since 2.17.0
+     * @param array $block Output of SEO_Analyzer::search_engine_block().
+     * @return string
+     */
+    private function search_block_error(array $block): string {
+        switch ((string) ($block['source'] ?? '')) {
+            case 'file':
+                if (!empty($block['thinkrank_file'])) {
+                    // The fix tried to rewrite ThinkRank's own file and the
+                    // block survived, so the write itself failed (#1202).
+                    return __('Search engines are allowed in your settings, but the robots.txt file ThinkRank wrote in your site root could not be rewritten and still blocks them. Check that the file is writable, then save the Robots.txt settings again.', 'thinkrank');
+                }
+
+                return __('Search engines are allowed in your settings, but the robots.txt file in your site root still blocks them. Your web server serves that file directly, so edit or remove it.', 'thinkrank');
+
+            case 'blog_public':
+            case 'allow_search_engines':
+                return __('Search engine access was turned on, but the setting did not stick. Another plugin may be changing it back.', 'thinkrank');
+
+            default:
+                return __('Search engines are allowed in your settings, but your custom robots.txt content still blocks them. Remove the "Disallow: /" rule under Essential SEO → Crawling and AI Indexing → Robots.txt.', 'thinkrank');
+        }
+    }
+
+    /**
+     * A Site Identity manager to read and save the robots.txt settings.
+     *
+     * A seam so tests can substitute a manager that does not need the
+     * settings table.
+     *
+     * @since 2.17.0
+     * @return Site_Identity_Manager
+     */
+    protected function site_identity_manager(): Site_Identity_Manager {
+        return new Site_Identity_Manager();
     }
 
     /**
@@ -240,7 +352,8 @@ class SEO_Analyzer_Fixer {
         $settings['enabled'] = true;
 
         if (!$generator->save_settings('site', null, $settings)) {
-            throw new \Exception(esc_html__('The sitemap setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause.', 'thinkrank'));
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            throw new \Exception(__('The sitemap setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause.', 'thinkrank'));
         }
 
         return [
@@ -258,7 +371,8 @@ class SEO_Analyzer_Fixer {
      */
     private function fix_schema(): array {
         if (!class_exists('ThinkRank\\SEO\\Schema_Management_System')) {
-            throw new \Exception(esc_html__('The schema module is unavailable.', 'thinkrank'));
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            throw new \Exception(__('The schema module is unavailable.', 'thinkrank'));
         }
 
         // 'site' is the storage context; 'schema_management_system' is the
@@ -287,7 +401,8 @@ class SEO_Analyzer_Fixer {
         }
 
         if (!$schema->save_settings('site', null, $settings)) {
-            throw new \Exception(esc_html__('The schema setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause.', 'thinkrank'));
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            throw new \Exception(__('The schema setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause.', 'thinkrank'));
         }
 
         return [
@@ -321,6 +436,35 @@ class SEO_Analyzer_Fixer {
         $defaults = Schema_Settings_Config::get_default_settings('site')['enabled_schema_types'] ?? [];
 
         return Schema_Management_System::filter_types_for_context('site', is_array($defaults) ? $defaults : []);
+    }
+
+    /**
+     * Why a fill left some images without alt text.
+     *
+     * Images the format would only have given filler are left empty on
+     * purpose (#1124). Say so, or the count of images still missing alt text
+     * looks like the fix did not run. The quality gate also refuses default
+     * names from cameras, phones and design tools (#1211, #1250), so the
+     * note names those too rather than only numbers and stock words.
+     *
+     * @param int $low_quality Images skipped as filler.
+     * @return string The note, or '' when nothing was skipped.
+     */
+    private static function low_quality_note(int $low_quality): string {
+        if ($low_quality <= 0) {
+            return '';
+        }
+
+        return sprintf(
+            /* translators: %d: images left without descriptive alt text. */
+            _n(
+                '%d image was left without descriptive alt text because your alt text format would only give it filler: a number, a word like "image", or a default name such as "IMG_1234" or "Screenshot". Add it by hand, or switch the alt text source to AI.',
+                '%d images were left without descriptive alt text because your alt text format would only give them filler: a number, a word like "image", or a default name such as "IMG_1234" or "Screenshot". Add them by hand, or switch the alt text source to AI.',
+                $low_quality,
+                'thinkrank'
+            ),
+            $low_quality
+        );
     }
 
     /**
@@ -366,9 +510,12 @@ class SEO_Analyzer_Fixer {
             'overwrite' => false,
         ]);
 
-        $updated   = (int) ($result['updated'] ?? 0);
-        $remaining = (int) ($result['remaining'] ?? 0);
-        $done      = !empty($result['done']);
+        $updated     = (int) ($result['updated'] ?? 0);
+        $remaining   = (int) ($result['remaining'] ?? 0);
+        $done        = !empty($result['done']);
+        $low_quality = (int) ($result['skipped_low_quality'] ?? 0);
+
+        $low_quality_note = self::low_quality_note($low_quality);
 
         // Reset when the walk finishes so a later run (after new uploads)
         // starts from the top rather than off the end of the library.
@@ -384,10 +531,11 @@ class SEO_Analyzer_Fixer {
         if (0 === $updated && $done) {
             return [
                 'fixed'   => false,
-                'message' => __('No images could be filled automatically. Check your alt text format under Essential SEO → Image SEO, or add alt text manually in the Media Library.', 'thinkrank'),
+                'message' => trim(__('No images could be filled automatically. Check your alt text format under Essential SEO → Image SEO, or add alt text manually in the Media Library.', 'thinkrank') . ' ' . $low_quality_note),
                 'data'    => [
-                    'updated'   => 0,
-                    'remaining' => $remaining,
+                    'updated'             => 0,
+                    'remaining'           => $remaining,
+                    'skipped_low_quality' => $low_quality,
                 ],
             ];
         }
@@ -408,6 +556,10 @@ class SEO_Analyzer_Fixer {
         // The write is done, but a cache ThinkRank cannot reach still decides
         // what the visitor sees. Saying so beats a green toast over a page
         // that has not changed (#763).
+        if ('' !== $low_quality_note) {
+            $message .= ' ' . $low_quality_note;
+        }
+
         $warnings = (array) ($result['cache']['warnings'] ?? []);
         if ([] !== $warnings) {
             $message .= ' ' . implode(' ', $warnings);
@@ -417,8 +569,9 @@ class SEO_Analyzer_Fixer {
             'fixed'   => true,
             'message' => $message,
             'data'    => [
-                'updated'   => $updated,
-                'remaining' => $remaining,
+                'updated'             => $updated,
+                'remaining'           => $remaining,
+                'skipped_low_quality' => $low_quality,
             ],
         ];
     }
@@ -454,7 +607,8 @@ class SEO_Analyzer_Fixer {
         $settings['ai_crawler_rules'] = $rules;
 
         if (!$manager->save_settings('site', null, $settings)) {
-            throw new \Exception(esc_html__('The AI crawler rules could not be saved. Check the PHP error log for the ThinkRank line naming the cause.', 'thinkrank'));
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            throw new \Exception(__('The AI crawler rules could not be saved. Check the PHP error log for the ThinkRank line naming the cause.', 'thinkrank'));
         }
 
         // The directives are composed into the served body at render time, but
@@ -471,11 +625,12 @@ class SEO_Analyzer_Fixer {
         $still_blocked = (new SEO_Analyzer())->blocked_answer_agents();
 
         if (!empty($still_blocked)) {
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
             throw new \Exception(
                 sprintf(
                     /* translators: %s: comma-separated crawler names. */
-                    esc_html__('The crawler rules were saved, but your robots.txt still blocks %s. That block comes from your own robots.txt content, a robots.txt file in your site root, or the site-wide search-engine setting. Edit it under Essential SEO → Crawling and AI Indexing.', 'thinkrank'),
-                    esc_html(implode(', ', $still_blocked))
+                    __('The crawler rules were saved, but your robots.txt still blocks %s. That block comes from your own robots.txt content, a robots.txt file in your site root, or the site-wide search-engine setting. Edit it under Essential SEO → Crawling and AI Indexing.', 'thinkrank'),
+                    implode(', ', $still_blocked)
                 )
             );
         }
@@ -502,7 +657,8 @@ class SEO_Analyzer_Fixer {
      */
     private function fix_llms_txt(): array {
         if (!class_exists('ThinkRank\\SEO\\LLMs_Txt_Manager')) {
-            throw new \Exception(esc_html__('The llms.txt module is unavailable.', 'thinkrank'));
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            throw new \Exception(__('The llms.txt module is unavailable.', 'thinkrank'));
         }
 
         $manager   = new LLMs_Txt_Manager();
@@ -513,7 +669,8 @@ class SEO_Analyzer_Fixer {
             : [];
 
         if (empty($validation['valid'])) {
-            throw new \Exception(esc_html__('llms.txt could not be published because its settings are incomplete. Fill in Website Description, Key Features and Target Audience under Essential SEO → Crawling and AI Indexing → LLMs.txt, then try again.', 'thinkrank'));
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            throw new \Exception(__('llms.txt could not be published because its settings are incomplete. Fill in Website Description, Key Features and Target Audience under Essential SEO → Crawling and AI Indexing → LLMs.txt, then try again.', 'thinkrank'));
         }
 
         $content = (string) ($generated['content'] ?? '');
@@ -522,10 +679,11 @@ class SEO_Analyzer_Fixer {
         if (empty($write['success'])) {
             $reason = (string) ($write['message'] ?? '');
 
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
             throw new \Exception(
                 '' !== $reason
-                    ? esc_html($reason)
-                    : esc_html__('llms.txt could not be written. Check that your site root is writable.', 'thinkrank')
+                    ? $reason
+                    : __('llms.txt could not be written. Check that your site root is writable.', 'thinkrank')
             );
         }
 

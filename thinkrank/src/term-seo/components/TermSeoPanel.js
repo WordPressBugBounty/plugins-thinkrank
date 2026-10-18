@@ -410,8 +410,16 @@ const TermSeoPanel = ({ config }) => {
 						</Field>
 
 						<SerpPreview
-							title={resolvedTitle}
-							description={resolvedDescription}
+							title={resolvedTitle || config.fallbackTitle}
+							description={
+								resolvedDescription ||
+								config.fallbackDescription
+							}
+							showDate={false}
+							emptyDescriptionHint={__(
+								"Please provide a meta description. If you don't, Google will try to find a relevant part of your page to show in search results.",
+								'thinkrank'
+							)}
 							postTitle={config.termName}
 							homeUrl={config.homeUrl}
 							siteName={config.siteName}

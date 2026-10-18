@@ -174,6 +174,97 @@ abstract class Image_Alt_Ability_Base extends Ability_Base {
 	}
 
 	/**
+	 * Input schema for a per-call alt source.
+	 *
+	 * @since 2.17.0
+	 * @return array<string, mixed>
+	 */
+	protected function alt_source_property(): array {
+		return [
+			'type'        => 'string',
+			'enum'        => Image_SEO_Manager::ALT_SOURCES,
+			'description' => __( 'Where the alt text comes from for this call only: template (file name or title, free) or ai (the AI provider looks at each image and describes it, one paid request per image). Default: the site\'s alt_source setting. Ask the user before using ai, and read get-ai-budget for the daily limit.', 'thinkrank' ),
+		];
+	}
+
+	/**
+	 * Output schema for the AI budget report.
+	 *
+	 * @since 2.17.0
+	 * @return array<string, mixed>
+	 */
+	protected function ai_budget_property(): array {
+		return [
+			'type'        => 'object',
+			'description' => __( 'Present when the alt text came from AI. requests_used is how far today\'s AI request count moved during this call, so another AI request running at the same time (auto-fill on upload, say) is counted in it too; remaining_today is what is left of the daily limit (null when there is no limit). Stop when blocked is true.', 'thinkrank' ),
+			'properties'  => [
+				'requests_used'   => [ 'type' => 'integer' ],
+				'used_today'      => [ 'type' => 'integer' ],
+				'daily_limit'     => [
+					'type'        => 'integer',
+					'description' => __( '0 means no daily limit.', 'thinkrank' ),
+				],
+				'remaining_today' => [ 'type' => [ 'integer', 'null' ] ],
+				'blocked'         => [ 'type' => 'boolean' ],
+				'message'         => [ 'type' => 'string' ],
+			],
+		];
+	}
+
+	/**
+	 * The alt source a call asked for, or null to use the setting.
+	 *
+	 * @since 2.17.0
+	 * @param array<string, mixed> $input Ability input.
+	 * @return string|null
+	 */
+	protected function requested_alt_source( array $input ): ?string {
+		if ( ! isset( $input['alt_source'] ) || ! is_string( $input['alt_source'] ) ) {
+			return null;
+		}
+
+		return $input['alt_source'];
+	}
+
+	/**
+	 * Refuse a call that asked for AI alt text when AI cannot produce it.
+	 *
+	 * Without this the manager falls back to the template, so a caller that
+	 * asked for AI precisely to avoid template filler would get the filler.
+	 *
+	 * @since 2.17.0
+	 * @param string|null $source Requested source, or null for the setting.
+	 * @return \WP_Error|null
+	 */
+	protected function reject_unknown_or_unavailable_alt_source( ?string $source ): ?\WP_Error {
+		if ( null === $source ) {
+			return null;
+		}
+
+		if ( ! in_array( $source, Image_SEO_Manager::ALT_SOURCES, true ) ) {
+			return new \WP_Error(
+				'thinkrank_invalid_alt_source',
+				sprintf(
+					/* translators: %s: accepted values. */
+					__( 'alt_source must be one of: %s.', 'thinkrank' ),
+					implode( ', ', Image_SEO_Manager::ALT_SOURCES )
+				),
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( 'ai' !== $source ) {
+			return null;
+		}
+
+		$reason = $this->manager()->ai_alt_unavailable_reason();
+
+		return null === $reason
+			? null
+			: new \WP_Error( 'thinkrank_ai_alt_unavailable', $reason, [ 'status' => 409 ] );
+	}
+
+	/**
 	 * Post statuses an image can carry.
 	 *
 	 * Mirrors Image_SEO_Manager's own list: 'inherit' alone misses the private

@@ -80,6 +80,18 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     ];
 
     /**
+     * Child sitemap types the generator publishes through its own paths,
+     * whatever is registered: the index, the whole-site file and the four
+     * core aggregates.
+     *
+     * @since 2.17.0
+     * @var string[]
+     */
+    private const BUILT_IN_CHILD_TYPES = [
+        'index', 'general', 'wordpress', 'posts', 'pages', 'categories', 'tags', // phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- lowercase on purpose: this is the stored type slug.
+    ];
+
+    /**
      * Supported sitemap types
      *
      * @since 1.0.0
@@ -143,6 +155,17 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @var string
      */
     public const REGENERATION_ERROR_OPTION = 'thinkrank_sitemap_regeneration_error';
+
+    /**
+     * Option holding the configured children the last index build published
+     * nothing for, keyed by URL: `type` and `reason` ('empty' or 'excluded').
+     * Read by unpublished_children() so the admin does not link to a child
+     * that answers 404 (#1219).
+     *
+     * @since 2.17.0
+     * @var string
+     */
+    public const UNPUBLISHED_CHILDREN_OPTION = 'thinkrank_sitemap_unpublished_children';
 
     /**
      * Delivery modes accepted by the `delivery_mode` setting.
@@ -3420,6 +3443,117 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     }
 
     /**
+     * Configured children the last build published nothing for, though their
+     * type is registered: a post type or taxonomy with nothing to list yet,
+     * or one the content type settings exclude. Such a child writes no file
+     * and is left out of the index (#836), so its URL answers 404 and the
+     * admin must not offer it as a link (#1219).
+     *
+     * Read from what the last build recorded rather than worked out again,
+     * because knowing a type is empty means querying it. Entries whose row
+     * has since been removed or given another type are dropped, and so are
+     * unregistered types, which unregistered_child_urls() reports.
+     *
+     * @since 2.17.0
+     *
+     * @param array|null $settings Sitemap settings (falls back to saved ones).
+     * @return array<int,array{url:string,reason:string}>
+     */
+    public function unpublished_children(?array $settings = null): array {
+        $settings = $settings ?? $this->get_settings('site');
+        $recorded = get_option(self::UNPUBLISHED_CHILDREN_OPTION, []);
+        if (!is_array($recorded) || empty($recorded)) {
+            return [];
+        }
+
+        $children = [];
+        foreach ((is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : []) as $child) {
+            if (!is_array($child) || empty($child['url']) || empty($child['enabled'])) {
+                continue;
+            }
+
+            $url   = (string) $child['url'];
+            $type  = (string) ($child['type'] ?? '');
+            $entry = $recorded[$url] ?? null;
+
+            if (!is_array($entry) || ($entry['type'] ?? null) !== $type
+                || !in_array($entry['reason'] ?? '', ['empty', 'excluded'], true)
+                || !$this->child_type_is_registered($type)) {
+                continue;
+            }
+
+            $children[] = ['url' => $url, 'reason' => (string) $entry['reason']];
+        }
+
+        return $children;
+    }
+
+    /**
+     * Store what this build left unpublished, for unpublished_children().
+     *
+     * Written only when it changed, since a dynamic site rebuilds on a
+     * sitemap request.
+     *
+     * @since 2.17.0
+     *
+     * @param array<string,array{type:string,reason:string}> $unpublished By URL.
+     * @return void
+     */
+    private function record_unpublished_children(array $unpublished): void {
+        if (get_option(self::UNPUBLISHED_CHILDREN_OPTION, []) === $unpublished) {
+            return;
+        }
+
+        update_option(self::UNPUBLISHED_CHILDREN_OPTION, $unpublished, false);
+    }
+
+    /**
+     * The registered label of each configured child that names a post type or
+     * taxonomy, so the admin's Type dropdown reads "Product categories" or
+     * "Team Members" rather than the slug (#1221).
+     *
+     * The built-in types are labelled by the screen itself and are left out,
+     * and so is a type nothing registers any more, which keeps its slug.
+     * `products` and the aliased WooCommerce children are labelled by the
+     * object they stand for.
+     *
+     * @since 2.17.0
+     *
+     * @param array|null $settings Sitemap settings (falls back to saved ones).
+     * @return array<string,string> Child type => label.
+     */
+    public function child_type_labels(?array $settings = null): array {
+        $settings = $settings ?? $this->get_settings('site');
+        $labels   = [];
+
+        foreach ((is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : []) as $child) {
+            $type = is_array($child) ? (string) ($child['type'] ?? '') : '';
+            if ('' === $type || isset($labels[$type])
+                || in_array($type, self::BUILT_IN_CHILD_TYPES, true)) {
+                continue;
+            }
+
+            $object = 'products' === $type ? 'product' : (self::CHILD_TYPE_ALIASES[$type] ?? $type);
+            $label  = '';
+
+            if (post_type_exists($object)) {
+                $post_type = get_post_type_object($object);
+                $label     = (string) ($post_type->labels->name ?? $post_type->label ?? '');
+            } elseif (taxonomy_exists($object)) {
+                $taxonomy = get_taxonomy($object);
+                $label    = (string) ($taxonomy->labels->name ?? $taxonomy->label ?? '');
+            }
+
+            $label = trim(html_entity_decode(wp_strip_all_tags($label), ENT_QUOTES, 'UTF-8'));
+            if ('' !== $label) {
+                $labels[$type] = $label;
+            }
+        }
+
+        return $labels;
+    }
+
+    /**
      * Is the object a child sitemap streams currently registered?
      *
      * The one answer generate_multiple_sitemaps() and unregistered_child_urls()
@@ -3436,7 +3570,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return bool
      */
     private function child_type_is_registered(string $type): bool {
-        if (in_array($type, ['index', 'general', 'wordpress', 'posts', 'pages', 'categories', 'tags'], true)) { // phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- lowercase on purpose: this is the stored type slug.
+        if (in_array($type, self::BUILT_IN_CHILD_TYPES, true)) {
             return true;
         }
 
@@ -3954,6 +4088,11 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $index_config = null;
         $index_children = [];
 
+        // Configured children this build publishes nothing for, and why. The
+        // unregistered ones are left out: unregistered_child_urls() answers
+        // those from the live registry.
+        $unpublished = [];
+
         foreach ($sitemap_urls as $sitemap_config) {
             if (empty($sitemap_config['enabled'])) {
                 continue;
@@ -3972,6 +4111,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             // 'pages', 'general', etc.) are not post type names, so this only
             // affects real custom post types.
             if (post_type_exists($type) && !$this->should_include_post_type($type)) {
+                $unpublished[$sitemap_config['url']] = ['type' => $type, 'reason' => 'excluded'];
                 continue;
             }
 
@@ -3982,6 +4122,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             // post_type_exists() keeps this to real custom post types.
             if (post_type_exists($type)
                 && !\ThinkRank\SEO\Content_Type_Settings::is_included_in_sitemap('post_type', $type, $settings)) {
+                $unpublished[$sitemap_config['url']] = ['type' => $type, 'reason' => 'excluded'];
                 continue;
             }
 
@@ -3996,6 +4137,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             if (taxonomy_exists($child_taxonomy)
                 && (!$this->should_include_taxonomy($child_taxonomy)
                     || !\ThinkRank\SEO\Content_Type_Settings::is_included_in_sitemap('taxonomy', $child_taxonomy, $settings))) {
+                $unpublished[$sitemap_config['url']] = ['type' => $type, 'reason' => 'excluded'];
                 continue;
             }
 
@@ -4012,6 +4154,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             if ($aggregate_flag !== false
                 && array_key_exists($aggregate_flag, $settings)
                 && empty($settings[$aggregate_flag])) {
+                $unpublished[$sitemap_config['url']] = ['type' => $type, 'reason' => 'excluded'];
                 continue;
             }
 
@@ -4045,6 +4188,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 // nothing rather than the whole site. The whole-site file is
                 // what 'general' asks for, and that is handled above.
                 if ($source === null) {
+                    $unpublished[$sitemap_config['url']] = ['type' => $type, 'reason' => 'empty'];
                     continue;
                 }
 
@@ -4092,6 +4236,11 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                     $this->write_sitemap_page($this->paginate_url($sitemap_config['url'], $page), $this->wrap_urlset($buffer, $settings, $image_ns), $type, count($buffer), $results, $index_children);
                 }
 
+                // Nothing written: the admin must not link to it (#1219).
+                if ($page === 0) {
+                    $unpublished[$sitemap_config['url']] = ['type' => $type, 'reason' => 'empty'];
+                }
+
                 // Remove pages left over from a previous, larger generation.
                 $this->cleanup_stale_pages($sitemap_config['url'], $page, $settings);
 
@@ -4100,6 +4249,8 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 $results['success'] = false;
             }
         }
+
+        $this->record_unpublished_children($unpublished);
 
         // Local business sitemap (parity with Rank Math's local-sitemap.xml).
         // The physical file is written whenever a business identity is

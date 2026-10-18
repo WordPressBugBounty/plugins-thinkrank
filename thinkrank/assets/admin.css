@@ -2408,6 +2408,12 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 			transition: none !important;
 		}
 	}
+.tr-root .\[container-type\:inline-size\]{
+  container-type: inline-size;
+}
+.tr-root .\[scrollbar-width\:none\]{
+  scrollbar-width: none;
+}
 
 /*
  * Tailwind Preflight (@tailwind base) emits UNSCOPED global resets — e.g.
@@ -2963,12 +2969,16 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   .tr-root .xl\:tr-col-span-2{
     grid-column: span 2 / span 2;
   }
-  .tr-root .xl\:tr-block{
-    display: block;
-  }
   .tr-root .xl\:tr-grid-cols-3{
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+  .tr-root .xl\:tr-grid-cols-\[minmax\(0\2c 1fr\)_minmax\(300px\2c 360px\)\]{
+    grid-template-columns: minmax(0,1fr) minmax(300px,360px);
+  }
+}
+
+.tr-root .\[\&\:\:-webkit-scrollbar\]\:tr-hidden::-webkit-scrollbar{
+  display: none;
 }
 
 .tr-root :is(.\[\&\>th\]\:tr-whitespace-nowrap>th){
@@ -2994,6 +3004,42 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root :is(.\[\&_strong\]\:tr-text-primary strong){
   --tw-text-opacity: 1;
   color: rgb(29 29 29 / var(--tw-text-opacity, 1));
+}
+
+@container (min-width:1000px){
+  .tr-root .\[\@container_\(min-width\:1000px\)\]\:tr-inline{
+    display: inline;
+  }
+}
+
+@container (min-width:1088px){
+  .tr-root .\[\@container_\(min-width\:1088px\)\]\:tr-inline{
+    display: inline;
+  }
+}
+
+@container (min-width:1184px){
+  .tr-root .\[\@container_\(min-width\:1184px\)\]\:tr-block{
+    display: block;
+  }
+}
+
+@container (min-width:1288px){
+  .tr-root .\[\@container_\(min-width\:1288px\)\]\:tr-inline{
+    display: inline;
+  }
+}
+
+@container (min-width:1340px){
+  .tr-root .\[\@container_\(min-width\:1340px\)\]\:tr-block{
+    display: block;
+  }
+}
+
+@container (min-width:936px){
+  .tr-root .\[\@container_\(min-width\:936px\)\]\:tr-block{
+    display: block;
+  }
 }
 
 /* Full-page WP chrome takeover — applied when ThinkRank admin UI is active */

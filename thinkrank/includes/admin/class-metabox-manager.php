@@ -18,6 +18,7 @@ use ThinkRank\AI\SEOScoreCalculator;
 use ThinkRank\Core\Settings;
 use ThinkRank\Core\Database;
 use ThinkRank\Core\Plan_Config;
+use ThinkRank\SEO\Absolute_Url;
 use ThinkRank\SEO\Focus_Keywords;
 use ThinkRank\SEO\Object_Redirect;
 use ThinkRank\SEO\Pattern_Resolver;
@@ -140,15 +141,28 @@ class Metabox_Manager {
             '_thinkrank_imported_from',
         ];
 
+        // URL fields written through REST post meta (or update_post_meta())
+        // skip the metabox writer, so they get the same absolute form here;
+        // a relative og:image is ignored by social crawlers (#1253).
+        $url_meta_fields = [
+            '_thinkrank_canonical_url',
+            '_thinkrank_og_image',
+            '_thinkrank_twitter_image',
+        ];
+
         foreach ($string_meta_fields as $meta_key) {
-            register_post_meta('', $meta_key, [
+            $args = [
                 'show_in_rest' => true,
                 'single' => true,
                 'type' => 'string',
                 'auth_callback' => function () {
                     return current_user_can('edit_posts') || current_user_can('edit_pages');
                 }
-            ]);
+            ];
+            if (in_array($meta_key, $url_meta_fields, true)) {
+                $args['sanitize_callback'] = [self::class, 'sanitize_url_meta'];
+            }
+            register_post_meta('', $meta_key, $args);
         }
 
         // Multiple focus keywords (array). The legacy single-value
@@ -319,6 +333,22 @@ class Metabox_Manager {
         // For any other data type, return null
         return null;
     }
+
+	/**
+	 * Sanitize a canonical or social image URL stored as post meta.
+	 *
+	 * The REST API and plain update_post_meta() calls bypass the metabox
+	 * writer, so a root-relative value such as `/rest/og.jpg` was stored and
+	 * printed as typed (#1253). Untyped because REST can send any JSON value.
+	 *
+	 * @since 2.17.0
+	 *
+	 * @param mixed $value Raw meta value.
+	 * @return string Absolute URL, or ''.
+	 */
+	public static function sanitize_url_meta( $value ): string {
+		return is_scalar( $value ) ? Absolute_Url::from( (string) $value ) : '';
+	}
 
 	/**
 	 * Sanitize JSON-LD meta field data
@@ -672,9 +702,11 @@ class Metabox_Manager {
             );
         }
 
-        // Save canonical URL separately with URL sanitization
+        // Save canonical URL separately with URL sanitization. A canonical
+        // has to be absolute: a root-relative value is resolved against the
+        // site and one with no host at all is dropped (#1220).
         if (isset($src['thinkrank_canonical_url'])) {
-            $canonical_url = esc_url_raw((string) $src['thinkrank_canonical_url']);
+            $canonical_url = Absolute_Url::from((string) $src['thinkrank_canonical_url']);
             if (empty($canonical_url)) {
                 delete_post_meta($post_id, '_thinkrank_canonical_url');
             } else {
@@ -834,7 +866,8 @@ class Metabox_Manager {
             if (!isset($src[$field])) {
                 continue;
             }
-            $value = esc_url_raw((string) $src[$field]);
+            // Social cards need an absolute image URL too (#1220).
+            $value = Absolute_Url::from((string) $src[$field]);
             if ($value === '') {
                 delete_post_meta($post_id, $meta_key);
             } else {
@@ -1380,7 +1413,9 @@ JS;
             'pillar_content' => get_post_meta($post_id, '_thinkrank_pillar_content', true),
             'exclude_from_search' => get_post_meta($post_id, \ThinkRank\SEO\Content_Visibility::SEARCH_META, true),
             'exclude_from_archives' => get_post_meta($post_id, \ThinkRank\SEO\Content_Visibility::ARCHIVE_META, true),
-            'canonical_url' => get_post_meta($post_id, '_thinkrank_canonical_url', true),
+            // Absolute even when stored before the writer made it so, so the
+            // editor's URL field accepts its own value (#1220).
+            'canonical_url' => Absolute_Url::from((string) get_post_meta($post_id, '_thinkrank_canonical_url', true)),
             // Not post meta: the rule in Pro's redirections table is the value.
             // See ThinkRank\SEO\Object_Redirect.
             'redirect_url' => $redirect['url'],
@@ -1390,10 +1425,10 @@ JS;
             'advanced_robots_meta' => get_post_meta($post_id, '_thinkrank_advanced_robots_meta', true),
             'og_title' => get_post_meta($post_id, '_thinkrank_og_title', true),
             'og_description' => get_post_meta($post_id, '_thinkrank_og_description', true),
-            'og_image' => get_post_meta($post_id, '_thinkrank_og_image', true),
+            'og_image' => Absolute_Url::from((string) get_post_meta($post_id, '_thinkrank_og_image', true)),
             'twitter_title' => get_post_meta($post_id, '_thinkrank_twitter_title', true),
             'twitter_description' => get_post_meta($post_id, '_thinkrank_twitter_description', true),
-            'twitter_image' => get_post_meta($post_id, '_thinkrank_twitter_image', true),
+            'twitter_image' => Absolute_Url::from((string) get_post_meta($post_id, '_thinkrank_twitter_image', true)),
         ];
     }
 

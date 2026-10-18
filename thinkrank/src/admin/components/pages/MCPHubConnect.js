@@ -29,6 +29,7 @@ import { Alert, Badge, Button, SkeletonText, Toggle } from '../ui';
 import logger from '../../../shared/utils/logger';
 import HubIcon from '../common/HubIcon';
 import { setHubConnected } from '../../utils/hubStatus';
+import notify from '../../utils/notify';
 
 const HUB = '/thinkrank/v1/hub';
 
@@ -128,7 +129,6 @@ const MCPHubConnect = ({ onNavigate, onDisconnected, from = '' }) => {
 	const [loadFailed, setLoadFailed] = useState(false);
 	const [attempt, setAttempt] = useState(0);
 	const [armed, setArmed] = useState(false);
-	const [ended, setEnded] = useState(false);
 	// Which request is in flight: '' | 'connect' | 'settings' | 'disconnect'.
 	const [busy, setBusy] = useState('');
 	const [error, setError] = useState('');
@@ -229,7 +229,9 @@ const MCPHubConnect = ({ onNavigate, onDisconnected, from = '' }) => {
 				setHub(result);
 				setHubConnected(isConnected(result));
 				setArmed(false);
-				setEnded(true);
+				notify.success(
+					__('Disconnected from ThinkRank Hub.', 'thinkrank')
+				);
 				// The hub's grant is listed among the connected apps, so
 				// the screen reloads that list rather than keep it there.
 				if (onDisconnected) {
@@ -323,7 +325,6 @@ const MCPHubConnect = ({ onNavigate, onDisconnected, from = '' }) => {
 	const hasNotices =
 		error ||
 		hub.pin_invalid ||
-		(ended && !connected) ||
 		(connected && paused && refusal) ||
 		(!connected && hub.staging) ||
 		(connected && armed);
@@ -392,17 +393,6 @@ const MCPHubConnect = ({ onNavigate, onDisconnected, from = '' }) => {
 					{error && (
 						<Alert variant="error" onDismiss={() => setError('')}>
 							{error}
-						</Alert>
-					)}
-
-					{ended && !connected && (
-						<Alert variant="success">
-							<span role="status">
-								{__(
-									'Disconnected from ThinkRank Hub.',
-									'thinkrank'
-								)}
-							</span>
 						</Alert>
 					)}
 

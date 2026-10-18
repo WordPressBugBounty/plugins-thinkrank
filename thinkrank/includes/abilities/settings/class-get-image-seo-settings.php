@@ -48,7 +48,7 @@ class Get_Image_Seo_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-image-seo-settings';
 		$this->label       = __( 'Get ThinkRank Image SEO Settings', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank image SEO settings, which control automatic alt/title injection, the token-based formats used to generate them, and whether generated alt text is persisted to the Media Library. Use update-image-seo-settings to change them.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank image SEO settings, which control automatic alt/title injection, the token-based formats used to generate them, whether generated alt text is persisted to the Media Library, and alt_source: template (built from the file name or title) or ai (the AI provider describes each image, one paid request per image). Use update-image-seo-settings to change them.', 'thinkrank' );
 	}
 
 	/**
@@ -98,6 +98,11 @@ class Get_Image_Seo_Settings extends Ability_Base {
 						'save_alt_to_media'   => [ 'type' => 'boolean' ],
 						'auto_fill_on_upload' => [ 'type' => 'boolean' ],
 						'media_alt_overwrite' => [ 'type' => 'boolean' ],
+						'alt_source'          => [
+							'type'        => 'string',
+							'enum'        => Image_SEO_Manager::ALT_SOURCES,
+							'description' => __( 'Where generated alt text comes from: template or ai.', 'thinkrank' ),
+						],
 					],
 				],
 			],
@@ -121,6 +126,9 @@ class Get_Image_Seo_Settings extends Ability_Base {
 		foreach ( self::STRING_KEYS as $key ) {
 			$out[ $key ] = (string) ( $s[ $key ] ?? '' );
 		}
+
+		$source            = (string) ( $s['alt_source'] ?? 'template' );
+		$out['alt_source'] = in_array( $source, Image_SEO_Manager::ALT_SOURCES, true ) ? $source : 'template';
 
 		return [ 'settings' => $out ];
 	}

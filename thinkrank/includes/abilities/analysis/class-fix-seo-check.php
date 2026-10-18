@@ -135,10 +135,11 @@ class Fix_Seo_Check extends Ability_Base {
 				'data'    => [
 					'type'                 => 'object',
 					'additionalProperties' => false,
-					'description'          => __( 'What the fix reports besides the message. image_alt_text gives updated (images filled by this call) and remaining (images still without alt text); the other fixes report nothing here.', 'thinkrank' ),
+					'description'          => __( 'What the fix reports besides the message. image_alt_text gives updated (images filled by this call), remaining (images still without alt text) and skipped_low_quality (images left empty because the alt text format would only have given them filler such as a number or "image"); the other fixes report nothing here.', 'thinkrank' ),
 					'properties'           => [
 						'updated'   => [ 'type' => 'integer' ],
 						'remaining' => [ 'type' => 'integer' ],
+						'skipped_low_quality' => [ 'type' => 'integer' ],
 					],
 				],
 				'undo'    => [
@@ -288,10 +289,11 @@ class Fix_Seo_Check extends Ability_Base {
 	 *
 	 * The AI crawler fix re-syncs the physical robots.txt after it saves the
 	 * rules (SEO_Analyzer_Fixer::fix_ai_crawler_access()). With ThinkRank's
-	 * robots.txt management off, the sync deletes any robots.txt in the site
-	 * root, a file ThinkRank does not manage and usually the one blocking the
-	 * crawlers, and nothing can put it back. The fix is refused here before it
-	 * changes anything. The REST route the audit screen uses is unchanged.
+	 * robots.txt management off, crawlers read the robots.txt in the site
+	 * root, usually the one blocking them, and the rules the fix saves never
+	 * reach it (the sync leaves a file ThinkRank did not write alone, #1122).
+	 * The fix is refused here before it changes anything. The REST route the
+	 * audit screen uses is unchanged.
 	 *
 	 * @param string $check_id Check id.
 	 * @return \WP_Error|null
@@ -308,7 +310,7 @@ class Fix_Seo_Check extends Ability_Base {
 
 		return new \WP_Error(
 			'thinkrank_seo_check_fix_refused',
-			__( 'ThinkRank is not managing your robots.txt, so crawlers read the robots.txt file in your site root. This fix would delete that file, so it was not applied. Edit the file to allow the answer-engine crawlers, or turn on robots.txt management under Essential SEO → Crawling and AI Indexing first.', 'thinkrank' ),
+			__( 'ThinkRank is not managing your robots.txt, so crawlers read the robots.txt file in your site root. This fix only changes ThinkRank\'s own crawler rules, which that file does not include, so it was not applied. Edit the file to allow the answer-engine crawlers, or turn on robots.txt management under Essential SEO → Crawling and AI Indexing first.', 'thinkrank' ),
 			[ 'status' => 409 ]
 		);
 	}

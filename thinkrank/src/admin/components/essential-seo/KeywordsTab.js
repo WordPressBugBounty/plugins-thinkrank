@@ -175,7 +175,7 @@ const KeywordsTab = ({ data }) => {
 			</div>
 
 			{/* Table */}
-			<div style={{ overflowX: 'auto' }}>
+			<div style={{ position: 'relative', overflowX: 'auto' }}>
 				<table
 					style={{
 						width: '100%',

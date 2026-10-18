@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace ThinkRank\Admin;
 
+use ThinkRank\Frontend\SEO_Manager;
 use ThinkRank\SEO\Object_Redirect;
 use ThinkRank\SEO\Pattern_Resolver;
 use ThinkRank\SEO\Term_Seo_Meta;
@@ -332,6 +333,11 @@ class Term_Seo_Fields {
             'fieldName'        => self::FIELD,
             'values'           => Term_Seo_Meta::read($term_id),
             'patternVariables' => Pattern_Resolver::term_variables($term_id),
+            // What the archive prints while the SEO Title and Meta Description
+            // fields are empty, so the search preview shows that instead of
+            // the bare term name (#1217).
+            'fallbackTitle'       => SEO_Manager::term_archive_fallback_title($term),
+            'fallbackDescription' => SEO_Manager::term_archive_fallback_description($term),
             'redirect'         => [
                 'supported' => Object_Redirect::is_supported(),
                 'url'       => $redirect['url'],

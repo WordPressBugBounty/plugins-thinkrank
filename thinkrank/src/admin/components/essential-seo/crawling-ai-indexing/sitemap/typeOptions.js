@@ -30,19 +30,29 @@ const BUILT_IN_LABELS = {
  * A native select whose value matches no option displays the first one, so a
  * custom post type, custom taxonomy or WooCommerce child read as "Index" and,
  * once changed, could not be set back (#1052). The row's current type and
- * every type the screen loaded with are appended when outside the fixed list,
- * labelled by name; a custom type's name is its slug, which is also what
- * "View Generated Sitemaps" shows.
+ * every type the screen loaded with are appended when outside the fixed list.
+ *
+ * Each appended type is labelled by the screen's own name for a built-in
+ * type, else by the label WordPress registers for the post type or taxonomy
+ * (`child_type_labels` from the settings response, #1221), else by its slug,
+ * which is all a type nothing registers any more has. Two options that would
+ * read the same, such as the `products` child and a `product` post type both
+ * called "Products", carry their slug as well so they can be told apart.
  *
  * The loaded types are one list for the screen, not one per row: keyed by
  * the row's URL, the loaded type was lost as soon as the admin edited it.
  * They come first, so the options keep their order while the row changes.
  *
- * @param {string|undefined} type        The row's current type.
- * @param {string[]}         loadedTypes Every row's type as loaded.
+ * @param {string|undefined}       type        The row's current type.
+ * @param {string[]}               loadedTypes Every row's type as loaded.
+ * @param {Object<string, string>} typeLabels  Registered label by type.
  * @return {Array<{value: string, label: string}>} Options for the select.
  */
-export const getSitemapTypeOptions = (type, loadedTypes = []) => {
+export const getSitemapTypeOptions = (
+	type,
+	loadedTypes = [],
+	typeLabels = {}
+) => {
 	const extra = [...new Set([...loadedTypes, type])].filter(
 		(value) =>
 			value &&
@@ -53,11 +63,22 @@ export const getSitemapTypeOptions = (type, loadedTypes = []) => {
 		return SITEMAP_TYPE_OPTIONS;
 	}
 
+	const labelled = extra.map((value) => ({
+		value,
+		label: BUILT_IN_LABELS[value] ?? typeLabels?.[value] ?? value,
+	}));
+
+	const taken = [...SITEMAP_TYPE_OPTIONS, ...labelled].map(
+		(option) => option.label
+	);
+
 	return [
 		...SITEMAP_TYPE_OPTIONS,
-		...extra.map((value) => ({
-			value,
-			label: BUILT_IN_LABELS[value] ?? value,
-		})),
+		...labelled.map((option) =>
+			option.label !== option.value &&
+			taken.filter((label) => label === option.label).length > 1
+				? { ...option, label: `${option.label} (${option.value})` }
+				: option
+		),
 	];
 };
