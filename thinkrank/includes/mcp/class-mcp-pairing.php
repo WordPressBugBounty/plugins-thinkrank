@@ -54,6 +54,16 @@ final class Mcp_Pairing {
 	public const LAST_USED_OPTION = 'thinkrank_mcp_pairing_last_used';
 
 	/**
+	 * Set when the owner ended the connection token on purpose (Disconnect,
+	 * or Revoke all on a site that had none), so the MCP screen's self-heal
+	 * does not mint a new one behind their back (#1075). An explicit connect
+	 * or rotate clears it.
+	 *
+	 * @since 2.17.1
+	 */
+	public const DECLINED_OPTION = 'thinkrank_mcp_pairing_declined';
+
+	/**
 	 * Path segment of the pretty per-site endpoint.
 	 */
 	public const SITE_ENDPOINT_PATH = 'thinkrank/mcp';
@@ -323,22 +333,36 @@ final class Mcp_Pairing {
 	/**
 	 * Re-store a legacy plaintext token encrypted, with its hash.
 	 *
+	 * Under the option lock, and only while the row still holds this legacy
+	 * token: a Disconnect or rotate that landed after the token was verified
+	 * would otherwise have the old token written back (#1078).
+	 *
 	 * @since 2.0.1
+	 * @since 2.17.1 Holds the option lock and re-checks the row inside it.
 	 *
 	 * @param string $token Raw token, already verified.
 	 * @return void
 	 */
 	private static function upgrade_legacy_storage( string $token ): void {
-		$stored = get_option( self::OPTION, [] );
+		self::locked(
+			static function () use ( $token ): void {
+				$stored = get_option( self::OPTION, [] );
 
-		if ( ! is_array( $stored ) ) {
-			return;
-		}
+				if ( ! is_array( $stored ) ) {
+					return;
+				}
 
-		$stored['site_token'] = Secret_At_Rest::encrypt( $token );
-		$stored['token_hash'] = self::hash( $token );
+				$state = self::state();
+				if ( '' !== $state['token_hash'] || '' === $state['site_token'] || ! hash_equals( $state['site_token'], $token ) ) {
+					return;
+				}
 
-		update_option( self::OPTION, $stored, false );
+				$stored['site_token'] = Secret_At_Rest::encrypt( $token );
+				$stored['token_hash'] = self::hash( $token );
+
+				update_option( self::OPTION, $stored, false );
+			}
+		);
 	}
 
 	/**
@@ -374,6 +398,76 @@ final class Mcp_Pairing {
 	public static function is_connected(): bool {
 		$state = self::state();
 		return $state['connected'] && ( '' !== $state['token_hash'] || '' !== $state['site_token'] );
+	}
+
+	/**
+	 * Whether the owner ended the connection token on purpose and has not
+	 * created one since (#1075).
+	 *
+	 * @since 2.17.1
+	 *
+	 * @return bool
+	 */
+	public static function is_declined(): bool {
+		return (bool) get_option( self::DECLINED_OPTION, false );
+	}
+
+	/**
+	 * Record that the owner wants no connection token until they create one.
+	 *
+	 * @since 2.17.1
+	 *
+	 * @return void
+	 */
+	public static function decline(): void {
+		update_option( self::DECLINED_OPTION, 1, false );
+	}
+
+	/**
+	 * The MCP screen's self-heal: mint a token for a site that has MCP on
+	 * and none, unless the owner declined one.
+	 *
+	 * Both conditions are read again under the option lock. A screen load
+	 * that checked them before a Disconnect or Revoke all finished would
+	 * otherwise go on to connect(), which clears the flag as an explicit
+	 * choice, and mint the token the owner had just ended (#1075).
+	 *
+	 * @since 2.17.1
+	 *
+	 * @return void
+	 */
+	public static function self_heal(): void {
+		self::locked(
+			static function (): void {
+				self::forget_cached( self::DECLINED_OPTION );
+				self::forget_cached( self::OPTION );
+
+				if ( self::is_declined() || self::is_connected() ) {
+					return;
+				}
+
+				self::connect_locked( false );
+			}
+		);
+	}
+
+	/**
+	 * Drop this request's cached copy of an option, including a cached
+	 * "does not exist", so the next read goes to the database.
+	 *
+	 * @since 2.17.1
+	 *
+	 * @param string $option Option name.
+	 * @return void
+	 */
+	private static function forget_cached( string $option ): void {
+		wp_cache_delete( $option, 'options' );
+
+		$notoptions = wp_cache_get( 'notoptions', 'options' );
+		if ( is_array( $notoptions ) && isset( $notoptions[ $option ] ) ) {
+			unset( $notoptions[ $option ] );
+			wp_cache_set( 'notoptions', $notoptions, 'options' );
+		}
 	}
 
 	/**
@@ -531,6 +625,9 @@ final class Mcp_Pairing {
 	 * @return array<string,mixed> Public status.
 	 */
 	private static function connect_locked( bool $read_only ): array {
+		// Asking for a token is the owner choosing one again.
+		delete_option( self::DECLINED_OPTION );
+
 		$state = self::state();
 		// The hash is what decides "is there a pairing", not the decrypted
 		// token: after an auth salt rotation the ciphertext will not open, but
@@ -594,7 +691,15 @@ final class Mcp_Pairing {
 	 * @return array<string,mixed>|null Public status with the fresh token, or null when there was none.
 	 */
 	public static function rotate_existing(): ?array {
-		return self::is_connected() ? self::rotate() : null;
+		if ( self::is_connected() ) {
+			return self::rotate();
+		}
+
+		// Nothing to replace. Revoke all is the owner saying no access, so
+		// the MCP screen must not mint one on its next load (#1075).
+		self::decline();
+
+		return null;
 	}
 
 	/**
@@ -645,6 +750,7 @@ final class Mcp_Pairing {
 
 		// A new token has not been used yet.
 		delete_option( self::LAST_USED_OPTION );
+		delete_option( self::DECLINED_OPTION );
 
 		return self::public_status();
 	}
@@ -653,12 +759,28 @@ final class Mcp_Pairing {
 	 * Disconnect — revoke the connection token AND every OAuth grant, so
 	 * Disconnect is a single kill switch for ALL MCP access.
 	 *
+	 * Under the option lock, as every other write of self::OPTION is: an
+	 * access or expiry edit that already read the record would otherwise
+	 * write it back after the delete, and the token would keep working
+	 * (#1078). The lock is re-entrant, so revoke_all() takes it again inside.
+	 *
+	 * @since 2.17.1 Holds the option lock.
+	 *
 	 * @return array<string,mixed> Public status after disconnect.
 	 */
 	public static function disconnect(): array {
-		delete_option( self::OPTION );
-		delete_option( self::LAST_USED_OPTION );
-		Mcp_OAuth::revoke_all();
+		// Disconnect is the kill switch: no token comes back until the owner
+		// creates one (#1075). Declined before the delete and under the same
+		// lock as every other write of the option (#1078), so a screen load
+		// landing in between sees either the token or the flag, never neither.
+		self::locked(
+			static function (): void {
+				self::decline();
+				delete_option( self::OPTION );
+				delete_option( self::LAST_USED_OPTION );
+				Mcp_OAuth::revoke_all();
+			}
+		);
 
 		return self::public_status();
 	}

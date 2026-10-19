@@ -447,11 +447,15 @@ class Global_SEO_Schema_Output {
     /**
      * Default schema type (and sub-type) for a post type when unconfigured.
      *
+     * Public since 2.15.1 so the editor's "enable structured data" fix saves
+     * the same default the front end emits, not Article for every non-page
+     * type (#1048).
+     *
      * @since 1.15.x
      * @param string $post_type Post type slug
      * @return array|null ['schema_type' => ..., 'article_type' => ..., 'media_type' => ...] or null to emit nothing
      */
-    private function get_default_schema_type(string $post_type): ?array {
+    public function get_default_schema_type(string $post_type): ?array {
         switch ($post_type) {
             case 'post':
                 return ['schema_type' => 'Article', 'article_type' => 'BlogPosting', 'media_type' => ''];
@@ -869,6 +873,13 @@ class Global_SEO_Schema_Output {
             $schema['sku'] = $sku;
         }
 
+        // WooCommerce's core "GTIN, UPC, EAN or ISBN" field. WooCommerce's own
+        // Product markup, which this node replaces, publishes it (#951).
+        $gtin = $this->woocommerce_gtin($this->woocommerce_product($post));
+        if ('' !== $gtin) {
+            $schema['gtin'] = $gtin;
+        }
+
         // Add brand (recommended)
         $brand = $this->get_product_brand($post);
         if (!empty($brand)) {
@@ -1082,19 +1093,28 @@ class Global_SEO_Schema_Output {
             'url' => get_permalink($post),
         ];
 
+        $product = $this->woocommerce_product($post);
+
         // Get price
         $price = get_post_meta($post->ID, '_thinkrank_product_price', true);
 
-        // Try WooCommerce if available
-        if (empty($price) && function_exists('wc_get_product')) {
-            $product = wc_get_product($post->ID);
-            if ($product) {
+        // A variable product's price is a range. get_price() is only the
+        // cheapest variation, so the single Offer it produced matched one
+        // variation; WooCommerce's own markup publishes the range (#951).
+        $range = (empty($price) && null !== $product) ? $this->woocommerce_price_range($product) : null;
+
+        if (null !== $range) {
+            $offers['@type'] = 'AggregateOffer';
+            $offers         += $range;
+        } else {
+            // Try WooCommerce if available
+            if (empty($price) && null !== $product) {
                 $price = $product->get_price();
             }
-        }
 
-        if (!empty($price)) {
-            $offers['price'] = (string) $price;
+            if (!empty($price)) {
+                $offers['price'] = (string) $price;
+            }
         }
 
         // Get currency
@@ -1116,11 +1136,8 @@ class Global_SEO_Schema_Output {
         $availability = get_post_meta($post->ID, '_thinkrank_product_availability', true);
 
         // Try WooCommerce if available
-        if (empty($availability) && function_exists('wc_get_product')) {
-            $product = wc_get_product($post->ID);
-            if ($product) {
-                $availability = $product->is_in_stock() ? 'InStock' : 'OutOfStock';
-            }
+        if (empty($availability) && null !== $product) {
+            $availability = $this->woocommerce_availability($product);
         }
 
         // Default to InStock
@@ -1137,11 +1154,174 @@ class Global_SEO_Schema_Output {
 
         // Add price valid until if available
         $price_valid_until = get_post_meta($post->ID, '_thinkrank_product_price_valid_until', true);
+
+        // WooCommerce never sets the meta above; a sale's end date is where a
+        // store says how long the price holds (#951).
+        if (empty($price_valid_until) && null !== $product) {
+            $price_valid_until = $this->woocommerce_sale_end_date($product);
+        }
+
         if (!empty($price_valid_until)) {
             $offers['priceValidUntil'] = $price_valid_until;
         }
 
+        // The store selling the product, as WooCommerce's markup names it.
+        if (null !== $product) {
+            $offers['seller'] = [
+                '@type' => 'Organization',
+                'name'  => self::normalize_name((string) get_bloginfo('name')),
+                'url'   => home_url('/'),
+            ];
+        }
+
         return $offers;
+    }
+
+    /**
+     * The WooCommerce product behind a post, or null without WooCommerce.
+     *
+     * @since 2.17.1
+     * @param \WP_Post $post Product post.
+     * @return object|null WC_Product.
+     */
+    private function woocommerce_product(\WP_Post $post): ?object {
+        if (!function_exists('wc_get_product')) {
+            return null;
+        }
+
+        $product = wc_get_product($post->ID);
+
+        return is_object($product) ? $product : null;
+    }
+
+    /**
+     * The product's GTIN from WooCommerce's core field (WooCommerce 9.2+).
+     *
+     * Digits only and a valid GTIN length, the same check WooCommerce applies
+     * before it publishes the value.
+     *
+     * @since 2.17.1
+     * @param object|null $product WC_Product.
+     * @return string GTIN, or '' when there is none.
+     */
+    private function woocommerce_gtin(?object $product): string {
+        if (null === $product || !method_exists($product, 'get_global_unique_id')) {
+            return '';
+        }
+
+        $gtin = preg_replace('/[^0-9]/', '', (string) $product->get_global_unique_id());
+
+        return (is_string($gtin) && preg_match('/^(\d{8}|\d{12,14})$/', $gtin)) ? $gtin : '';
+    }
+
+    /**
+     * A variable product's price range as AggregateOffer properties.
+     *
+     * @since 2.17.1
+     * @param object $product WC_Product.
+     * @return array|null lowPrice, highPrice and offerCount, or null when the
+     *                    product is not variable or all variations cost the same.
+     */
+    private function woocommerce_price_range(object $product): ?array {
+        if (!method_exists($product, 'is_type') || !$product->is_type('variable')
+            || !method_exists($product, 'get_variation_prices')) {
+            return null;
+        }
+
+        $prices = $product->get_variation_prices(true);
+        $prices = is_array($prices['price'] ?? null) ? array_map('strval', $prices['price']) : [];
+        $prices = array_values(array_filter($prices, 'is_numeric'));
+
+        if (empty($prices)) {
+            return null;
+        }
+
+        $low  = $prices[0];
+        $high = $prices[0];
+        foreach ($prices as $price) {
+            if ((float) $price < (float) $low) {
+                $low = $price;
+            }
+            if ((float) $price > (float) $high) {
+                $high = $price;
+            }
+        }
+
+        if ((float) $low === (float) $high) {
+            return null;
+        }
+
+        return [
+            'lowPrice'   => $low,
+            'highPrice'  => $high,
+            'offerCount' => count($prices),
+        ];
+    }
+
+    /**
+     * Schema.org availability for a product's WooCommerce stock status.
+     *
+     * "On backorder" counts as in stock to WooCommerce, so is_in_stock()
+     * alone published a backordered product as InStock (#951).
+     *
+     * @since 2.17.1
+     * @param object $product WC_Product.
+     * @return string BackOrder, InStock or OutOfStock.
+     */
+    private function woocommerce_availability(object $product): string {
+        if (!$product->is_in_stock()) {
+            return 'OutOfStock';
+        }
+
+        $status = method_exists($product, 'get_stock_status') ? (string) $product->get_stock_status() : '';
+
+        return 'onbackorder' === $status ? 'BackOrder' : 'InStock';
+    }
+
+    /**
+     * The date a product's current sale ends, as Y-m-d.
+     *
+     * For a variable product, the variation with the lowest sale price, which
+     * is the one WooCommerce's own markup takes the date from.
+     *
+     * @since 2.17.1
+     * @param object $product WC_Product.
+     * @return string Date, or '' when the product is not on sale or the sale
+     *                has no end date.
+     */
+    private function woocommerce_sale_end_date(object $product): string {
+        if (!method_exists($product, 'is_on_sale') || !$product->is_on_sale()) {
+            return '';
+        }
+
+        $source = $product;
+
+        if (method_exists($product, 'is_type') && $product->is_type('variable')
+            && method_exists($product, 'get_variation_prices') && function_exists('wc_get_product')) {
+            $prices  = $product->get_variation_prices(true);
+            $sale    = is_array($prices['sale_price'] ?? null) ? $prices['sale_price'] : [];
+            $regular = is_array($prices['regular_price'] ?? null) ? $prices['regular_price'] : [];
+            $lowest  = null;
+
+            foreach ($sale as $variation_id => $sale_price) {
+                $on_sale = isset($regular[$variation_id]) && (float) $sale_price < (float) $regular[$variation_id];
+                if ($on_sale && (null === $lowest || (float) $sale_price < (float) $sale[$lowest])) {
+                    $lowest = $variation_id;
+                }
+            }
+
+            $variation = null !== $lowest ? wc_get_product($lowest) : null;
+            if (!is_object($variation)) {
+                return '';
+            }
+            $source = $variation;
+        }
+
+        $date = method_exists($source, 'get_date_on_sale_to') ? $source->get_date_on_sale_to() : null;
+
+        return (is_object($date) && method_exists($date, 'getTimestamp'))
+            ? gmdate('Y-m-d', (int) $date->getTimestamp())
+            : '';
     }
 
     /**

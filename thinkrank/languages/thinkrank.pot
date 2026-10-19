@@ -2,14 +2,14 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 2.17.0\n"
+"Project-Id-Version: ThinkRank 2.17.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-18T12:35:42+00:00\n"
+"POT-Creation-Date: 2026-10-19T08:27:47+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
@@ -219,33 +219,37 @@ msgstr ""
 msgid "One or more post IDs to inspect."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-post-seo-checks.php:103
+#: includes/abilities/analysis/class-get-post-seo-checks.php:97
+msgid "Score from 0 to 100. Can end in .5, because some checks award half a point."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-post-seo-checks.php:108
 msgid "Placements the keyword appears in."
 msgstr ""
 
 #. translators: %s: comma-separated placement names.
-#: includes/abilities/analysis/class-get-post-seo-checks.php:110
+#: includes/abilities/analysis/class-get-post-seo-checks.php:115
 #, php-format
 msgid "One entry per placement (%s), each {passed, where}; where is the matching heading or alt text."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-post-seo-checks.php:146
+#: includes/abilities/analysis/class-get-post-seo-checks.php:151
 msgid "At least one valid post ID is required."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-post-seo-checks.php:183
+#: includes/abilities/analysis/class-get-post-seo-checks.php:188
 msgid "SEO checks generated."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-seo-analytics-data.php:32
+#: includes/abilities/analysis/class-get-seo-analytics-data.php:33
 msgid "Get ThinkRank SEO Analytics Data"
 msgstr ""
 
-#: includes/abilities/analysis/class-get-seo-analytics-data.php:33
-msgid "Retrieve the ThinkRank SEO analytics dashboard data. Requires Google Search Console / Analytics to be connected; returns empty data otherwise. get-integrations-status reports whether those are connected."
+#: includes/abilities/analysis/class-get-seo-analytics-data.php:34
+msgid "Retrieve the ThinkRank SEO analytics dashboard data: Search Console performance and Core Web Vitals. Requires Google Search Console to be connected; returns empty data otherwise. The GA4 `traffic` block is filled only when ThinkRank Pro is active with a GA4 property selected. get-integrations-status reports what is connected."
 msgstr ""
 
-#: includes/abilities/analysis/class-get-seo-analytics-data.php:63
+#: includes/abilities/analysis/class-get-seo-analytics-data.php:64
 #: includes/abilities/analysis/class-get-seo-opportunities.php:62
 msgid "The reporting date range."
 msgstr ""
@@ -456,24 +460,32 @@ msgstr ""
 msgid "Breakdance"
 msgstr ""
 
-#: includes/abilities/content/class-faq-ability-base.php:154
+#: includes/abilities/content/class-faq-ability-base.php:130
+msgid "Etch"
+msgstr ""
+
+#: includes/abilities/content/class-faq-ability-base.php:155
 msgid "The block editor renders this post, so update-faq can write a FAQ block into its content."
 msgstr ""
 
+#: includes/abilities/content/class-faq-ability-base.php:161
+msgid "Etch builds this post from its own blocks in the post content, so a FAQ block written here would land outside the Etch layout. ThinkRank has no FAQ module for Etch and does not read Etch accordions, so add the questions in Etch, and read a question count of zero as \"not readable\" rather than \"no FAQ\"."
+msgstr ""
+
 #. translators: %s: page builder name.
-#: includes/abilities/content/class-faq-ability-base.php:160
+#: includes/abilities/content/class-faq-ability-base.php:167
 #, php-format
 msgid "%s renders this post and replaces its content, so a FAQ block written here would never be shown. Add the questions with the ThinkRank FAQ module for that builder; get-faq reads the questions already stored there, and they reach the FAQPage."
 msgstr ""
 
 #. translators: %s: page builder name.
-#: includes/abilities/content/class-faq-ability-base.php:168
+#: includes/abilities/content/class-faq-ability-base.php:175
 #, php-format
 msgid "%s renders this post and replaces its content, so a FAQ block written here would never be shown, and ThinkRank has no FAQ module for it. Its own accordion is read instead, and the questions above are what that accordion holds. Edit them in the builder. They reach the FAQPage only while Publish FAQ schema from page-builder accordions is on in Schema Settings, which is off by default."
 msgstr ""
 
 #. translators: %s: page builder name.
-#: includes/abilities/content/class-faq-ability-base.php:175
+#: includes/abilities/content/class-faq-ability-base.php:182
 #, php-format
 msgid "%s renders this post and replaces its content, so a FAQ block written here would never be shown. ThinkRank has no FAQ module for it and cannot read its stored questions either, so this post is recognised but unsupported: add the questions with the builder's own accordion, and read a question count of zero as \"not readable\" rather than \"no FAQ\"."
 msgstr ""
@@ -1591,7 +1603,7 @@ msgid "The resolved Email Reporting config: enabled, frequency_days, recipients,
 msgstr ""
 
 #: includes/abilities/settings/class-get-email-report-settings.php:81
-msgid "Data-source readiness: ready (bool: a report can be built), search_console (bool, required), analytics (bool: Google Analytics 4 connected, adds the site-traffic section), ai_traffic (bool: AI-assistant referrals recorded, adds that section), reason (string|null: search_console_not_connected when not ready)."
+msgid "Data-source readiness: ready (bool: a report can be built), search_console (bool, required), analytics (bool: Google Analytics 4 connected through ThinkRank Pro, which adds the site-traffic section; always false without Pro), ai_traffic (bool: AI-assistant referrals recorded, adds that section), reason (string|null: search_console_not_connected when not ready)."
 msgstr ""
 
 #: includes/abilities/settings/class-get-email-report-settings.php:92
@@ -2200,12 +2212,12 @@ msgid "The enabled flag is required."
 msgstr ""
 
 #: includes/abilities/settings/class-update-email-report-settings.php:120
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:257
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:261
 msgid "Email reporting is on."
 msgstr ""
 
 #: includes/abilities/settings/class-update-email-report-settings.php:121
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:258
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:262
 msgid "Email reporting is off."
 msgstr ""
 
@@ -2771,7 +2783,7 @@ msgstr ""
 #: src/admin/components/pages/MCPConnectedApps.js:869
 #: src/admin/components/pages/MCPConnectedApps.js:980
 #: src/admin/components/pages/MCPConnectedApps.js:1017
-#: src/admin/components/pages/MCPConnectionConfig.js:503
+#: src/admin/components/pages/MCPConnectionConfig.js:538
 #: src/admin/components/pages/MCPHubConnect.js:434
 #: src/admin/components/seo/SEOScoreCalculator.js:1007
 #: src/metabox/components/metabox-schema-tab/ImportSection.js:510
@@ -2861,7 +2873,7 @@ msgid "ThinkRank could not save the redirect: %s"
 msgstr ""
 
 #: includes/admin/class-metabox-manager.php:1672
-#: includes/ai/class-manager.php:1555
+#: includes/ai/class-manager.php:1567
 msgid "SEO metadata generated successfully!"
 msgstr ""
 
@@ -2981,7 +2993,7 @@ msgstr ""
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:1441
 #: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:1421
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:1549
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:357
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:367
 #: src/admin/components/essential-seo/ExternalLinksTab.js:499
 #: src/admin/components/essential-seo/GlobalSEOTab.js:766
 #: src/admin/components/essential-seo/instant-indexing/Settings.js:576
@@ -2992,7 +3004,7 @@ msgstr ""
 #: src/admin/components/essential-seo/site-identity/LocalSEO.js:204
 #: src/admin/components/essential-seo/SiteIdentityTab.js:1074
 #: src/admin/components/essential-seo/SocialMediaTab.js:1807
-#: src/admin/components/pages/MCP.js:243
+#: src/admin/components/pages/MCP.js:259
 #: src/admin/components/pages/Settings.js:2514
 #: src/admin/components/pages/Settings.js:2950
 #: src/admin/components/pages/Settings.js:3140
@@ -3472,36 +3484,36 @@ msgstr ""
 msgid "ThinkRank could not connect to %1$s. Please verify your API key and model under %2$s, then try again."
 msgstr ""
 
-#: includes/ai/class-openai-client.php:184
+#: includes/ai/class-openai-client.php:188
 msgid "the AI endpoint"
 msgstr ""
 
 #. translators: %s: endpoint name or host.
-#: includes/ai/class-openai-client.php:643
+#: includes/ai/class-openai-client.php:647
 #, php-format
 msgid "%s sent more than ThinkRank will read (2 MB). The endpoint is misconfigured or is not answering with a chat completion."
 msgstr ""
 
 #. translators: 1: endpoint name or host, 2: HTTP status code, 3: error message from the server.
-#: includes/ai/class-openai-client.php:653
+#: includes/ai/class-openai-client.php:657
 #, php-format
 msgid "%1$s API error (%2$d): %3$s"
 msgstr ""
 
 #. translators: %s: endpoint name or host.
-#: includes/ai/class-openai-client.php:665
+#: includes/ai/class-openai-client.php:669
 #, php-format
 msgid "Invalid JSON response from %s"
 msgstr ""
 
 #. translators: %s: endpoint name or host.
-#: includes/ai/class-openai-client.php:698
+#: includes/ai/class-openai-client.php:702
 #, php-format
 msgid "%s answered with no text: the model spent its whole token budget on hidden reasoning. Use a non-reasoning model, or raise the token budget for this endpoint."
 msgstr ""
 
 #. translators: %s: endpoint name or host.
-#: includes/ai/class-openai-client.php:709
+#: includes/ai/class-openai-client.php:713
 #, php-format
 msgid "Unexpected non-array response from %s"
 msgstr ""
@@ -3590,8 +3602,8 @@ msgid "This copy of the site is marked as a staging environment, which pauses th
 msgstr ""
 
 #: includes/api/class-hub-endpoint.php:228
-#: includes/mcp/class-mcp-manager.php:1451
-#: includes/mcp/class-mcp-manager.php:1474
+#: includes/mcp/class-mcp-manager.php:1462
+#: includes/mcp/class-mcp-manager.php:1485
 msgid "Unknown user"
 msgstr ""
 
@@ -3681,201 +3693,201 @@ msgstr ""
 msgid "Added a keyword-focused paragraph"
 msgstr ""
 
-#: includes/api/class-manager.php:1670
+#: includes/api/class-manager.php:1671
 #: includes/api/class-snippets-endpoint.php:530
 #: includes/api/class-snippets-endpoint.php:599
 msgid "Post not found."
 msgstr ""
 
-#: includes/api/class-manager.php:1706
+#: includes/api/class-manager.php:1711
 msgid "Schema was already enabled for this post type."
 msgstr ""
 
 #. translators: %s: schema type.
-#: includes/api/class-manager.php:1708
+#: includes/api/class-manager.php:1713
 #, php-format
 msgid "Enabled %s schema for this post type."
 msgstr ""
 
 #. translators: %s: the unrecognised provider value.
-#: includes/api/class-manager.php:1748
+#: includes/api/class-manager.php:1753
 #, php-format
 msgid "Unknown AI provider: %s"
 msgstr ""
 
-#: includes/api/class-manager.php:1794
+#: includes/api/class-manager.php:1799
 msgid "No API key provided or saved for the selected provider."
 msgstr ""
 
-#: includes/api/class-manager.php:1848
+#: includes/api/class-manager.php:1853
 msgid "Enter the model id your endpoint should use, for example llama3.1 or gpt-4o."
 msgstr ""
 
 #. translators: %s: transport error, e.g. "cURL error 7: Connection refused".
 #. translators: %s: transport error.
-#: includes/api/class-manager.php:1888
-#: includes/api/class-manager.php:2122
+#: includes/api/class-manager.php:1893
+#: includes/api/class-manager.php:2130
 #, php-format
 msgid "Could not reach the endpoint: %s"
 msgstr ""
 
 #. translators: 1: HTTP status code, 2: the URL the endpoint redirected to.
-#: includes/api/class-manager.php:1907
+#: includes/api/class-manager.php:1912
 #, php-format
 msgid "The endpoint redirected (%1$d) to %2$s. Redirects are refused so your API key cannot follow them. Enter the final URL instead, for example https:// in place of http://."
 msgstr ""
 
 #. translators: %d: HTTP status code.
-#: includes/api/class-manager.php:1913
+#: includes/api/class-manager.php:1918
 #, php-format
 msgid "The endpoint redirected (%d). Redirects are refused so your API key cannot follow them. Enter the final URL instead, for example https:// in place of http://."
 msgstr ""
 
-#: includes/api/class-manager.php:1925
+#: includes/api/class-manager.php:1930
 msgid "The endpoint sent more than ThinkRank will read for a connection test (128 KB). It is misconfigured or is not answering with a chat completion."
 msgstr ""
 
 #. translators: 1: HTTP status code, 2: error message from the server.
-#: includes/api/class-manager.php:1944
+#: includes/api/class-manager.php:1949
 #, php-format
 msgid "The endpoint answered %1$d: %2$s"
 msgstr ""
 
-#: includes/api/class-manager.php:1972
+#: includes/api/class-manager.php:1980
 msgid "The endpoint replied, but with no completion text. Check that the model id is one this server serves."
 msgstr ""
 
 #. translators: 1: model id, 2: latency in milliseconds.
-#: includes/api/class-manager.php:1986
+#: includes/api/class-manager.php:1994
 #, php-format
 msgid "Connected: \"%1$s\" answered in %2$d ms. It is a reasoning model: it thinks before replying, so generation will be slower and may need a higher timeout."
 msgstr ""
 
 #. translators: 1: model id, 2: latency in milliseconds, 3: the model's reply.
-#: includes/api/class-manager.php:1992
+#: includes/api/class-manager.php:2000
 #, php-format
 msgid "Connected: \"%1$s\" replied in %2$d ms: %3$s"
 msgstr ""
 
 #. translators: 1: model id, 2: HTTP status code, 3: error message from the server.
-#: includes/api/class-manager.php:2064
+#: includes/api/class-manager.php:2072
 #, php-format
 msgid "Connected to \"%1$s\", but the endpoint rejected JSON mode (%2$d: %3$s). Turn off \"Force valid JSON answers\": generation still works, but each request is sent twice."
 msgstr ""
 
 #. translators: %d: HTTP status code.
-#: includes/api/class-manager.php:2133
+#: includes/api/class-manager.php:2141
 #, php-format
 msgid "This endpoint does not list its models (HTTP %d). Type the model id by hand instead."
 msgstr ""
 
-#: includes/api/class-manager.php:2163
+#: includes/api/class-manager.php:2171
 msgid "The endpoint answered, but listed no models. Type the model id by hand instead."
 msgstr ""
 
-#: includes/api/class-manager.php:2203
+#: includes/api/class-manager.php:2211
 msgid "Failed to connect to OpenAI API: "
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2221
+#: includes/api/class-manager.php:2229
 #, php-format
 msgid "API key works, but the model \"%s\" is not available to this account."
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2231
+#: includes/api/class-manager.php:2239
 #, php-format
 msgid "OpenAI API connection successful. Model \"%s\" is available."
 msgstr ""
 
-#: includes/api/class-manager.php:2232
+#: includes/api/class-manager.php:2240
 msgid "OpenAI API connection successful!"
 msgstr ""
 
-#: includes/api/class-manager.php:2240
-#: includes/api/class-manager.php:2317
-#: includes/api/class-manager.php:2439
-#: includes/api/class-manager.php:2526
+#: includes/api/class-manager.php:2248
+#: includes/api/class-manager.php:2325
+#: includes/api/class-manager.php:2447
+#: includes/api/class-manager.php:2534
 msgid "Unknown API error"
 msgstr ""
 
-#: includes/api/class-manager.php:2244
+#: includes/api/class-manager.php:2252
 msgid "OpenAI API Error: "
 msgstr ""
 
-#: includes/api/class-manager.php:2264
+#: includes/api/class-manager.php:2272
 msgid "Invalid OpenRouter API key format. Should start with \"sk-or-\""
 msgstr ""
 
-#: includes/api/class-manager.php:2284
+#: includes/api/class-manager.php:2292
 msgid "Failed to connect to OpenRouter API: "
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2309
+#: includes/api/class-manager.php:2317
 #, php-format
 msgid "OpenRouter API connection successful. Model \"%s\" is available."
 msgstr ""
 
-#: includes/api/class-manager.php:2310
+#: includes/api/class-manager.php:2318
 msgid "OpenRouter API connection successful!"
 msgstr ""
 
-#: includes/api/class-manager.php:2321
+#: includes/api/class-manager.php:2329
 msgid "OpenRouter API Error: "
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2364
+#: includes/api/class-manager.php:2372
 #, php-format
 msgid "API key works, but \"%s\" is not a model OpenRouter offers."
 msgstr ""
 
-#: includes/api/class-manager.php:2380
+#: includes/api/class-manager.php:2388
 msgid "Invalid Claude API key format. Should start with \"sk-ant-\""
 msgstr ""
 
-#: includes/api/class-manager.php:2422
+#: includes/api/class-manager.php:2430
 msgid "Failed to connect to Claude API: "
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2435
+#: includes/api/class-manager.php:2443
 #, php-format
 msgid "Claude API connection successful. Model \"%s\" is available."
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2449
-#: includes/api/class-manager.php:2536
+#: includes/api/class-manager.php:2457
+#: includes/api/class-manager.php:2544
 #, php-format
 msgid "API key works, but the model \"%s\" was not found."
 msgstr ""
 
 #. translators: %1$d: HTTP status code, %2$s: error message from Claude API
-#: includes/api/class-manager.php:2457
+#: includes/api/class-manager.php:2465
 #, php-format
 msgid "Claude API error (%1$d): %2$s"
 msgstr ""
 
-#: includes/api/class-manager.php:2509
+#: includes/api/class-manager.php:2517
 msgid "Failed to connect to Gemini API: "
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2522
+#: includes/api/class-manager.php:2530
 #, php-format
 msgid "Gemini API connection successful. Model \"%s\" is available."
 msgstr ""
 
 #. translators: %1$d: HTTP status code, %2$s: error message from Gemini API
-#: includes/api/class-manager.php:2544
+#: includes/api/class-manager.php:2552
 #, php-format
 msgid "Gemini API error (%1$d): %2$s"
 msgstr ""
 
-#: includes/api/class-manager.php:2617
+#: includes/api/class-manager.php:2625
 msgid "Content analyzed successfully"
 msgstr ""
 
@@ -3999,12 +4011,12 @@ msgstr ""
 msgid "You do not have permission to manage sitemaps."
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1345
+#: includes/api/class-sitemap-endpoint.php:1356
 msgid "Sitemap generation is disabled"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1373
-#: includes/api/class-sitemap-endpoint.php:1405
+#: includes/api/class-sitemap-endpoint.php:1384
+#: includes/api/class-sitemap-endpoint.php:1416
 #: includes/editor/beaver/faq/faq.php:314
 #: includes/editor/beaver/howto/howto.php:327
 #: src/admin/components/essential-seo/crawling-ai-indexing/RobotsManagement.js:385
@@ -4019,46 +4031,46 @@ msgstr ""
 msgid "General"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1404
+#: includes/api/class-sitemap-endpoint.php:1415
 #: src/admin/components/essential-seo/crawling-ai-indexing/GlobalRobotMeta.js:219
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/typeOptions.js:10
 #: src/admin/components/essential-seo/RobotMetaSettings.js:90
 msgid "Index"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1406
+#: includes/api/class-sitemap-endpoint.php:1417
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/typeOptions.js:12
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:233
 msgid "Posts"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1407
+#: includes/api/class-sitemap-endpoint.php:1418
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/typeOptions.js:13
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:243
 msgid "Pages"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1408
+#: includes/api/class-sitemap-endpoint.php:1419
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/typeOptions.js:14
 msgid "Categories"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1409
+#: includes/api/class-sitemap-endpoint.php:1420
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/typeOptions.js:21
 msgid "Tags"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1410
+#: includes/api/class-sitemap-endpoint.php:1421
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/typeOptions.js:22
 msgid "Products"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1411
+#: includes/api/class-sitemap-endpoint.php:1422
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:240
 msgid "WordPress Core"
 msgstr ""
 
-#: includes/api/class-sitemap-endpoint.php:1412
+#: includes/api/class-sitemap-endpoint.php:1423
 #: src/admin/components/essential-seo/site-identity/BreadcrumbSettings.js:24
 #: src/metabox/components/metabox-schema-tab/PreviewSection.js:81
 msgid "Custom"
@@ -4082,11 +4094,11 @@ msgstr ""
 msgid "AI is not set up yet. Choose a provider under ThinkRank → Settings."
 msgstr ""
 
-#: includes/api/class-snippets-endpoint.php:622
+#: includes/api/class-snippets-endpoint.php:624
 msgid "This post has too little content for AI to describe. Add content first, or write the snippet by hand."
 msgstr ""
 
-#: includes/api/class-snippets-endpoint.php:654
+#: includes/api/class-snippets-endpoint.php:656
 msgid "The AI did not return a usable title and description for this post. Try again, or write them by hand."
 msgstr ""
 
@@ -4111,39 +4123,34 @@ msgstr ""
 msgid "You do not have permission to access this resource."
 msgstr ""
 
-#: includes/config/email-report-settings-config.php:51
+#: includes/config/email-report-settings-config.php:54
 #: includes/seo/email-report-sections/class-key-metrics-section.php:31
 msgid "Search performance"
 msgstr ""
 
-#: includes/config/email-report-settings-config.php:54
+#: includes/config/email-report-settings-config.php:57
 #: includes/seo/email-report-sections/class-top-winning-posts-section.php:31
 msgid "Top growing pages"
 msgstr ""
 
-#: includes/config/email-report-settings-config.php:57
+#: includes/config/email-report-settings-config.php:60
 #: includes/seo/email-report-sections/class-top-winning-keywords-section.php:32
 msgid "Top growing queries"
 msgstr ""
 
-#: includes/config/email-report-settings-config.php:60
+#: includes/config/email-report-settings-config.php:63
 #: includes/seo/email-report-sections/class-top-losing-posts-section.php:32
 msgid "Pages losing ground"
 msgstr ""
 
-#: includes/config/email-report-settings-config.php:63
+#: includes/config/email-report-settings-config.php:66
 #: includes/seo/email-report-sections/class-top-losing-keywords-section.php:33
 msgid "Queries losing ground"
 msgstr ""
 
-#: includes/config/email-report-settings-config.php:66
+#: includes/config/email-report-settings-config.php:69
 #: includes/seo/email-report-sections/class-position-summary-section.php:30
 msgid "Where your keywords rank"
-msgstr ""
-
-#: includes/config/email-report-settings-config.php:69
-#: includes/seo/email-report-sections/class-site-traffic-section.php:29
-msgid "Site traffic (Google Analytics 4)"
 msgstr ""
 
 #: includes/config/email-report-settings-config.php:72
@@ -4865,9 +4872,15 @@ msgid "Blog"
 msgstr ""
 
 #. translators: %d: page number.
-#: includes/frontend/class-seo-manager.php:847
+#: includes/frontend/class-seo-manager.php:872
 #, php-format
 msgid "Page %d"
+msgstr ""
+
+#. translators: %s: search query.
+#: includes/frontend/class-seo-manager.php:4752
+#, php-format
+msgid "Search results for \"%s\""
 msgstr ""
 
 #: includes/integrations/class-google-api-base-client.php:304
@@ -4978,169 +4991,169 @@ msgstr ""
 msgid "MCP access is enabled, but the bundled Abilities runtime (dependencies/vendor) is missing from this installation, usually a plugin package built without it. Reinstall ThinkRank from wordpress.org or an official build; until then, connected AI clients get an empty tool list."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1361
+#: includes/mcp/class-mcp-manager.php:1371
 msgid "That connection no longer has access, so there is nothing to change."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1425
+#: includes/mcp/class-mcp-manager.php:1436
 msgid "A client_id is required to revoke an OAuth app."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1528
-#: includes/mcp/class-mcp-manager.php:1543
+#: includes/mcp/class-mcp-manager.php:1548
+#: includes/mcp/class-mcp-manager.php:1563
 msgid "MCP is disabled on this site."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1725
+#: includes/mcp/class-mcp-manager.php:1745
 msgid "You must be an administrator to authorize an AI assistant to manage SEO on this site."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1740
+#: includes/mcp/class-mcp-manager.php:1760
 msgid "The hub address set in wp-config.php (THINKRANK_HUB_URL) is not an https address this site can use, so it will not connect to any hub until that is corrected."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1741
+#: includes/mcp/class-mcp-manager.php:1761
 msgid "This site is set to connect to a different ThinkRank Hub, so it cannot be connected to this one."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1752
+#: includes/mcp/class-mcp-manager.php:1772
 msgid "Connecting this site to ThinkRank Hub starts from this site’s ThinkRank Hub tab, under ThinkRank > AI Tools > ThinkRank Hub, while signed in as the administrator approving it. Start there and the hub brings you back to this page."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1780
+#: includes/mcp/class-mcp-manager.php:1800
 msgid "Security check failed. Please try connecting again."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1849
+#: includes/mcp/class-mcp-manager.php:1869
 msgid "ThinkRank Pro isn’t active on this site yet: this applies once it is."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1987
+#: includes/mcp/class-mcp-manager.php:2007
 msgid "Requested: read-only"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1987
+#: includes/mcp/class-mcp-manager.php:2007
 msgid "Requested: read & write"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1989
+#: includes/mcp/class-mcp-manager.php:2009
 msgid "Review your SEO across posts and site settings metadata, schema, sitemaps, robots, social, and SEO scores. No changes are made."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1990
+#: includes/mcp/class-mcp-manager.php:2010
 msgid "Read and improve your SEO across posts and site settings metadata, schema, sitemaps, robots, social, indexing, and SEO scores."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:1991
+#: includes/mcp/class-mcp-manager.php:2011
 msgid "An AI assistant"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2035
+#: includes/mcp/class-mcp-manager.php:2055
 msgid "Authorize AI access"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2064
+#: includes/mcp/class-mcp-manager.php:2084
 msgid "Connect to ThinkRank"
 msgstr ""
 
 #. translators: %s: AI client name, already escaped and wrapped in <strong>.
-#: includes/mcp/class-mcp-manager.php:2067
+#: includes/mcp/class-mcp-manager.php:2087
 #, php-format
 msgid "%s wants to manage SEO on this site."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2073
+#: includes/mcp/class-mcp-manager.php:2093
 msgid "Site"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2074
+#: includes/mcp/class-mcp-manager.php:2094
 msgid "Signed in as"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2077
+#: includes/mcp/class-mcp-manager.php:2097
 msgid "Sends you back to"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2079
+#: includes/mcp/class-mcp-manager.php:2099
 #: src/admin/components/pages/MCPHubConnect.js:445
 msgid "Access"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2081
+#: includes/mcp/class-mcp-manager.php:2101
 msgid "Narrow it per area below. You can change it later under ThinkRank > MCP without reconnecting."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2090
+#: includes/mcp/class-mcp-manager.php:2110
 #: src/admin/components/pages/MCPConnectedApps.js:289
 #: src/admin/components/pages/MCPConnectedApps.js:325
 msgid "No access"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2091
+#: includes/mcp/class-mcp-manager.php:2111
 #: src/admin/components/pages/MCPConnectedApps.js:290
 msgid "Read"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2092
+#: includes/mcp/class-mcp-manager.php:2112
 #: src/admin/components/pages/MCPConnectedApps.js:291
 #: src/admin/components/pages/MCPHubConnect.js:448
 msgid "Read & Write"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2110
+#: includes/mcp/class-mcp-manager.php:2130
 msgid "Secured with OAuth. Revoke anytime in ThinkRank → MCP."
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2116
+#: includes/mcp/class-mcp-manager.php:2136
 msgid "Deny"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2117
+#: includes/mcp/class-mcp-manager.php:2137
 msgid "Approve"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2133
+#: includes/mcp/class-mcp-manager.php:2153
 msgid "Authorization error"
 msgstr ""
 
-#: includes/mcp/class-mcp-manager.php:2136
+#: includes/mcp/class-mcp-manager.php:2156
 msgid "Could not authorize"
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:283
+#: includes/mcp/class-mcp-oauth.php:314
 msgid "At least one valid redirect_uri is required."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:336
+#: includes/mcp/class-mcp-oauth.php:367
 msgid "Unknown client_id."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:340
+#: includes/mcp/class-mcp-oauth.php:371
 msgid "redirect_uri does not match a registered value."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:345
+#: includes/mcp/class-mcp-oauth.php:376
 msgid "Only response_type=code is supported."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:356
+#: includes/mcp/class-mcp-oauth.php:387
 msgid "PKCE with code_challenge_method=S256 is required."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:370
+#: includes/mcp/class-mcp-oauth.php:401
 msgid "code_challenge is not a valid S256 challenge."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:383
+#: includes/mcp/class-mcp-oauth.php:414
 msgid "That request asked for a token for a different address than this one."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:905
+#: includes/mcp/class-mcp-oauth.php:936
 #: src/admin/components/pages/MCPConnectedApps.js:891
 msgid "ThinkRank Hub’s access can only be narrowed here. To let the hub read or change more, disconnect it on the ThinkRank Hub card and connect it again with the access you want."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:1046
+#: includes/mcp/class-mcp-oauth.php:1077
 msgid "MCP Client"
 msgstr ""
 
@@ -5499,7 +5512,7 @@ msgstr ""
 msgid "The ability %1$s is not offered over MCP: its tool name %2$s is already taken by %3$s. Register it under another name."
 msgstr ""
 
-#: includes/seo/class-analytics-manager.php:217
+#: includes/seo/class-analytics-manager.php:210
 msgid "Every 45 Minutes"
 msgstr ""
 
@@ -5595,7 +5608,7 @@ msgid "Hidden from archives"
 msgstr ""
 
 #. translators: 1: number of clicks, 2: change in parentheses or empty, 3: number of days.
-#: includes/seo/class-email-report-data-provider.php:161
+#: includes/seo/class-email-report-data-provider.php:158
 #, php-format
 msgid "%1$s Google clicks%2$s in the last %3$d day"
 msgid_plural "%1$s Google clicks%2$s in the last %3$d days"
@@ -5603,16 +5616,16 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: period label, e.g. "Aug 19 – Sep 17, 2026".
-#: includes/seo/class-email-report-data-provider.php:170
+#: includes/seo/class-email-report-data-provider.php:167
 #, php-format
 msgid "Your SEO report for %s"
 msgstr ""
 
-#: includes/seo/class-email-report-data-provider.php:173
+#: includes/seo/class-email-report-data-provider.php:170
 msgid "Your SEO report"
 msgstr ""
 
-#: includes/seo/class-email-report-data-provider.php:225
+#: includes/seo/class-email-report-data-provider.php:222
 msgid "Analytics integration not available."
 msgstr ""
 
@@ -5655,7 +5668,7 @@ msgid "until Search Console is connected. Nothing will be sent to your recipient
 msgstr ""
 
 #: includes/seo/class-email-report-renderer.php:338
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:400
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:410
 msgid "Connect Search Console"
 msgstr ""
 
@@ -5677,7 +5690,7 @@ msgid "Where your keywords rank: top 3, page one, page two and beyond"
 msgstr ""
 
 #: includes/seo/class-email-report-renderer.php:347
-msgid "Site traffic from Google Analytics 4 and visits from AI assistants, when those are connected"
+msgid "Visits from AI assistants, once AI Insights has recorded some"
 msgstr ""
 
 #: includes/seo/class-email-report-renderer.php:357
@@ -6792,40 +6805,40 @@ msgstr ""
 msgid "Business type is selected for proper schema markup."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:2237
+#: includes/seo/class-sitemap-generator.php:2242
 msgid "The previous automatic sitemap rebuild stopped before it finished, most likely because PHP ran out of memory or time. It is retried with a growing delay. If this keeps happening, raise the PHP memory_limit or max_execution_time, or run WP-Cron from a system cron."
 msgstr ""
 
 #. translators: 1: memory in use, 2: PHP memory limit.
-#: includes/seo/class-sitemap-generator.php:2607
+#: includes/seo/class-sitemap-generator.php:2612
 #, php-format
 msgid "The sitemap rebuild was stopped at %1$s of the %2$s PHP memory limit, before PHP would have run out of memory. It will be retried by a process with more memory (WP-CLI or a system cron). To let it finish in the admin, raise the PHP memory_limit."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3136
+#: includes/seo/class-sitemap-generator.php:3141
 #, php-format
 msgid "The sitemap is disabled, but these files are still in the site root and your web server is still serving them: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3144
+#: includes/seo/class-sitemap-generator.php:3149
 #, php-format
 msgid "The sitemap is being served from WordPress, but these files are still in the site root and your web server will keep serving them instead: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: %s: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3166
+#: includes/seo/class-sitemap-generator.php:3171
 #, php-format
 msgid "The sitemap could not be written because the folder %s is not writable by PHP. Ask your host to make the WordPress root writable, or set Sitemap Delivery to Dynamic to serve the sitemap without writing files."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:3171
+#: includes/seo/class-sitemap-generator.php:3176
 msgid "The sitemap files could not be written to the site root."
 msgstr ""
 
 #. translators: %s: search query.
-#: includes/seo/class-social-meta-manager.php:2067
+#: includes/seo/class-social-meta-manager.php:2140
 #, php-format
 msgid "Search Results for \"%s\""
 msgstr ""
@@ -6910,7 +6923,7 @@ msgid "Clicks from Google"
 msgstr ""
 
 #: includes/seo/email-report-sections/class-key-metrics-section.php:161
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1531
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1221
 #: src/admin/components/essential-seo/KeywordsTab.js:206
 #: src/admin/dashboard-widget/components/SearchTrafficChart.js:104
 msgid "Impressions"
@@ -7010,27 +7023,6 @@ msgstr[1] ""
 
 #: includes/seo/email-report-sections/class-position-summary-section.php:122
 msgid "See all keywords"
-msgstr ""
-
-#: includes/seo/email-report-sections/class-site-traffic-section.php:70
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:409
-msgid "Sessions"
-msgstr ""
-
-#: includes/seo/email-report-sections/class-site-traffic-section.php:75
-msgid "Active users"
-msgstr ""
-
-#: includes/seo/email-report-sections/class-site-traffic-section.php:80
-msgid "Site traffic"
-msgstr ""
-
-#: includes/seo/email-report-sections/class-site-traffic-section.php:80
-msgid "From Google Analytics 4, all channels"
-msgstr ""
-
-#: includes/seo/email-report-sections/class-site-traffic-section.php:82
-msgid "Open the analytics dashboard"
 msgstr ""
 
 #: includes/seo/email-report-sections/class-top-losing-keywords-section.php:92
@@ -7293,9 +7285,9 @@ msgstr ""
 #: src/admin/components/content-brief/ContentStructure.js:510
 #: src/admin/components/content-brief/ContentStructure.js:1411
 #: src/admin/components/essential-seo/schema/SchemaPreview.js:141
-#: src/admin/components/pages/MCPConnectionConfig.js:582
-#: src/admin/components/pages/MCPConnectionConfig.js:670
-#: src/admin/components/pages/MCPConnectionConfig.js:680
+#: src/admin/components/pages/MCPConnectionConfig.js:617
+#: src/admin/components/pages/MCPConnectionConfig.js:705
+#: src/admin/components/pages/MCPConnectionConfig.js:715
 #: src/admin/setup-wizard/steps/StepMcpServer.js:381
 msgid "Copy"
 msgstr ""
@@ -7306,7 +7298,7 @@ msgstr ""
 
 #: src/admin/components/ai/MetadataGenerator.js:402
 #: src/admin/components/content-brief/ContentBriefInsertTeaser.js:51
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2565
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2255
 #: src/admin/components/pro/ProTeaser.js:46
 msgid "Pro"
 msgstr ""
@@ -8040,8 +8032,8 @@ msgstr ""
 
 #: src/admin/components/content-brief/ContentBriefGenerator.js:1113
 #: src/admin/components/content-brief/ContentBriefGenerator.js:1150
-#: src/admin/components/pages/MCPConnectionConfig.js:577
-#: src/admin/components/pages/MCPConnectionConfig.js:675
+#: src/admin/components/pages/MCPConnectionConfig.js:612
+#: src/admin/components/pages/MCPConnectionConfig.js:710
 #: src/metabox/components/PillarContentSuggestions.js:297
 msgid "Copied!"
 msgstr ""
@@ -8382,7 +8374,7 @@ msgid "Content brief sections"
 msgstr ""
 
 #: src/admin/components/content-brief/KeywordInput.js:17
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1985
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1675
 #: src/admin/components/essential-seo/schema/forms/SchemaProductForm.js:278
 #: src/admin/components/essential-seo/SidebarNavigation.js:210
 msgid "Keywords"
@@ -8432,7 +8424,7 @@ msgid "Track rankings, build internal links with AI, ship custom schema with dis
 msgstr ""
 
 #: src/admin/components/dashboard/ProSlot.js:209
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2604
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2294
 #: src/admin/components/pro/ProTeaser.js:72
 msgid "Upgrade Now"
 msgstr ""
@@ -9071,212 +9063,199 @@ msgstr ""
 msgid "Save Settings"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:166
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:165
 msgid "Track your SEO performance with AI-powered insights, real trends, and data that helps you improve rankings."
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:273
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:562
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:576
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:257
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:270
 msgid "Traffic Overview"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:420
-msgid "Pageviews"
-msgstr ""
-
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:431
-msgid "Active Users"
-msgstr ""
-
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:442
-msgid "Bounce Rate"
-msgstr ""
-
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:580
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:271
 msgid "See how much traffic your site really gets. Connect Google Analytics 4 to track sessions, pageviews, active users, and bounce rate right inside ThinkRank."
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:585
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:276
 msgid "Sessions, pageviews, and active users at a glance"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:589
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:280
 msgid "Bounce rate with period-over-period trends"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:593
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:284
 msgid "GA4 traffic data alongside your search performance"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:634
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:324
 msgid "Search Performance"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:656
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1949
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2629
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2907
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:346
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1639
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2319
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2597
 #: src/admin/components/essential-seo/SearchConsoleSettings.js:279
 msgid "Search Console"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:781
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:471
 #: src/admin/dashboard-widget/components/TrafficDisplay.js:56
 msgid "Total Clicks"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:940
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:630
 #: src/admin/dashboard-widget/components/TrafficDisplay.js:63
 msgid "Total Impressions"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1124
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:814
 msgid "Avg. CTR"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1282
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:972
 msgid "Average Position"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1508
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1198
 #: src/admin/components/essential-seo/KeywordsTab.js:199
 #: src/admin/dashboard-widget/components/SearchTrafficChart.js:98
 msgid "Clicks"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1555
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1245
 #: src/admin/dashboard-widget/components/SearchTrafficChart.js:110
 msgid "Avg. CTR (%)"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1578
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1268
 #: src/admin/dashboard-widget/components/SearchTrafficChart.js:116
 msgid "Avg. Position"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1738
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1759
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1797
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1858
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2458
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1428
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1449
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1487
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1548
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2148
 #: src/admin/components/essential-seo/IntegrationsTab.js:568
 msgid "Google Analytics"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1833
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:3099
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1523
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2789
 msgid "Queries"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1845
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:3151
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1535
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2841
 msgid "Top Content"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1859
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1549
 msgid "See who is visiting and how engaged they are. Connect Google Analytics 4 to bring total, new, and returning users plus engagement time right beside your search data."
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1864
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1554
 msgid "Total, new, and returning users at a glance"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1868
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1558
 msgid "Average engagement time and user trends over time"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1872
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1562
 msgid "GA4 metrics side by side with your Search Console data"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1923
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1613
 msgid "Keyword positions"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1978
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1668
 msgid "Top3"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1979
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1669
 msgid "4-10"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1980
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1670
 msgid "11-50"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:1981
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:1671
 msgid "51-100"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2352
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2366
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2546
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2042
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2056
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2236
 msgid "Traffic Channels"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2411
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2101
 msgid "Top Countries"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2418
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2108
 msgid "Branded vs Non-Branded"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2580
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2270
 msgid "See where your visitors come from (organic, direct, referral, social, and more) with Google Analytics 4."
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2647
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2337
 msgid "No country data available for this period."
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2771
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2461
 msgid "Branded"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2798
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2488
 msgid "Non-Branded"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2929
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2619
 msgid "No data available for this period."
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:2966
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2656
 msgid "Brand keyword:"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:3100
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2790
 msgid "Discover exactly what people search to find you. Track your top Search Console queries and see which are winning or losing positions over time."
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:3105
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2795
 msgid "Your best-performing queries ranked by clicks and impressions"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:3109
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2799
 msgid "Winning vs. losing filters to spot momentum shifts"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:3113
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2803
 msgid "Position, CTR, and change tracked for every query"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:3152
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2842
 msgid "Know which pages actually drive results. Top Content merges Search Console and GA4 so you can see clicks, impressions, and users for every page in one table."
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:3157
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2847
 msgid "Search Console and GA4 metrics merged per page"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:3161
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2851
 msgid "Position, clicks, impressions, CTR, and GA4 users side by side"
 msgstr ""
 
-#: src/admin/components/essential-seo/analytics/DashboardSection.js:3165
+#: src/admin/components/essential-seo/analytics/DashboardSection.js:2855
 msgid "Spot your highest-impact pages at a glance"
 msgstr ""
 
@@ -9498,7 +9477,7 @@ msgid "Author archives are off."
 msgstr ""
 
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:242
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:263
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:267
 #: src/admin/components/essential-seo/GlobalSEOTab.js:343
 #: src/admin/hooks/useAutosaveSettings.js:158
 msgid "Couldn’t save that change."
@@ -10080,7 +10059,7 @@ msgstr ""
 
 #: src/admin/components/essential-seo/ContentTypeMatrix.js:57
 #: src/admin/components/essential-seo/ContentTypeMatrix.js:127
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:348
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:358
 #: src/admin/components/pages/Settings.js:2700
 #: src/admin/components/pages/Settings.js:2911
 #: src/admin/components/pages/Settings.js:3116
@@ -10089,9 +10068,9 @@ msgstr ""
 
 #: src/admin/components/essential-seo/ContentTypeMatrix.js:58
 #: src/admin/components/essential-seo/ContentTypeMatrix.js:128
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:218
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:349
-#: src/admin/components/pages/MCP.js:196
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:222
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:359
+#: src/admin/components/pages/MCP.js:204
 #: src/admin/components/pages/Settings.js:2701
 #: src/admin/components/pages/Settings.js:2912
 #: src/admin/components/pages/Settings.js:3117
@@ -11324,8 +11303,8 @@ msgid "Custom (User-modified configuration)"
 msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:270
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:222
-#: src/admin/components/pages/MCP.js:198
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:226
+#: src/admin/components/pages/MCP.js:206
 #: src/admin/components/pages/Settings.js:1946
 #: src/admin/components/pages/Settings.js:2494
 #: src/admin/setup-wizard/steps/Step5Ecosystem.js:144
@@ -11845,141 +11824,145 @@ msgstr ""
 msgid "Failed to load email report settings."
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:220
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:224
 #: src/admin/components/pages/MCPHubConnect.js:302
 #: src/admin/components/pages/Settings.js:2493
 msgid "Paused"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:278
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:282
 msgid "Test email sent. Search Console isn’t connected, so the email explains how to connect it instead of showing a report."
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:282
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:286
 msgid "Test email sent. Check your inbox in a moment."
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:292
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:296
 msgid "Test email could not be sent."
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:298
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:302
 msgid "Test email failed."
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:307
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:311
 msgid "Loading email report settings…"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:331
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:335
 #: src/admin/components/essential-seo/SidebarNavigation.js:213
 msgid "Email Reporting"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:338
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:344
 msgid "A Search Console-style summary by email: clicks, impressions, CTR and position with the change vs the previous period, the pages and queries that grew or fell, where your keywords rank, and, when connected, site traffic and visits from AI assistants."
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:367
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:348
+msgid "A Search Console-style summary by email: clicks, impressions, CTR and position with the change vs the previous period, the pages and queries that grew or fell, where your keywords rank, and visits from AI assistants once AI Insights has recorded some."
+msgstr ""
+
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:377
 msgid "Reports are paused: Google Search Console isn’t connected"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:373
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:383
 msgid "The report is built from Search Console data, so nothing is sent until it is connected. The schedule stays as it is: the first report goes out on the next hourly check after you connect."
 msgstr ""
 
 #. translators: 1: date and time, 2: reason sentence.
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:382
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:412
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:392
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:422
 #, js-format
 msgid "Last scheduled run on %1$s sent nothing: %2$s"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:430
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:440
 msgid "Frequency"
 msgstr ""
 
 #. translators: %d: number of days between reports.
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:433
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:443
 #, js-format
 msgid "Every %d day"
 msgid_plural "Every %d days"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:441
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:451
 msgid "Each report covers the period since the last one and compares it with the period before."
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:447
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:457
 msgid "Recipients"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:451
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:461
 msgid "No recipients"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:455
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:465
 msgid "Sections"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:459
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:469
 msgid "No sections"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:464
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:474
 msgid "Site traffic needs Google Analytics 4. Connect it to add that card. The AI assistants card appears once AI Insights has recorded visits."
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:468
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:478
 msgid "Sections with nothing to show for the period are left out rather than sent empty."
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:475
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:485
 msgid "Next report"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:478
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:488
 msgid "Paused until Search Console is connected"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:483
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:493
 msgid "Not scheduled yet"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:497
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:507
 msgid "Send Test Email"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:501
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:511
 msgid "Sends the “connect Search Console” email your recipients would get."
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:505
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:515
 msgid "Sends the report as it stands today to every recipient."
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:520
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:530
 msgid "Branded email reports"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:521
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:531
 msgid "Send the report on your schedule, to your whole team or your clients, looking like it came from you."
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:526
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:536
 msgid "Every 7, 15 or 30 days"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:527
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:537
 msgid "Up to 50 recipients"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:528
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:538
 msgid "Your logo, header colour, subject line, intro and footer"
 msgstr ""
 
-#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:532
+#: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:542
 msgid "Pick the sections to include"
 msgstr ""
 
@@ -12886,7 +12869,7 @@ msgid "Failed to submit URLs. Please check your API key and try again."
 msgstr ""
 
 #: src/admin/components/essential-seo/instant-indexing/SubmitURLs.js:348
-#: src/admin/components/pages/MCPConnectionConfig.js:253
+#: src/admin/components/pages/MCPConnectionConfig.js:280
 msgid "Loading…"
 msgstr ""
 
@@ -18115,53 +18098,57 @@ msgstr ""
 msgid "SEO scoring, checks, insights & analytics"
 msgstr ""
 
-#: src/admin/components/pages/MCP.js:150
+#: src/admin/components/pages/MCP.js:155
 msgid "Couldn’t load your MCP settings."
 msgstr ""
 
-#: src/admin/components/pages/MCP.js:173
+#: src/admin/components/pages/MCP.js:178
 msgid "MCP is on. Connect an AI client below."
 msgstr ""
 
-#: src/admin/components/pages/MCP.js:174
+#: src/admin/components/pages/MCP.js:179
 msgid "MCP is off. AI clients can no longer connect."
 msgstr ""
 
-#: src/admin/components/pages/MCP.js:184
+#: src/admin/components/pages/MCP.js:192
 msgid "Couldn’t save your MCP settings."
 msgstr ""
 
-#: src/admin/components/pages/MCP.js:200
+#: src/admin/components/pages/MCP.js:208
 msgid "Setup needed"
 msgstr ""
 
-#: src/admin/components/pages/MCP.js:220
+#: src/admin/components/pages/MCP.js:228
 #: src/admin/setup-wizard/steps/StepMcpServer.js:298
 msgid "AI agent access"
 msgstr ""
 
-#: src/admin/components/pages/MCP.js:227
+#: src/admin/components/pages/MCP.js:235
 msgid "Open a secure, permission-scoped bridge so assistants like Claude, ChatGPT, and Cursor can review and improve your SEO for you. Access runs through a revocable connection token or a one-time OAuth approval, always tied to an administrator account. Turn it off and ThinkRank registers no tools every AI connection is refused."
 msgstr ""
 
-#: src/admin/components/pages/MCP.js:239
+#: src/admin/components/pages/MCP.js:247
 #: src/admin/setup-wizard/steps/StepMcpServer.js:321
 msgid "Enable MCP access"
 msgstr ""
 
-#: src/admin/components/pages/MCP.js:260
+#: src/admin/components/pages/MCP.js:251
+msgid "Only an administrator can turn MCP on or off."
+msgstr ""
+
+#: src/admin/components/pages/MCP.js:276
 msgid "What a connected agent can do"
 msgstr ""
 
-#: src/admin/components/pages/MCP.js:266
+#: src/admin/components/pages/MCP.js:282
 msgid "Every action honours the signed-in user’s capabilities and can be reviewed or reverted in ThinkRank."
 msgstr ""
 
-#: src/admin/components/pages/MCP.js:348
+#: src/admin/components/pages/MCP.js:364
 msgid "MCP runtime not loaded"
 msgstr ""
 
-#: src/admin/components/pages/MCP.js:350
+#: src/admin/components/pages/MCP.js:366
 msgid "The bundled Abilities API could not be loaded, so no SEO tools can be served to AI clients. This usually means the plugin build is incomplete (dependencies/vendor is missing). Reinstall ThinkRank from an official package, or run \"composer install\" inside the plugin’s dependencies/ directory."
 msgstr ""
 
@@ -18628,163 +18615,175 @@ msgstr ""
 msgid "Every OAuth app loses access now and has to be approved again, and the connection token is replaced, which disconnects Claude Code, Cursor and VS Code until you paste the new command. Use this if you think a credential has leaked. MCP stays on."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:193
+#: src/admin/components/pages/MCPConnectionConfig.js:197
 msgid "Couldn’t load the MCP connection status."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:219
+#: src/admin/components/pages/MCPConnectionConfig.js:223
 msgid "Couldn’t copy to the clipboard. Please select the text and copy it manually."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:240
+#: src/admin/components/pages/MCPConnectionConfig.js:244
 msgid "Connection token reset."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:244
+#: src/admin/components/pages/MCPConnectionConfig.js:248
 msgid "Couldn’t reset the connection token."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:284
+#: src/admin/components/pages/MCPConnectionConfig.js:267
+msgid "Connection token created."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:271
+msgid "Couldn’t create a connection token."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:311
 msgid "Claude (web, mobile & desktop)"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:288
+#: src/admin/components/pages/MCPConnectionConfig.js:315
 msgid "In Claude, open Settings → Connectors → Add Connector → Add custom connector."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:292
+#: src/admin/components/pages/MCPConnectionConfig.js:319
 #: src/admin/setup-wizard/steps/StepMcpServer.js:152
 msgid "Paste the connector URL above and give it a name (e.g. ThinkRank)."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:296
+#: src/admin/components/pages/MCPConnectionConfig.js:323
 #: src/admin/setup-wizard/steps/StepMcpServer.js:156
 msgid "Click Add, then approve access when Claude asks you to sign in."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:309
+#: src/admin/components/pages/MCPConnectionConfig.js:336
 msgid "In ChatGPT, open Settings → Plugins → Add New."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:313
+#: src/admin/components/pages/MCPConnectionConfig.js:340
 msgid "Enter a name (e.g. ThinkRank)."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:314
+#: src/admin/components/pages/MCPConnectionConfig.js:341
 msgid "Paste the Connection URL above."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:315
+#: src/admin/components/pages/MCPConnectionConfig.js:342
 #: src/admin/setup-wizard/steps/StepMcpServer.js:177
 msgid "Save, then approve access when ChatGPT asks you to sign in."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:331
+#: src/admin/components/pages/MCPConnectionConfig.js:358
 msgid "CLI"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:333
+#: src/admin/components/pages/MCPConnectionConfig.js:360
 msgid "Command"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:336
+#: src/admin/components/pages/MCPConnectionConfig.js:363
 msgid "Copy the command above."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:337
+#: src/admin/components/pages/MCPConnectionConfig.js:364
 msgid "Run it in your terminal from your project directory."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:348
-#: src/admin/components/pages/MCPConnectionConfig.js:365
+#: src/admin/components/pages/MCPConnectionConfig.js:375
+#: src/admin/components/pages/MCPConnectionConfig.js:392
 msgid "Editor"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:351
+#: src/admin/components/pages/MCPConnectionConfig.js:378
 msgid "Add to Cursor"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:353
+#: src/admin/components/pages/MCPConnectionConfig.js:380
 msgid "Click \"Add to Cursor\". It opens Cursor with ThinkRank prefilled."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:357
+#: src/admin/components/pages/MCPConnectionConfig.js:384
 msgid "Confirm the install when Cursor asks."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:368
+#: src/admin/components/pages/MCPConnectionConfig.js:395
 msgid "Add to VS Code"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:370
+#: src/admin/components/pages/MCPConnectionConfig.js:397
 msgid "Click \"Add to VS Code\". It opens VS Code with ThinkRank prefilled."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:374
+#: src/admin/components/pages/MCPConnectionConfig.js:401
 msgid "Confirm the install when VS Code asks."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:380
-#: src/admin/components/pages/MCPConnectionConfig.js:548
+#: src/admin/components/pages/MCPConnectionConfig.js:407
+#: src/admin/components/pages/MCPConnectionConfig.js:583
 msgid "OAuth"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:381
+#: src/admin/components/pages/MCPConnectionConfig.js:408
 msgid "Editors & CLI"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:388
+#: src/admin/components/pages/MCPConnectionConfig.js:415
 msgid "Add ThinkRank to your client"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:391
+#: src/admin/components/pages/MCPConnectionConfig.js:418
 msgid "Pick your assistant below it opens or copies fully configured."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:401
+#: src/admin/components/pages/MCPConnectionConfig.js:428
 msgid "How it works"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:415
-msgid "Preparing your connection… reload the page if this persists."
+#: src/admin/components/pages/MCPConnectionConfig.js:465
+msgid "There is no connection token. Claude Code, Cursor, VS Code, and Claude Desktop need one to connect. OAuth apps don’t."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:448
+#: src/admin/components/pages/MCPConnectionConfig.js:476
+msgid "Create connection token"
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:483
 msgid "This site can no longer display the connection token: the security keys in wp-config.php changed after it was minted. Clients you’ve already set up keep working. Reset the token below to get one you can copy again; that disconnects those clients until you paste the new command."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:474
+#: src/admin/components/pages/MCPConnectionConfig.js:510
 msgid "Reset the connection token if it may have leaked. This disconnects Claude Code, Cursor, VS Code, and Claude Desktop they’ll need the new command to reconnect. OAuth-connected apps are unaffected."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:484
-#: src/admin/components/pages/MCPConnectionConfig.js:510
+#: src/admin/components/pages/MCPConnectionConfig.js:520
+#: src/admin/components/pages/MCPConnectionConfig.js:545
 msgid "Reset token"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:494
+#: src/admin/components/pages/MCPConnectionConfig.js:529
 msgid "Reset connection token?"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:516
+#: src/admin/components/pages/MCPConnectionConfig.js:551
 msgid "A new token is generated immediately. Every header-based client (Claude Code, Cursor, VS Code, Claude Desktop) is disconnected and must reconnect with the new command. OAuth-connected apps like Claude on the web keep working."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:551
+#: src/admin/components/pages/MCPConnectionConfig.js:586
 msgid "Signs in with a one-time approval. No token to paste."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:562
+#: src/admin/components/pages/MCPConnectionConfig.js:597
 #: src/admin/setup-wizard/steps/StepMcpServer.js:360
 msgid "Connector URL"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:572
+#: src/admin/components/pages/MCPConnectionConfig.js:607
 #: src/admin/setup-wizard/steps/StepMcpServer.js:368
 msgid "Copy connector URL"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:611
+#: src/admin/components/pages/MCPConnectionConfig.js:646
 msgid "How to add a connector"
 msgstr ""
 

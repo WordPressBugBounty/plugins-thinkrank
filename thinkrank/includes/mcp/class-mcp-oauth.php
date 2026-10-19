@@ -70,6 +70,14 @@ final class Mcp_OAuth {
 	public const LAST_USED_OPTION = 'thinkrank_mcp_oauth_last_used';
 
 	/**
+	 * The `for` value naming the REST fallback as the address that answered,
+	 * in the protected-resource metadata URL its 401 challenge advertises.
+	 *
+	 * @since 2.17.1
+	 */
+	public const FOR_REST = 'rest';
+
+	/**
 	 * Authorization-code lifetime (seconds). Deliberately short.
 	 */
 	private const CODE_TTL = 60;
@@ -204,9 +212,24 @@ final class Mcp_OAuth {
 	 * permalink structure. The well-known variants stay served for clients
 	 * that ignore the pointer and derive the URL themselves.
 	 *
+	 * A challenge sent from the REST fallback points at the document that
+	 * names the fallback as the resource. RFC 9728 section 3.3 has a client
+	 * discard metadata whose `resource` is not the URL it connected to, and
+	 * the fallback is not under the pretty path, so the plain document would
+	 * be thrown away by exactly the clients the fallback exists for (#1113).
+	 *
+	 * @since 2.17.1 Takes $address, and names the fallback's document for 'rest'.
+	 *
+	 * @param string $address Which address answered: '' for the pretty endpoint,
+	 *                        self::FOR_REST for the REST fallback.
 	 * @return string
 	 */
-	public static function resource_metadata_url(): string {
+	public static function resource_metadata_url( string $address = '' ): string {
+		$url = rest_url( 'thinkrank/v1/mcp/oauth/protected-resource' );
+		if ( self::FOR_REST === $address ) {
+			$url = add_query_arg( 'for', self::FOR_REST, $url );
+		}
+
 		/**
 		 * Filter the resource_metadata URL advertised in the WWW-Authenticate
 		 * challenge, for hosts where neither the REST route nor the
@@ -214,13 +237,13 @@ final class Mcp_OAuth {
 		 * from somewhere custom (a CDN, a static file, another domain).
 		 *
 		 * @since 1.32.0
+		 * @since 2.17.1 Passes $address.
 		 *
 		 * @param string $url The advertised protected-resource metadata URL.
+		 * @param string $address '' when the pretty endpoint answered, 'rest' when
+		 *                        the REST fallback did.
 		 */
-		return apply_filters(
-			'thinkrank_mcp_resource_metadata_url',
-			rest_url( 'thinkrank/v1/mcp/oauth/protected-resource' )
-		);
+		return apply_filters( 'thinkrank_mcp_resource_metadata_url', $url, $address );
 	}
 
 	// -- Discovery documents (RFC 8414 / RFC 9728) -----------------------
@@ -229,11 +252,19 @@ final class Mcp_OAuth {
 	 * RFC 9728 protected-resource metadata — tells the client which
 	 * authorization server(s) protect the MCP endpoint (this site).
 	 *
+	 * For self::FOR_REST the resource is the REST fallback, the address a
+	 * client connected through that route asked for (#1113). Both addresses
+	 * are this one resource; names_this_resource() accepts either.
+	 *
+	 * @since 2.17.1 Takes $address.
+	 *
+	 * @param string $address '' for the pretty endpoint, self::FOR_REST for the
+	 *                        REST fallback.
 	 * @return array<string,mixed>
 	 */
-	public static function protected_resource_metadata(): array {
+	public static function protected_resource_metadata( string $address = '' ): array {
 		return [
-			'resource'                 => self::resource(),
+			'resource'                 => self::FOR_REST === $address ? Mcp_Pairing::site_endpoint_fallback() : self::resource(),
 			'authorization_servers'    => [ self::issuer() ],
 			'scopes_supported'         => Mcp_Scopes::supported_tokens(),
 			'bearer_methods_supported' => [ 'header' ],

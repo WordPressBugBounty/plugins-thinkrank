@@ -90,7 +90,12 @@ class Get_Post_Seo_Checks extends Ability_Base {
 							'score'   => [
 								'type'       => 'object',
 								'properties' => [
-									'overall_score' => [ 'type' => 'integer' ],
+									// The calculator awards half points, so a
+									// score such as 64.5 is a valid result (#988).
+									'overall_score' => [
+										'type'        => 'number',
+										'description' => __( 'Score from 0 to 100. Can end in .5, because some checks award half a point.', 'thinkrank' ),
+									],
 									'grade'         => [ 'type' => 'string' ],
 									'keywords'      => [
 										'type'  => 'array',

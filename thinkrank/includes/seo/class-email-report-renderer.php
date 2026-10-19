@@ -344,7 +344,7 @@ final class Email_Report_Renderer {
             __('Clicks, impressions, CTR and average position, with the change vs the previous period', 'thinkrank'),
             __('Top growing pages and queries, and the ones losing ground', 'thinkrank'),
             __('Where your keywords rank: top 3, page one, page two and beyond', 'thinkrank'),
-            __('Site traffic from Google Analytics 4 and visits from AI assistants, when those are connected', 'thinkrank'),
+            __('Visits from AI assistants, once AI Insights has recorded some', 'thinkrank'),
         ];
         $list = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;' . $font . 'font-size:14px;color:' . Email_Report_Html::INK . ';line-height:1.6;">';
         foreach ($items as $item) {

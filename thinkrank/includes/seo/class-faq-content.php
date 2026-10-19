@@ -98,6 +98,20 @@ class FAQ_Content {
     public const BUILDER_BREAKDANCE = 'breakdance';
 
     /**
+     * Etch, which keeps its own `etch/*` block tree in `post_content`.
+     *
+     * Etch has no builder meta key, so it is recognised by its blocks. Before
+     * it was, an Etch page reported no builder: `get-faq` called it writable
+     * and `update-faq` appended a core FAQ block next to Etch's tree (#1046).
+     * ThinkRank has no Etch FAQ module and no reader for its accordion; the
+     * `thinkrank_faq_builder_accordions` filter is the way in.
+     *
+     * @since 2.17.1
+     * @var string
+     */
+    public const BUILDER_ETCH = 'etch';
+
+    /**
      * Builder post meta keys whose presence alone names the builder.
      *
      * Every key here is one of {@see Builder_Content::builder_meta_keys()}, and
@@ -207,6 +221,19 @@ class FAQ_Content {
      * @var string[]
      */
     private const ANSWER_KEY_FRAGMENTS = ['answer', 'text', 'content', 'body', 'description', 'editor', 'html'];
+
+    /**
+     * Style setting keys that contain an answer fragment but never hold copy.
+     *
+     * Oxygen keeps an element's CSS as flat strings beside its content
+     * (`options.original['text-align'] = 'center'`), and `text-align` contains
+     * `text`. Once every block of an answer was read, a styled wrapper div
+     * inside an item put "center" into the answer (#947).
+     *
+     * @since 2.17.1
+     * @var string
+     */
+    private const STYLE_KEY_PATTERN = '/^text[-_](align|decoration|transform|shadow|indent|overflow|wrap|justify|rendering|emphasis|orientation|underline|stroke|fill)/';
 
     /**
      * How deep a builder tree is walked before the walk gives up.
@@ -401,6 +428,7 @@ class FAQ_Content {
      *
      * @since 2.10.1
      * @since 2.14.0 Detects Oxygen and Breakdance.
+     * @since 2.17.1 Detects Etch.
      * @param int $post_id Post ID.
      * @return string One of {@see self::builders()}, or '' for the block editor.
      */
@@ -419,6 +447,11 @@ class FAQ_Content {
             return self::SOURCE_BEAVER;
         }
 
+        $post = get_post($post_id);
+        if ($post instanceof \WP_Post && Builder_Content::is_etch_markup((string) $post->post_content)) {
+            return self::BUILDER_ETCH;
+        }
+
         return self::builder_from_meta($post_id);
     }
 
@@ -434,7 +467,7 @@ class FAQ_Content {
      */
     public static function builders(): array {
         return array_values(array_unique(array_merge(
-            [self::SOURCE_ELEMENTOR, self::SOURCE_BRICKS, self::SOURCE_BEAVER],
+            [self::SOURCE_ELEMENTOR, self::SOURCE_BRICKS, self::SOURCE_BEAVER, self::BUILDER_ETCH],
             array_values(self::META_BUILDERS)
         )));
     }
@@ -660,11 +693,13 @@ class FAQ_Content {
         // and Beaver have one, and sweeping their trees for accordions as well
         // would publish a second FAQPage source behind the back of the module's
         // own schema toggle.
-        if (!in_array($builder, [self::BUILDER_OXYGEN, self::BUILDER_BREAKDANCE], true)) {
+        if (!in_array($builder, [self::BUILDER_OXYGEN, self::BUILDER_BREAKDANCE, self::BUILDER_ETCH], true)) {
             return [];
         }
 
-        $pairs = self::accordion_pairs((int) $post->ID);
+        // Etch has no built-in reader: its pairs come only from the filter, so
+        // a site can map its Etch accordion component to FAQPage (#1046).
+        $pairs = self::BUILDER_ETCH === $builder ? [] : self::accordion_pairs((int) $post->ID);
 
         /**
          * Filter the question/answer pairs read out of a builder accordion.
@@ -913,7 +948,8 @@ class FAQ_Content {
      * `oxy_pro_accordion_item` the same way. So an item's question is read from
      * the item's own properties and its answer from its children, which is what
      * keeps a nested element's unrelated `title` — a Video's own name, say —
-     * from being read as the next question.
+     * from being read as the next question. Every child element contributes
+     * to the answer, in document order (#947).
      *
      * A repeater is still handled, for a builder that stores one and for the
      * accordion whose items carry no element name of their own: when no named
@@ -937,10 +973,11 @@ class FAQ_Content {
                     continue;
                 }
 
+                // Every child element, not only the first: an answer stored as
+                // a lead-in line, a list and a closing paragraph kept just the
+                // lead-in (#947).
                 $children = self::as_tree_node($item['children'] ?? null);
-                $answer   = null === $children
-                    ? ''
-                    : self::deep_fragment_value($children, self::ANSWER_KEY_FRAGMENTS, false);
+                $answer   = null === $children ? '' : self::answer_from_elements($children);
 
                 // An item that keeps its answer beside its question rather than
                 // in a child element.
@@ -960,6 +997,99 @@ class FAQ_Content {
         }
 
         return self::repeater_pairs($accordion);
+    }
+
+    /**
+     * The answer held by a run of child elements, in document order.
+     *
+     * Each element contributes its own copy (see {@see self::element_answer()}),
+     * then its own child elements do, so a text block, a list and another text
+     * block under one accordion item all reach the answer (#947).
+     *
+     * @since 2.17.1
+     * @param array<mixed> $elements Child elements of an accordion item.
+     * @return string Answer parts joined by newlines, or ''.
+     */
+    private static function answer_from_elements(array $elements): string {
+        $parts = [];
+
+        $walk = static function (array $nodes, int $depth) use (&$walk, &$parts): void {
+            if ($depth > self::MAX_TREE_DEPTH) {
+                return;
+            }
+
+            foreach ($nodes as $node) {
+                $node = self::as_tree_node($node);
+                if (null === $node) {
+                    continue;
+                }
+
+                $value = self::element_answer($node, $depth);
+                if ('' !== $value) {
+                    $parts[] = $value;
+                }
+
+                $children = self::as_tree_node($node['children'] ?? null);
+                if (null !== $children) {
+                    $walk($children, $depth + 1);
+                }
+            }
+        };
+
+        $walk($elements, 0);
+
+        return implode("\n", $parts);
+    }
+
+    /**
+     * The copy one element holds in its own fields.
+     *
+     * The first answer-like value, as before, with one difference: inside a
+     * list (a List element's items, say) every entry contributes, not just
+     * the first. `children` is left alone, because it holds other elements,
+     * which {@see self::answer_from_elements()} reads in their own turn.
+     *
+     * @since 2.17.1
+     * @param array<mixed> $node  Element, or one of its field groups.
+     * @param int          $depth Current depth.
+     * @return string
+     */
+    private static function element_answer(array $node, int $depth): string {
+        if ($depth > self::MAX_TREE_DEPTH) {
+            return '';
+        }
+
+        $value = self::first_fragment_value($node, self::ANSWER_KEY_FRAGMENTS);
+        if ('' !== $value) {
+            return $value;
+        }
+
+        $is_list = [] !== $node && array_keys($node) === range(0, count($node) - 1);
+        $parts   = [];
+
+        foreach ($node as $key => $child) {
+            if (is_string($key) && 'children' === strtolower($key)) {
+                continue;
+            }
+
+            $child = self::as_tree_node($child);
+            if (null === $child) {
+                continue;
+            }
+
+            $found = self::element_answer($child, $depth + 1);
+            if ('' === $found) {
+                continue;
+            }
+
+            if (!$is_list) {
+                return $found;
+            }
+
+            $parts[] = $found;
+        }
+
+        return implode("\n", $parts);
     }
 
     /**
@@ -1012,17 +1142,24 @@ class FAQ_Content {
      * row carrying both halves pairs directly; otherwise a question is held
      * until an answer follows it, and a second question arriving first replaces
      * the held one rather than pairing with a later answer, so an item with no
-     * answer drops out instead of stealing the next item's.
+     * answer drops out instead of stealing the next item's. Answer nodes that
+     * follow the first one join its answer until the next question, so an
+     * answer kept in several blocks stays whole.
      *
      * @since 2.14.0
+     * @since 2.17.1 Keeps every answer block, not only the first (#947).
      * @param array<mixed> $accordion Accordion element node.
      * @return array<int, array{question: string, answer: string}>
      */
     private static function repeater_pairs(array $accordion): array {
         $pairs   = [];
         $pending = '';
+        // The pair built from a held question, which later answer-only nodes
+        // extend until the next question: an item whose answer is a lead-in, a
+        // list and a closing line kept only the lead-in (#947).
+        $open = null;
 
-        $walk = static function ($node, int $depth) use (&$walk, &$pairs, &$pending): void {
+        $walk = static function ($node, int $depth) use (&$walk, &$pairs, &$pending, &$open): void {
             if ($depth > self::MAX_TREE_DEPTH) {
                 return;
             }
@@ -1041,18 +1178,38 @@ class FAQ_Content {
                     'answer'   => $answer,
                 ];
                 $pending = '';
+                $open    = null;
 
                 return;
             }
 
             if ('' !== $question) {
                 $pending = $question;
+                $open    = null;
             } elseif ('' !== $answer && '' !== $pending) {
                 $pairs[] = [
                     'question' => $pending,
                     'answer'   => $answer,
                 ];
                 $pending = '';
+                $open    = count($pairs) - 1;
+            } elseif ('' !== $answer && null !== $open) {
+                $pairs[$open]['answer'] .= "\n" . $answer;
+            }
+
+            // A node that held an answer is read only through its child
+            // elements from here on: its other fields are its own settings
+            // (alignment, typography), and now that answers are appended a
+            // stray `text_align` there would join the previous answer. A
+            // question node is still read whole, since its answer can sit in
+            // one of its own field groups.
+            if ('' !== $answer) {
+                $children = self::as_tree_node($node['children'] ?? null);
+                if (null !== $children) {
+                    $walk($children, $depth + 1);
+                }
+
+                return;
             }
 
             foreach ($node as $child) {
@@ -1138,7 +1295,7 @@ class FAQ_Content {
                 return trim($value);
             }
 
-            if ('' !== $fallback) {
+            if ('' !== $fallback || 1 === preg_match(self::STYLE_KEY_PATTERN, $lower)) {
                 continue;
             }
 

@@ -393,23 +393,15 @@ class Content_Brief_Generator {
 
             // Handle OpenAI response format
             if (isset($ai_response['choices'][0]['message']['content'])) {
-                $content_field = $ai_response['choices'][0]['message']['content'];
-                if (is_string($content_field)) {
-                    $ai_text = $content_field;
-                } elseif (is_array($content_field)) {
-                    // Concatenate text parts from array-based content (Chat Completions multimodal)
-                    $parts = array_map(function($part) {
-                        if (is_array($part)) {
-                            return $part['text'] ?? '';
-                        }
-                        return is_string($part) ? $part : '';
-                    }, $content_field);
-                    $ai_text = trim(implode("\n", array_filter($parts)));
-                }
+                // A string, or the text parts of array content without the
+                // reasoning parts (#1042).
+                $ai_text = Chat_Content::text($ai_response['choices'][0]['message']['content']);
             }
             // Handle Claude response format
-            elseif (isset($ai_response['content'][0]['text'])) {
-                $ai_text = $ai_response['content'][0]['text'];
+            // The answer can follow a thinking block, so read the text blocks
+            // rather than content[0] (#1038).
+            elseif (isset($ai_response['content']) && is_array($ai_response['content'])) {
+                $ai_text = Claude_Client::extract_text($ai_response);
             }
             // Handle Gemini response format
             elseif (isset($ai_response['candidates'][0]['content']['parts'][0]['text'])) {
@@ -562,6 +554,13 @@ class Content_Brief_Generator {
             if ('content_filter' === $finish) {
                 throw new \Exception('The AI blocked this request under its content policy. Try a different topic or less sensitive keywords.');
             }
+            // An OpenRouter upstream failure is HTTP 200 with finish_reason
+            // "error" and the reason in choices[0].error (#1041).
+            $choice_error = $ai_response['choices'][0]['error'] ?? null;
+            $choice_error = is_array($choice_error) ? (string) ($choice_error['message'] ?? '') : (is_string($choice_error) ? $choice_error : '');
+            if ('' !== trim($choice_error) || 'error' === $finish) {
+                throw new \Exception(esc_html('The AI provider reported an error while writing the brief: ' . ('' !== trim($choice_error) ? trim($choice_error) : 'no details given')));
+            }
             // A self-hosted server can stop short of max_tokens because the
             // prompt and the answer together filled its context window
             // (Ollama loads models at 4096 by default). A bigger output budget
@@ -579,6 +578,16 @@ class Content_Brief_Generator {
             }
         }
 
+        // OpenRouter can also answer 200 with only an error object, before
+        // the upstream provider produced any choice (#1041).
+        if (!isset($ai_response['choices']) && isset($ai_response['error'])) {
+            $error = $ai_response['error'];
+            $error = is_array($error) ? (string) ($error['message'] ?? '') : (is_string($error) ? $error : '');
+            if ('' !== trim($error)) {
+                throw new \Exception(esc_html('The AI provider reported an error: ' . trim($error)));
+            }
+        }
+
         // --- Claude (Messages) ---
         if (isset($ai_response['stop_reason'])) {
             $stop_reason = (string) $ai_response['stop_reason'];
@@ -592,8 +601,10 @@ class Content_Brief_Generator {
 
         // --- Gemini ---
         // A prompt rejected outright returns no candidate at all, only
-        // promptFeedback.blockReason; a candidate can also finish on SAFETY or
-        // PROHIBITED_CONTENT, or be truncated at MAX_TOKENS.
+        // promptFeedback.blockReason; a candidate can also finish on SAFETY,
+        // PROHIBITED_CONTENT, BLOCKLIST, SPII or RECITATION, or be truncated
+        // at MAX_TOKENS. The last three policy reasons used to fall through
+        // to "unexpected format" (#1041).
         $block_reason = (string) ($ai_response['promptFeedback']['blockReason'] ?? '');
         if ('' !== $block_reason) {
             throw new \Exception(esc_html(sprintf(
@@ -602,8 +613,11 @@ class Content_Brief_Generator {
             )));
         }
         $gemini_finish = (string) ($ai_response['candidates'][0]['finishReason'] ?? '');
-        if (in_array($gemini_finish, ['SAFETY', 'PROHIBITED_CONTENT'], true)) {
+        if (in_array($gemini_finish, ['SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII'], true)) {
             throw new \Exception('The AI blocked this request under its content policy. Try a different topic or less sensitive keywords.');
+        }
+        if ('RECITATION' === $gemini_finish) {
+            throw new \Exception('The AI stopped because its answer repeated published text too closely. Try a different topic or angle.');
         }
         if ('MAX_TOKENS' === $gemini_finish) {
             throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try fewer competitor URLs, or a model with a larger output limit. A shorter content length will not help: it asks for a smaller budget, not a smaller answer.');
@@ -662,22 +676,20 @@ class Content_Brief_Generator {
      * @return array|null Parsed JSON data or null if parsing fails
      */
     private function parse_json_response(string $ai_response): ?array {
-        // Clean the response - remove any text before/after JSON
-        $ai_response = trim($ai_response);
+        // Clean the response - drop inline <think> reasoning (#1044), then
+        // any text before/after JSON
+        $ai_response = trim(Ai_Json::strip_reasoning($ai_response));
 
         // Handle markdown code blocks (```json ... ```)
         if (preg_match('/```(?:json)?\s*\n?(.*?)\n?```/s', $ai_response, $matches)) {
             $json_string = trim($matches[1]);
         } else {
-            // Find JSON object boundaries
-            $start = strpos($ai_response, '{');
-            $end = strrpos($ai_response, '}');
+            // The whole answer, or its first `{` to last `}`.
+            $json_string = Ai_Json::object_text($ai_response);
 
-            if (false === $start || false === $end || $start >= $end) {
+            if ('' === $json_string) {
                 return null;
             }
-
-            $json_string = substr($ai_response, $start, $end - $start + 1);
         }
 
         $json_data = json_decode($json_string, true);

@@ -2025,6 +2025,12 @@ class SEOScoreCalculator {
      * even when none is embedded in the post body. The score credits this so the
      * "add structured data" suggestion reflects ThinkRank's own schema engine.
      *
+     * Asks the front end rather than reading the saved option: with nothing
+     * saved for a post type the output still falls back to its per-type default
+     * (Product for WooCommerce products, WebPage for public CPTs), so reading
+     * the option alone suggested schema for content that already had it, and
+     * that suggestion's fix replaced the products' Product schema (#1048).
+     *
      * @param string $post_type Post type slug.
      * @return bool
      */
@@ -2032,6 +2038,11 @@ class SEOScoreCalculator {
         if ($post_type === '') {
             return false;
         }
+
+        if (class_exists('ThinkRank\\Frontend\\Global_SEO_Schema_Output')) {
+            return (new \ThinkRank\Frontend\Global_SEO_Schema_Output())->would_output_schema($post_type);
+        }
+
         $all_settings = get_option('thinkrank_global_seo_settings', []);
         return !empty($all_settings[$post_type]['schema_type']);
     }

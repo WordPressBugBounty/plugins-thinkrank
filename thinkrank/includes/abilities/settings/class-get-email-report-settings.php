@@ -78,7 +78,7 @@ class Get_Email_Report_Settings extends Ability_Base {
 				],
 				'readiness' => [
 					'type'        => 'object',
-					'description' => __( 'Data-source readiness: ready (bool: a report can be built), search_console (bool, required), analytics (bool: Google Analytics 4 connected, adds the site-traffic section), ai_traffic (bool: AI-assistant referrals recorded, adds that section), reason (string|null: search_console_not_connected when not ready).', 'thinkrank' ),
+					'description' => __( 'Data-source readiness: ready (bool: a report can be built), search_console (bool, required), analytics (bool: Google Analytics 4 connected through ThinkRank Pro, which adds the site-traffic section; always false without Pro), ai_traffic (bool: AI-assistant referrals recorded, adds that section), reason (string|null: search_console_not_connected when not ready).', 'thinkrank' ),
 					'properties'  => [
 						'ready'          => [ 'type' => 'boolean' ],
 						'search_console' => [ 'type' => 'boolean' ],

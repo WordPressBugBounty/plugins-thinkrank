@@ -613,8 +613,10 @@ class Snippets_Endpoint {
         // Same floor the editor's "Generate with AI" applies. Below it the
         // model has only the post title to go on and answers with filler — a
         // bulk run over empty posts would spend the user's key on "..." and put
-        // it in front of them for review.
-        $text = trim(wp_strip_all_tags(strip_shortcodes((string) $post->post_content)));
+        // it in front of them for review. Measured on the body the generator
+        // will send, so a builder page whose words live outside post_content
+        // is not turned away as empty (#895).
+        $text = trim(wp_strip_all_tags(strip_shortcodes(Metadata_Generator::resolve_post_body($post))));
         if (mb_strlen($text) < self::MIN_CONTENT_LENGTH) {
             return new WP_REST_Response([
                 'success' => false,

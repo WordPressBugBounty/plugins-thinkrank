@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.17.0
+Stable tag: 2.17.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -315,7 +315,7 @@ Under that approval, within the areas you approve, the hub and the AI assistants
 
 = Google APIs: Search Console, Analytics Data, PageSpeed Insights, OAuth =
 
-After you connect Google or add a PageSpeed Insights key, ThinkRank sends your access token or API key, your Search Console or GA4 property, and page URLs to test, to www.googleapis.com and analyticsdata.googleapis.com - when you open analytics or performance screens or the dashboard widget, and when scheduled reports or checks run. Disconnecting sends the token to oauth2.googleapis.com to revoke it. [Terms](https://developers.google.com/terms), [Privacy](https://policies.google.com/privacy)
+After you connect Google or add a PageSpeed Insights key, ThinkRank sends your access token or API key, your Search Console property, and page URLs to test, to www.googleapis.com - when you open analytics or performance screens or the dashboard widget, and when scheduled reports or checks run. Disconnecting sends the token to oauth2.googleapis.com to revoke it. [Terms](https://developers.google.com/terms), [Privacy](https://policies.google.com/privacy)
 
 = IndexNow (api.indexnow.org) =
 
@@ -348,6 +348,20 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 9. AI Content Brief Generator with competitor analysis and content gaps.
 
 == Changelog ==
+
+= 2.17.1 =
+Release Date: 2026-10-19
+
+- Fixed: Titles containing "<" (like "I <3 Dhaka") are no longer cut off in tags and schema
+- Fixed: A static front page uses its own featured or social image for Open Graph and X
+- Fixed: The site-wide X card type and OG Site Name now apply to posts and terms
+- Fixed: Breadcrumbs show the right levels on archives, WooCommerce products and a static front page
+- Fixed: WooCommerce Product schema includes GTIN, price range, backorder and sale end date
+- Fixed: Schema stays separate from another active SEO plugin's structured data
+- Fixed: AI reads Claude, Gemini Pro, OpenRouter and thinking-model replies and says why one failed
+- Fixed: Etch pages get meta descriptions; Oxygen, Breakdance and Etch FAQs keep every answer block
+- Fixed: With no token, the MCP screen shows its setup steps and a Create connection token button
+- Fixed: Minor robots.txt sitemap, SEO score and page builder issues
 
 = 2.17.0 =
 Release Date: 2026-10-18
@@ -402,26 +416,12 @@ Release Date: 2026-10-11
 - Fixed: WooCommerce products with a deployed Product schema no longer output two Product entries
 - Fixed: Saving ThinkRank robots or schema fields from WP-CLI or code no longer causes a fatal error
 
-= 2.14.2 =
-Release Date: 2026-10-08
-
-- Fixed: Word count skips shortcode syntax and stray punctuation in the score and thin content report
-- Fixed: Readability and keyword density on page builder posts no longer read shortcode text
-- Fixed: The AI crawler check now treats "Disallow: *" and "Disallow: /*$" as a full block
-- Fixed: The answer-ready schema check ignores unpublished Elementor and Beaver Builder layouts
-- Fixed: Content analysis no longer pulls drafts or the wrong post into related-posts shortcodes
-- Fixed: Google Analytics figures now cover exactly the number of days selected
-- Fixed: Images, logos and links with non-Latin characters or international domains are accepted
-- Fixed: Search Console setup accepts domain properties (sc-domain:)
-- Fixed: Uninstall now also removes cached Search Console data
-- Fixed: Minor content brief and admin date range issues
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.17.1 =
+Titles with "<" are no longer cut off, breadcrumbs and WooCommerce schema are fuller, and AI replies from thinking models are read correctly. ThinkRank Pro users: update Pro to 2.9.1 to keep GA4 traffic reports. Recommended for all sites.
+
 = 2.17.0 =
 Choose AI or your own format for Media Library alt text, filler alt text is skipped everywhere, and the SEO Analyzer names the real source of a search block. Recommended for all sites.
-
-= 2.16.0 =
-SEO fields on every category, tag and term edit screen, import from SureRank, and the right sitemap types for custom post types and WooCommerce. Recommended for all sites.

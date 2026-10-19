@@ -1653,8 +1653,9 @@ class Manager {
     /**
      * Enable ThinkRank's Global SEO schema output for a post's post type.
      *
-     * Sets a sensible default schema type (Article for posts, WebPage for pages)
-     * when none is configured yet, so ThinkRank emits JSON-LD for the post. This
+     * Saves the post type's default schema type (Article for posts, WebPage for
+     * pages, Product for WooCommerce products) when none is configured yet, so
+     * ThinkRank emits JSON-LD for the post. This
      * resolves the "add structured data" suggestion, which the scorer now credits
      * when ThinkRank schema is active.
      *
@@ -1682,12 +1683,16 @@ class Manager {
 
         $already_enabled = !empty($settings[$post_type]['schema_type']);
         if (!$already_enabled) {
-            if ($post_type === 'page') {
-                $settings[$post_type]['schema_type'] = 'WebPage';
-            } else {
-                $settings[$post_type]['schema_type'] = 'Article';
-                if (empty($settings[$post_type]['article_type'])) {
-                    $settings[$post_type]['article_type'] = 'BlogPosting';
+            // The same per-type default the front end emits when nothing is
+            // saved. Hardcoding Article for every type but page saved
+            // Article/BlogPosting for WooCommerce products, so every product
+            // lost its Product schema site-wide (#1048).
+            $default = (new \ThinkRank\Frontend\Global_SEO_Schema_Output())->get_default_schema_type($post_type)
+                ?? ['schema_type' => 'WebPage', 'article_type' => '', 'media_type' => ''];
+
+            foreach ($default as $key => $value) {
+                if ('schema_type' === $key || empty($settings[$post_type][$key])) {
+                    $settings[$post_type][$key] = $value;
                 }
             }
             update_option('thinkrank_global_seo_settings', $settings);
@@ -1949,7 +1954,10 @@ class Manager {
         $reasoning_only = false;
         if (is_array($body)) {
             $message = is_array($body['choices'][0]['message'] ?? null) ? $body['choices'][0]['message'] : [];
-            $reply = trim((string) ($message['content'] ?? ''));
+            // Content can be an array of parts (Mistral's reasoning models
+            // send a thinking part and a text part); casting that to a string
+            // reported the reply as "Array" (#1042).
+            $reply = trim(\ThinkRank\AI\Chat_Content::text($message['content'] ?? null));
 
             // Ollama and vLLM expose a thinking model's hidden reasoning
             // separately. Reasoning with no content still proves the endpoint

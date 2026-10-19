@@ -359,7 +359,7 @@ class Vision_Client {
             OpenAI_Client::API_BASE_URL !== $base_url
         );
 
-        return (string) ($response['choices'][0]['message']['content'] ?? '');
+        return Chat_Content::text($response['choices'][0]['message']['content'] ?? null);
     }
 
     /**
@@ -511,7 +511,10 @@ class Vision_Client {
      * @return string
      */
     private function clean(string $text): string {
-        $text = trim(wp_strip_all_tags($text));
+        // An open reasoning model on a compatible server can put its reasoning
+        // inline as <think>...</think>. wp_strip_all_tags() drops the tags but
+        // keeps the reasoning, which then became the alt text (#1044).
+        $text = trim(wp_strip_all_tags(Ai_Json::strip_reasoning($text)));
         $text = trim($text, "\"' \t\n\r");
         $text = (string) preg_replace('/^(an?\s+)?(image|picture|photo|photograph|screenshot)\s+(of|showing|depicting)\s+/i', '', $text);
         $text = (string) preg_replace('/\s+/', ' ', $text);

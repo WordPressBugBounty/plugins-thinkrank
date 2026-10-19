@@ -1100,6 +1100,25 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
     ];
 
     /**
+     * Site-wide choices a post, page or term may override with its own value.
+     *
+     * The Social settings screen saves these on the `site` row only. A post or
+     * term with no row of its own read them from the context defaults instead,
+     * so they took effect on the homepage and nowhere else: choosing the
+     * "Summary" card still published summary_large_image on every page with
+     * an image, and a custom OG Site Name was replaced by the blog name on
+     * every post (#1056). Unlike SITE_ONLY_KEYS, a value stored on the context
+     * itself still wins, so a per-post or imported per-post choice is kept.
+     *
+     * @since 2.17.1
+     * @var string[]
+     */
+    private const SITE_DEFAULT_KEYS = [
+        'twitter_card_type',
+        'og_site_name',
+    ];
+
+    /**
      * Get settings for a context, inheriting the site-wide default images
      *
      * Two corrections over the generic lookup:
@@ -1139,6 +1158,23 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         // array_key_exists, not empty() — '' is how a disabled toggle is stored.
         foreach (self::SITE_ONLY_KEYS as $key) {
             if (array_key_exists($key, $site_settings)) {
+                $settings[$key] = $site_settings[$key];
+            }
+        }
+
+        // Site-wide choices: the site value stands in for the shipped default,
+        // but only where this context stored nothing of its own. Checked
+        // against the stored row because the merged one always carries the
+        // default and so cannot tell "never set" from "set" (#1056). A blank
+        // site value is a cleared field, not a choice: inheriting it removed
+        // og:site_name from every post, so the context keeps its default.
+        $own_settings = $this->get_stored_settings($context_type, $context_id);
+        foreach (self::SITE_DEFAULT_KEYS as $key) {
+            if (
+                !array_key_exists($key, $own_settings)
+                && isset($site_settings[$key])
+                && '' !== trim((string) $site_settings[$key])
+            ) {
                 $settings[$key] = $site_settings[$key];
             }
         }
@@ -1595,11 +1631,23 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 ? $stored_locale
                 : null;
 
+            // A static front page is a page with its own social image and
+            // featured image. Passing no post skipped both, so the site default
+            // or the logo was published in their place (#1273). The order is
+            // the post/page branch's: per-page override, featured image, then
+            // the site-wide defaults.
+            $front_page        = self::static_front_page();
+            $og_image_override = $front_page
+                ? Absolute_Url::from((string) get_post_meta($front_page->ID, '_thinkrank_og_image', true))
+                : '';
+
             // Set Open Graph image with proper fallback
-            $data['image'] = $this->get_og_image_for_context($settings, null);
+            $data['image'] = $og_image_override !== ''
+                ? $og_image_override
+                : $this->get_og_image_for_context($settings, $front_page);
 
             // Set Twitter image with proper fallback
-            $data['twitter_image'] = $this->get_twitter_image_for_context($settings, null);
+            $data['twitter_image'] = $this->get_twitter_image_for_context($settings, $front_page);
         } elseif ($context_id && in_array($context_type, ['post', 'page', 'product'], true)) {
             // Post-specific data
             $post = get_post($context_id);
@@ -1861,6 +1909,31 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             $url,
             \ThinkRank\Frontend\SEO_Manager::current_page_number()
         );
+    }
+
+    /**
+     * The page a static front page is rendered from.
+     *
+     * Null on a latest-posts front page and on the posts page, which both
+     * reach the 'site' context with no page of their own.
+     *
+     * @since 2.17.1
+     *
+     * @return \WP_Post|null
+     */
+    private static function static_front_page(): ?\WP_Post {
+        if (!function_exists('is_front_page') || !is_front_page() || is_home()) {
+            return null;
+        }
+
+        if ('page' !== get_option('show_on_front')) {
+            return null;
+        }
+
+        $page_id = (int) get_option('page_on_front');
+        $page    = $page_id > 0 ? get_post($page_id) : null;
+
+        return $page instanceof \WP_Post ? $page : null;
     }
 
     /**

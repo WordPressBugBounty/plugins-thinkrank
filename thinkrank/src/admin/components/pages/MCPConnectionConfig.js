@@ -167,8 +167,10 @@ const toBase64 = (str) => {
 
 const MCPConnectionConfig = () => {
 	// Live connection status from /thinkrank/v1/mcp/connection. The token is
-	// minted automatically (server-side) when MCP is enabled, so by the time
-	// this loads `connected` is true and the recipes are populated.
+	// minted automatically (server-side) when MCP is enabled, so this usually
+	// loads with `connected` true and the recipes populated. After Disconnect,
+	// or Revoke all on a site that had no token, it stays false until the
+	// owner creates one here (#1075).
 	const [status, setStatus] = useState(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState('');
@@ -180,6 +182,8 @@ const MCPConnectionConfig = () => {
 	// Reset-token confirm modal + in-flight state.
 	const [showReset, setShowReset] = useState(false);
 	const [resetting, setResetting] = useState(false);
+	// Creating a connection token after the owner had none.
+	const [creating, setCreating] = useState(false);
 
 	const loadStatus = useCallback(async () => {
 		try {
@@ -245,6 +249,29 @@ const MCPConnectionConfig = () => {
 			);
 		} finally {
 			setResetting(false);
+		}
+	};
+
+	// Mint a connection token on request. The screen no longer gets one just
+	// by loading once the owner has ended theirs, so this is how they opt
+	// back in for header-based clients.
+	const createToken = async () => {
+		setCreating(true);
+		setError('');
+		try {
+			const response = await apiFetch({
+				path: '/thinkrank/v1/mcp/connect',
+				method: 'POST',
+			});
+			setStatus(response);
+			notify.success(__('Connection token created.', 'thinkrank'));
+		} catch (err) {
+			logger.error('ThinkRank: MCP token create failed', err);
+			notify.error(
+				__('Couldn’t create a connection token.', 'thinkrank')
+			);
+		} finally {
+			setCreating(false);
 		}
 	};
 
@@ -410,83 +437,91 @@ const MCPConnectionConfig = () => {
 				</Alert>
 			)}
 
-			{!connected ? (
-				<p className="tr-m-0 tr-text-sm tr-text-secondary">
-					{__(
-						'Preparing your connection… reload the page if this persists.',
-						'thinkrank'
-					)}
-				</p>
-			) : (
-				<>
-					<Tabs
-						tabs={TABS}
-						activeTab={activeTab}
-						onTabChange={setActiveTab}
-						className="tr-mb-4"
-					/>
+			<Tabs
+				tabs={TABS}
+				activeTab={activeTab}
+				onTabChange={setActiveTab}
+				className="tr-mb-4"
+			/>
 
-					<TabPanel tabId="auth" activeTab={activeTab}>
-						<div className="tr-grid tr-grid-cols-1 lg:tr-grid-cols-2 tr-gap-3">
-							{authConnectors.map((connector) => (
-								<AuthConnectorCard
-									key={connector.id}
-									connector={connector}
-									endpoint={endpoint}
-									copied={copiedId === connector.id}
-									onCopy={() =>
-										copyWith(endpoint, connector.id)
-									}
-								/>
-							))}
-						</div>
-					</TabPanel>
+			<TabPanel tabId="auth" activeTab={activeTab}>
+				<div className="tr-grid tr-grid-cols-1 lg:tr-grid-cols-2 tr-gap-3">
+					{authConnectors.map((connector) => (
+						<AuthConnectorCard
+							key={connector.id}
+							connector={connector}
+							endpoint={endpoint}
+							copied={copiedId === connector.id}
+							onCopy={() => copyWith(endpoint, connector.id)}
+						/>
+					))}
+				</div>
+			</TabPanel>
 
-					<TabPanel tabId="others" activeTab={activeTab}>
-						{tokenSealed && (
-							<Alert variant="warning" className="tr-mb-3">
-								{__(
-									'This site can no longer display the connection token: the security keys in wp-config.php changed after it was minted. Clients you’ve already set up keep working. Reset the token below to get one you can copy again; that disconnects those clients until you paste the new command.',
-									'thinkrank'
-								)}
-							</Alert>
+			<TabPanel tabId="others" activeTab={activeTab}>
+				{!connected && (
+					<div className="tr-flex tr-flex-wrap tr-items-center tr-justify-between tr-gap-3">
+						<p className="tr-m-0 tr-text-sm tr-text-secondary tr-max-w-lg">
+							{__(
+								'There is no connection token. Claude Code, Cursor, VS Code, and Claude Desktop need one to connect. OAuth apps don’t.',
+								'thinkrank'
+							)}
+						</p>
+						<Button
+							variant="primary"
+							size="sm"
+							onClick={createToken}
+							loading={creating}
+						>
+							{__('Create connection token', 'thinkrank')}
+						</Button>
+					</div>
+				)}
+
+				{connected && tokenSealed && (
+					<Alert variant="warning" className="tr-mb-3">
+						{__(
+							'This site can no longer display the connection token: the security keys in wp-config.php changed after it was minted. Clients you’ve already set up keep working. Reset the token below to get one you can copy again; that disconnects those clients until you paste the new command.',
+							'thinkrank'
 						)}
+					</Alert>
+				)}
 
-						{!tokenSealed && (
-							<div className="tr-grid tr-grid-cols-1 lg:tr-grid-cols-2 tr-gap-3">
-								{otherClients.map((client) => (
-									<ClientCard
-										key={client.id}
-										client={client}
-										copied={copiedId === client.id}
-										onCopy={() =>
-											copyWith(client.payload, client.id)
-										}
-									/>
-								))}
-							</div>
-						)}
+				{connected && !tokenSealed && (
+					<div className="tr-grid tr-grid-cols-1 lg:tr-grid-cols-2 tr-gap-3">
+						{otherClients.map((client) => (
+							<ClientCard
+								key={client.id}
+								client={client}
+								copied={copiedId === client.id}
+								onCopy={() =>
+									copyWith(client.payload, client.id)
+								}
+							/>
+						))}
+					</div>
+				)}
 
-						{/* Reset lives here: it only affects these header-based
+				{/* Reset lives here: it only affects these header-based
 						    (static-token) clients — OAuth apps are unaffected. */}
-						<div className="tr-flex tr-flex-wrap tr-items-center tr-justify-between tr-gap-3 tr-mt-4 tr-pt-4 tr-border-t tr-border-secondary">
-							<p className="tr-m-0 tr-text-xs tr-text-tertiary tr-max-w-lg">
-								{__(
-									'Reset the connection token if it may have leaked. This disconnects Claude Code, Cursor, VS Code, and Claude Desktop they’ll need the new command to reconnect. OAuth-connected apps are unaffected.',
-									'thinkrank'
-								)}
-							</p>
-							<Button
-								variant="secondary"
-								size="sm"
-								onClick={() => setShowReset(true)}
-							>
-								{__('Reset token', 'thinkrank')}
-							</Button>
-						</div>
-					</TabPanel>
-				</>
-			)}
+				{connected && (
+					<div className="tr-flex tr-flex-wrap tr-items-center tr-justify-between tr-gap-3 tr-mt-4 tr-pt-4 tr-border-t tr-border-secondary">
+						<p className="tr-m-0 tr-text-xs tr-text-tertiary tr-max-w-lg">
+							{__(
+								'Reset the connection token if it may have leaked. This disconnects Claude Code, Cursor, VS Code, and Claude Desktop they’ll need the new command to reconnect. OAuth-connected apps are unaffected.',
+								'thinkrank'
+							)}
+						</p>
+						<Button
+							variant="secondary"
+							size="sm"
+							onClick={() => setShowReset(true)}
+						>
+							{__('Reset token', 'thinkrank')}
+						</Button>
+					</div>
+				)}
+			</TabPanel>
 
 			<Modal
 				isOpen={showReset}

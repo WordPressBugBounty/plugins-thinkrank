@@ -127,6 +127,7 @@ abstract class FAQ_Ability_Base extends Ability_Base {
 			FAQ_Content::SOURCE_BEAVER      => __( 'Beaver Builder', 'thinkrank' ),
 			FAQ_Content::BUILDER_OXYGEN     => __( 'Oxygen', 'thinkrank' ),
 			FAQ_Content::BUILDER_BREAKDANCE => __( 'Breakdance', 'thinkrank' ),
+			FAQ_Content::BUILDER_ETCH       => __( 'Etch', 'thinkrank' ),
 		];
 
 		return $labels[ $builder ] ?? $builder;
@@ -152,6 +153,12 @@ abstract class FAQ_Ability_Base extends Ability_Base {
 	protected function writable_reason( string $builder ): string {
 		if ( '' === $builder ) {
 			return __( 'The block editor renders this post, so update-faq can write a FAQ block into its content.', 'thinkrank' );
+		}
+
+		// Etch keeps its tree in post_content rather than replacing it, so the
+		// generic "replaces its content" wording would be wrong (#1046).
+		if ( FAQ_Content::BUILDER_ETCH === $builder ) {
+			return __( 'Etch builds this post from its own blocks in the post content, so a FAQ block written here would land outside the Etch layout. ThinkRank has no FAQ module for Etch and does not read Etch accordions, so add the questions in Etch, and read a question count of zero as "not readable" rather than "no FAQ".', 'thinkrank' );
 		}
 
 		if ( FAQ_Content::builder_has_module( $builder ) ) {

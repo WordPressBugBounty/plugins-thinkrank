@@ -576,7 +576,13 @@ final class Mcp_Server {
 		// 404 it before WordPress runs, killing the flow on the client's very
 		// first fetch. See Mcp_OAuth::resource_metadata_url() for the full
 		// reasoning and the override filter.
-		return sprintf( 'Bearer resource_metadata="%s"', Mcp_OAuth::resource_metadata_url() );
+		//
+		// The pretty route marks the request before it hands off; anything
+		// else reaching here came in through the REST fallback, and is sent
+		// to the document that names that address as the resource (#1113).
+		$address = Mcp_Manager::is_serving_request() ? '' : Mcp_OAuth::FOR_REST;
+
+		return sprintf( 'Bearer resource_metadata="%s"', Mcp_OAuth::resource_metadata_url( $address ) );
 	}
 
 	/**

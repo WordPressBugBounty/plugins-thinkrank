@@ -24,7 +24,6 @@ import { applyFilters } from '@wordpress/hooks';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import {
 	renderSearchChangeBadge,
-	renderPercentChangeBadge,
 	getSearchConsoleUrl,
 	getSearchConsoleInsightsUrl,
 	getGoogleAnalyticsReportUrl,
@@ -235,327 +234,23 @@ const DashboardSection = ({
 			{/* Dashboard Data */}
 			{dashboardData && hasValidDashboardData(dashboardData) && (
 				<div className="thinkrank-space-y-6 thinkrank-mt-6">
-					{/* Traffic Overview — GA4 data: real card when present, else Pro teaser (GA4 is Pro-connected) */}
+					{/* Traffic Overview — GA4 is a ThinkRank Pro feature (#1115): Pro renders the card through this slot; off the paid path a teaser stands in */}
 					{(() => {
-						const hasTraffic =
-							dashboardData.traffic &&
-							Object.keys(dashboardData.traffic).length > 0;
-						if (hasTraffic)
-							return (
-								<div
-									style={{
-										border: '1px solid var(--tr-border-card)',
-										borderRadius: '8px',
-										display: 'flex',
-										flexDirection: 'column',
-										marginBottom: '24px',
-										overflow: 'hidden',
-									}}
-								>
-									{/* Section header */}
-									<div
-										style={{
-											padding: '16px 20px',
-											borderBottom:
-												'1px solid var(--tr-border-light)',
-											display: 'flex',
-											alignItems: 'center',
-											gap: '8px',
-										}}
-									>
-										<span
-											style={{
-												fontWeight: 600,
-												fontSize: '16px',
-												color: 'var(--tr-text-heading)',
-											}}
-										>
-											{__(
-												'Traffic Overview',
-												'thinkrank'
-											)}
-										</span>
-									</div>
-
-									{/* Body — metric cards */}
-									<div style={{ padding: '16px 20px 20px' }}>
-										<div
-											style={{
-												display: 'flex',
-												gap: '16px',
-												flexWrap: 'wrap',
-											}}
-										>
-											{(() => {
-												const t = dashboardData.traffic;
-												const trends =
-													trafficTrends || {};
-
-												// Icon glyphs (20×20). Stroke uses currentColor so the
-												// badge's brand text colour tints the icon.
-												const ICONS = {
-													sessions: (
-														<svg
-															width="20"
-															height="20"
-															viewBox="0 0 20 20"
-															fill="none"
-															xmlns="http://www.w3.org/2000/svg"
-														>
-															<path
-																d="M2 10.5H5.5L7.5 5L11 15L13 8.5H18"
-																stroke="currentColor"
-																strokeWidth="1.5"
-																strokeLinecap="round"
-																strokeLinejoin="round"
-															/>
-														</svg>
-													),
-													pageviews: (
-														<svg
-															width="20"
-															height="20"
-															viewBox="0 0 20 20"
-															fill="none"
-															xmlns="http://www.w3.org/2000/svg"
-														>
-															<path
-																d="M2 10C2 10 5 4 10 4C15 4 18 10 18 10C18 10 15 16 10 16C5 16 2 10 2 10Z"
-																stroke="currentColor"
-																strokeWidth="1.5"
-																strokeLinecap="round"
-																strokeLinejoin="round"
-															/>
-															<circle
-																cx="10"
-																cy="10"
-																r="2.5"
-																stroke="currentColor"
-																strokeWidth="1.5"
-															/>
-														</svg>
-													),
-													active_users: (
-														<svg
-															width="20"
-															height="20"
-															viewBox="0 0 20 20"
-															fill="none"
-															xmlns="http://www.w3.org/2000/svg"
-														>
-															<circle
-																cx="7.5"
-																cy="6.5"
-																r="2.5"
-																stroke="currentColor"
-																strokeWidth="1.5"
-															/>
-															<path
-																d="M3 15.5C3 12.9 5 11 7.5 11C10 11 12 12.9 12 15.5"
-																stroke="currentColor"
-																strokeWidth="1.5"
-																strokeLinecap="round"
-															/>
-															<path
-																d="M13 4.3C14.3 4.7 15.2 5.9 15.2 7.3C15.2 8.7 14.3 9.9 13 10.3"
-																stroke="currentColor"
-																strokeWidth="1.5"
-																strokeLinecap="round"
-															/>
-															<path
-																d="M14 15.5C14 13.4 12.8 11.9 11 11.2"
-																stroke="currentColor"
-																strokeWidth="1.5"
-																strokeLinecap="round"
-															/>
-														</svg>
-													),
-													bounce_rate: (
-														<svg
-															width="20"
-															height="20"
-															viewBox="0 0 20 20"
-															fill="none"
-															xmlns="http://www.w3.org/2000/svg"
-														>
-															<path
-																d="M4 5V15H16"
-																stroke="currentColor"
-																strokeWidth="1.5"
-																strokeLinecap="round"
-																strokeLinejoin="round"
-															/>
-															<path
-																d="M7 11L10 8L12 10L15.5 6.5"
-																stroke="currentColor"
-																strokeWidth="1.5"
-																strokeLinecap="round"
-																strokeLinejoin="round"
-															/>
-															<path
-																d="M12.5 6.5H15.5V9.5"
-																stroke="currentColor"
-																strokeWidth="1.5"
-																strokeLinecap="round"
-																strokeLinejoin="round"
-															/>
-														</svg>
-													),
-												};
-
-												const cards = [
-													{
-														key: 'sessions',
-														label: __(
-															'Sessions',
-															'thinkrank'
-														),
-														value: Number(
-															t.sessions || 0
-														).toLocaleString(),
-														trend: trends.sessions,
-													},
-													{
-														key: 'pageviews',
-														label: __(
-															'Pageviews',
-															'thinkrank'
-														),
-														value: Number(
-															t.pageviews || 0
-														).toLocaleString(),
-														trend: trends.pageviews,
-													},
-													{
-														key: 'active_users',
-														label: __(
-															'Active Users',
-															'thinkrank'
-														),
-														value: Number(
-															t.active_users || 0
-														).toLocaleString(),
-														trend: trends.active_users,
-													},
-													{
-														key: 'bounce_rate',
-														label: __(
-															'Bounce Rate',
-															'thinkrank'
-														),
-														value: `${(Number(t.bounce_rate || 0) * 100).toFixed(1)}%`,
-														trend: trends.bounce_rate,
-														lowerIsBetter: true,
-													},
-												];
-
-												return cards.map((c) => (
-													<div
-														key={c.key}
-														style={{
-															background: '#fff',
-															border: '1px solid var(--tr-border-light)',
-															borderRadius: '8px',
-															padding: '16px',
-															flex: '1 0 0',
-															minWidth: '160px',
-															display: 'flex',
-															flexDirection:
-																'column',
-															gap: '20px',
-															overflow: 'hidden',
-															position:
-																'relative',
-														}}
-													>
-														<div
-															style={{
-																display: 'flex',
-																gap: '12px',
-																alignItems:
-																	'center',
-															}}
-														>
-															<div
-																style={{
-																	background:
-																		'var(--tr-accent-bg)',
-																	color: 'var(--tr-accent)',
-																	borderRadius:
-																		'8px',
-																	width: '36px',
-																	height: '36px',
-																	flexShrink: 0,
-																	display:
-																		'flex',
-																	alignItems:
-																		'center',
-																	justifyContent:
-																		'center',
-																}}
-															>
-																{ICONS[c.key]}
-															</div>
-															<span
-																style={{
-																	fontSize:
-																		'16px',
-																	color: 'var(--tr-text-body)',
-																	lineHeight: 1.2,
-																}}
-															>
-																{c.label}
-															</span>
-														</div>
-														<div
-															style={{
-																display: 'flex',
-																alignItems:
-																	'flex-end',
-																justifyContent:
-																	'space-between',
-															}}
-														>
-															<span
-																style={{
-																	fontWeight: 600,
-																	fontSize:
-																		'24px',
-																	lineHeight: 1.2,
-																	color: 'var(--tr-text-heading)',
-																}}
-															>
-																{c.value}
-															</span>
-															{c.trend &&
-																typeof c.trend
-																	.percentage_change ===
-																	'number' && (
-																	<div
-																		style={{
-																			paddingBottom:
-																				'4px',
-																		}}
-																	>
-																		{renderPercentChangeBadge(
-																			c
-																				.trend
-																				.percentage_change,
-																			c.lowerIsBetter
-																		)}
-																	</div>
-																)}
-														</div>
-													</div>
-												));
-											})()}
-										</div>
-									</div>
-								</div>
+						// Ask the plan before the filter: Pro registers its filters even
+						// when unlicensed (#512), and an unlicensed Pro must get the licence
+						// notice below, not a card. Pro answers null when the payload has
+						// no traffic, which renders nothing.
+						if (window.thinkrankAdmin?.isPro)
+							return applyFilters(
+								'thinkrank.analytics.trafficOverviewCard',
+								null,
+								dashboardData.traffic,
+								trafficTrends,
+								dateRange
 							);
 						// Pro is installed but unlicensed: name the missing licence
 						// rather than selling Pro to someone who already has it.
-						if (!window.thinkrankAdmin?.isPro && isProUnlicensed())
+						if (isProUnlicensed())
 							return (
 								<div style={{ marginBottom: '24px' }}>
 									<ProLicenseNotice
@@ -566,39 +261,34 @@ const DashboardSection = ({
 									/>
 								</div>
 							);
-						if (!window.thinkrankAdmin?.isPro)
-							return (
-								<div style={{ marginBottom: '24px' }}>
-									<ProTeaser
-										illustration={
-											<TrafficOverviewIllustration />
-										}
-										title={__(
-											'Traffic Overview',
+						return (
+							<div style={{ marginBottom: '24px' }}>
+								<ProTeaser
+									illustration={
+										<TrafficOverviewIllustration />
+									}
+									title={__('Traffic Overview', 'thinkrank')}
+									description={__(
+										'See how much traffic your site really gets. Connect Google Analytics 4 to track sessions, pageviews, active users, and bounce rate right inside ThinkRank.',
+										'thinkrank'
+									)}
+									features={[
+										__(
+											'Sessions, pageviews, and active users at a glance',
 											'thinkrank'
-										)}
-										description={__(
-											'See how much traffic your site really gets. Connect Google Analytics 4 to track sessions, pageviews, active users, and bounce rate right inside ThinkRank.',
+										),
+										__(
+											'Bounce rate with period-over-period trends',
 											'thinkrank'
-										)}
-										features={[
-											__(
-												'Sessions, pageviews, and active users at a glance',
-												'thinkrank'
-											),
-											__(
-												'Bounce rate with period-over-period trends',
-												'thinkrank'
-											),
-											__(
-												'GA4 traffic data alongside your search performance',
-												'thinkrank'
-											),
-										]}
-									/>
-								</div>
-							);
-						return null;
+										),
+										__(
+											'GA4 traffic data alongside your search performance',
+											'thinkrank'
+										),
+									]}
+								/>
+							</div>
+						);
 					})()}
 
 					{/* Search Performance (GSC Data) — Figma design */}

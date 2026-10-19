@@ -56,6 +56,14 @@ class Schema_Graph {
     private const SITE_LEVEL_TYPES = ['LocalBusiness', 'Person'];
 
     /**
+     * Fragment prefix that keeps ThinkRank's @id values apart from another
+     * SEO plugin's.
+     *
+     * @since 2.17.1
+     */
+    private const ID_NAMESPACE = 'thinkrank-';
+
+    /**
      * Which source wins when several subsystems describe the page.
      *
      * Lower wins. Per-post schema deployed from the editor's Schema tab is a
@@ -855,6 +863,9 @@ class Schema_Graph {
             return;
         }
 
+        // After the filter, so an add-on's nodes and references move with ours.
+        $graph = $this->namespace_ids($graph);
+
         // One pass over the assembled graph, rather than at each producer.
         // @id and url values arrive from a dozen of them — some derived from
         // WordPress, some read straight out of stored settings — and on a
@@ -880,6 +891,112 @@ class Schema_Graph {
         echo $json . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_json_encode with JSON_HEX_* cannot break out of the script block.
         echo '</script>' . "\n";
         echo "<!-- /ThinkRank Schema Graph -->\n";
+    }
+
+    /**
+     * Whether ThinkRank's @id values should be namespaced on this request.
+     *
+     * Yoast, Rank Math, AIOSEO and Slim SEO all mint `<home>/#website`,
+     * `<home>/#organization` and `<url>#breadcrumb`, the same fragments this
+     * graph uses. With one of them active both graphs print on the page, and a
+     * consumer treats nodes sharing an @id as one entity: Google merged the
+     * two BreadcrumbList item lists into one and reported the homepage's
+     * breadcrumb invalid (#1147). Off by default, so the @ids a site already
+     * has (and Pro's references to `/#organization`) stay stable.
+     *
+     * @since 2.17.1
+     * @return bool
+     */
+    private function namespaces_ids(): bool {
+        $namespace = class_exists('ThinkRank\\Core\\SEO_Plugin_Detector')
+            && \ThinkRank\Core\SEO_Plugin_Detector::has_seo_plugins();
+
+        /**
+         * Filter whether ThinkRank prefixes its schema @id fragments.
+         *
+         * True by default while another SEO plugin is active, so the two
+         * graphs stay separate entities. Return true to keep ThinkRank's
+         * nodes apart from JSON-LD printed by a theme or another plugin.
+         *
+         * @since 2.17.1
+         *
+         * @param bool $namespace Whether to prefix @id fragments with "thinkrank-".
+         */
+        return (bool) apply_filters('thinkrank_schema_namespace_ids', $namespace);
+    }
+
+    /**
+     * Prefix every on-site @id fragment in the graph with "thinkrank-".
+     *
+     * Definitions and references are rewritten together, so `isPartOf`,
+     * `breadcrumb` and `publisher` still point at the nodes they named. An
+     * @id on another host is left alone: it names someone else's entity.
+     *
+     * @since 2.17.1
+     *
+     * @param array $graph Graph nodes.
+     * @return array Graph with namespaced @id values.
+     */
+    private function namespace_ids(array $graph): array {
+        if (!$this->namespaces_ids()) {
+            return $graph;
+        }
+
+        $host = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_HOST));
+
+        return $this->namespace_ids_in($graph, $host);
+    }
+
+    /**
+     * Recursive worker for namespace_ids().
+     *
+     * @since 2.17.1
+     *
+     * @param array  $value Node or property value.
+     * @param string $host  The site's host.
+     * @return array
+     */
+    private function namespace_ids_in(array $value, string $host): array {
+        foreach ($value as $key => $item) {
+            if ('@id' === $key && is_string($item)) {
+                $value[$key] = $this->namespace_id($item, $host);
+            } elseif (is_array($item)) {
+                $value[$key] = $this->namespace_ids_in($item, $host);
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * Prefix one @id's fragment when it belongs to this site.
+     *
+     * @since 2.17.1
+     *
+     * @param string $id   @id value.
+     * @param string $host The site's host.
+     * @return string
+     */
+    private function namespace_id(string $id, string $host): string {
+        $hash = strpos($id, '#');
+
+        if (false === $hash || $hash === strlen($id) - 1) {
+            return $id;
+        }
+
+        $fragment = substr($id, $hash + 1);
+
+        if (0 === strpos($fragment, self::ID_NAMESPACE)) {
+            return $id;
+        }
+
+        $id_host = strtolower((string) wp_parse_url(substr($id, 0, $hash), PHP_URL_HOST));
+
+        if ('' === $host || $id_host !== $host) {
+            return $id;
+        }
+
+        return substr($id, 0, $hash + 1) . self::ID_NAMESPACE . $fragment;
     }
 
     /**

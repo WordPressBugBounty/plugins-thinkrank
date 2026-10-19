@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace ThinkRank\AI;
 
+use ThinkRank\AI\Traits\Chat_Completion_Reply;
 use ThinkRank\AI\Traits\Request_Timeout;
 
 // Prevent direct access
@@ -20,7 +21,9 @@ if (!defined('ABSPATH')) {
 }
 
 require_once __DIR__ . '/traits/trait-request-timeout.php';
+require_once __DIR__ . '/traits/trait-chat-completion-reply.php';
 require_once __DIR__ . '/class-endpoint-url-validator.php';
+require_once __DIR__ . '/class-chat-content.php';
 
 /**
  * OpenAI Client Class
@@ -31,6 +34,7 @@ require_once __DIR__ . '/class-endpoint-url-validator.php';
  */
 class OpenAI_Client {
 
+    use Chat_Completion_Reply;
     use Request_Timeout;
 
     
@@ -688,7 +692,7 @@ class OpenAI_Client {
                 // Keep the first answer when the retry is no better — a server
                 // that ignores the parameter answers exactly the same way, and
                 // the error below is then the honest one.
-                if (is_array($retry_data) && '' !== trim((string) ($retry_data['choices'][0]['message']['content'] ?? ''))) {
+                if (is_array($retry_data) && '' !== trim(Chat_Content::text($retry_data['choices'][0]['message']['content'] ?? null))) {
                     return $retry_data;
                 }
             }
@@ -772,7 +776,7 @@ class OpenAI_Client {
         }
 
         $message = is_array($data['choices'][0]['message'] ?? null) ? $data['choices'][0]['message'] : null;
-        if (null === $message || '' !== trim((string) ($message['content'] ?? ''))) {
+        if (null === $message || '' !== trim(Chat_Content::text($message['content'] ?? null))) {
             return false;
         }
 
@@ -865,22 +869,16 @@ class OpenAI_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_seo_response(array $response): array {
-        if (!isset($response['choices'][0]['message']['content'])) {
-            throw new \Exception('Invalid response format from OpenAI');
-        }
-
-        $content = $response['choices'][0]['message']['content'];
+        $content = $this->chat_reply_text($response, $this->get_endpoint_label());
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Try to extract JSON from the response
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
+        $json_content = Ai_Json::object_text($content);
 
-        if (false === $json_start || false === $json_end) {
+        if ('' === $json_content) {
             throw new \Exception('No valid JSON found in OpenAI response');
         }
         
-        $json_content = substr($content, $json_start, $json_end - $json_start + 1);
         $metadata = json_decode($json_content, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -914,22 +912,16 @@ class OpenAI_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_analysis_response(array $response): array {
-        if (!isset($response['choices'][0]['message']['content'])) {
-            throw new \Exception('Invalid response format from OpenAI');
-        }
-
-        $content = trim($response['choices'][0]['message']['content']);
+        $content = trim($this->chat_reply_text($response, $this->get_endpoint_label()));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
+        $json_content = Ai_Json::object_text($content);
 
-        if (false === $json_start || false === $json_end) {
+        if ('' === $json_content) {
             throw new \Exception('No valid JSON found in response');
         }
 
-        $json_content = substr($content, $json_start, $json_end - $json_start + 1);
         $analysis = json_decode($json_content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -992,22 +984,16 @@ class OpenAI_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_site_identity_response(array $response): array {
-        if (!isset($response['choices'][0]['message']['content'])) {
-            throw new \Exception('Invalid response format from OpenAI');
-        }
-
-        $content = trim($response['choices'][0]['message']['content']);
+        $content = trim($this->chat_reply_text($response, $this->get_endpoint_label()));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
+        $json_content = Ai_Json::object_text($content);
 
-        if (false === $json_start || false === $json_end) {
+        if ('' === $json_content) {
             throw new \Exception('No valid JSON found in response');
         }
 
-        $json_content = substr($content, $json_start, $json_end - $json_start + 1);
         $optimization = json_decode($json_content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -1127,22 +1113,16 @@ class OpenAI_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_llms_txt_response(array $response): array {
-        if (!isset($response['choices'][0]['message']['content'])) {
-            throw new \Exception('Invalid response format from OpenAI');
-        }
-
-        $content = trim($response['choices'][0]['message']['content']);
+        $content = trim($this->chat_reply_text($response, $this->get_endpoint_label()));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
+        $json_content = Ai_Json::object_text($content);
 
-        if (false === $json_start || false === $json_end) {
+        if ('' === $json_content) {
             throw new \Exception('No valid JSON found in response');
         }
 
-        $json_content = substr($content, $json_start, $json_end - $json_start + 1);
         $optimization = json_decode($json_content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -1173,22 +1153,16 @@ class OpenAI_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_homepage_meta_response(array $response): array {
-        if (!isset($response['choices'][0]['message']['content'])) {
-            throw new \Exception('Invalid response format from OpenAI');
-        }
-
-        $content = trim($response['choices'][0]['message']['content']);
+        $content = trim($this->chat_reply_text($response, $this->get_endpoint_label()));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
+        $json_content = Ai_Json::object_text($content);
 
-        if (false === $json_start || false === $json_end) {
+        if ('' === $json_content) {
             throw new \Exception('No valid JSON found in response');
         }
 
-        $json_content = substr($content, $json_start, $json_end - $json_start + 1);
         $optimization = json_decode($json_content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -1217,22 +1191,16 @@ class OpenAI_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_homepage_hero_response(array $response): array {
-        if (!isset($response['choices'][0]['message']['content'])) {
-            throw new \Exception('Invalid response format from OpenAI');
-        }
-
-        $content = trim($response['choices'][0]['message']['content']);
+        $content = trim($this->chat_reply_text($response, $this->get_endpoint_label()));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
+        $json_content = Ai_Json::object_text($content);
 
-        if (false === $json_start || false === $json_end) {
+        if ('' === $json_content) {
             throw new \Exception('No valid JSON found in response');
         }
 
-        $json_content = substr($content, $json_start, $json_end - $json_start + 1);
         $optimization = json_decode($json_content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {

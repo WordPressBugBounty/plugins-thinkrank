@@ -1109,11 +1109,21 @@ final class Mcp_Manager {
 	 * no token; minting here — idempotent, admin-gated — keeps the connect
 	 * recipes populated without a separate "Generate token" click.
 	 *
+	 * Not once the owner has ended the token on purpose (Disconnect, or
+	 * Revoke all on a site that had none): a GET right after that used to
+	 * hand them a new read+write token nobody asked for (#1075). They create
+	 * one again from the screen, which clears the flag.
+	 *
+	 * The checks here only skip the lock on the common path; self_heal()
+	 * makes the decision again under it.
+	 *
+	 * @since 2.17.1 Skipped once the owner declined a token.
+	 *
 	 * @return void
 	 */
 	private function ensure_connected(): void {
-		if ( self::is_enabled() && ! Mcp_Pairing::is_connected() ) {
-			Mcp_Pairing::connect();
+		if ( self::is_enabled() && ! Mcp_Pairing::is_connected() && ! Mcp_Pairing::is_declined() ) {
+			Mcp_Pairing::self_heal();
 		}
 	}
 
@@ -1382,7 +1392,8 @@ final class Mcp_Manager {
 	 * POST /mcp/revoke-all — the day an owner suspects a leak: every OAuth
 	 * app loses access and the connection token is replaced, in one step.
 	 * MCP stays switched on, so the owner can reconnect the clients they
-	 * trust straight away.
+	 * trust straight away. A site with no connection token is left without
+	 * one, and the screen does not mint one on its next load (#1075).
 	 *
 	 * @return \WP_REST_Response
 	 */
@@ -1500,10 +1511,19 @@ final class Mcp_Manager {
 	/**
 	 * GET /mcp/oauth/protected-resource — RFC 9728 metadata via REST.
 	 *
+	 * `?for=rest` is the document the REST fallback's challenge points at,
+	 * naming the fallback as the resource (#1113). Without it, the pretty
+	 * endpoint's document, as before.
+	 *
+	 * @since 2.17.1 Answers `?for=rest` with the fallback's document.
+	 *
+	 * @param \WP_REST_Request $request Incoming request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function rest_oauth_discovery_resource() {
-		return $this->oauth_discovery_response( Mcp_OAuth::protected_resource_metadata() );
+	public function rest_oauth_discovery_resource( \WP_REST_Request $request ) {
+		$address = Mcp_OAuth::FOR_REST === $request->get_param( 'for' ) ? Mcp_OAuth::FOR_REST : '';
+
+		return $this->oauth_discovery_response( Mcp_OAuth::protected_resource_metadata( $address ) );
 	}
 
 	/**

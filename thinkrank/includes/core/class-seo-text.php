@@ -197,7 +197,7 @@ class Seo_Text {
             return '';
         }
 
-        $text = self::decode_schema_entities(wp_strip_all_tags($text));
+        $text = self::decode_schema_entities(wp_strip_all_tags(self::encode_bare_less_than($text)));
 
         // Core's excerpt marker, in both its entity and literal forms, with or
         // without the surrounding brackets it is normally wrapped in.
@@ -234,9 +234,29 @@ class Seo_Text {
             return '';
         }
 
-        $text = self::decode_schema_entities(wp_strip_all_tags($text));
+        $text = self::decode_schema_entities(wp_strip_all_tags(self::encode_bare_less_than($text)));
 
         return trim((string) preg_replace('/\s+/u', ' ', $text));
+    }
+
+    /**
+     * Encode every "<" that cannot open a tag, so strip_tags() keeps it.
+     *
+     * wp_strip_all_tags() runs strip_tags(), which reads any "<" as the start
+     * of a tag and drops the rest of the string: "Why I <3 Dhaka" reached the
+     * graph's headline and BreadcrumbList as "Why I", and "2<5 reasons" as
+     * "2" (#983). A tag starts with a letter, "/", "!" or "?"; any other "<"
+     * is text. Encoded, it survives the strip, and decode_schema_entities()
+     * turns it back into "<" for the JSON-LD. Real markup is still parsed by
+     * strip_tags() itself, quoted attributes and comments included.
+     *
+     * @since 2.17.1
+     *
+     * @param string $text Raw text.
+     * @return string Text with each bare "<" as "&lt;".
+     */
+    private static function encode_bare_less_than(string $text): string {
+        return (string) preg_replace('/<(?![a-zA-Z\/!?])/', '&lt;', $text);
     }
 
     /**

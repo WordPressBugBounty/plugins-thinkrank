@@ -354,12 +354,21 @@ class Gemini_Client {
      * covers the current default (gemini-3.5-flash) as well as legacy
      * gemini-2.5-flash installs.
      *
+     * Pro models cannot turn thinking off, and nothing else compensated: Gemini
+     * 3.1 Pro ran its default dynamic thinking inside the same 500- and
+     * 800-token caps, and the reply ended at MAX_TOKENS before any text (#1040).
+     * A model that thinks by default therefore gets at least
+     * THINKING_MODEL_MIN_OUTPUT_TOKENS. It is a ceiling, not a spend: a short
+     * answer costs no more.
+     *
      * @param array $config Caller-supplied generationConfig
      * @return array generationConfig with thinking disabled where supported
      */
     private function build_generation_config(array $config): array {
         if (preg_match('/^gemini-(2\.5|3(?:\.\d+)?)-flash/', $this->model) === 1) {
             $config['thinkingConfig'] = ['thinkingBudget' => 0];
+        } elseif ($this->model_thinks_by_default() && isset($config['maxOutputTokens'])) {
+            $config['maxOutputTokens'] = max((int) $config['maxOutputTokens'], self::THINKING_MODEL_MIN_OUTPUT_TOKENS);
         }
 
         if (isset($config['maxOutputTokens'])) {
@@ -367,6 +376,43 @@ class Gemini_Client {
         }
 
         return $config;
+    }
+
+    /**
+     * Output budget floor for a model whose thinking cannot be switched off.
+     *
+     * Thinking tokens count against maxOutputTokens, so this must hold the
+     * model's default dynamic thinking plus the visible JSON.
+     *
+     * @since 2.17.1
+     * @var int
+     */
+    private const THINKING_MODEL_MIN_OUTPUT_TOKENS = 8192;
+
+    /**
+     * Whether the model thinks by default and cannot be told not to.
+     *
+     * Gemini 2.5 and newer think by default. Flash models accept
+     * thinkingBudget 0 and are switched off in build_generation_config(); every
+     * other 2.5+ model (2.5 Pro, 3.x Pro and whatever follows) is not, so it
+     * needs room in its budget instead (#1040).
+     *
+     * @since 2.17.1
+     * @return bool
+     */
+    private function model_thinks_by_default(): bool {
+        if (preg_match('/^gemini-(\d+)(?:\.(\d+))?-/', $this->model, $m) !== 1) {
+            return false;
+        }
+
+        $major = (int) $m[1];
+        $minor = isset($m[2]) ? (int) $m[2] : 0;
+
+        if ($major < 2 || (2 === $major && $minor < 5)) {
+            return false;
+        }
+
+        return false === strpos($this->model, '-flash');
     }
 
     /**
@@ -553,6 +599,63 @@ class Gemini_Client {
     }
 
     /**
+     * The answer text of the first candidate, or an exception that says why there is none.
+     *
+     * The metadata and analysis parsers checked only that parts[0].text
+     * existed, so a reply cut off at MAX_TOKENS before any text, a safety
+     * block and a prompt rejected outright all read as "Invalid response
+     * format from Gemini" (#1040). The finish and block reasons are read the
+     * way the site-identity parser already reads them.
+     *
+     * @since 2.17.1
+     *
+     * @param array $response Decoded generateContent response.
+     * @return string Answer text, never empty.
+     * @throws \Exception With the reason when the candidate has no usable text.
+     */
+    private function candidate_text(array $response): string {
+        $block_reason = (string) ($response['promptFeedback']['blockReason'] ?? '');
+        if ('' !== $block_reason) {
+            throw new \Exception(esc_html(sprintf('The AI blocked this request under its content policy (%s). Try different wording.', $block_reason)));
+        }
+
+        $candidate = $response['candidates'][0] ?? null;
+        if (!is_array($candidate)) {
+            throw new \Exception('No response candidates from Gemini. The request may have been filtered.');
+        }
+
+        $finish = (string) ($candidate['finishReason'] ?? '');
+
+        if (in_array($finish, ['SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'RECITATION'], true)) {
+            throw new \Exception(esc_html(sprintf('The AI blocked this answer (%s). Try different wording.', $finish)));
+        }
+
+        // A thinking model's budget can run out mid-answer as well as before
+        // it; a cut-off JSON object is never usable here.
+        if ('MAX_TOKENS' === $finish) {
+            throw new \Exception('The AI ran out of output tokens before it finished the answer. Try again, or pick a Flash model, which does not spend its budget thinking.');
+        }
+
+        $text = '';
+        foreach ((array) ($candidate['content']['parts'] ?? []) as $part) {
+            // Thought summaries only come back when asked for, but they are
+            // never the answer.
+            if (is_array($part) && empty($part['thought']) && isset($part['text']) && is_string($part['text'])) {
+                $text .= $part['text'];
+            }
+        }
+
+        if ('' === trim($text)) {
+            throw new \Exception(esc_html(sprintf(
+                'Invalid response format from Gemini: no text in the reply (finish reason: %s).',
+                '' !== $finish ? $finish : 'none'
+            )));
+        }
+
+        return $text;
+    }
+
+    /**
      * Parse SEO response from Gemini
      *
      * @param array $response Gemini response
@@ -560,13 +663,7 @@ class Gemini_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_seo_response(array $response): array {
-
-
-        if (!isset($response['candidates'][0]['content']['parts'][0]['text'])) {
-            throw new \Exception('Invalid response format from Gemini');
-        }
-
-        $content = trim($response['candidates'][0]['content']['parts'][0]['text']);
+        $content = trim($this->candidate_text($response));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
@@ -613,11 +710,7 @@ class Gemini_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_analysis_response(array $response): array {
-        if (!isset($response['candidates'][0]['content']['parts'][0]['text'])) {
-            throw new \Exception('Invalid response format from Gemini');
-        }
-
-        $content = trim($response['candidates'][0]['content']['parts'][0]['text']);
+        $content = trim($this->candidate_text($response));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response

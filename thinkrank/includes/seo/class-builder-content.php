@@ -444,19 +444,50 @@ class Builder_Content {
      * The post's content as the visitor actually receives it.
      *
      * `post_content` for everything except a Bricks page that discards it, and
-     * there the Bricks tree's text. Descriptions are derived from a post's body
-     * in half a dozen places; every one of them wants this rather than the raw
-     * column (#651).
+     * there the Bricks tree's text, or an Etch page, whose text is in its block
+     * attributes. Descriptions are derived from a post's body in half a dozen
+     * places; every one of them wants this rather than the raw column (#651).
      *
      * @since 2.3.1
+     * @since 2.17.1 Etch pages, and the `thinkrank_visible_content` filter.
      *
      * @param \WP_Post $post Post being described.
      * @return string
      */
     public static function visible_content(\WP_Post $post): string {
         $superseding = self::superseding_content($post);
+        $content     = '' !== $superseding ? $superseding : (string) $post->post_content;
 
-        return '' !== $superseding ? $superseding : (string) $post->post_content;
+        /**
+         * Filter the body text a post's descriptions are derived from.
+         *
+         * The meta, og: and twitter: descriptions, the %excerpt% variable and
+         * the schema description all start here. The counterpart of
+         * `thinkrank_analyzable_content` for descriptions: use it to supply the
+         * visible text of a builder ThinkRank does not know.
+         *
+         * @since 2.17.1
+         *
+         * @param string   $content Body text to describe.
+         * @param \WP_Post $post    Post being described.
+         */
+        return (string) apply_filters('thinkrank_visible_content', $content, $post);
+    }
+
+    /**
+     * Whether markup is an Etch page.
+     *
+     * Etch saves a page as `etch/*` blocks in `post_content` and keeps the
+     * words in the block attributes, so the column holds block comments and
+     * no text (#1046).
+     *
+     * @since 2.17.1
+     *
+     * @param string $raw Post content.
+     * @return bool
+     */
+    public static function is_etch_markup(string $raw): bool {
+        return false !== strpos($raw, '<!-- wp:etch/');
     }
 
     /**
@@ -464,21 +495,32 @@ class Builder_Content {
      *
      * Empty for every ordinary post, which is what makes this safe to call from
      * paths that already handle excerpts their own way: they keep that handling
-     * and only a Bricks page is diverted.
+     * and only a Bricks or Etch page is diverted.
      *
      * @since 2.3.1
+     * @since 2.17.1 Etch pages.
      *
      * @param \WP_Post $post Post being described.
      * @return string Visible body text, or '' when `post_content` is fine.
      */
     public static function superseding_content(\WP_Post $post): string {
-        if (!self::bricks_supersedes_post_content((int) $post->ID)) {
-            return '';
+        if (self::bricks_supersedes_post_content((int) $post->ID)) {
+            $bricks = self::from_bricks((int) $post->ID);
+
+            return self::is_blank($bricks) ? '' : $bricks;
         }
 
-        $bricks = self::from_bricks((int) $post->ID);
+        // Etch's words are in its block attributes, so the column strips to
+        // nothing and the page printed no description at all. resolve() gives
+        // Etch's own render when Etch is loaded and the attribute text when
+        // it is not (#1046).
+        if (self::is_etch_markup((string) $post->post_content)) {
+            $etch = self::resolve($post);
 
-        return self::is_blank($bricks) ? '' : $bricks;
+            return self::is_blank($etch) ? '' : $etch;
+        }
+
+        return '';
     }
 
     /**
@@ -487,7 +529,8 @@ class Builder_Content {
      * A hand-written excerpt is the author's own summary and is correct however
      * the page is built, so it yields '' here and the caller's normal
      * `get_the_excerpt()` path keeps it. Only a Bricks page with no excerpt —
-     * where core would derive one from discarded `post_content` — gets diverted.
+     * where core would derive one from discarded `post_content` — or an Etch
+     * page with none, whose blocks core's excerpt drops, gets diverted.
      *
      * @since 2.3.1
      *

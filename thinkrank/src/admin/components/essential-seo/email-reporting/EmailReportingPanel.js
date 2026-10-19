@@ -212,7 +212,11 @@ const EmailReportingPanel = ({ onNavigate }) => {
 	const searchConsoleConnected = readiness
 		? Boolean(readiness.search_console)
 		: true;
-	const analyticsConnected = readiness ? Boolean(readiness.analytics) : true;
+	// GA4 and its Site traffic card are ThinkRank Pro's (#1115). Without Pro
+	// there is no card to miss, so the hint below never asks for GA4.
+	const analyticsConnected =
+		!window.thinkrankAdmin?.isPro ||
+		(readiness ? Boolean(readiness.analytics) : true);
 	const paused = enabled && !searchConsoleConnected;
 
 	let status = { variant: 'neutral', label: __('Off', 'thinkrank') };
@@ -335,10 +339,16 @@ const EmailReportingPanel = ({ onNavigate }) => {
 							</Badge>
 						</div>
 						<p className="tr-mt-1 tr-mb-0 tr-text-sm tr-text-secondary tr-max-w-2xl">
-							{__(
-								'A Search Console-style summary by email: clicks, impressions, CTR and position with the change vs the previous period, the pages and queries that grew or fell, where your keywords rank, and, when connected, site traffic and visits from AI assistants.',
-								'thinkrank'
-							)}
+							{/* GA4 site traffic is a ThinkRank Pro card (#1115). */}
+							{window.thinkrankAdmin?.isPro
+								? __(
+										'A Search Console-style summary by email: clicks, impressions, CTR and position with the change vs the previous period, the pages and queries that grew or fell, where your keywords rank, and, when connected, site traffic and visits from AI assistants.',
+										'thinkrank'
+									)
+								: __(
+										'A Search Console-style summary by email: clicks, impressions, CTR and position with the change vs the previous period, the pages and queries that grew or fell, where your keywords rank, and visits from AI assistants once AI Insights has recorded some.',
+										'thinkrank'
+									)}
 						</p>
 					</div>
 					<div className="tr-flex tr-flex-col tr-items-end tr-gap-1 tr-shrink-0">

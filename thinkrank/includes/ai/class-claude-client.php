@@ -207,7 +207,7 @@ class Claude_Client {
         $prompt = $prompt_builder->build_seo_prompt($content, $target_keyword, $content_type, $tone, 'claude', $language);
         
         $response = $this->generate_completion($prompt, [
-            'max_tokens' => 500,
+            'max_tokens' => $this->get_recommended_tokens('seo_metadata'),
             'temperature' => 0.3,
         ]);
         
@@ -227,7 +227,7 @@ class Claude_Client {
         $prompt = $prompt_builder->build_analysis_prompt($content, $metadata, 'claude');
 
         $response = $this->generate_completion($prompt, [
-            'max_tokens' => 800,
+            'max_tokens' => $this->get_recommended_tokens('analysis'),
             'temperature' => 0.3,
         ]);
 
@@ -523,18 +523,97 @@ class Claude_Client {
     }
 
     /**
+     * The answer text of a Messages API reply, read from its text blocks.
+     *
+     * Sonnet 5 and Opus 5 think by default when a request sends no `thinking`
+     * setting, so a reply can open with a `thinking` block and carry its
+     * answer in content[1] or later. Reading content[0]['text'] took that
+     * valid reply for a malformed one (#1038). Every `text` block is joined in
+     * order; `thinking`, `redacted_thinking` and any other block type is
+     * skipped. A block with no `type` is read as text, as the old index did.
+     *
+     * Public and static so the provider-agnostic readers (Manager, Content
+     * Brief) extract Claude replies the same way.
+     *
+     * @since 2.17.1
+     *
+     * @param array $response Decoded Messages API response.
+     * @return string Joined text, or '' when the reply has no text block.
+     */
+    public static function extract_text(array $response): string {
+        $content = $response['content'] ?? null;
+        if (!is_array($content)) {
+            return '';
+        }
+
+        $text = '';
+        foreach ($content as $block) {
+            if (!is_array($block) || !isset($block['text']) || !is_string($block['text'])) {
+                continue;
+            }
+            if ('text' !== (string) ($block['type'] ?? 'text')) {
+                continue;
+            }
+            $text .= $block['text'];
+        }
+
+        return $text;
+    }
+
+    /**
+     * The answer text of a reply, or an exception that says why there is none.
+     *
+     * The parsers used to answer every non-answer with the same bare
+     * "Invalid response format from Claude", whether the model refused,
+     * spent its whole budget thinking, or answered after a thinking block
+     * (#1038). The stop reason is read first so each case gets its own message.
+     *
+     * @since 2.17.1
+     *
+     * @param array $response Decoded Messages API response.
+     * @return string Answer text, never empty.
+     * @throws \Exception On a refusal, a reply cut off at max_tokens, or a reply with no text.
+     */
+    private function response_text(array $response): string {
+        $stop_reason = (string) ($response['stop_reason'] ?? '');
+
+        if ('refusal' === $stop_reason) {
+            throw new \Exception('The AI declined this request. Try different wording.');
+        }
+
+        // A reply cut off at the token cap is never usable here: every caller
+        // parses a JSON object, and a truncated one either fails to parse or,
+        // worse, parses a fragment.
+        if ('max_tokens' === $stop_reason) {
+            throw new \Exception('The AI ran out of output tokens before it finished the answer. Try again, or pick a model that thinks less, such as Claude Haiku 4.5.');
+        }
+
+        $text = self::extract_text($response);
+        if ('' !== trim($text)) {
+            return $text;
+        }
+
+        $types = [];
+        foreach ((array) ($response['content'] ?? []) as $block) {
+            $types[] = is_array($block) ? (string) ($block['type'] ?? 'unknown') : gettype($block);
+        }
+
+        throw new \Exception(esc_html(sprintf(
+            'Invalid response format from Claude: no text in the reply (stop reason: %1$s, content blocks: %2$s).',
+            '' !== $stop_reason ? $stop_reason : 'none',
+            [] !== $types ? implode(', ', $types) : 'none'
+        )));
+    }
+
+    /**
      * Parse SEO response from Claude
-     * 
+     *
      * @param array $response Claude response
      * @return array Parsed metadata
      * @throws \Exception If parsing fails
      */
     private function parse_seo_response(array $response): array {
-        if (!isset($response['content'][0]['text'])) {
-            throw new \Exception('Invalid response format from Claude');
-        }
-        
-        $content = $response['content'][0]['text'];
+        $content = $this->response_text($response);
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Try to extract JSON from the response
@@ -579,11 +658,7 @@ class Claude_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_analysis_response(array $response): array {
-        if (!isset($response['content'][0]['text'])) {
-            throw new \Exception('Invalid response format from Claude');
-        }
-
-        $content = trim($response['content'][0]['text']);
+        $content = trim($this->response_text($response));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
@@ -639,7 +714,7 @@ class Claude_Client {
 
         $response = $this->make_request('messages', [
             'model' => $this->model,
-            'max_tokens' => 600,
+            'max_tokens' => $this->get_recommended_tokens('optimization'),
             'temperature' => 0.4,
             'messages' => [
                 [
@@ -660,11 +735,7 @@ class Claude_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_site_identity_response(array $response): array {
-        if (!isset($response['content'][0]['text'])) {
-            throw new \Exception('Invalid response format from Claude');
-        }
-
-        $content = trim($response['content'][0]['text']);
+        $content = trim($this->response_text($response));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
@@ -719,7 +790,7 @@ class Claude_Client {
 
         $response = $this->make_request('messages', [
             'model' => $this->model,
-            'max_tokens' => 600,
+            'max_tokens' => $this->get_recommended_tokens('optimization'),
             'temperature' => 0.4,
             'messages' => [
                 [
@@ -753,7 +824,7 @@ class Claude_Client {
 
         $response = $this->make_request('messages', [
             'model' => $this->model,
-            'max_tokens' => 600,
+            'max_tokens' => $this->get_recommended_tokens('optimization'),
             'temperature' => 0.4,
             'messages' => [
                 [
@@ -783,7 +854,7 @@ class Claude_Client {
 
         $response = $this->make_request('messages', [
             'model' => $this->model,
-            'max_tokens' => 2000, // Increased for consistency with other providers
+            'max_tokens' => $this->get_recommended_tokens('llms_txt'),
             'temperature' => 0.4,
             'messages' => [
                 [
@@ -806,11 +877,7 @@ class Claude_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_llms_txt_response(array $response): array {
-        if (!isset($response['content'][0]['text'])) {
-            throw new \Exception('Invalid response format from Claude');
-        }
-
-        $content = trim($response['content'][0]['text']);
+        $content = trim($this->response_text($response));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
@@ -852,11 +919,7 @@ class Claude_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_homepage_meta_response(array $response): array {
-        if (!isset($response['content'][0]['text'])) {
-            throw new \Exception('Invalid response format from Claude');
-        }
-
-        $content = trim($response['content'][0]['text']);
+        $content = trim($this->response_text($response));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
@@ -896,11 +959,7 @@ class Claude_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_homepage_hero_response(array $response): array {
-        if (!isset($response['content'][0]['text'])) {
-            throw new \Exception('Invalid response format from Claude');
-        }
-
-        $content = trim($response['content'][0]['text']);
+        $content = trim($this->response_text($response));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response

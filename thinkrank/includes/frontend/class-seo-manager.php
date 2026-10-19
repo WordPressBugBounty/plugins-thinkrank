@@ -487,10 +487,17 @@ class SEO_Manager {
         // Determine current context
         $this->current_context = $this->detect_current_context();
 
-        // Initialize post data if singular
+        // Initialize post data if singular. Only a post that can actually be
+        // loaded counts: a "virtual page" plugin (myRealPage IDX and the like)
+        // answers the main query with a stdClass post whose ID is not in the
+        // database and forces is_singular(). get_the_ID() still returns that
+        // fake ID, but get_permalink() on it is false, and the canonical handed
+        // that false to a string-typed helper under strict_types, which fataled
+        // the page halfway through wp_head (#981). With no loadable post the
+        // request is treated as having no post, so every consumer agrees.
         if (is_singular()) {
             $post_id = get_the_ID();
-            if ($post_id) {
+            if ($post_id && get_post($post_id) instanceof \WP_Post) {
                 $this->current_post_id = $post_id;
                 $this->current_metadata = $this->get_post_seo_metadata($post_id);
             }
@@ -826,11 +833,29 @@ class SEO_Manager {
             return $title;
         }
 
-        return trim(wp_strip_all_tags($title));
+        // Only real markup is removed. wp_strip_all_tags() runs strip_tags(),
+        // which reads any "<" as the start of a tag and drops everything after
+        // it, so "Why I <3 Dhaka" came out as "Why I" and "2<5 reasons" as
+        // "2", separator and site name included (#983). A tag starts with a
+        // letter, "/" or "!" (comments, doctype); script and style blocks go
+        // with their contents, as they did before.
+        $title = (string) preg_replace('@<(script|style)[^>]*?>.*?</\\1>@si', '', $title);
+        $title = (string) preg_replace('@</?[a-zA-Z!][^>]*>@', '', $title);
+
+        // A "<" that survives is text and is returned as text. Callers that
+        // print into HTML escape it: og:title and twitter:title go through
+        // esc_attr(), and the document title through with_page_suffix().
+        // Encoding it here put a literal "&lt;" into the plain-text consumers,
+        // the editor's social preview and the term screen's fallback title.
+        return trim($title);
     }
 
     public static function with_page_suffix(string $title): string {
-        $title = self::strip_title_tags($title);
+        // The document title is printed unescaped: the pre_get_document_title
+        // short-circuit skips the esc_html core applies on its own path. A
+        // "<" left in the title is text (#983), so it is encoded here, where
+        // it would otherwise reach <title> raw and could open a tag there.
+        $title = str_replace('<', '&lt;', self::strip_title_tags($title));
 
         $page = self::current_page_number();
 
@@ -2088,14 +2113,22 @@ class SEO_Manager {
             }
 
             if (empty($canonical_url)) {
-                $canonical_url = $this->current_post_id ? get_permalink($this->current_post_id) : get_permalink();
+                // Only a post that resolved in initialize_current_context() has
+                // a permalink worth publishing. get_permalink() returns false
+                // for a post that is not in the database, and the no-argument
+                // form on a virtual page builds a fake ?page_id= URL from the
+                // in-memory global post, so neither is used as a canonical
+                // (#981). Such a page prints no canonical rather than a 500.
+                $canonical_url = $this->current_post_id ? get_permalink($this->current_post_id) : '';
 
                 // Core's rel_canonical() keeps the page number; this replaced
                 // it with a bare permalink, so every <!--nextpage--> sub-page
                 // and every /comment-page-N/ canonicalised to page 1 — a
                 // regression against core behaviour (#397). A custom canonical
                 // is left exactly as the user typed it.
-                $canonical_url = self::with_singular_page($canonical_url);
+                $canonical_url = is_string($canonical_url) && '' !== $canonical_url
+                    ? self::with_singular_page($canonical_url)
+                    : '';
             }
         } else {
             $canonical_url = self::get_non_singular_canonical_url();
@@ -4478,21 +4511,46 @@ class SEO_Manager {
             'position' => 1
         ];
 
+        // The front page is Home. A static front page also matches is_page(),
+        // which appended it a second time under its own title, so the trail
+        // read "Home > Home" with both items pointing at the homepage (#1137).
+        if (is_front_page()) {
+            return $items;
+        }
+
         $position = 2;
 
         if (is_single()) {
             $current_post_id = get_the_ID();
 
             if ($current_post_id) {
-                // Add categories for posts
-                $post_type = get_post_type($current_post_id);
-                if ($post_type === 'post') {
-                    $categories = get_the_category($current_post_id);
-                    if (!empty($categories)) {
-                        $category = $categories[0];
+                // A product sits under the Shop page (#952).
+                if ('product' === get_post_type($current_post_id)) {
+                    $shop = $this->get_breadcrumb_shop_item($settings, $position);
+
+                    if ($shop) {
+                        $items[] = $shop;
+                        $position++;
+                    }
+                }
+
+                // The post's term, with its ancestors: the primary category
+                // when one is set and still assigned, else the first term. Only
+                // posts got a level before, from get_the_category()[0], so
+                // products had none and an imported primary was ignored (#952).
+                $term = \ThinkRank\SEO\Site_Identity_Manager::get_breadcrumb_term((int) $current_post_id);
+
+                if ($term) {
+                    foreach ($this->get_breadcrumb_term_trail($term, $settings, $position) as $crumb) {
+                        $items[] = $crumb;
+                    }
+
+                    $url = get_term_link($term);
+
+                    if (!is_wp_error($url)) {
                         $items[] = [
-                            'title' => $this->get_breadcrumb_term_title($category, $settings),
-                            'url' => get_category_link($category->term_id),
+                            'title' => $this->get_breadcrumb_term_title($term, $settings),
+                            'url' => $url,
                             'position' => $position++
                         ];
                     }
@@ -4555,41 +4613,144 @@ class SEO_Manager {
                     ];
                 }
             }
-        } elseif (is_category()) {
-            $category = get_queried_object();
+        } elseif (is_category() || is_tag() || is_tax()) {
+            // Tags and custom taxonomies stopped at Home: only categories had a
+            // branch (#984). A hierarchical taxonomy lists its ancestors first,
+            // as categories always did.
+            $term = get_queried_object();
 
-            // Add parent categories
-            $parents = [];
-            $parent_id = $category->parent;
+            if ($term instanceof \WP_Term) {
+                // Product categories, tags and attributes sit under the Shop
+                // page (#952).
+                $taxonomy = get_taxonomy($term->taxonomy);
 
-            while ($parent_id) {
-                $parent = get_category($parent_id);
-                if ($parent && !is_wp_error($parent)) {
-                    $parents[] = [
-                        'title' => $this->get_breadcrumb_term_title($parent, $settings),
-                        'url' => get_category_link($parent->term_id),
-                        'position' => 0 // Will be set later
+                if ($taxonomy && in_array('product', (array) ($taxonomy->object_type ?? []), true)) {
+                    $shop = $this->get_breadcrumb_shop_item($settings, $position);
+
+                    if ($shop) {
+                        $items[] = $shop;
+                        $position++;
+                    }
+                }
+
+                foreach ($this->get_breadcrumb_term_trail($term, $settings, $position) as $crumb) {
+                    $items[] = $crumb;
+                }
+
+                $url = get_term_link($term);
+
+                if (($settings['show_current_page'] ?? true) && !is_wp_error($url)) {
+                    $items[] = [
+                        'title' => $this->get_breadcrumb_term_title($term, $settings),
+                        'url' => $url,
+                        'position' => $position,
+                        'current' => true
                     ];
-                    $parent_id = $parent->parent;
-                } else {
-                    break;
                 }
             }
+        } elseif (is_home() && !is_front_page()) {
+            // The posts page of a site with a static front page.
+            $posts_page_id = (int) get_option('page_for_posts');
 
-            // Reverse to get correct order
-            $parents = array_reverse($parents);
+            if ($posts_page_id && ($settings['show_current_page'] ?? true)) {
+                $items[] = [
+                    'title' => $this->get_breadcrumb_post_title($posts_page_id, $settings),
+                    'url' => get_permalink($posts_page_id),
+                    'position' => $position,
+                    'current' => true
+                ];
+            }
+        } elseif (is_post_type_archive()) {
+            // From the query var, as the archive canonical does: plugins such
+            // as WooCommerce swap the queried object for a page.
+            $post_type_name = get_query_var('post_type');
+            $post_type_name = is_array($post_type_name) ? (string) reset($post_type_name) : (string) $post_type_name;
+            $post_type = '' !== $post_type_name ? get_post_type_object($post_type_name) : null;
 
-            // Add parents with correct positions
-            foreach ($parents as $parent) {
-                $parent['position'] = $position++;
-                $items[] = $parent;
+            // WooCommerce's product archive is the Shop page: name it after
+            // the page, as products and product categories do (#952).
+            $shop = 'product' === $post_type_name ? $this->get_breadcrumb_shop_item($settings, $position) : null;
+
+            if ($shop && ($settings['show_current_page'] ?? true)) {
+                $items[] = $shop + ['current' => true];
+            } elseif (!$shop && $post_type instanceof \WP_Post_Type && ($settings['show_current_page'] ?? true)) {
+                $items[] = [
+                    'title' => (string) ($post_type->labels->name ?? $post_type->label),
+                    'url' => (string) get_post_type_archive_link($post_type->name),
+                    'position' => $position,
+                    'current' => true
+                ];
+            }
+        } elseif (is_author()) {
+            $author = get_queried_object();
+
+            if (is_object($author) && !empty($author->ID) && ($settings['show_current_page'] ?? true)) {
+                $items[] = [
+                    'title' => (string) ($author->display_name ?? ''),
+                    'url' => get_author_posts_url((int) $author->ID),
+                    'position' => $position,
+                    'current' => true
+                ];
+            }
+        } elseif (is_date()) {
+            $year  = (int) get_query_var('year');
+            $month = (int) get_query_var('monthnum');
+            $day   = (int) get_query_var('day');
+
+            // Plain permalinks ask for a date archive as ?m=YYYY[MM[DD]].
+            $m = preg_replace('/\D/', '', (string) get_query_var('m'));
+
+            if (!$year && strlen($m) >= 4) {
+                $year  = (int) substr($m, 0, 4);
+                $month = (int) substr($m, 4, 2);
+                $day   = (int) substr($m, 6, 2);
             }
 
-            // Add current category
+            // Year > month > day, the deepest one being the current item. Same
+            // links the archive canonical uses.
+            $levels = [];
+
+            if ($year) {
+                $levels[] = [(string) $year, get_year_link($year)];
+            }
+
+            if ($year && $month && (is_month() || is_day())) {
+                // Mid-month at noon UTC, so no site timezone moves it into the
+                // neighbouring month.
+                $levels[] = [wp_date('F', gmmktime(12, 0, 0, $month, 15, $year)), get_month_link($year, $month)];
+            }
+
+            if ($year && $month && $day && is_day()) {
+                $levels[] = [(string) $day, get_day_link($year, $month, $day)];
+            }
+
+            $last = count($levels) - 1;
+
+            foreach ($levels as $index => [$title, $url]) {
+                if ($index === $last) {
+                    if ($settings['show_current_page'] ?? true) {
+                        $items[] = [
+                            'title' => $title,
+                            'url' => $url,
+                            'position' => $position,
+                            'current' => true
+                        ];
+                    }
+                    break;
+                }
+
+                $items[] = [
+                    'title' => $title,
+                    'url' => $url,
+                    'position' => $position++
+                ];
+            }
+        } elseif (is_search()) {
             if ($settings['show_current_page'] ?? true) {
                 $items[] = [
-                    'title' => $this->get_breadcrumb_term_title($category, $settings),
-                    'url' => get_category_link($category->term_id),
+                    /* translators: %s: search query. */
+                    'title' => sprintf(__('Search results for "%s"', 'thinkrank'), get_search_query(false)),
+                    'url' => get_search_link(),
                     'position' => $position,
                     'current' => true
                 ];
@@ -4597,6 +4758,71 @@ class SEO_Manager {
         }
 
         return $items;
+    }
+
+    /**
+     * Ancestor crumbs of a term, outermost first, without the term itself.
+     *
+     * @since 2.17.1
+     *
+     * @param \WP_Term $term     Term whose ancestors to list.
+     * @param array    $settings Breadcrumb settings.
+     * @param int      $position Next position; advanced past the crumbs added.
+     * @return array<int, array<string, mixed>> Breadcrumb items.
+     */
+    private function get_breadcrumb_term_trail(\WP_Term $term, array $settings, int &$position): array {
+        $crumbs = [];
+
+        foreach (array_reverse(get_ancestors($term->term_id, $term->taxonomy, 'taxonomy')) as $ancestor_id) {
+            $ancestor = get_term($ancestor_id, $term->taxonomy);
+            $url = $ancestor instanceof \WP_Term ? get_term_link($ancestor) : '';
+
+            if (!$ancestor instanceof \WP_Term || is_wp_error($url)) {
+                continue;
+            }
+
+            $crumbs[] = [
+                'title' => $this->get_breadcrumb_term_title($ancestor, $settings),
+                'url' => $url,
+                'position' => $position++
+            ];
+        }
+
+        return $crumbs;
+    }
+
+    /**
+     * The WooCommerce Shop page as a breadcrumb item.
+     *
+     * Null without WooCommerce, without a published Shop page, or when the
+     * Shop page is the static front page and so already the Home item.
+     *
+     * @since 2.17.1
+     *
+     * @param array $settings Breadcrumb settings.
+     * @param int   $position Position the item takes.
+     * @return array<string, mixed>|null Breadcrumb item.
+     */
+    private function get_breadcrumb_shop_item(array $settings, int $position): ?array {
+        if (!function_exists('wc_get_page_id')) {
+            return null;
+        }
+
+        $shop_id = (int) wc_get_page_id('shop');
+
+        if ($shop_id <= 0 || 'publish' !== get_post_status($shop_id)) {
+            return null;
+        }
+
+        if ('page' === get_option('show_on_front') && $shop_id === (int) get_option('page_on_front')) {
+            return null;
+        }
+
+        return [
+            'title' => $this->get_breadcrumb_post_title($shop_id, $settings),
+            'url' => get_permalink($shop_id),
+            'position' => $position
+        ];
     }
 
     /**

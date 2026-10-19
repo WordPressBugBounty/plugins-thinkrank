@@ -230,19 +230,42 @@ class Metadata_Generator {
     
     /**
      * Extract content from WordPress post
-     * 
+     *
+     * The body comes from Builder_Content, the resolver the SEO score already
+     * uses. Breakdance, Oxygen, Bricks and the other page builders keep their
+     * text in postmeta and leave `post_content` empty or stale, so reading the
+     * column handed the AI the title and nothing else (#895).
+     *
      * @param \WP_Post $post Post object
      * @return string Extracted content
      */
     private function extract_post_content(\WP_Post $post): string {
-        $content = $post->post_title . "\n\n" . $post->post_content;
-        
+        $body = self::resolve_post_body($post);
+
+        $content = $post->post_title . "\n\n" . $body;
+
         // Add excerpt if available
         if (!empty($post->post_excerpt)) {
-            $content = $post->post_title . "\n\n" . $post->post_excerpt . "\n\n" . $post->post_content;
+            $content = $post->post_title . "\n\n" . $post->post_excerpt . "\n\n" . $body;
         }
-        
+
         return $content;
+    }
+
+    /**
+     * A post's body as the visitor sees it, whichever builder made it.
+     *
+     * @since 2.17.1
+     *
+     * @param \WP_Post $post Post object.
+     * @return string HTML of the post body.
+     */
+    public static function resolve_post_body(\WP_Post $post): string {
+        if (!class_exists('\\ThinkRank\\SEO\\Builder_Content')) {
+            require_once THINKRANK_PLUGIN_DIR . 'includes/seo/class-builder-content.php';
+        }
+
+        return \ThinkRank\SEO\Builder_Content::resolve($post);
     }
     
     /**

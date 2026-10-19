@@ -40,13 +40,16 @@ function thinkrank_get_default_email_report_config(): array {
  *
  * Keys here are the section identifiers used everywhere — in the
  * sections_enabled list of the resolved config, in the Section_Registry, and
- * in template paths. `site_traffic` and `ai_search` render only when their
- * source (a GA4 property, the AI traffic tracker) has something to show.
+ * in template paths. `ai_search` renders only when the AI traffic tracker
+ * has something to show.
+ *
+ * ThinkRank Pro adds its GA4 `site_traffic` card here through
+ * `thinkrank_email_report_default_sections` (#1115).
  *
  * @return array<string,array{label:string}>
  */
 function thinkrank_get_email_report_default_sections(): array {
-    return [
+    $sections = [
         'key_metrics' => [
             'label' => __('Search performance', 'thinkrank'),
         ],
@@ -65,9 +68,6 @@ function thinkrank_get_email_report_default_sections(): array {
         'position_summary' => [
             'label' => __('Where your keywords rank', 'thinkrank'),
         ],
-        'site_traffic' => [
-            'label' => __('Site traffic (Google Analytics 4)', 'thinkrank'),
-        ],
         'ai_search' => [
             'label' => __('Traffic from AI assistants', 'thinkrank'),
         ],
@@ -75,4 +75,22 @@ function thinkrank_get_email_report_default_sections(): array {
             'label' => __('AI assistant access', 'thinkrank'),
         ],
     ];
+
+    /**
+     * Filter the section catalog: the default section list, the keys a saved
+     * section choice may hold, and the catalog ThinkRank Pro reads to offer
+     * new sections.
+     *
+     * Add a section with its key and label in the position it renders. A
+     * section added here also needs registering on
+     * `thinkrank_email_report_register_sections`, or it is listed but never
+     * rendered.
+     *
+     * @since 2.17.1
+     *
+     * @param array<string,array{label:string}> $sections Key => ['label' => string], in render order.
+     */
+    $filtered = apply_filters('thinkrank_email_report_default_sections', $sections);
+
+    return is_array($filtered) ? $filtered : $sections;
 }

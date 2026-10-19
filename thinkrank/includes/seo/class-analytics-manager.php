@@ -4,8 +4,9 @@
  * Analytics Manager Class
  *
  * Coordinates Google API integrations for SEO analytics data collection,
- * processing, and AI-powered insights generation. Manages Google Analytics,
- * Search Console, and PageSpeed data with intelligent caching and rate limiting.
+ * processing, and AI-powered insights generation. Manages Search Console and
+ * PageSpeed data with intelligent caching and rate limiting. GA4 is a ThinkRank
+ * Pro feature and reaches the dashboard through `thinkrank_analytics_dashboard_data`.
  *
  * @package ThinkRank
  * @subpackage SEO
@@ -17,7 +18,6 @@ declare(strict_types=1);
 namespace ThinkRank\SEO;
 
 use ThinkRank\Core\Settings_Manager;
-use ThinkRank\Integrations\Google_Analytics_Client;
 use ThinkRank\Integrations\Google_Search_Console_Client;
 use ThinkRank\Integrations\Google_PageSpeed_Client;
 use ThinkRank\Integrations\Google_Search_Analytics_Client;
@@ -44,13 +44,6 @@ class Analytics_Manager {
      * @var Settings_Manager
      */
     private Settings_Manager $settings_manager;
-
-    /**
-     * Google Analytics client
-     *
-     * @var Google_Analytics_Client|null
-     */
-    private ?Google_Analytics_Client $analytics_client = null;
 
     /**
      * Google Search Console client
@@ -324,18 +317,6 @@ class Analytics_Manager {
             // Shorter timeout here: the dashboard CWV card fetches in-request
             // on a cold cache and must not stall the whole dashboard payload.
             $this->pagespeed_client = Google_PageSpeed_Client::for_site(25);
-
-            // Initialize Google Analytics (GA4) client when a property has
-            // been selected. The GA settings UI stores the property in the
-            // Admin API's "properties/XXXXXXXX" form, which is exactly what
-            // the Data API endpoints expect.
-            $ga_property = (string) $this->get_setting('seo_analytics_google_analytics_property_id');
-            if (!empty($access_token) && $ga_property !== '') {
-                if (strpos($ga_property, 'properties/') !== 0) {
-                    $ga_property = 'properties/' . $ga_property;
-                }
-                $this->analytics_client = new Google_Analytics_Client('', $ga_property, $timeout, $access_token);
-            }
         } catch (\Exception $e) {
             if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
                 // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -645,16 +626,14 @@ class Analytics_Manager {
         // handed to the Integrations screen as JSON, and a key that exists on
         // some services and not others reads as `undefined` there.
         $results = [
-            'google_analytics' => ['status' => 'not_configured', 'message' => ''],
             'search_console' => ['status' => 'not_configured', 'message' => ''],
             'pagespeed' => ['status' => 'not_configured', 'message' => '']
         ];
 
-        // One shape for all three. They were three copies of the same block
+        // One shape for every client. They were three copies of the same block
         // differing only in the client, which is how the same unguarded read
         // came to exist in triplicate (#852).
         $clients = [
-            'google_analytics' => $this->analytics_client,
             'search_console' => $this->search_console_client,
             'pagespeed' => $this->pagespeed_client,
         ];
@@ -726,6 +705,16 @@ class Analytics_Manager {
             // a transient PageSpeed failure can't blank the CWV card for the
             // dashboard cache's full 1-3 day TTL.
             $cached_data['core_web_vitals'] = $this->get_dashboard_core_web_vitals();
+
+            // GA4 `traffic` is ThinkRank Pro's (#1115). A payload cached while
+            // Pro filled it outlives Pro being deactivated or unlicensed, so
+            // without a listener it is dropped here rather than served for the
+            // rest of the cache's lifetime.
+            if (!has_filter('thinkrank_analytics_dashboard_data')) {
+                $cached_data['traffic'] = [];
+                unset($cached_data['traffic_error']);
+            }
+
             return $cached_data;
         }
 
@@ -743,26 +732,9 @@ class Analytics_Manager {
         while ($retry_count <= $max_retries) {
             try {
                 // Ensure clients are initialized (lazy load) before any of
-                // them are used — this also builds the GA4 client when a
-                // property is configured.
+                // them are used.
                 if (!$this->search_console_client || !$this->search_analytics_client) {
                     $this->initialize_clients();
-                }
-
-                // Get Google Analytics traffic data. GA is optional — an
-                // isolated failure (misconfigured property, missing scope)
-                // must not abort the Search Console portion of the dashboard.
-                // 401s are re-thrown so the token-refresh retry below runs.
-                if ($this->analytics_client) {
-                    try {
-                        $dashboard_data['traffic'] = $this->analytics_client->get_traffic_data($date_range);
-                    } catch (\Exception $ga_error) {
-                        if ($ga_error->getCode() === 401) {
-                            throw $ga_error;
-                        }
-                        $dashboard_data['traffic'] = [];
-                        $dashboard_data['traffic_error'] = $ga_error->getMessage();
-                    }
                 }
 
                 // Get Search Console data
@@ -825,6 +797,25 @@ class Analytics_Manager {
 
         // Add last updated timestamp
         $dashboard_data['last_updated'] = current_time('mysql');
+
+        /**
+         * Filter a freshly built dashboard payload before it is cached.
+         *
+         * The free plugin fills only the Search Console half. `traffic` stays
+         * an empty array here: GA4 is a ThinkRank Pro feature, and Pro fills
+         * it (and `traffic_error` when GA4 fails) through this filter
+         * (#1115). Runs on a cache miss only; whatever it adds is cached with
+         * the rest of the payload, and an error payload is never cached.
+         *
+         * @since 2.17.1
+         *
+         * @param array  $dashboard_data Dashboard payload.
+         * @param string $date_range     Date range, e.g. "30d".
+         */
+        $filtered = apply_filters('thinkrank_analytics_dashboard_data', $dashboard_data, $date_range);
+        if (is_array($filtered)) {
+            $dashboard_data = $filtered;
+        }
 
         // Cache the results — but never cache an error payload, otherwise a
         // transient failure (e.g. a Google API 401) would be served from the
@@ -1195,11 +1186,6 @@ class Analytics_Manager {
      */
     public function get_client_status(): array {
         return [
-            'google_analytics' => [
-                'initialized' => !is_null($this->analytics_client),
-                'api_key_configured' => !empty($this->get_setting('google_analytics_api_key')),
-                'property_id_configured' => !empty($this->get_setting('seo_analytics_google_analytics_property_id'))
-            ],
             'search_console' => [
                 'initialized' => !is_null($this->search_console_client),
                 'api_key_configured' => !empty($this->get_setting('google_search_console_api_key')),

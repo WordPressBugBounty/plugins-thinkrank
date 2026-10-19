@@ -15,10 +15,15 @@ declare(strict_types=1);
 
 namespace ThinkRank\AI;
 
+use ThinkRank\AI\Traits\Chat_Completion_Reply;
+
 // Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
+
+require_once __DIR__ . '/class-chat-content.php';
+require_once __DIR__ . '/traits/trait-chat-completion-reply.php';
 
 /**
  * OpenRouter Client Class
@@ -29,10 +34,97 @@ if (!defined('ABSPATH')) {
  */
 class OpenRouter_Client {
 
+    use Chat_Completion_Reply;
+
     /**
      * OpenRouter API base URL
      */
     private const API_BASE_URL = 'https://openrouter.ai/api/v1';
+
+    /**
+     * Output ceilings for the reasoning model families we can name.
+     *
+     * Keys are OpenRouter model id prefixes with dots written as dashes
+     * (`anthropic/claude-sonnet-4.5` is matched as `anthropic/claude-sonnet-4-5`).
+     * The longest matching prefix wins. A model that matches none of them keeps
+     * FALLBACK_OUTPUT_LIMIT, so an arbitrary custom id is never asked for more
+     * than it was before.
+     *
+     * Only families whose ceiling is published belong here: a ceiling guessed
+     * too high is a provider 400, which is worse than a small budget.
+     *
+     * @since 2.17.1
+     * @var array<string, int>
+     */
+    private const MODEL_OUTPUT_LIMITS = [
+        'anthropic/claude-opus-5'     => 128000,
+        'anthropic/claude-sonnet-5'   => 128000,
+        'anthropic/claude-opus-4-8'   => 128000,
+        'anthropic/claude-opus-4-7'   => 128000,
+        'anthropic/claude-opus-4-6'   => 128000,
+        'anthropic/claude-sonnet-4-6' => 128000,
+        'anthropic/claude-opus-4-5'   => 64000,
+        'anthropic/claude-sonnet-4-5' => 64000,
+        'anthropic/claude-haiku-4-5'  => 64000,
+        'anthropic/claude-sonnet-4'   => 64000,
+        'anthropic/claude-opus-4-1'   => 32000,
+        'anthropic/claude-opus-4'     => 32000,
+        'google/gemini-2-5-'          => 65536,
+        'google/gemini-3'             => 65536,
+    ];
+
+    /**
+     * Ceiling for a model MODEL_OUTPUT_LIMITS does not know.
+     *
+     * The flat ceiling every model had before #1043.
+     *
+     * @since 2.17.1
+     * @var int
+     */
+    private const FALLBACK_OUTPUT_LIMIT = 8192;
+
+    /**
+     * Upper bound per use case, applied after the percentage.
+     *
+     * Same values and reasons as Claude_Client::USE_CASE_TOKEN_CAPS: a single
+     * blocking call with no streaming must not ask for a budget it cannot
+     * return inside the timeout. Against the 8192 fallback none of these bind,
+     * so a model outside MODEL_OUTPUT_LIMITS keeps its old budgets.
+     *
+     * @since 2.17.1
+     * @var array<string, int>
+     */
+    private const USE_CASE_TOKEN_CAPS = [
+        'content_brief' => 16000,
+        'llms_txt'      => 16000,
+        'analysis'      => 8000,
+        'seo_metadata'  => 4000,
+        'optimization'  => 4000,
+        'default'       => 4000,
+    ];
+
+    /**
+     * Reasoning effort sent when the caller names none.
+     *
+     * Every ThinkRank request asks for a short JSON answer. A thinking model
+     * left to its default (Gemini 3.5 Flash thinks dynamically, Claude Sonnet 5
+     * adaptively) can spend the whole output budget on reasoning and return
+     * empty or cut-off JSON (#1043). "low" is accepted by every reasoning
+     * model OpenRouter routes to, including those that cannot turn reasoning
+     * off, and OpenRouter drops the parameter for models that do not reason.
+     *
+     * @since 2.17.1
+     * @var string
+     */
+    private const DEFAULT_REASONING_EFFORT = 'low';
+
+    /**
+     * Effort levels OpenRouter's unified `reasoning` parameter accepts.
+     *
+     * @since 2.17.1
+     * @var string[]
+     */
+    private const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high'];
 
     /**
      * API key
@@ -140,6 +232,7 @@ class OpenRouter_Client {
             'frequency_penalty' => $options['frequency_penalty'],
             'presence_penalty' => $options['presence_penalty'],
             'max_tokens' => $safe_tokens,
+            'reasoning' => $this->build_reasoning((string) ($options['reasoning_effort'] ?? '')),
         ];
 
         return $this->make_request('chat/completions', $body);
@@ -191,28 +284,71 @@ class OpenRouter_Client {
     }
 
     /**
+     * OpenRouter's unified `reasoning` parameter for a request.
+     *
+     * The caller's effort when it names a valid one (the content brief sends
+     * its own), otherwise DEFAULT_REASONING_EFFORT. The reasoning text is
+     * excluded from the answer: no parser reads it, and leaving it out keeps
+     * the response small.
+     *
+     * @since 2.17.1
+     *
+     * @param string $effort Effort the caller asked for, or ''.
+     * @return array{effort: string, exclude: bool}
+     */
+    private function build_reasoning(string $effort): array {
+        $effort = strtolower(trim($effort));
+        if (!in_array($effort, self::REASONING_EFFORTS, true)) {
+            $effort = self::DEFAULT_REASONING_EFFORT;
+        }
+
+        return [
+            'effort' => $effort,
+            'exclude' => true,
+        ];
+    }
+
+    /**
      * Get maximum completion tokens for a model.
      *
-     * OpenRouter normalises `max_tokens` across very different underlying
-     * models, so we apply a single conservative ceiling rather than per-model
-     * limits.
+     * OpenRouter routes to arbitrary models from many providers, and a ceiling
+     * guessed too high returns a provider 400 rather than a smaller answer. So
+     * only the reasoning families in MODEL_OUTPUT_LIMITS, whose ceilings are
+     * published, get their own; every other model keeps the conservative
+     * FALLBACK_OUTPUT_LIMIT it always had.
      *
-     * Deliberately NOT given the per-model table Claude_Client gained in #665,
-     * and still subject to the same truncation symptom as a result.
-     *
-     * That table is only safe for Claude because its model list is short, known
-     * and verifiable. OpenRouter routes to arbitrary models from many providers
-     * with no curated list here, and a ceiling guessed too high returns a
-     * provider 400 rather than a smaller answer — a worse failure than the one
-     * it would be fixing. Raising this needs either a per-model table sourced
-     * from OpenRouter's own model metadata endpoint, or streaming so a large
-     * budget cannot time out. Tracked separately; see #665.
+     * Those families need the room: their reasoning is billed against the same
+     * output budget, and a flat 8192 left Claude Sonnet 5 and Gemini 3.5 Flash
+     * about 1600 tokens for SEO metadata, reasoning included (#1043).
      *
      * @param string $model Model name
      * @return int Maximum completion tokens
      */
     private function get_max_completion_tokens(string $model): int {
-        return 8192;
+        $model = str_replace('.', '-', strtolower(trim($model)));
+
+        if ('' === $model) {
+            return self::FALLBACK_OUTPUT_LIMIT;
+        }
+
+        $limits = self::MODEL_OUTPUT_LIMITS;
+
+        // Longest prefix first, so a point release never matches the shorter
+        // family id that is a prefix of it.
+        uksort(
+            $limits,
+            static function (string $a, string $b): int {
+                return strlen($b) <=> strlen($a);
+            }
+        );
+
+        foreach ($limits as $prefix => $limit) {
+            if (0 === strpos($model, $prefix)) {
+                return $limit;
+            }
+        }
+
+        return self::FALLBACK_OUTPUT_LIMIT;
     }
 
     /**
@@ -244,8 +380,9 @@ class OpenRouter_Client {
             'optimization' => 0.2,    // 20% of max tokens for optimization
         ];
         $percentage = $recommendations[$use_case] ?? 0.2;
+        $cap = self::USE_CASE_TOKEN_CAPS[$use_case] ?? self::USE_CASE_TOKEN_CAPS['default'];
 
-        return (int) ($max_tokens * $percentage);
+        return min($cap, (int) ($max_tokens * $percentage));
     }
 
     /**
@@ -275,6 +412,7 @@ class OpenRouter_Client {
             'messages' => $messages,
             'temperature' => $temperature,
             'max_tokens' => $this->get_safe_token_limit($this->model, $max_tokens),
+            'reasoning' => $this->build_reasoning(''),
         ];
     }
 
@@ -397,22 +535,16 @@ class OpenRouter_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_seo_response(array $response): array {
-        if (!isset($response['choices'][0]['message']['content'])) {
-            throw new \Exception('Invalid response format from OpenRouter');
-        }
-
-        $content = $response['choices'][0]['message']['content'];
+        $content = $this->chat_reply_text($response, 'OpenRouter');
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Try to extract JSON from the response
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
+        $json_content = Ai_Json::object_text($content);
 
-        if (false === $json_start || false === $json_end) {
+        if ('' === $json_content) {
             throw new \Exception('No valid JSON found in OpenRouter response');
         }
 
-        $json_content = substr($content, $json_start, $json_end - $json_start + 1);
         $metadata = json_decode($json_content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -446,22 +578,16 @@ class OpenRouter_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_analysis_response(array $response): array {
-        if (!isset($response['choices'][0]['message']['content'])) {
-            throw new \Exception('Invalid response format from OpenRouter');
-        }
-
-        $content = trim($response['choices'][0]['message']['content']);
+        $content = trim($this->chat_reply_text($response, 'OpenRouter'));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
+        $json_content = Ai_Json::object_text($content);
 
-        if (false === $json_start || false === $json_end) {
+        if ('' === $json_content) {
             throw new \Exception('No valid JSON found in response');
         }
 
-        $json_content = substr($content, $json_start, $json_end - $json_start + 1);
         $analysis = json_decode($json_content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -524,22 +650,16 @@ class OpenRouter_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_site_identity_response(array $response): array {
-        if (!isset($response['choices'][0]['message']['content'])) {
-            throw new \Exception('Invalid response format from OpenRouter');
-        }
-
-        $content = trim($response['choices'][0]['message']['content']);
+        $content = trim($this->chat_reply_text($response, 'OpenRouter'));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
+        $json_content = Ai_Json::object_text($content);
 
-        if (false === $json_start || false === $json_end) {
+        if ('' === $json_content) {
             throw new \Exception('No valid JSON found in response');
         }
 
-        $json_content = substr($content, $json_start, $json_end - $json_start + 1);
         $optimization = json_decode($json_content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -659,22 +779,16 @@ class OpenRouter_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_llms_txt_response(array $response): array {
-        if (!isset($response['choices'][0]['message']['content'])) {
-            throw new \Exception('Invalid response format from OpenRouter');
-        }
-
-        $content = trim($response['choices'][0]['message']['content']);
+        $content = trim($this->chat_reply_text($response, 'OpenRouter'));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
+        $json_content = Ai_Json::object_text($content);
 
-        if (false === $json_start || false === $json_end) {
+        if ('' === $json_content) {
             throw new \Exception('No valid JSON found in response');
         }
 
-        $json_content = substr($content, $json_start, $json_end - $json_start + 1);
         $optimization = json_decode($json_content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -705,22 +819,16 @@ class OpenRouter_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_homepage_meta_response(array $response): array {
-        if (!isset($response['choices'][0]['message']['content'])) {
-            throw new \Exception('Invalid response format from OpenRouter');
-        }
-
-        $content = trim($response['choices'][0]['message']['content']);
+        $content = trim($this->chat_reply_text($response, 'OpenRouter'));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
+        $json_content = Ai_Json::object_text($content);
 
-        if (false === $json_start || false === $json_end) {
+        if ('' === $json_content) {
             throw new \Exception('No valid JSON found in response');
         }
 
-        $json_content = substr($content, $json_start, $json_end - $json_start + 1);
         $optimization = json_decode($json_content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -749,22 +857,16 @@ class OpenRouter_Client {
      * @throws \Exception If parsing fails
      */
     private function parse_homepage_hero_response(array $response): array {
-        if (!isset($response['choices'][0]['message']['content'])) {
-            throw new \Exception('Invalid response format from OpenRouter');
-        }
-
-        $content = trim($response['choices'][0]['message']['content']);
+        $content = trim($this->chat_reply_text($response, 'OpenRouter'));
         $ai_text = $content; // Store the raw AI-generated text (Content Brief pattern)
 
         // Extract JSON from response
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
+        $json_content = Ai_Json::object_text($content);
 
-        if (false === $json_start || false === $json_end) {
+        if ('' === $json_content) {
             throw new \Exception('No valid JSON found in response');
         }
 
-        $json_content = substr($content, $json_start, $json_end - $json_start + 1);
         $optimization = json_decode($json_content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {

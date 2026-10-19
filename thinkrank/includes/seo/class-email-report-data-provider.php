@@ -8,8 +8,9 @@
  * one fetch per period, shared across the report.
  *
  * readiness() answers, before any data is pulled, whether there is a report
- * to build: Search Console is required, Google Analytics 4 and the AI
- * traffic tracker each add a card when present (#742). The generator asks
+ * to build: Search Console is required, and the AI traffic tracker adds a
+ * card when present (#742). ThinkRank Pro answers `analytics` and adds the
+ * GA4 card (#1115). The generator asks
  * this first so a disconnected site is paused with a reason rather than
  * fetched, rendered and sent as a column of blanks.
  *
@@ -89,16 +90,12 @@ final class Email_Report_Data_Provider {
         $search_console = $oauth_present
             || '' !== (string) $settings->get('google_search_console_api_key', '');
 
-        // GA4: the Data API client is built only when a token AND a selected
-        // property both exist — mirror that exactly.
-        $ga_property = (string) $settings->get('seo_analytics_google_analytics_property_id', '');
-        $analytics   = ($oauth_present && '' !== $ga_property)
-            || '' !== (string) $settings->get('google_analytics_api_key', '');
-
         $readiness = [
             'ready'          => $search_console,
             'search_console' => $search_console,
-            'analytics'      => $analytics,
+            // GA4 is a ThinkRank Pro feature (#1115): Pro answers this
+            // through the filter below, along with the card it feeds.
+            'analytics'      => false,
             'ai_traffic'     => $this->ai_tracker_has_data(),
             'reason'         => $search_console ? null : 'search_console_not_connected',
         ];

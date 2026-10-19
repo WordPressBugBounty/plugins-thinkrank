@@ -3730,6 +3730,15 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         if ($context_type === 'post' || $context_type === 'page' || $context_type === 'product') {
             if ($context_id) {
                 $post = get_post($context_id);
+
+                // The static front page is Home itself; listing it again under
+                // its own title gave "Home > Home" (#1137).
+                if ($post
+                    && 'page' === get_option('show_on_front')
+                    && (int) $post->ID === (int) get_option('page_on_front')) {
+                    return $breadcrumbs;
+                }
+
                 if ($post) {
                     // Add parent pages for hierarchical content
                     $ancestors = get_post_ancestors($post);
@@ -3782,31 +3791,40 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         if (($context_type === 'post' || $context_type === 'product') && $context_id) {
             $post = get_post($context_id);
             if ($post) {
-                // Get primary category
-                $categories = get_the_category($post->ID);
-                if (!empty($categories)) {
-                    $primary_category = $categories[0];
+                // $position was only assigned inside the category branch, so a
+                // post without a category built its own item from an undefined
+                // variable (#952).
+                $position = 2;
 
-                    // Add category hierarchy
-                    $category_ancestors = get_ancestors($primary_category->term_id, 'category');
-                    $category_ancestors = array_reverse($category_ancestors);
+                // The primary term (or the first one) of the post type's
+                // taxonomy: product_cat for products, not the post category.
+                $term = self::get_breadcrumb_term((int) $post->ID);
 
-                    $position = 2;
-                    foreach ($category_ancestors as $ancestor_id) {
-                        $ancestor = get_category($ancestor_id);
+                if ($term) {
+                    foreach (array_reverse(get_ancestors($term->term_id, $term->taxonomy, 'taxonomy')) as $ancestor_id) {
+                        $ancestor = get_term($ancestor_id, $term->taxonomy);
+                        $url = $ancestor instanceof \WP_Term ? get_term_link($ancestor) : '';
+
+                        if (!$ancestor instanceof \WP_Term || is_wp_error($url)) {
+                            continue;
+                        }
+
                         $breadcrumbs[] = [
                             'title' => $ancestor->name,
-                            'url' => get_category_link($ancestor_id),
+                            'url' => $url,
                             'position' => $position++
                         ];
                     }
 
-                    // Add primary category
-                    $breadcrumbs[] = [
-                        'title' => $primary_category->name,
-                        'url' => get_category_link($primary_category->term_id),
-                        'position' => $position++
-                    ];
+                    $url = get_term_link($term);
+
+                    if (!is_wp_error($url)) {
+                        $breadcrumbs[] = [
+                            'title' => $term->name,
+                            'url' => $url,
+                            'position' => $position++
+                        ];
+                    }
                 }
 
                 // Add current post
@@ -3820,6 +3838,61 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         }
 
         return $breadcrumbs;
+    }
+
+    /**
+     * The term a post's breadcrumb trail runs through.
+     *
+     * The post type's main hierarchical taxonomy (category for posts,
+     * product_cat for products, else the first public hierarchical one), and
+     * in it the primary term from `_thinkrank_primary_category` (set by the
+     * Rank Math, Yoast and other importers) while that term is still assigned
+     * to the post, else the first assigned term.
+     *
+     * @since 2.17.1
+     *
+     * @param int $post_id Post ID.
+     * @return \WP_Term|null Term, or null when the post has none.
+     */
+    public static function get_breadcrumb_term(int $post_id): ?\WP_Term {
+        $post_type = (string) get_post_type($post_id);
+        $taxonomy  = '';
+
+        if ('post' === $post_type) {
+            $taxonomy = 'category';
+        } elseif ('product' === $post_type && taxonomy_exists('product_cat')) {
+            $taxonomy = 'product_cat';
+        } elseif ('' !== $post_type) {
+            foreach (get_object_taxonomies($post_type, 'objects') as $object_taxonomy) {
+                if (!empty($object_taxonomy->hierarchical) && !empty($object_taxonomy->public)) {
+                    $taxonomy = (string) $object_taxonomy->name;
+                    break;
+                }
+            }
+        }
+
+        if ('' === $taxonomy) {
+            return null;
+        }
+
+        $terms = get_the_terms($post_id, $taxonomy);
+
+        if (empty($terms) || is_wp_error($terms)) {
+            return null;
+        }
+
+        $terms   = array_values(array_filter($terms, static fn($term): bool => $term instanceof \WP_Term));
+        $primary = (int) get_post_meta($post_id, '_thinkrank_primary_category', true);
+
+        if ($primary > 0) {
+            foreach ($terms as $term) {
+                if ((int) $term->term_id === $primary) {
+                    return $term;
+                }
+            }
+        }
+
+        return $terms[0] ?? null;
     }
 
     /**
@@ -4061,8 +4134,56 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             static function (string $url): string {
                 return Url_Scheme::apply($url);
             },
-            $this->collect_sitemap_urls_for_robots()
+            $this->drop_dead_core_sitemap_url($this->collect_sitemap_urls_for_robots())
         );
+    }
+
+    /**
+     * Drop core's `/wp-sitemap.xml` while nothing answers it.
+     *
+     * The "WordPress Core" preset publishes ThinkRank's own sitemap at core's
+     * URL, so the URL alone says nothing about who serves it. Two things can:
+     * core, while `wp_sitemaps_enabled` holds, and ThinkRank, once it actually
+     * publishes the document. With core switched off (by another plugin or a
+     * snippet) and ThinkRank's static file not yet written, the URL 404s and
+     * robots.txt was still pointing crawlers at it (#969).
+     *
+     * Only this URL is checked. Every other configured path is ThinkRank's
+     * alone, and a static file missing for one of those leaves core switched
+     * on, whose /sitemap.xml route still answers.
+     *
+     * @since 2.17.1
+     * @param string[] $urls Sitemap URLs about to be advertised.
+     * @return string[]
+     */
+    private function drop_dead_core_sitemap_url(array $urls): array {
+        // Core's own filter, read exactly as WP_Sitemaps::sitemaps_enabled() reads it.
+        if (apply_filters('wp_sitemaps_enabled', (bool) get_option('blog_public'))) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook, read not invoked as ours.
+            return $urls;
+        }
+
+        $generator = null;
+
+        foreach ($urls as $i => $url) {
+            if ('wp-sitemap.xml' !== basename((string) wp_parse_url($url, PHP_URL_PATH))) {
+                continue;
+            }
+
+            try {
+                $generator = $generator ?? new \ThinkRank\SEO\Sitemap_Generator(false);
+                $served    = $generator->serves_document('wp-sitemap.xml');
+            } catch (\Exception $e) {
+                // Unreadable settings: keep the line rather than drop a sitemap
+                // that may well be live on the strength of a failed read.
+                $served = true;
+            }
+
+            if (!$served) {
+                unset($urls[$i]);
+            }
+        }
+
+        return array_values($urls);
     }
 
     /**

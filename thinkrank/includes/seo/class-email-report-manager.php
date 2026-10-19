@@ -27,7 +27,6 @@ use ThinkRank\SEO\Email_Report_Sections\Top_Winning_Posts_Section;
 use ThinkRank\SEO\Email_Report_Sections\Top_Losing_Posts_Section;
 use ThinkRank\SEO\Email_Report_Sections\Top_Winning_Keywords_Section;
 use ThinkRank\SEO\Email_Report_Sections\Top_Losing_Keywords_Section;
-use ThinkRank\SEO\Email_Report_Sections\Site_Traffic_Section;
 use ThinkRank\SEO\Email_Report_Sections\Ai_Search_Section;
 use ThinkRank\SEO\Email_Report_Sections\Mcp_Access_Section;
 
@@ -80,7 +79,6 @@ final class Email_Report_Manager {
         require_once $base . 'class-top-losing-posts-section.php';
         require_once $base . 'class-top-winning-keywords-section.php';
         require_once $base . 'class-top-losing-keywords-section.php';
-        require_once $base . 'class-site-traffic-section.php';
         require_once $base . 'class-ai-search-section.php';
         require_once $base . 'class-mcp-access-section.php';
 
@@ -105,14 +103,15 @@ final class Email_Report_Manager {
 
     private function register_default_sections(): void {
         // Registration order is render order: the hero, what grew, what
-        // fell, where things rank, then the optional GA4 and AI cards.
+        // fell, where things rank, then the optional AI cards. ThinkRank Pro
+        // adds the GA4 Site traffic card through the extension hook below
+        // (#1115).
         $this->registry->register(new Key_Metrics_Section());
         $this->registry->register(new Top_Winning_Posts_Section());
         $this->registry->register(new Top_Winning_Keywords_Section());
         $this->registry->register(new Top_Losing_Posts_Section());
         $this->registry->register(new Top_Losing_Keywords_Section());
         $this->registry->register(new Position_Summary_Section());
-        $this->registry->register(new Site_Traffic_Section());
         $this->registry->register(new Ai_Search_Section());
         $this->registry->register(new Mcp_Access_Section());
     }

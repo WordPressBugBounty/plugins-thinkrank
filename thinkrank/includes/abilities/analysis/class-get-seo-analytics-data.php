@@ -19,7 +19,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Retrieves the ThinkRank SEO analytics dashboard data.
  *
- * Requires Google Search Console / Google Analytics to be connected. When no
+ * Requires Google Search Console to be connected (GA4 traffic comes from
+ * ThinkRank Pro, through `thinkrank_analytics_dashboard_data`). When no
  * Google connection is present, empty data is returned (this is expected and is
  * not an error).
  */
@@ -30,7 +31,7 @@ class Get_Seo_Analytics_Data extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-seo-analytics-data';
 		$this->label       = __( 'Get ThinkRank SEO Analytics Data', 'thinkrank' );
-		$this->description = __( 'Retrieve the ThinkRank SEO analytics dashboard data. Requires Google Search Console / Analytics to be connected; returns empty data otherwise. get-integrations-status reports whether those are connected.', 'thinkrank' );
+		$this->description = __( 'Retrieve the ThinkRank SEO analytics dashboard data: Search Console performance and Core Web Vitals. Requires Google Search Console to be connected; returns empty data otherwise. The GA4 `traffic` block is filled only when ThinkRank Pro is active with a GA4 property selected. get-integrations-status reports what is connected.', 'thinkrank' );
 	}
 
 	/**

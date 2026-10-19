@@ -132,6 +132,11 @@ const MCP = ({ appsRefreshSignal = 0 }) => {
 	// The MCP server is built in; its tool catalog is the bundled Abilities
 	// API. When that's missing (bundle not built), the endpoint has no tools.
 	const dependenciesReady = !!globals.abilities_api_available;
+	// Only an administrator may turn the server on or off (#1057); the tab is
+	// open to a delegated role, which must not be offered a switch that the
+	// save then refuses (#1070).
+	const canToggle =
+		typeof window !== 'undefined' && !!window.thinkrankAdmin?.isAdmin;
 
 	useEffect(() => {
 		loadSettings();
@@ -179,9 +184,12 @@ const MCP = ({ appsRefreshSignal = 0 }) => {
 		} catch (error) {
 			logger.error('ThinkRank: Failed to save MCP settings', error);
 			setEnableMcp(savedMcp);
+			// Say why when the server did, e.g. the administrator-only refusal.
 			setNotice({
 				type: 'error',
-				message: __('Couldn’t save your MCP settings.', 'thinkrank'),
+				message:
+					error?.message ||
+					__('Couldn’t save your MCP settings.', 'thinkrank'),
 			});
 		} finally {
 			setIsSaving(false);
@@ -235,9 +243,17 @@ const MCP = ({ appsRefreshSignal = 0 }) => {
 							id="thinkrank-enable-mcp"
 							checked={enableMcp}
 							onChange={handleToggle}
-							disabled={isSaving}
+							disabled={isSaving || !canToggle}
 							label={__('Enable MCP access', 'thinkrank')}
 						/>
+						{!canToggle && (
+							<span className="tr-text-xs tr-text-tertiary">
+								{__(
+									'Only an administrator can turn MCP on or off.',
+									'thinkrank'
+								)}
+							</span>
+						)}
 						{isSaving && (
 							<span className="tr-text-xs tr-text-tertiary">
 								{__('Saving…', 'thinkrank')}

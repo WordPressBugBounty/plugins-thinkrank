@@ -1092,6 +1092,17 @@ class Sitemap_Endpoint extends WP_REST_Controller {
                 );
             }
 
+            // A value the generator rejects is the caller's mistake, so say
+            // which one with a 400 instead of the generic save failure (#980).
+            $validation = $this->sitemap_generator->validate_settings($settings);
+            if (empty($validation['valid'])) {
+                return new WP_Error(
+                    'invalid_sitemap_settings',
+                    implode(' ', (array) ($validation['errors'] ?? [])),
+                    ['status' => 400, 'errors' => $validation['errors'] ?? []]
+                );
+            }
+
             // Save settings using Sitemap_Generator
             $success = $this->sitemap_generator->save_settings($context_type, $context_id, $settings);
 
@@ -1126,7 +1137,7 @@ class Sitemap_Endpoint extends WP_REST_Controller {
                 'message' => 'Sitemap settings saved successfully'
             ], 200);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return new WP_Error(
                 'settings_update_failed',
                 'Failed to update sitemap settings: ' . $e->getMessage(),

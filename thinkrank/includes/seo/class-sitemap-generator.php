@@ -625,6 +625,11 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             // Validate sitemap_urls
             if (!empty($settings['sitemap_urls']) && is_array($settings['sitemap_urls'])) {
                 foreach ($settings['sitemap_urls'] as $sitemap) {
+                    if (!is_array($sitemap)) {
+                        $validation['valid'] = false;
+                        $validation['errors'][] = 'Each sitemap URL entry must be an object';
+                        continue;
+                    }
                     if (!empty($sitemap['url'])) {
                         $this->validate_sitemap_url($sitemap['url']);
                     }
@@ -3829,6 +3834,31 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     }
 
     /**
+     * Whether a request for this document name is answered by ThinkRank now.
+     *
+     * Configured is not the same as served. In dynamic mode maybe_serve_sitemap()
+     * answers every published name; in static mode nothing in PHP does, so the
+     * file on disk is the only thing that can answer, and before the first build
+     * there is none.
+     *
+     * @since 2.17.1
+     *
+     * @param string     $name     Document file name, e.g. `wp-sitemap.xml`.
+     * @param array|null $settings Sitemap settings (falls back to saved ones).
+     * @return bool
+     */
+    public function serves_document(string $name, ?array $settings = null): bool {
+        $settings = $settings ?? $this->get_settings('site');
+
+        if (empty($settings['enabled']) || !$this->publishes_document_name($name, $settings)) {
+            return false;
+        }
+
+        return 'dynamic' === $this->resolve_delivery_mode($settings)
+            || file_exists(ABSPATH . $name);
+    }
+
+    /**
      * Save sitemap XML to file
      *
      * @since 1.0.0
@@ -4814,13 +4844,19 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * Validate and sanitize exclude posts input
      *
      * @since 1.0.0
-     * @param string $exclude_posts Comma-separated post IDs
+     * @since 2.17.1 Takes any value and rejects a non-string as invalid
+     *               instead of raising a TypeError (#980).
+     * @param mixed $exclude_posts Comma-separated post IDs
      * @return array Validated post IDs
      * @throws InvalidArgumentException If validation fails
      */
-    private function validate_exclude_posts(string $exclude_posts): array {
+    private function validate_exclude_posts($exclude_posts): array {
         if (empty($exclude_posts)) {
             return [];
+        }
+
+        if (!is_string($exclude_posts)) {
+            throw new InvalidArgumentException('Exclude posts must be a comma-separated list of post IDs');
         }
 
         // Limit input length to prevent DoS
@@ -4849,13 +4885,19 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * Validate and sanitize exclude terms input
      *
      * @since 1.0.0
-     * @param string $exclude_terms Comma-separated term IDs
+     * @since 2.17.1 Takes any value and rejects a non-string as invalid
+     *               instead of raising a TypeError (#980).
+     * @param mixed $exclude_terms Comma-separated term IDs
      * @return array Validated term IDs
      * @throws InvalidArgumentException If validation fails
      */
-    private function validate_exclude_terms(string $exclude_terms): array {
+    private function validate_exclude_terms($exclude_terms): array {
         if (empty($exclude_terms)) {
             return [];
+        }
+
+        if (!is_string($exclude_terms)) {
+            throw new InvalidArgumentException('Exclude terms must be a comma-separated list of term IDs');
         }
 
         // Limit input length to prevent DoS
@@ -4884,13 +4926,19 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * Validate and sanitize custom URL pattern
      *
      * @since 1.0.0
-     * @param string $pattern Custom URL pattern
+     * @since 2.17.1 Takes any value and rejects a non-string as invalid
+     *               instead of raising a TypeError (#980).
+     * @param mixed $pattern Custom URL pattern
      * @return string Validated and sanitized pattern
      * @throws InvalidArgumentException If validation fails
      */
-    private function validate_custom_url_pattern(string $pattern): string {
+    private function validate_custom_url_pattern($pattern): string {
         if (empty($pattern)) {
             return 'sitemap-{type}.xml';
+        }
+
+        if (!is_string($pattern)) {
+            throw new InvalidArgumentException('URL pattern must be a string');
         }
 
         // Remove any HTML/script tags to prevent XSS
@@ -4923,13 +4971,19 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * Validate sitemap URL
      *
      * @since 1.0.0
-     * @param string $url Sitemap URL
+     * @since 2.17.1 Takes any value and rejects a non-string as invalid
+     *               instead of raising a TypeError (#980).
+     * @param mixed $url Sitemap URL
      * @return string Validated and sanitized URL
      * @throws InvalidArgumentException If validation fails
      */
-    private function validate_sitemap_url(string $url): string {
+    private function validate_sitemap_url($url): string {
         if (empty($url)) {
             throw new InvalidArgumentException('Sitemap URL cannot be empty');
+        }
+
+        if (!is_string($url)) {
+            throw new InvalidArgumentException('Sitemap URL must be a string');
         }
 
         // Remove leading/trailing whitespace
@@ -4970,6 +5024,12 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @throws InvalidArgumentException If validation fails
      */
     private function validate_links_per_sitemap($links_per_sitemap): int {
+        // intval() turns an array into 0 or 1, so ['1'] used to pass and be
+        // stored as an array (#980).
+        if (!is_numeric($links_per_sitemap)) {
+            throw new InvalidArgumentException('Links per sitemap must be a number');
+        }
+
         $links = intval($links_per_sitemap);
 
         if ($links < 1) {

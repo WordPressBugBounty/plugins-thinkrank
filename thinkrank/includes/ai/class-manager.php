@@ -1016,13 +1016,8 @@ class Manager {
      * @return array|null Decoded object, or null if none parses.
      */
     private function extract_json_object(string $ai_text): ?array {
-        $json_start = strpos($ai_text, '{');
-        $json_end = strrpos($ai_text, '}');
-        if ($json_start === false || $json_end === false || $json_end <= $json_start) {
-            return null;
-        }
-        $decoded = json_decode(substr($ai_text, $json_start, $json_end - $json_start + 1), true);
-        return is_array($decoded) ? $decoded : null;
+        // Past any inline <think> block, whole answer first (#1044).
+        return Ai_Json::decode_object($ai_text);
     }
 
     /**
@@ -1060,6 +1055,20 @@ class Manager {
             }
         }
 
+        // --- OpenRouter ---
+        // An upstream provider failure mid-generation is HTTP 200 with
+        // finish_reason "error" and the reason in choices[0].error. Retrying
+        // the same request repeats it, so fail with the reason (#1041).
+        if (isset($response['choices'][0]) && is_array($response['choices'][0])) {
+            $choice = $response['choices'][0];
+            $error  = $choice['error'] ?? null;
+            $error  = is_array($error) ? (string) ($error['message'] ?? '') : (is_string($error) ? $error : '');
+
+            if ('' !== trim($error) || 'error' === (string) ($choice['finish_reason'] ?? '')) {
+                throw new \Exception(esc_html('The AI provider reported an error: ' . ('' !== trim($error) ? trim($error) : 'no details given')));
+            }
+        }
+
         // --- Claude (Messages) ---
         if (isset($response['stop_reason']) && 'refusal' === (string) $response['stop_reason']) {
             throw new \Exception('The AI declined this request. Try different wording.');
@@ -1067,15 +1076,20 @@ class Manager {
 
         // --- Gemini ---
         // A prompt rejected outright returns no candidate at all, only
-        // promptFeedback.blockReason; a candidate can also finish on SAFETY or
-        // PROHIBITED_CONTENT.
+        // promptFeedback.blockReason; a candidate can also finish on SAFETY,
+        // PROHIBITED_CONTENT, BLOCKLIST, SPII or RECITATION. The last three
+        // used to fall through as an empty result and use up a retry on an
+        // answer the model had already withheld (#1041).
         $block_reason = (string) ($response['promptFeedback']['blockReason'] ?? '');
         if ('' !== $block_reason) {
             throw new \Exception(esc_html(sprintf('The AI blocked this request under its content policy (%s). Try different wording.', $block_reason)));
         }
         $gemini_finish = (string) ($response['candidates'][0]['finishReason'] ?? '');
-        if (in_array($gemini_finish, ['SAFETY', 'PROHIBITED_CONTENT'], true)) {
+        if (in_array($gemini_finish, ['SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII'], true)) {
             throw new \Exception('The AI blocked this request under its content policy. Try different wording.');
+        }
+        if ('RECITATION' === $gemini_finish) {
+            throw new \Exception('The AI stopped because its answer repeated published text too closely. Try different wording.');
         }
     }
 
@@ -1102,11 +1116,11 @@ class Manager {
 
         $ai_text = '';
         if (isset($response['choices'][0]['message']['content'])) {
-            $ai_text = is_array($response['choices'][0]['message']['content'])
-                ? implode(' ', array_map(static fn($part) => is_array($part) ? ($part['text'] ?? '') : (string) $part, $response['choices'][0]['message']['content']))
-                : (string) $response['choices'][0]['message']['content'];
-        } elseif (isset($response['content'][0]['text'])) {
-            $ai_text = (string) $response['content'][0]['text'];
+            $ai_text = Chat_Content::text($response['choices'][0]['message']['content']);
+        } elseif (isset($response['content']) && is_array($response['content'])) {
+            // Claude: the answer can follow a thinking block, so read the
+            // text blocks rather than content[0] (#1038).
+            $ai_text = Claude_Client::extract_text($response);
         } elseif (isset($response['candidates'][0]['content']['parts'][0]['text'])) {
             $ai_text = (string) $response['candidates'][0]['content']['parts'][0]['text'];
         } elseif (isset($response['content']) && is_string($response['content'])) {
@@ -1187,19 +1201,17 @@ class Manager {
      * @return string Sanitized value (without surrounding quotes), or '' on failure.
      */
     private function extract_json_field(string $ai_text, string $field): string {
-        $ai_text = trim($ai_text);
+        // Inline reasoning is not the answer, neither as JSON nor as the
+        // first line the fallback below reads (#1044).
+        $ai_text = trim(Ai_Json::strip_reasoning($ai_text));
         if ($ai_text === '') {
             return '';
         }
 
         // Prefer a JSON object with the requested field.
-        $json_start = strpos($ai_text, '{');
-        $json_end = strrpos($ai_text, '}');
-        if ($json_start !== false && $json_end !== false && $json_end > $json_start) {
-            $decoded = json_decode(substr($ai_text, $json_start, $json_end - $json_start + 1), true);
-            if (is_array($decoded) && !empty($decoded[$field])) {
-                return sanitize_text_field(trim((string) $decoded[$field], " \t\n\r\0\x0B\"'"));
-            }
+        $decoded = Ai_Json::decode_object($ai_text);
+        if (is_array($decoded) && !empty($decoded[$field])) {
+            return sanitize_text_field(trim((string) $decoded[$field], " \t\n\r\0\x0B\"'"));
         }
 
         // Fall back to the first non-empty line, stripping wrapping quotes.
