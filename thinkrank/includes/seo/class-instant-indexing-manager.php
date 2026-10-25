@@ -62,12 +62,21 @@ class Instant_Indexing_Manager {
     private array $pending_transitions = [];
 
     /**
+     * Public links of published posts that this request is unpublishing,
+     * read before the change, keyed by ID.
+     *
+     * @var array<int, string>
+     */
+    private array $unpublished_permalinks = [];
+
+    /**
      * Initialize the component
      *
      * @since 1.1.0
      * @return void
      */
     public function init(): void {
+        add_action('pre_post_update', [$this, 'remember_published_permalink'], 10, 2);
         add_action('transition_post_status', [$this, 'handle_post_transition'], 10, 3);
         add_action('wp_after_insert_post', [$this, 'handle_after_insert_post'], 10, 4);
         add_action('delete_post', [$this, 'handle_post_deletion'], 10, 2);
@@ -273,8 +282,9 @@ class Instant_Indexing_Manager {
      * @return array Modified actions.
      */
     public function add_row_action_link(array $actions, \WP_Post $post): array {
-        // Check if enabled and post type is supported
-        if (!$this->is_enabled() || !$this->is_post_type_supported($post->post_type)) {
+        // Offered only where the handler below would act on it, so the link
+        // never leads to a refusal.
+        if (!$this->is_enabled() || !$this->user_can_submit() || !$this->can_submit_post($post)) {
             return $actions;
         }
 
@@ -310,13 +320,32 @@ class Instant_Indexing_Manager {
             wp_die(esc_html__('Security check failed.', 'thinkrank'));
         }
 
+        // The same capability the Instant Indexing screen and its REST routes
+        // require. edit_post alone let any contributor send URLs (#1316).
+        if (!$this->user_can_submit()) {
+            wp_die(esc_html__('You do not have permission to use Instant Indexing.', 'thinkrank'));
+        }
+
         // Check permissions
         if (!current_user_can('edit_post', $post_id)) {
             wp_die(esc_html__('You do not have permission to edit this post.', 'thinkrank'));
         }
 
-        $url = get_permalink($post_id);
         $redirect_to = wp_get_referer() ?: admin_url('edit.php');
+
+        // Switched off, or a post that is not a public, indexable page (a
+        // draft, a private or password-protected post, a noindexed one): the
+        // automatic path would not send it, so neither does this one.
+        $post = get_post($post_id);
+        if (!$this->is_enabled() || !$post instanceof \WP_Post || !$this->can_submit_post($post)) {
+            wp_safe_redirect(add_query_arg([
+                'thinkrank_indexed_count' => 0,
+                'thinkrank_index_status' => 'skipped',
+            ], $redirect_to));
+            exit;
+        }
+
+        $url = get_permalink($post);
 
         if ($url) {
             $result = $this->submit_urls([$url]);
@@ -351,7 +380,7 @@ class Instant_Indexing_Manager {
      */
     public function add_bulk_action_item(array $actions, string $post_type): array {
         // Check if enabled and post type is supported
-        if (!$this->is_enabled() || !$this->is_post_type_supported($post_type)) {
+        if (!$this->is_enabled() || !$this->is_post_type_supported($post_type) || !$this->user_can_submit()) {
             return $actions;
         }
 
@@ -391,8 +420,15 @@ class Instant_Indexing_Manager {
             return;
         }
 
-        // Only content that is (still) published is submitted.
+        // A published post leaving publish (trashed, drafted, made private,
+        // pending or rescheduled) is announced once more at the link search
+        // engines indexed, so they recrawl it and drop it. That link is read
+        // before the change, because by now a trashed post's slug carries
+        // __trashed and any other status resolves to ?p=ID (#1301).
         if ($new_status !== 'publish') {
+            if ($old_status === 'publish') {
+                $this->submit_unpublished_permalink((int) $post->ID);
+            }
             return;
         }
 
@@ -410,6 +446,76 @@ class Instant_Indexing_Manager {
             'was_published' => $old_status === 'publish',
             'was_excluded'  => Indexability::is_post_noindexed($post) || Indexability::is_post_redirected($post),
         ];
+    }
+
+    /**
+     * Remember a published post's public link before an update unpublishes it.
+     *
+     * Runs on `pre_post_update`, which wp_insert_post() fires before the row
+     * is written, so the post still reads as published.
+     * Every status change goes through it, wp_trash_post() included. Only an
+     * indexable post is remembered: one that was noindexed, redirected or
+     * password-protected was never announced, so it has nothing to withdraw.
+     *
+     * @since 2.18.0
+     *
+     * @param int   $post_id Post ID.
+     * @param array $data    Unslashed post data about to be written.
+     * @return void
+     */
+    public function remember_published_permalink(int $post_id, array $data): void {
+        if (($data['post_status'] ?? 'publish') === 'publish') {
+            return;
+        }
+
+        $post = get_post($post_id);
+        if (!$post instanceof \WP_Post || $post->post_status !== 'publish') {
+            return;
+        }
+
+        if (!$this->should_process_post($post) || !Indexability::is_indexable_post($post)) {
+            return;
+        }
+
+        // Trashing renames the slug to `<slug>__trashed` straight in the
+        // database before this hook fires, keeping the old one in
+        // `_wp_desired_post_slug`. Build the link from that slug, or the
+        // trashed address is announced instead of the indexed one.
+        $link_post = $post;
+        if (str_ends_with((string) $post->post_name, '__trashed')) {
+            $desired = (string) get_post_meta($post_id, '_wp_desired_post_slug', true);
+            if ($desired !== '') {
+                $link_post            = clone $post;
+                $link_post->post_name = $desired;
+            }
+        }
+
+        $url = get_permalink($link_post);
+        if ($url) {
+            $this->unpublished_permalinks[$post_id] = $url;
+        }
+    }
+
+    /**
+     * Queue the link remembered for a post that has just been unpublished.
+     *
+     * @since 2.18.0
+     *
+     * @param int $post_id Post ID.
+     * @return void
+     */
+    private function submit_unpublished_permalink(int $post_id): void {
+        $url = $this->unpublished_permalinks[$post_id] ?? '';
+        unset($this->unpublished_permalinks[$post_id]);
+
+        // No 15-second dedupe here: a status change fires this once, and a
+        // post published and trashed within seconds must still be withdrawn.
+        // An identical event already queued is collapsed by the scheduler.
+        if ($url === '') {
+            return;
+        }
+
+        $this->schedule_url_submission([$url]);
     }
 
     /**
@@ -497,19 +603,17 @@ class Instant_Indexing_Manager {
      * @return void
      */
     public function handle_post_deletion(int $postid, \WP_Post $post): void {
-        // Check if we should process this post (even if it's being deleted, we might want to notify, 
-        // though IndexNow 'submit' usually implies "please crawl this". 
-        // IndexNow documentation says "notify... that a URL and its content has been added, updated, or deleted."
-        // So yes, we submit deleted URLs too if they were public.)
-
-        // For deletion, status might be 'trash' or 'delete', careful with checks.
-        // We only care if it was a supported post type.
-        if (!$this->is_post_type_supported($post->post_type)) {
+        // IndexNow is told about deleted URLs too ("added, updated, or
+        // deleted"), but only URLs that were public. A post deleted from the
+        // trash was announced when it was trashed, at its public link; by now
+        // that link is ?p=ID. A draft, pending or private post never had a
+        // public link at all. So only a post deleted while still published,
+        // and indexable, is submitted (#1301).
+        if ($post->post_status !== 'publish') {
             return;
         }
 
-        // If global setting disabled, abort
-        if (!$this->is_enabled()) {
+        if (!$this->should_process_post($post) || !Indexability::is_indexable_post($post)) {
             return;
         }
 
@@ -550,12 +654,25 @@ class Instant_Indexing_Manager {
     /**
      * Check if feature is enabled globally
      *
+     * Public since 2.18.0 so the manual callers (the REST submit route and the
+     * submit-urls-to-index ability) can refuse with their own error (#1305).
+     *
      * @since 1.1.0
      * @return bool
      */
-    private function is_enabled(): bool {
+    public function is_enabled(): bool {
         $settings = get_option($this->option_name, []);
         return isset($settings['enabled']) && $settings['enabled'];
+    }
+
+    /**
+     * What a manual caller says when Instant Indexing is switched off.
+     *
+     * @since 2.18.0
+     * @return string
+     */
+    public static function disabled_message(): string {
+        return __('Instant Indexing is turned off, so no URLs were sent to IndexNow. Turn it on under Instant Indexing settings first.', 'thinkrank');
     }
 
     /**
@@ -573,6 +690,38 @@ class Instant_Indexing_Manager {
     }
 
     /**
+     * Whether the current user may submit URLs by hand.
+     *
+     * The row and bulk actions answer to the same capability as the Instant
+     * Indexing screen and its REST routes, so the Role Manager governs every
+     * manual path, not just the screen (#1316).
+     *
+     * @since 2.18.0
+     * @return bool
+     */
+    private function user_can_submit(): bool {
+        return \ThinkRank\Core\Capability_Manager::current_user_can('thinkrank_instant_indexing');
+    }
+
+    /**
+     * Whether a post is one the manual row and bulk actions may submit.
+     *
+     * The same rule the automatic path applies: a supported type, published,
+     * and an indexable destination (not password-protected, noindexed or
+     * redirected). A draft or private post's `?p=` link is not a public page,
+     * and announcing it asks search engines to crawl a 404 (#1316).
+     *
+     * @since 2.18.0
+     * @param \WP_Post $post Post.
+     * @return bool
+     */
+    private function can_submit_post(\WP_Post $post): bool {
+        return $this->is_post_type_supported($post->post_type)
+            && $post->post_status === 'publish'
+            && Indexability::is_indexable_post($post);
+    }
+
+    /**
      * Submit URLs to IndexNow API
      *
      * @since 1.1.0
@@ -580,6 +729,14 @@ class Instant_Indexing_Manager {
      * @return array Submission results.
      */
     public function submit_urls(array $urls): array {
+        // Every path lands here, so the on/off switch is enforced here too:
+        // a site owner who switched Instant Indexing off has every URL kept
+        // from IndexNow, whichever caller asks (#1305). Nothing is logged,
+        // because nothing was attempted.
+        if (!$this->is_enabled()) {
+            return ['success' => false, 'message' => self::disabled_message(), 'submitted_count' => 0];
+        }
+
         if (empty($urls)) {
             return ['success' => false, 'message' => 'No URLs provided', 'submitted_count' => 0];
         }
@@ -837,16 +994,35 @@ class Instant_Indexing_Manager {
             return $redirect_to;
         }
 
+        // Core's edit.php checks only the bulk-posts nonce before handing a
+        // custom action to this filter, so every check the row action makes
+        // is made here too, and per post: a selection can name posts the user
+        // cannot edit, and drafts or private posts that are not public (#1316).
+        if (!$this->is_enabled() || !$this->user_can_submit()) {
+            return $redirect_to;
+        }
+
         $urls = [];
         foreach ($post_ids as $post_id) {
-            $url = get_permalink($post_id);
+            $post = get_post((int) $post_id);
+            if (!$post instanceof \WP_Post
+                || !current_user_can('edit_post', $post->ID)
+                || !$this->can_submit_post($post)
+            ) {
+                continue;
+            }
+
+            $url = get_permalink($post);
             if ($url) {
                 $urls[] = $url;
             }
         }
 
         if (empty($urls)) {
-            return $redirect_to;
+            return add_query_arg([
+                'thinkrank_indexed_count' => 0,
+                'thinkrank_index_status' => 'skipped',
+            ], $redirect_to);
         }
 
         // Cap the set and defer the outbound call to WP-Cron so a large bulk
@@ -883,7 +1059,10 @@ class Instant_Indexing_Manager {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Admin notice display reads URL params.
         $status = sanitize_key(wp_unslash($_GET['thinkrank_index_status']));
 
-        if ($status === 'scheduled') {
+        if ($status === 'skipped') {
+            $class = 'notice-warning';
+            $message = __('Nothing was submitted to IndexNow. Only published, indexable posts you can edit are submitted, and only while Instant Indexing is on.', 'thinkrank');
+        } elseif ($status === 'scheduled') {
             $class = 'notice-success';
             // translators: %s is the number of URLs queued for IndexNow submission.
             $message = sprintf(_n('%s URL queued for submission to IndexNow.', '%s URLs queued for submission to IndexNow.', $count, 'thinkrank'), $count);

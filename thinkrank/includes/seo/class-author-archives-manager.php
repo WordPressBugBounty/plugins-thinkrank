@@ -51,7 +51,7 @@ class Author_Archives_Manager {
      * @return void
      */
     public function add_meta_description(): void {
-        if (!is_author()) {
+        if (!is_author() || !self::metas_enabled()) {
             return;
         }
 
@@ -61,6 +61,22 @@ class Author_Archives_Manager {
         }
 
         $this->print_meta_description($meta_desc);
+    }
+
+    /**
+     * Whether the Content Type Matrix lets ThinkRank own the author archive's
+     * title and meta description.
+     *
+     * SEO_Manager asks the same question for every other page type and steps
+     * aside when Metas is Off, but it hands author archives to this class, which
+     * never asked: Off on the Author archives row left the description tag and
+     * the templated <title> in place (#1334).
+     *
+     * @since 2.18.0
+     * @return bool
+     */
+    private static function metas_enabled(): bool {
+        return Content_Type_Settings::is_enabled_for_current(Content_Type_Settings::FEATURE_META, true);
     }
 
     /**
@@ -131,7 +147,7 @@ class Author_Archives_Manager {
      * @return string Modified title
      */
     public function modify_document_title(string $title): string {
-        if (!is_author()) {
+        if (!is_author() || !self::metas_enabled()) {
             return $title;
         }
 

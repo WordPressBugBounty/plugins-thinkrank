@@ -171,6 +171,7 @@ class Divi_Metabox {
         // AJAX route used to persist all fields (no #post form in the builder).
         $data['saveAction'] = 'thinkrank_save_metabox';
 
+        wp_set_script_translations('thinkrank-divi', 'thinkrank');
         wp_localize_script('thinkrank-divi', 'thinkrankMetabox', $data);
 
         // Depend on wp-components so the @wordpress/components controls inside

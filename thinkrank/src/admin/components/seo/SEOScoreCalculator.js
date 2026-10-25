@@ -98,14 +98,16 @@ const IconRefresh = ({ spin = false }) => (
  * open a guidance dialog is what made the feature look broken — the button
  * promised an edit and then nothing in the post changed.
  *
- * Matching is on the scoring engine's suggestion text, which is emitted in
- * English from PHP and is not translated, so substring matching is safe here.
+ * The score sends each suggestion's `action` with it, decided in PHP by key,
+ * because the text is translated and its words are no longer English (#1298).
+ * A suggestion without one (a score cached before that, or one a filter added)
+ * falls back to matching the English text, as before.
  *
- * @param {string} text         Suggestion text.
- * @param {Object} capabilities What the host component can actually apply.
+ * @param {string|Object} suggestion   Suggestion text, or the score's {text, action} object.
+ * @param {Object}        capabilities What the host component can actually apply.
  * @return {'title'|'description'|'link'|'density'|'schema'|'guidance'} Action kind.
  */
-export const classifySuggestion = (text, capabilities = {}) => {
+export const classifySuggestion = (suggestion, capabilities = {}) => {
 	const {
 		canApplyTitle = false,
 		canApplyDescription = false,
@@ -113,6 +115,23 @@ export const classifySuggestion = (text, capabilities = {}) => {
 		hasKeyword = false,
 	} = capabilities;
 
+	const action =
+		suggestion && typeof suggestion === 'object' ? suggestion.action : null;
+	if (action) {
+		const allowed = {
+			title: canApplyTitle,
+			description: canApplyDescription,
+			link: canApplyContent,
+			density: hasKeyword && canApplyContent,
+			schema: true,
+		};
+		return allowed[action] ? action : 'guidance';
+	}
+
+	const text =
+		suggestion && typeof suggestion === 'object'
+			? suggestion.text
+			: suggestion;
 	const lower = String(text || '').toLowerCase();
 
 	// Order mirrors handleApplySuggestion: first match wins.
@@ -384,7 +403,7 @@ const SEOScoreCalculator = ({
 	 * @return {string} Action kind (see classifySuggestion).
 	 */
 	const resolveSuggestionKind = (suggestion) =>
-		classifySuggestion(toText(suggestion), {
+		classifySuggestion(suggestion, {
 			canApplyTitle: !!onApplyTitle,
 			canApplyDescription: !!onApplyDescription,
 			canApplyContent: !!onApplyContent,
@@ -407,6 +426,7 @@ const SEOScoreCalculator = ({
 					content_type: contentType,
 					tone,
 					suggestion: suggestionText,
+					suggestion_key: suggestion?.key || '',
 				},
 				field: 'title',
 				apply: onApplyTitle,

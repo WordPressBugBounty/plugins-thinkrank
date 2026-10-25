@@ -422,8 +422,11 @@ class Manager {
         $site_identity_settings = (new \ThinkRank\SEO\Site_Identity_Manager())->get_settings('site');
 
         // Localize script with data
+        wp_set_script_translations('thinkrank-admin', 'thinkrank');
         wp_localize_script('thinkrank-admin', 'thinkrankAdmin', [
             'apiUrl' => rest_url('thinkrank/v1/'),
+            // The site's language, for readability figures computed in the app (#1298).
+            'locale' => get_locale(),
             'restNonce' => wp_create_nonce('wp_rest'),
             'adminNonce' => wp_create_nonce('thinkrank_admin'),
             'currentUser' => wp_get_current_user()->ID,

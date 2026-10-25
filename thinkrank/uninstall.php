@@ -371,8 +371,13 @@ class ThinkRank_Uninstaller {
         // Was 2 hooks against the 15 the plugin schedules, and weaker than the
         // deactivator's 5 — so uninstalling without deactivating first left
         // even more behind (#389).
+        //
+        // wp_unschedule_hook(), not wp_clear_scheduled_hook(): the latter only
+        // removes events whose arguments match the ones passed, none here, so
+        // every queued thinkrank_instant_indexing_submit (scheduled with its
+        // list of URLs) survived the uninstall (#1327).
         foreach (self::manifest()['cron_hooks'] as $job) {
-            wp_clear_scheduled_hook($job);
+            wp_unschedule_hook($job);
         }
     }
     

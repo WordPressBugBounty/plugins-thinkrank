@@ -74,10 +74,6 @@ class Manager {
 
         // Schedule cache cleanup
         add_action('thinkrank_daily_cleanup', [$this, 'cleanup_cache']);
-
-        // Add AJAX handlers for AI requests
-        add_action('wp_ajax_thinkrank_generate_metadata', [$this, 'ajax_generate_metadata']);
-        add_action('wp_ajax_thinkrank_test_api_connection', [$this, 'ajax_test_connection']);
     }
 
     /**
@@ -471,12 +467,19 @@ class Manager {
 
         // Use ThinkRank's own validation word lists so the generated title passes
         // the same emotion/sentiment and power-word checks the scorer applies.
-        $sentiment_words = SEOScoreCalculator::get_title_sentiment_words();
-        $power_words = SEOScoreCalculator::get_title_power_words();
+        // In the title's own language, so a French title is asked for, and
+        // checked against, French words (#1298).
+        $locale = (string) ($options['locale'] ?? '');
+        $sentiment_words = SEOScoreCalculator::get_title_sentiment_words($locale);
+        $power_words = SEOScoreCalculator::get_title_power_words($locale);
 
         // When the suggestion explicitly asks for an emotional/sentiment word we
         // strictly validate the result (and retry once) to guarantee it passes.
-        $needs_sentiment = stripos($suggestion, 'sentiment') !== false || stripos($suggestion, 'emotional') !== false;
+        // By the score's key, since a translated suggestion has neither English
+        // word (#1298); the words are the fallback for a caller without a key.
+        $needs_sentiment = 'title_sentiment_word' === (string) ($options['suggestion_key'] ?? '')
+            || stripos($suggestion, 'sentiment') !== false
+            || stripos($suggestion, 'emotional') !== false;
 
         $prompt = (new Prompt_Builder())->build_title_improvement_prompt(
             $content,
@@ -1533,71 +1536,6 @@ class Manager {
             'configured' => $configured,
             'connected' => $this->client !== null,
         ];
-    }
-
-    /**
-     * AJAX handler for generating metadata
-     *
-     * @return void
-     */
-    public function ajax_generate_metadata(): void {
-        // Verify nonce
-        $nonce = sanitize_text_field(wp_unslash($_POST['nonce'] ?? ''));
-        if (!wp_verify_nonce($nonce, 'thinkrank_ai_nonce')) {
-            wp_die('Security check failed');
-        }
-
-        // Check permissions
-        if (!current_user_can('edit_posts')) {
-            wp_die('Insufficient permissions');
-        }
-
-        $content = sanitize_textarea_field(wp_unslash($_POST['content'] ?? ''));
-        $options = [
-            'target_keyword' => sanitize_text_field(wp_unslash($_POST['target_keyword'] ?? '')),
-            'content_type' => sanitize_text_field(wp_unslash($_POST['content_type'] ?? 'blog_post')),
-            'tone' => sanitize_text_field(wp_unslash($_POST['tone'] ?? 'professional')),
-        ];
-
-        try {
-            $metadata = $this->generate_seo_metadata($content, $options);
-
-            wp_send_json_success([
-                'metadata' => $metadata,
-                'message' => __('SEO metadata generated successfully!', 'thinkrank'),
-            ]);
-
-        } catch (\Exception $e) {
-            wp_send_json_error([
-                'message' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    /**
-     * AJAX handler for testing API connection
-     *
-     * @return void
-     */
-    public function ajax_test_connection(): void {
-        // Verify nonce
-        $nonce = sanitize_text_field(wp_unslash($_POST['nonce'] ?? ''));
-        if (!wp_verify_nonce($nonce, 'thinkrank_ai_nonce')) {
-            wp_die('Security check failed');
-        }
-
-        // Check permissions
-        if (!current_user_can('manage_options')) {
-            wp_die('Insufficient permissions');
-        }
-
-        $result = $this->test_api_connection();
-
-        if ($result['success']) {
-            wp_send_json_success($result);
-        } else {
-            wp_send_json_error($result);
-        }
     }
 
     /**

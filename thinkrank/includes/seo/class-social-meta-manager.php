@@ -1215,6 +1215,11 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             // resolver was unreachable and every install advertised en_US.
             'og_locale' => '',
             'default_og_image' => '',
+            // Last image fallback for og:image and twitter:image, after the
+            // network-specific defaults. The image resolvers and the MCP
+            // ability always used it, but without a default here
+            // sanitize_settings() dropped it on every save (#1342).
+            'default_image' => '',
             'og_image_width' => 1200,
             'og_image_height' => 630,
             // Offer alternative og:image tags after the primary one (#636).

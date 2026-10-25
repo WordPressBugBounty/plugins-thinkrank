@@ -8,6 +8,8 @@
  * @since 1.0.0
  */
 
+import { __ } from '@wordpress/i18n';
+
 /**
  * Calculate real word count from text
  *
@@ -98,32 +100,79 @@ export const calculateKeywordDensity = (content, keyword) => {
 };
 
 /**
- * Estimate syllable count for readability calculations
- * Simple approximation used in Flesch Reading Ease formula
+ * The language of a locale: "fr" for "fr_FR", "fr-CA" or "fr".
  *
- * @param {string} text - Text to analyze
+ * @param {string} locale - A WordPress locale.
+ * @return {string} Lowercase language code; "en" when nothing is known.
+ */
+export const languageOf = (locale) =>
+	String(locale || '')
+		.replace('-', '_')
+		.split('_')[0]
+		.toLowerCase() || 'en';
+
+/**
+ * The locale of the content being scored: the post's own (Polylang/WPML, else
+ * the site's) as the metabox was given it, the site's in the admin app, else
+ * the admin page's own language.
+ *
+ * @return {string} A WordPress locale, or '' when none is known.
+ */
+export const detectLocale = () => {
+	if (typeof window !== 'undefined') {
+		const given =
+			window.thinkrankMetabox?.locale || window.thinkrankAdmin?.locale;
+		if (given) return String(given);
+	}
+	if (typeof document !== 'undefined') {
+		return document.documentElement?.lang || '';
+	}
+	return '';
+};
+
+const VOWELS = {
+	en: 'aeiouy',
+	fr: 'aeiouyàâäéèêëîïôöùûüÿœæ',
+};
+
+/**
+ * Estimate syllable count for readability calculations, by the rules of the
+ * text's language.
+ *
+ * @param {string} text   - Text to analyze
+ * @param {string} locale - The text's locale; its language picks the rules
  * @return {number} Estimated syllable count
  */
-export const estimateSyllables = (text) => {
-	// Same rules as the server's count_syllables(), so the editor and the
-	// stored score agree: whitespace-separated tokens of the reading text,
-	// letters a-z only, a trailing silent e dropped after a consonant but
-	// never for consonant-le ("table").
+export const estimateSyllables = (text, locale = detectLocale()) => {
+	// Same rules as the server's Text_Language::count_syllables(), so the
+	// editor and the stored score agree. English: whitespace-separated tokens
+	// of the reading text, letters a-z only, a trailing silent e dropped after
+	// a consonant but never for consonant-le ("table"). French: letters of any
+	// accent, accented vowels count, and a final e or es after a consonant is
+	// mute ("porte", "portes", "école").
+	const french = languageOf(locale) === 'fr';
+	const vowels = french ? VOWELS.fr : VOWELS.en;
+	const vowelGroups = new RegExp(`[${vowels}]+`, 'gu');
+	const silentEnding = french
+		? new RegExp(`[^${vowels}]es?$`, 'u')
+		: /[^aeiouy]e$/;
 	let syllableCount = 0;
 
 	toReadingText(text)
 		.toLowerCase()
 		.split(' ')
 		.forEach((token) => {
-			const word = token.replace(/[^a-z]/g, '');
+			const word = french
+				? token.replace(/[^\p{L}]/gu, '')
+				: token.replace(/[^a-z]/g, '');
 			if (!word) return;
 
-			let syllables = (word.match(/[aeiouy]+/g) || []).length;
+			let syllables = (word.match(vowelGroups) || []).length;
 
 			if (
 				syllables > 1 &&
-				/[^aeiouy]e$/.test(word) &&
-				!word.endsWith('le')
+				silentEnding.test(word) &&
+				(french || !word.endsWith('le'))
 			) {
 				syllables--;
 			}
@@ -135,42 +184,47 @@ export const estimateSyllables = (text) => {
 };
 
 /**
- * Calculate readability score using industry standard Flesch Reading Ease
- * Official formula used by academic institutions and professional tools
+ * Calculate readability score on the 0-100 reading-ease scale of the text's
+ * language: Flesch Reading Ease for English (and any language without a
+ * formula of its own), Kandel-Moles for French, as on the server.
  *
- * @param {string} text - Text content to analyze
+ * @param {string} text   - Text content to analyze
+ * @param {string} locale - The text's locale; its language picks the formula
  * @return {string} Readability assessment with score
  */
-export const calculateReadabilityScore = (text) => {
-	if (!text) return 'No content';
+export const calculateReadabilityScore = (text, locale = detectLocale()) => {
+	if (!text) return __('No content', 'thinkrank');
 
 	// Words, sentences and syllables from one reading text, as on the server.
 	const readingText = toReadingText(text);
 	const words = calculateWordCount(readingText);
 	const sentences = countSentences(readingText);
-	const syllables = estimateSyllables(readingText);
+	const syllables = estimateSyllables(readingText, locale);
 
-	if (sentences === 0 || words === 0) return 'Too short';
+	if (sentences === 0 || words === 0) return __('Too short', 'thinkrank');
 
 	const avgWordsPerSentence = words / sentences;
 	const avgSyllablesPerWord = syllables / words;
 
-	// Official Flesch Reading Ease formula
 	const fleschScore =
-		206.835 - 1.015 * avgWordsPerSentence - 84.6 * avgSyllablesPerWord;
+		languageOf(locale) === 'fr'
+			? 207 - 1.015 * avgWordsPerSentence - 73.6 * avgSyllablesPerWord
+			: 206.835 -
+				1.015 * avgWordsPerSentence -
+				84.6 * avgSyllablesPerWord;
 	// Flesch Reading Ease is unbounded below; the scale (and the server,
 	// which clamps the same way) runs 0 to 100.
 	const roundedScore = Math.round(Math.max(0, Math.min(100, fleschScore)));
 
 	// Industry standard Flesch Reading Ease scale
 	let level = '';
-	if (roundedScore >= 90) level = 'Very Easy';
-	else if (roundedScore >= 80) level = 'Easy';
-	else if (roundedScore >= 70) level = 'Fairly Easy';
-	else if (roundedScore >= 60) level = 'Standard';
-	else if (roundedScore >= 50) level = 'Fairly Difficult';
-	else if (roundedScore >= 30) level = 'Difficult';
-	else level = 'Very Difficult';
+	if (roundedScore >= 90) level = __('Very Easy', 'thinkrank');
+	else if (roundedScore >= 80) level = __('Easy', 'thinkrank');
+	else if (roundedScore >= 70) level = __('Fairly Easy', 'thinkrank');
+	else if (roundedScore >= 60) level = __('Standard', 'thinkrank');
+	else if (roundedScore >= 50) level = __('Fairly Difficult', 'thinkrank');
+	else if (roundedScore >= 30) level = __('Difficult', 'thinkrank');
+	else level = __('Very Difficult', 'thinkrank');
 
 	// Return professional format
 	return `${level} (${roundedScore})`;

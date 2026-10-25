@@ -244,6 +244,14 @@ class Instant_Indexing_Reconciler {
                 continue;
             }
 
+            // The address the post is actually submitted and logged under.
+            // submit_urls() applies the site's canonical scheme before it
+            // sends and logs (#638), so the raw permalink, which carries the
+            // scheme of home_url(), never matched a log row when the scheme
+            // was forced the other way, and every post read "never submitted"
+            // and was resubmitted on every pass (#1300).
+            $url = Url_Scheme::apply((string) $url);
+
             $entry = $log[$url] ?? null;
             $state = self::classify(
                 (string) $row['post_modified'],

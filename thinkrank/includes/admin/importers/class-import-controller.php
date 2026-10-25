@@ -325,7 +325,9 @@ class Import_Controller extends \WP_REST_Controller {
      * redirections, owed to the Pro Redirections feature), cleanup is gated:
      * while such buckets exist the request is rejected with HTTP 409 unless
      * force=true is passed, so the user explicitly acknowledges that the
-     * snapshot becomes the only copy of that data.
+     * snapshot becomes the only copy of that data. With no complete snapshot
+     * at all, cleanup is refused outright (HTTP 409, not overridable by
+     * force), since the source rows would then be the only copy (#1304).
      *
      * @param \WP_REST_Request $request Request object
      * @return \WP_REST_Response|\WP_Error
@@ -345,6 +347,22 @@ class Import_Controller extends \WP_REST_Controller {
                 'thinkrank_cleanup_not_applicable',
                 __('Cleanup removes a source plugin\'s data and does not apply to ThinkRank\'s own export. Use DELETE /import/snapshot to discard the snapshot.', 'thinkrank'),
                 ['status' => 400]
+            );
+        }
+
+        // Cleanup is only safe once a complete snapshot holds a copy of what it
+        // deletes. Without one, the bucket gate below has nothing to inspect
+        // and answers "nothing unapplied", so the source plugin's meta,
+        // options and tables would go with no copy anywhere (#1304). The UI
+        // only offers cleanup after a snapshot, but this route is callable
+        // directly, and `force` acknowledges unapplied snapshot data — it can
+        // never stand in for a snapshot that does not exist.
+        $manifest = Snapshot_Store::get_manifest((string) $plugin);
+        if (!$manifest || ($manifest['status'] ?? '') !== 'complete') {
+            return new \WP_Error(
+                'thinkrank_cleanup_no_snapshot',
+                __('No complete snapshot of this plugin\'s SEO data exists, so cleanup would delete the only copy. Export a snapshot first, then clean up.', 'thinkrank'),
+                ['status' => 409]
             );
         }
 

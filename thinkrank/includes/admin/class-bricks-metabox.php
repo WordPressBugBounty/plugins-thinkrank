@@ -196,6 +196,7 @@ class Bricks_Metabox {
         // AJAX route used to persist all fields (no #post form in the builder).
         $data['saveAction'] = 'thinkrank_save_metabox';
 
+        wp_set_script_translations('thinkrank-bricks', 'thinkrank');
         wp_localize_script('thinkrank-bricks', 'thinkrankMetabox', $data);
 
         // Depend on wp-components so the @wordpress/components controls inside

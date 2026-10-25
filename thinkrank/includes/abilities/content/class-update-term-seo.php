@@ -59,7 +59,7 @@ class Update_Term_Seo extends Ability_Base {
 						'redirect_type'        => [
 							'type'        => 'integer',
 							'enum'        => Object_Redirect::TYPES,
-							'description' => __( 'Redirect status code. Defaults to 301.', 'thinkrank' ),
+							'description' => __( 'Redirect status code. When left out, an existing redirect keeps its code and a new one is 301.', 'thinkrank' ),
 						],
 						'focus_keyword'        => [ 'type' => 'string' ],
 						'robots_meta_enabled'  => [ 'type' => 'boolean' ],
@@ -142,7 +142,8 @@ class Update_Term_Seo extends Ability_Base {
 				'term',
 				$term_id,
 				(string) $settings['redirect_url'],
-				$settings['redirect_type'] ?? Object_Redirect::DEFAULT_TYPE
+				// Only the destination sent: the code it has is kept (#1302).
+				$settings['redirect_type'] ?? Object_Redirect::type_to_keep( 'term', $term_id )
 			);
 
 			if ( is_wp_error( $redirect_result ) ) {

@@ -386,6 +386,7 @@ class Setup_Wizard {
         $migrated_plugins = get_option(self::OPT_MIGRATED_PLUGINS, []);
         $migrated_plugins = is_array($migrated_plugins) ? array_values($migrated_plugins) : [];
 
+        wp_set_script_translations('thinkrank-setup-wizard', 'thinkrank');
         wp_localize_script('thinkrank-setup-wizard', 'thinkrankWizard', [
             'apiUrl'         => rest_url('thinkrank/v1/'),
             'restNonce'      => wp_create_nonce('wp_rest'),

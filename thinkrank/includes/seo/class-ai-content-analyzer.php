@@ -900,13 +900,16 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
 
         $content = $this->extract_content_for_analysis($context_type, $context_id);
         if (!empty($content)) {
-            // Simple keyword extraction from title and content
-            $words = str_word_count(strtolower(wp_strip_all_tags($content)), 1);
+            // Simple keyword extraction from title and content: words of any
+            // script, and the stop words of the post's language (#1298).
+            $words = \ThinkRank\AI\Text_Language::words(wp_strip_all_tags($content));
             $word_counts = array_count_values($words);
 
             // Remove common stop words
-            $stop_words = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'];
-            foreach ($stop_words as $stop_word) {
+            $locale = 'post' === $context_type && $context_id
+                ? \ThinkRank\AI\Language_Resolver::resolve_locale((int) $context_id)
+                : '';
+            foreach (\ThinkRank\AI\Text_Language::stop_words($locale) as $stop_word) {
                 unset($word_counts[$stop_word]);
             }
 

@@ -134,6 +134,7 @@ class Elementor_Metabox {
         // AJAX route used to persist all fields (no #post form in Elementor).
         $data['saveAction'] = 'thinkrank_save_metabox';
 
+        wp_set_script_translations('thinkrank-elementor', 'thinkrank');
         wp_localize_script('thinkrank-elementor', 'thinkrankMetabox', $data);
 
         // Depend on wp-components so the @wordpress/components controls (toggles,

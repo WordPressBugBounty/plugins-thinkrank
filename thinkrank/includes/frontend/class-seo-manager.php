@@ -1032,6 +1032,104 @@ class SEO_Manager {
     }
 
     /**
+     * Fold the restrictive directives other plugins add through core's
+     * `wp_robots` filter into ThinkRank's list.
+     *
+     * Core's wp_robots() printer is unhooked so the page carries one robots
+     * tag, which also dropped everything registered on its filter: WooCommerce
+     * marks cart, checkout and my-account noindex, nofollow that way, as do
+     * membership and LMS plugins (#1319). Only restrictive directives are
+     * taken. index/follow and the max-* values stay ThinkRank's decision, so
+     * core's own max-image-preview:large cannot override the settings.
+     *
+     * @since 2.18.0
+     *
+     * @param string[] $robots    ThinkRank's directives.
+     * @param array    $wp_robots The `wp_robots` filter result (directive => bool|string).
+     * @return string[] Directives with noindex/nofollow winning.
+     */
+    public static function merge_wp_robots_directives(array $robots, array $wp_robots): array {
+        if (!empty($wp_robots['none'])) {
+            $wp_robots['noindex']  = true;
+            $wp_robots['nofollow'] = true;
+        }
+
+        $swap = ['noindex' => 'index', 'nofollow' => 'follow'];
+
+        foreach (['noindex', 'nofollow', 'noarchive', 'nosnippet', 'noimageindex', 'notranslate'] as $directive) {
+            if (empty($wp_robots[$directive]) || in_array($directive, $robots, true)) {
+                continue;
+            }
+
+            if (isset($swap[$directive])) {
+                $robots = array_values(array_diff($robots, [$swap[$directive]]));
+            }
+
+            $robots[] = $directive;
+        }
+
+        // A snippet or image ban makes the matching size limits meaningless.
+        $drop = [];
+        if (in_array('nosnippet', $robots, true)) {
+            $drop[] = 'max-snippet:';
+            $drop[] = 'max-video-preview:';
+        }
+        if (in_array('noimageindex', $robots, true)) {
+            $drop[] = 'max-image-preview:';
+        }
+
+        if ($drop) {
+            $robots = array_values(array_filter($robots, static function ($directive) use ($drop) {
+                foreach ($drop as $prefix) {
+                    if (strpos((string) $directive, $prefix) === 0) {
+                        return false;
+                    }
+                }
+                return true;
+            }));
+        }
+
+        // Keep the index/follow pair at the front, in that order.
+        $order  = ['noindex' => 0, 'index' => 0, 'nofollow' => 1, 'follow' => 1];
+        $ranked = [];
+        foreach ($robots as $position => $directive) {
+            $ranked[] = [$order[$directive] ?? 2, $position, $directive];
+        }
+        sort($ranked);
+
+        return array_column($ranked, 2);
+    }
+
+    /**
+     * Apply the `wp_robots` filter to a directive list.
+     *
+     * @param string[] $robots ThinkRank's directives.
+     * @return string[] Merged directives.
+     */
+    private function apply_wp_robots_filter(array $robots): array {
+        // Core's own defaults are left out: search results and the image
+        // preview size are already ThinkRank settings (the Content Type Matrix
+        // can index search, #660), and core would overrule them.
+        $core_defaults = ['wp_robots_noindex_search', 'wp_robots_max_image_preview_large'];
+        $removed       = [];
+        foreach ($core_defaults as $callback) {
+            $priority = has_filter('wp_robots', $callback);
+            if (false !== $priority && remove_filter('wp_robots', $callback, $priority)) {
+                $removed[$callback] = $priority;
+            }
+        }
+
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook, not ours to name.
+        $wp_robots = apply_filters('wp_robots', []);
+
+        foreach ($removed as $callback => $priority) {
+            add_filter('wp_robots', $callback, $priority);
+        }
+
+        return is_array($wp_robots) ? self::merge_wp_robots_directives($robots, $wp_robots) : $robots;
+    }
+
+    /**
      * Get robots meta content based on context and settings
      *
      * @return string Robots meta content
@@ -1052,6 +1150,7 @@ class SEO_Manager {
                 \ThinkRank\SEO\Content_Type_Settings::resolve_robots_meta($entity)
             );
 
+            $robots = $this->apply_wp_robots_filter($robots);
             $robots = apply_filters('thinkrank_robots_meta', $robots);
             return implode(', ', array_unique($robots));
         }
@@ -1214,6 +1313,9 @@ class SEO_Manager {
                 $robots = $this->apply_term_robots_override($queried->term_id, $robots, $current_settings);
             }
         }
+
+        // Directives other plugins set through core's wp_robots filter (#1319).
+        $robots = $this->apply_wp_robots_filter($robots);
 
         // Apply filters for customization
         $robots = apply_filters('thinkrank_robots_meta', $robots);

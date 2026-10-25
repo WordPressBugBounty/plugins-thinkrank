@@ -232,7 +232,7 @@ class Term_Seo_Fields {
 
         // Unchanged: no write, so an untouched field never rewrites Pro's rule.
         $current = Object_Redirect::get('term', $term_id);
-        $type    = Object_Redirect::normalize_type($raw['redirect_type'] ?? Object_Redirect::DEFAULT_TYPE);
+        $type    = array_key_exists('redirect_type', $raw) ? Object_Redirect::normalize_type($raw['redirect_type']) : $current['type'];
         if ($url === $current['url'] && ('' === $url || $type === $current['type'])) {
             return null;
         }

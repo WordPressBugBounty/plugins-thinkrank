@@ -377,6 +377,13 @@ class Manager {
                     'type' => 'string',
                     'sanitize_callback' => 'sanitize_text_field',
                 ],
+                // The score's key for the suggestion: its text is translated,
+                // so the key says what it asks for (#1298).
+                'suggestion_key' => [
+                    'type' => 'string',
+                    'default' => '',
+                    'sanitize_callback' => 'sanitize_key',
+                ],
                 'post_id' => [
                     'type' => 'integer',
                     'required' => false,
@@ -874,7 +881,9 @@ class Manager {
      * Delegable via Role Manager: route_map() maps the `ai` prefix to
      * thinkrank_content_tools. Testing a provider and listing its models are
      * configuration reads that report whether the stored key works; neither
-     * returns the key.
+     * returns the key. Neither sends it anywhere but the saved endpoint either:
+     * aiming a probe at another URL is an administrator's decision, held back
+     * in resolve_compatible_probe_target() (#1313).
      *
      * @param \WP_REST_Request $request Request object
      * @return bool|\WP_Error Permission status
@@ -1418,7 +1427,9 @@ class Manager {
             'content_type' => $request->get_param('content_type'),
             'tone' => $request->get_param('tone'),
             'suggestion' => $request->get_param('suggestion'),
+            'suggestion_key' => (string) $request->get_param('suggestion_key'),
             'language' => \ThinkRank\AI\Language_Resolver::resolve((int) $request->get_param('post_id')),
+            'locale' => \ThinkRank\AI\Language_Resolver::resolve_locale((int) $request->get_param('post_id')),
         ];
 
         // Rate limiting: shares the AI generation bucket.
@@ -1715,6 +1726,33 @@ class Manager {
     }
 
     /**
+     * The refusal for an AI request made while AI is paused or over its daily
+     * limit, or null when the request may go out.
+     *
+     * Spend_Guard::guard() runs inside the provider clients, but Test
+     * Connection and the endpoint model list call the providers directly, so
+     * they sent real requests while the pause message promised that none were
+     * being sent (#1317). The wording and status match what the AI features
+     * answer in the same state.
+     *
+     * @since 2.18.0
+     *
+     * @return \WP_REST_Response|null
+     */
+    private function ai_spend_blocked_response(): ?\WP_REST_Response {
+        $reason = \ThinkRank\AI\Spend_Guard::blocked_reason();
+        if (null === $reason) {
+            return null;
+        }
+
+        return new \WP_REST_Response([
+            'success'        => false,
+            'blocked_reason' => $reason,
+            'message'        => \ThinkRank\AI\Spend_Guard::message_for($reason),
+        ], 400);
+    }
+
+    /**
      * Test AI connection for specified provider
      *
      * @param \WP_REST_Request $request Request object containing api_key and provider parameters
@@ -1722,6 +1760,14 @@ class Manager {
      * @throws \Exception When API connection test encounters unexpected errors
      */
     public function test_ai_connection(\WP_REST_Request $request): \WP_REST_Response {
+        // A test is a real request to the provider (a completion for Claude,
+        // Gemini and custom endpoints), so it answers to the pause and the
+        // daily limit like every other AI call (#1317).
+        $blocked = $this->ai_spend_blocked_response();
+        if (null !== $blocked) {
+            return $blocked;
+        }
+
         // Rate limiting: per user/IP per route
         $user_id = get_current_user_id();
         $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
@@ -1758,14 +1804,12 @@ class Manager {
             // local Ollama or LM Studio server wants no key, so the key checks
             // below would refuse to test a perfectly good endpoint (#721).
             if ('openai_compatible' === $provider) {
-                $base_url = trim((string) $request->get_param('base_url'));
-                if ('' === $base_url) {
-                    $base_url = (string) \ThinkRank\Core\Settings::instance()->get('openai_compatible_base_url', '');
+                $target = $this->resolve_compatible_probe_target($request);
+                if ($target instanceof \WP_REST_Response) {
+                    return $target;
                 }
 
-                if (empty($api_key)) {
-                    $api_key = (string) \ThinkRank\Core\Settings::instance()->get('openai_compatible_api_key', '');
-                }
+                [$base_url, $api_key] = $target;
 
                 if ('' === $model) {
                     $model = trim((string) \ThinkRank\Core\Settings::instance()->get('openai_compatible_model', ''));
@@ -2079,6 +2123,71 @@ class Manager {
     }
 
     /**
+     * The endpoint and key an OpenAI-compatible probe may use.
+     *
+     * The connection test and the model list both take the URL on screen, so
+     * an endpoint can be checked before it is saved. Both used to fall back to
+     * the saved key whenever the key field was empty or masked, whatever URL
+     * came with it, and both are delegable through `thinkrank_content_tools`.
+     * So an author granted AI Tools could post their own host and receive the
+     * site's key in the Authorization header, or walk loopback and LAN
+     * addresses from the server (#1313).
+     *
+     * The rules now match save_settings(), where aiming the AI at a host is an
+     * administrator's decision:
+     *
+     * - A URL that is not the saved one (compared after normalising, so a
+     *   trailing slash is the same URL) needs `manage_options`. That covers
+     *   every private and loopback address a delegated user could type, since
+     *   the only endpoint left to them is the one an administrator chose.
+     * - The saved key goes only to the saved URL, for administrators too. A
+     *   new URL is tested with the key typed beside it, or with none, which is
+     *   what a local Ollama or LM Studio server wants anyway.
+     * - A masked key ("sk-pr••••••••abc", as GET /settings returns it) is not
+     *   a key. The connection test used to send it as typed.
+     *
+     * @since 2.18.0
+     *
+     * @param \WP_REST_Request $request Request carrying `base_url` and `api_key`.
+     * @return array{0: string, 1: string}|\WP_REST_Response [base URL, key], or the 403 refusing the URL.
+     */
+    private function resolve_compatible_probe_target(\WP_REST_Request $request) {
+        $settings = \ThinkRank\Core\Settings::instance();
+        $saved_url = (string) $settings->get('openai_compatible_base_url', '');
+
+        $typed_key = trim((string) $request->get_param('api_key'));
+        if (false !== strpos($typed_key, '••••••••')) {
+            $typed_key = '';
+        }
+
+        $base_url = trim((string) $request->get_param('base_url'));
+        $is_saved_url = true;
+
+        if ('' === $base_url) {
+            $base_url = $saved_url;
+        } else {
+            $requested = \ThinkRank\AI\Endpoint_URL_Validator::validate($base_url);
+            $saved = '' !== $saved_url ? \ThinkRank\AI\Endpoint_URL_Validator::validate($saved_url) : '';
+
+            $is_saved_url = is_string($requested) && is_string($saved) && '' !== $saved && $requested === $saved;
+        }
+
+        if (!$is_saved_url && !current_user_can('manage_options')) {
+            return new \WP_REST_Response([
+                'success' => false,
+                'message' => __('Only an administrator can test an AI endpoint other than the saved one. Ask an administrator to save this endpoint first.', 'thinkrank'),
+                'field' => 'base_url',
+            ], 403);
+        }
+
+        if ('' !== $typed_key) {
+            return [$base_url, $typed_key];
+        }
+
+        return [$base_url, $is_saved_url ? (string) $settings->get('openai_compatible_api_key', '') : ''];
+    }
+
+    /**
      * List the models an OpenAI-compatible endpoint serves.
      *
      * @since 2.8.0
@@ -2087,12 +2196,18 @@ class Manager {
      * @return \WP_REST_Response Response object.
      */
     public function list_endpoint_models(\WP_REST_Request $request): \WP_REST_Response {
-        $settings = \ThinkRank\Core\Settings::instance();
-
-        $base_url = trim((string) $request->get_param('base_url'));
-        if ('' === $base_url) {
-            $base_url = (string) $settings->get('openai_compatible_base_url', '');
+        // Paused means no requests to the AI provider at all, this one too (#1317).
+        $blocked = $this->ai_spend_blocked_response();
+        if (null !== $blocked) {
+            return $blocked;
         }
+
+        $target = $this->resolve_compatible_probe_target($request);
+        if ($target instanceof \WP_REST_Response) {
+            return $target;
+        }
+
+        [$base_url, $api_key] = $target;
 
         $validated = \ThinkRank\AI\Endpoint_URL_Validator::validate($base_url);
         if (is_wp_error($validated)) {
@@ -2100,11 +2215,6 @@ class Manager {
                 'success' => false,
                 'message' => $validated->get_error_message(),
             ], 400);
-        }
-
-        $api_key = trim((string) $request->get_param('api_key'));
-        if ('' === $api_key || false !== strpos($api_key, '••••••••')) {
-            $api_key = (string) $settings->get('openai_compatible_api_key', '');
         }
 
         $headers = ['Content-Type' => 'application/json'];

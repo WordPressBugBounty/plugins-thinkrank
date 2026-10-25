@@ -526,6 +526,19 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
      * @return WP_REST_Response Response object
      */
     public function submit_urls_to_api(WP_REST_Request $request): WP_REST_Response {
+        $manager = new \ThinkRank\SEO\Instant_Indexing_Manager();
+
+        // Switched off means nothing is sent, on this path as on every other
+        // (#1305). The Submit URLs screen already disables its form then.
+        if (!$manager->is_enabled()) {
+            return new WP_REST_Response([
+                'success' => false,
+                'code'    => 'thinkrank_instant_indexing_disabled',
+                'message' => \ThinkRank\SEO\Instant_Indexing_Manager::disabled_message(),
+                'count'   => 0,
+            ], 400);
+        }
+
         $urls_param = $request->get_param('urls');
         $urls = array_filter(array_map('trim', explode("\n", $urls_param)));
 
@@ -541,7 +554,6 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
             $urls = array_slice($urls, 0, 100);
         }
 
-        $manager = new \ThinkRank\SEO\Instant_Indexing_Manager();
         $result = $manager->submit_urls($urls);
 
         // Report the count the manager actually submitted (after same-host

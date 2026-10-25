@@ -19,9 +19,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Submits URLs to search engines via the IndexNow protocol.
  *
- * Requires instant indexing to be configured (an API key must exist); otherwise
- * the manager responds with "API Key missing". This calls the external IndexNow
- * API.
+ * Requires instant indexing to be switched on and configured (an API key must
+ * exist); otherwise it returns an error. This calls the external IndexNow API.
  */
 class Submit_Urls_To_Index extends Ability_Base {
 	/**
@@ -30,7 +29,7 @@ class Submit_Urls_To_Index extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/submit-urls-to-index';
 		$this->label       = __( 'Submit URLs to Instant Indexing', 'thinkrank' );
-		$this->description = __( 'Submit one or more URLs to search engines via the IndexNow protocol. Requires instant indexing to be configured (an API key must exist) or it returns "API Key missing". Calls the external IndexNow API. get-instant-indexing-settings reports whether a key is configured, and get-instant-indexing-history lists past submissions.', 'thinkrank' );
+		$this->description = __( 'Submit one or more URLs to search engines via the IndexNow protocol. Requires Instant Indexing to be switched on (it returns a thinkrank_instant_indexing_disabled error while it is off) and configured (an API key must exist) or it returns "API Key missing". Calls the external IndexNow API. get-instant-indexing-settings reports whether a key is configured, and get-instant-indexing-history lists past submissions.', 'thinkrank' );
 	}
 
 	/**
@@ -113,7 +112,18 @@ class Submit_Urls_To_Index extends Ability_Base {
 		}
 
 		$manager = new Instant_Indexing_Manager();
-		$result  = $manager->submit_urls( $urls );
+
+		// A site owner who switched Instant Indexing off has every URL kept
+		// from IndexNow, an agent's included (#1305).
+		if ( ! $manager->is_enabled() ) {
+			return new \WP_Error(
+				'thinkrank_instant_indexing_disabled',
+				Instant_Indexing_Manager::disabled_message(),
+				[ 'status' => 400 ]
+			);
+		}
+
+		$result = $manager->submit_urls( $urls );
 
 		return [
 			'success'         => (bool) ( $result['success'] ?? false ),

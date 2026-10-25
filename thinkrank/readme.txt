@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.17.1
+Stable tag: 2.18.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -349,6 +349,20 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.18.0 =
+Release Date: 2026-10-25
+
+- New: AI agents can edit a post's body and URL slug over MCP, with a preview first and an undo
+- New: SEO scores and suggestions follow each post's own language, with French readability rules
+- Improved: The admin screens and editor SEO panels now show in your site's language
+- Fixed: WooCommerce cart, checkout and account pages are now noindex, as WooCommerce asks
+- Fixed: Preview no longer publishes unsaved SEO fields on a published post
+- Fixed: The SEO score is the same whole number in the editor and the posts list
+- Fixed: Author archives follow the Metas switch in the Content Type Matrix
+- Fixed: The sitemap drops a post as soon as it is unpublished
+- Fixed: Instant Indexing sends nothing while off and announces trashed and unpublished posts
+- Fixed: Minor email report subject, AI pause and social image setting issues
+
 = 2.17.1 =
 Release Date: 2026-10-19
 
@@ -402,26 +416,12 @@ Release Date: 2026-10-13
 - Fixed: The MCP activity log now works on WordPress 6.0 and 6.1
 - Fixed: Revoke all access keeps app registrations, so ChatGPT and other clients reconnect
 
-= 2.14.3 =
-Release Date: 2026-10-11
-
-- Fixed: Schema names and breadcrumbs no longer show HTML entities such as &amp; or &#8217;
-- Fixed: Titles that start with €, ✅ or a curly quote keep every character with the Bullet separator
-- Fixed: Sitemap image captions stay whole and valid, and empty categories and tags stay out with WooCommerce
-- Fixed: Author archives now share their own SEO title and description on social media
-- Fixed: Turning off the sitelinks search box or setting a custom search URL now takes effect
-- Fixed: Organization schema uses the Site Identity logo and no longer disappears beside other schema
-- Fixed: LocalBusiness subtypes such as Restaurant or Dentist now deploy from the Schema Manager
-- Fixed: The SEO Analyzer's structured data fix no longer removes deployed site schema
-- Fixed: WooCommerce products with a deployed Product schema no longer output two Product entries
-- Fixed: Saving ThinkRank robots or schema fields from WP-CLI or code no longer causes a fatal error
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.18.0 =
+AI agents can edit post bodies and slugs over MCP with a preview and undo, and scores follow each post's language. Preview no longer publishes unsaved SEO fields. Recommended for all sites.
+
 = 2.17.1 =
 Titles with "<" are no longer cut off, breadcrumbs and WooCommerce schema are fuller, and AI replies from thinking models are read correctly. ThinkRank Pro users: update Pro to 2.9.1 to keep GA4 traffic reports. Recommended for all sites.
-
-= 2.17.0 =
-Choose AI or your own format for Media Library alt text, filler alt text is skipped everywhere, and the SEO Analyzer names the real source of a search block. Recommended for all sites.

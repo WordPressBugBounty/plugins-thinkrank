@@ -68,7 +68,6 @@ class Update_Social_Meta_Settings extends Ability_Base {
 		'twitter_creator',
 		'twitter_card_type',
 		'default_twitter_image',
-		'twitter_site',
 		'default_image',
 		'facebook_app_id',
 		'facebook_admins',
@@ -142,9 +141,12 @@ class Update_Social_Meta_Settings extends Ability_Base {
 			'additionalProperties' => false,
 			'properties'           => [
 				'settings' => [
-					'type'        => 'object',
-					'description' => __( 'Social meta settings to update.', 'thinkrank' ),
-					'properties'  => self::schema_properties(),
+					'type'                 => 'object',
+					'description'          => __( 'Social meta settings to update.', 'thinkrank' ),
+					'properties'           => self::schema_properties(),
+					// A key the manager does not store is refused by name
+					// rather than dropped beside the keys that are saved (#1342).
+					'additionalProperties' => false,
 				],
 			],
 			'required'             => [ 'settings' ],

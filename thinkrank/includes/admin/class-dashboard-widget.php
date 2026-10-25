@@ -135,6 +135,7 @@ class Dashboard_Widget {
 
         $settings = Settings::instance();
 
+        wp_set_script_translations('thinkrank-dashboard-widget', 'thinkrank');
         wp_localize_script('thinkrank-dashboard-widget', 'thinkrankDashboardWidget', [
             'apiUrl'      => rest_url('thinkrank/v1/'),
             'restNonce'   => wp_create_nonce('wp_rest'),

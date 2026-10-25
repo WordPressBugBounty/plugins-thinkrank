@@ -104,7 +104,224 @@ class SEOScoreCalculator {
     public function __construct(Database $database) {
         $this->database = $database;
     }
-    
+
+    /**
+     * What the editor's action button does for a suggestion, by key.
+     *
+     * The editor used to decide this by searching the English text for words
+     * such as "title" and "meta description", which only worked while the text
+     * was never translated (#1298). Each entry here is what that text matching
+     * decided, so an English site behaves exactly as before; a suggestion with
+     * no entry opens guidance. The editor still gates each action on what it
+     * can apply (no title field, no keyword).
+     */
+    public const SUGGESTION_ACTIONS = [
+        'keyword_in_body'             => 'density',
+        'keyword_in_meta_description' => 'description',
+        'title_missing'               => 'title',
+        'title_length'                => 'title',
+        'title_too_short'             => 'title',
+        'title_too_long'              => 'title',
+        'title_keyword_parts'         => 'title',
+        'title_keyword'               => 'title',
+        'title_set_keyword'           => 'title',
+        'title_power_word'            => 'title',
+        'title_sentiment_word'        => 'title',
+        'density_low'                 => 'density',
+        'keyword_in_content'          => 'density',
+        'external_dofollow_link'      => 'link',
+        'cite_sources'                => 'link',
+        'meta_description_missing'    => 'description',
+        'schema_missing'              => 'schema',
+    ];
+
+    /**
+     * The editor's category badge for a suggestion, by key.
+     *
+     * Same origin as SUGGESTION_ACTIONS: the category the English text matched.
+     */
+    public const SUGGESTION_CATEGORIES = [
+        'content_depth_1500'          => 'content',
+        'content_depth_1000'          => 'content',
+        'content_thin'                => 'content',
+        'content_shallow'             => 'content',
+        'set_focus_keyword'           => 'keywords',
+        'keyword_in_body'             => 'keywords',
+        'keyword_in_first_paragraph'  => 'content',
+        'keyword_in_meta_description' => 'meta',
+        'content_structure'           => 'headings',
+        'title_missing'               => 'title',
+        'title_length'                => 'title',
+        'title_too_short'             => 'title',
+        'title_too_long'              => 'title',
+        'title_semantic_keyword'      => 'keywords',
+        'title_keyword_parts'         => 'title',
+        'title_keyword'               => 'title',
+        'title_set_keyword'           => 'title',
+        'title_power_word'            => 'title',
+        'title_sentiment_word'        => 'title',
+        'expertise_set_keyword'       => 'headings',
+        'keyword_in_subheading'       => 'headings',
+        'density_high'                => 'keywords',
+        'density_low'                 => 'keywords',
+        'keyword_in_content'          => 'keywords',
+        'keyword_in_slug'             => 'keywords',
+        'slug_too_long'               => 'url',
+        'image_with_keyword_alt'      => 'keywords',
+        'keyword_in_image_alt'        => 'keywords',
+        'readability_structure'       => 'headings',
+        'external_dofollow_link'      => 'links',
+        'cite_sources'                => 'links',
+        'trust_signals'               => 'general',
+        'https'                       => 'general',
+        'freshness_6_12_months'       => 'content',
+        'freshness_over_a_year'       => 'content',
+        'mobile_assumed'              => 'mobile',
+        'mobile_speed'                => 'mobile',
+        'vitals_assumed'              => 'general',
+        'vitals_failing'              => 'mobile',
+        'internal_links'              => 'links',
+        'meta_description_missing'    => 'meta',
+        'schema_missing'              => 'general',
+    ];
+
+    /**
+     * Suggestion text => key, for the suggestions this instance has written.
+     *
+     * prioritize_suggestions() reads it to attach the key, so the editor and
+     * the AI improvers can act on a suggestion without reading its words.
+     *
+     * @var array<string, string>
+     */
+    private $suggestion_keys = [];
+
+    /**
+     * A suggestion's text in the site's language, remembering its key.
+     *
+     * @param string $key  Suggestion key (see suggestion_text()).
+     * @param string ...$args Values for the text's placeholders, e.g. the focus keyword.
+     * @return string
+     */
+    private function suggest(string $key, string ...$args): string {
+        $text = self::suggestion_text($key, ...$args);
+
+        $this->suggestion_keys[$text] = $key;
+
+        return $text;
+    }
+
+    /**
+     * The text of a scoring suggestion, translated.
+     *
+     * One place for every suggestion the score gives (#1298): they were English
+     * literals scattered through the scoring factors, so a site in any other
+     * language read its recommendations in English. The English wording is
+     * unchanged.
+     *
+     * @param string $key  Suggestion key.
+     * @param string ...$args Values for the text's placeholders.
+     * @return string The text, or '' for an unknown key.
+     */
+    public static function suggestion_text(string $key, string ...$args): string {
+        switch ($key) {
+            case 'content_depth_1500':
+                return __('Consider expanding content to 1500+ words for more comprehensive coverage', 'thinkrank');
+            case 'content_depth_1000':
+                return __('Content is adequate - aim for 1000+ words for stronger topic depth', 'thinkrank');
+            case 'content_thin':
+                return __('Content is thin - aim for 600+ words minimum', 'thinkrank');
+            case 'content_shallow':
+                return __('Content too shallow - Google prioritizes comprehensive, satisfying content', 'thinkrank');
+            case 'set_focus_keyword':
+                return __('Set a focus keyword so content relevance can be measured', 'thinkrank');
+            case 'keyword_in_body':
+                /* translators: %s: focus keyword. */
+                return sprintf(__("Use the focus keyword '%s' in the body content", 'thinkrank'), ...$args);
+            case 'keyword_in_first_paragraph':
+                /* translators: %s: focus keyword. */
+                return sprintf(__("Mention '%s' near the start of the content (first paragraph)", 'thinkrank'), ...$args);
+            case 'keyword_in_meta_description':
+                /* translators: %s: focus keyword. */
+                return sprintf(__("Include the focus keyword '%s' in the meta description", 'thinkrank'), ...$args);
+            case 'content_structure':
+                return __('Improve content structure - break up long paragraphs and add subheadings', 'thinkrank');
+            case 'title_missing':
+                return __('Add a compelling, click-worthy title that matches search intent', 'thinkrank');
+            case 'title_length':
+                return __('Optimize title length to 35-60 characters for better SERP visibility', 'thinkrank');
+            case 'title_too_short':
+                return __('Title too short - aim for 35-60 characters', 'thinkrank');
+            case 'title_too_long':
+                return __('Title too long - risk truncation in search results', 'thinkrank');
+            case 'title_semantic_keyword':
+                return __('Good semantic keyword usage - Google now recognizes keyword variations', 'thinkrank');
+            case 'title_keyword_parts':
+                /* translators: %s: focus keyword. */
+                return sprintf(__("Include more parts of target keyword '%s' in title", 'thinkrank'), ...$args);
+            case 'title_keyword':
+                /* translators: %s: focus keyword. */
+                return sprintf(__("Include target keyword '%s' or related terms in title", 'thinkrank'), ...$args);
+            case 'title_set_keyword':
+                return __('Set a target keyword to optimize title effectiveness', 'thinkrank');
+            case 'title_power_word':
+                return __('Add a number or a power word to the title to boost click-through rate', 'thinkrank');
+            case 'title_sentiment_word':
+                return __('Use an emotional/sentiment word in the title to make it more compelling', 'thinkrank');
+            case 'expertise_set_keyword':
+                return __('Set a focus keyword and use it in subheadings and the URL for stronger topical signals', 'thinkrank');
+            case 'keyword_in_subheading':
+                /* translators: %s: focus keyword. */
+                return sprintf(__("Include '%s' in at least one subheading (H2-H6)", 'thinkrank'), ...$args);
+            case 'density_high':
+                return __('Keyword density is high - reduce repetition to avoid over-optimization', 'thinkrank');
+            case 'density_low':
+                return __('Keyword density is low - use the focus keyword a little more often', 'thinkrank');
+            case 'keyword_in_content':
+                /* translators: %s: focus keyword. */
+                return sprintf(__("Use the focus keyword '%s' in the content", 'thinkrank'), ...$args);
+            case 'keyword_in_slug':
+                return __('Include the focus keyword in the URL slug', 'thinkrank');
+            case 'slug_too_long':
+                return __('Shorten the URL slug - long URLs are harder to read and share', 'thinkrank');
+            case 'image_with_keyword_alt':
+                return __('Add a relevant image with the focus keyword in its alt text', 'thinkrank');
+            case 'keyword_in_image_alt':
+                return __('Include the focus keyword in at least one image alt attribute', 'thinkrank');
+            case 'readability_structure':
+                return __('Improve readability and structure (shorter sentences, subheadings, shorter paragraphs)', 'thinkrank');
+            case 'external_dofollow_link':
+                return __('Add at least one dofollow link to an authoritative external source', 'thinkrank');
+            case 'cite_sources':
+                return __('Cite authoritative external sources, and build quality backlinks to this page', 'thinkrank');
+            case 'trust_signals':
+                return __('Add author credentials, citations, and contact information to reinforce trustworthiness', 'thinkrank');
+            case 'https':
+                return __('Serve the site over HTTPS (install an SSL certificate)', 'thinkrank');
+            case 'freshness_6_12_months':
+                return __('Content is 6-12 months old - review and refresh it for better freshness signals', 'thinkrank');
+            case 'freshness_over_a_year':
+                return __('Content is over a year old - update it to maintain freshness signals', 'thinkrank');
+            case 'mobile_assumed':
+                return __('Ensure mobile-first design and fast loading on mobile devices', 'thinkrank');
+            case 'mobile_speed':
+                /* translators: %s: PageSpeed mobile performance score, out of 100. */
+                return sprintf(__('Improve mobile page speed: the last PageSpeed run scored %s/100 on mobile', 'thinkrank'), ...$args);
+            case 'vitals_assumed':
+                return __('Optimize Core Web Vitals: LCP, INP, and CLS for better user experience', 'thinkrank');
+            case 'vitals_failing':
+                /* translators: %s: comma-separated Core Web Vitals metric names, e.g. "LCP, CLS". */
+                return sprintf(__('Optimize Core Web Vitals: %s below target on mobile', 'thinkrank'), ...$args);
+            case 'internal_links':
+                return __('Add relevant internal links to other pages on your site', 'thinkrank');
+            case 'meta_description_missing':
+                return __('Add a compelling meta description (120-160 characters)', 'thinkrank');
+            case 'schema_missing':
+                return __('Consider adding structured data (schema markup)', 'thinkrank');
+        }
+
+        return '';
+    }
+
     /**
      * Calculate comprehensive modern SEO score.
      *
@@ -189,7 +406,7 @@ class SEOScoreCalculator {
             if ($keyword === '') {
                 continue;
             }
-            $key = strtolower($keyword);
+            $key = self::lower($keyword);
             if (isset($seen[$key])) {
                 continue;
             }
@@ -621,7 +838,11 @@ class SEOScoreCalculator {
 
         try {
             // 2. Title Optimization (14 points) - Looser keyword matching in 2025
-            $title_result = $this->score_2025_title_optimization($metadata['title'] ?? '', $options['target_keyword'] ?? '');
+            $title_result = $this->score_2025_title_optimization(
+                $metadata['title'] ?? '',
+                $options['target_keyword'] ?? '',
+                (string) ($content_data['locale'] ?? $options['locale'] ?? '')
+            );
             $scores['title_optimization'] = $title_result;
             $total_score += $title_result['score'];
             $suggestions = array_merge($suggestions, $title_result['suggestions']);
@@ -709,10 +930,16 @@ class SEOScoreCalculator {
 
         try {
             $prioritized_suggestions = $this->prioritize_suggestions($suggestions, $scores);
-            $grade = $this->get_grade_from_score($total_score);
+
+            // Two technical checks award half points, so the sum can end in .5.
+            // Round it once, here, so the grade, the editor, the stored row
+            // (an integer column) and the posts list all read one whole number:
+            // 57.5 used to show in the editor and be saved as 57 (#1311).
+            $overall_score = (int) round(min(100, $total_score));
+            $grade = $this->get_grade_from_score($overall_score);
 
             return [
-                'overall_score' => min(100, $total_score),
+                'overall_score' => $overall_score,
                 'score_breakdown' => $scores,
                 'suggestions' => $prioritized_suggestions,
                 'grade' => $grade,
@@ -757,16 +984,16 @@ class SEOScoreCalculator {
             $score += 8;
         } elseif ($word_count >= 1000) {
             $score += 7;
-            $suggestions[] = 'Consider expanding content to 1500+ words for more comprehensive coverage';
+            $suggestions[] = $this->suggest('content_depth_1500');
         } elseif ($word_count >= 600) {
             $score += 5;
-            $suggestions[] = 'Content is adequate - aim for 1000+ words for stronger topic depth';
+            $suggestions[] = $this->suggest('content_depth_1000');
         } elseif ($word_count >= 300) {
             $score += 3;
-            $suggestions[] = 'Content is thin - aim for 600+ words minimum';
+            $suggestions[] = $this->suggest('content_thin');
         } else {
             $score++;
-            $suggestions[] = 'Content too shallow - Google prioritizes comprehensive, satisfying content';
+            $suggestions[] = $this->suggest('content_shallow');
         }
 
         // Keyword presence & placement (8 points) - deterministic, replaces the
@@ -776,22 +1003,22 @@ class SEOScoreCalculator {
         // description" basic-SEO check.
         if (empty($target_keyword)) {
             $score += 4; // Benefit of the doubt when no focus keyword is set.
-            $suggestions[] = 'Set a focus keyword so content relevance can be measured';
+            $suggestions[] = $this->suggest('set_focus_keyword');
         } else {
             if ($this->keyword_in_content($content, $target_keyword)) {
                 $score += 3;
             } else {
-                $suggestions[] = "Use the focus keyword '{$target_keyword}' in the body content";
+                $suggestions[] = $this->suggest('keyword_in_body', $target_keyword);
             }
             if ($this->keyword_in_first_paragraph($content, $target_keyword)) {
                 $score += 3;
             } else {
-                $suggestions[] = "Mention '{$target_keyword}' near the start of the content (first paragraph)";
+                $suggestions[] = $this->suggest('keyword_in_first_paragraph', $target_keyword);
             }
             if ($this->keyword_in_meta($meta_description, $target_keyword)) {
                 $score += 2;
             } else {
-                $suggestions[] = "Include the focus keyword '{$target_keyword}' in the meta description";
+                $suggestions[] = $this->suggest('keyword_in_meta_description', $target_keyword);
             }
         }
 
@@ -802,7 +1029,7 @@ class SEOScoreCalculator {
         $score += (int) round(($quality / 100) * 7);
 
         if ($quality < 60) {
-            $suggestions[] = 'Improve content structure - break up long paragraphs and add subheadings';
+            $suggestions[] = $this->suggest('content_structure');
         }
 
         return [
@@ -843,15 +1070,16 @@ class SEOScoreCalculator {
      *
      * @param string $title Post title
      * @param string $target_keyword Target keyword
+     * @param string $locale The title's locale, or '' for the site's; picks the power and sentiment word lists
      * @return array Scoring result
      */
-    private function score_2025_title_optimization(string $title, string $target_keyword): array {
+    private function score_2025_title_optimization(string $title, string $target_keyword, string $locale = ''): array {
         $score = 0;
         $max_score = $this->scoring_factors['title_optimization'];
         $suggestions = [];
 
         if (empty($title)) {
-            $suggestions[] = 'Add a compelling, click-worthy title that matches search intent';
+            $suggestions[] = $this->suggest('title_missing');
             return ['score' => 0, 'max_score' => $max_score, 'suggestions' => $suggestions];
         }
 
@@ -863,18 +1091,18 @@ class SEOScoreCalculator {
             $score += 6;
         } elseif ($title_length >= 25 && $title_length <= 75) {
             $score += 4;
-            $suggestions[] = 'Optimize title length to 35-60 characters for better SERP visibility';
+            $suggestions[] = $this->suggest('title_length');
         } else {
             $score++;
             $suggestions[] = $title_length < 25 ?
-                'Title too short - aim for 35-60 characters' :
-                'Title too long - risk truncation in search results';
+                $this->suggest('title_too_short') :
+                $this->suggest('title_too_long');
         }
 
         // Looser keyword matching (6 points) - 2025 update
         if (!empty($target_keyword)) {
-            $title_lower = strtolower($title);
-            $keyword_lower = strtolower($target_keyword);
+            $title_lower = self::lower($title);
+            $keyword_lower = self::lower($target_keyword);
 
             // Exact match
             if (strpos($title_lower, $keyword_lower) !== false) {
@@ -884,7 +1112,7 @@ class SEOScoreCalculator {
                 $semantic_match = $this->check_semantic_keyword_match($title, $target_keyword);
                 if ($semantic_match) {
                     $score += 5; // Almost full credit for semantic match
-                    $suggestions[] = 'Good semantic keyword usage - Google now recognizes keyword variations';
+                    $suggestions[] = $this->suggest('title_semantic_keyword');
                 } else {
                     // Check for partial keyword match
                     $keyword_parts = explode(' ', $keyword_lower);
@@ -897,32 +1125,32 @@ class SEOScoreCalculator {
 
                     if ($partial_matches > 0) {
                         $score += round(($partial_matches / count($keyword_parts)) * 4);
-                        $suggestions[] = "Include more parts of target keyword '{$target_keyword}' in title";
+                        $suggestions[] = $this->suggest('title_keyword_parts', $target_keyword);
                     } else {
-                        $suggestions[] = "Include target keyword '{$target_keyword}' or related terms in title";
+                        $suggestions[] = $this->suggest('title_keyword', $target_keyword);
                     }
                 }
             }
         } else {
             $score += 2; // Partial credit
-            $suggestions[] = 'Set a target keyword to optimize title effectiveness';
+            $suggestions[] = $this->suggest('title_set_keyword');
         }
 
         // Title readability (2 points) - mirrors Rank Math's title checks for a
         // number/power word (drives CTR) and emotional sentiment.
         $has_number = (bool) preg_match('/\d/', $title);
-        $has_power_word = $this->title_has_power_word($title);
-        $has_sentiment = $this->title_has_sentiment_word($title);
+        $has_power_word = $this->title_has_power_word($title, $locale);
+        $has_sentiment = $this->title_has_sentiment_word($title, $locale);
 
         if ($has_number || $has_power_word) {
             $score++;
         } else {
-            $suggestions[] = 'Add a number or a power word to the title to boost click-through rate';
+            $suggestions[] = $this->suggest('title_power_word');
         }
         if ($has_sentiment) {
             $score++;
         } else {
-            $suggestions[] = 'Use an emotional/sentiment word in the title to make it more compelling';
+            $suggestions[] = $this->suggest('title_sentiment_word');
         }
 
         return [
@@ -932,7 +1160,7 @@ class SEOScoreCalculator {
             'details' => [
                 'title_length' => $title_length,
                 'optimal_range' => '35-60 characters',
-                'keyword_present' => !empty($target_keyword) && strpos(strtolower($title), strtolower($target_keyword)) !== false,
+                'keyword_present' => !empty($target_keyword) && strpos(self::lower($title), self::lower($target_keyword)) !== false,
                 'semantic_match' => !empty($target_keyword) ? $this->check_semantic_keyword_match($title, $target_keyword) : false,
                 'has_number_or_power_word' => $has_number || $has_power_word,
                 'has_sentiment_word' => $has_sentiment,
@@ -952,7 +1180,7 @@ class SEOScoreCalculator {
             return [
                 'score' => 7,
                 'max_score' => $max_score,
-                'suggestions' => ['Set a focus keyword and use it in subheadings and the URL for stronger topical signals'],
+                'suggestions' => [$this->suggest('expertise_set_keyword')],
                 'details' => ['expertise_level' => 'Unmeasured (no focus keyword)'],
             ];
         }
@@ -961,13 +1189,13 @@ class SEOScoreCalculator {
         $content = (string) ($content_data['content'] ?? '');
         $headings = (array) ($content_data['headings'] ?? []);
         $images = (array) ($content_data['images'] ?? []);
-        $slug = strtolower((string) ($content_data['slug'] ?? ''));
+        $slug = self::lower((string) ($content_data['slug'] ?? ''));
 
         // Keyword in a subheading (4 points).
         if ($this->keyword_in_subheadings($headings, $target_keyword)) {
             $score += 4;
         } else {
-            $suggestions[] = "Include '{$target_keyword}' in at least one subheading (H2-H6)";
+            $suggestions[] = $this->suggest('keyword_in_subheading', $target_keyword);
         }
 
         // Keyword density in a healthy band (4 points). Rank Math treats
@@ -978,20 +1206,20 @@ class SEOScoreCalculator {
         } elseif ($density > 0) {
             $score += 2;
             $suggestions[] = $density > 2.5
-                ? 'Keyword density is high - reduce repetition to avoid over-optimization'
-                : 'Keyword density is low - use the focus keyword a little more often';
+                ? $this->suggest('density_high')
+                : $this->suggest('density_low');
         } else {
-            $suggestions[] = "Use the focus keyword '{$target_keyword}' in the content";
+            $suggestions[] = $this->suggest('keyword_in_content', $target_keyword);
         }
 
         // URL optimization (3 points): keyword in slug (2) + a reasonably short
         // URL (1). Rank Math flags overly long URLs, so reward concise slugs.
-        $keyword_slug = str_replace(' ', '-', strtolower($target_keyword));
+        $keyword_slug = str_replace(' ', '-', self::lower($target_keyword));
         $keyword_in_slug = $slug !== '' && (strpos($slug, $keyword_slug) !== false || strpos(str_replace('-', '', $slug), str_replace('-', '', $keyword_slug)) !== false);
         if ($keyword_in_slug) {
             $score += 2;
         } else {
-            $suggestions[] = 'Include the focus keyword in the URL slug';
+            $suggestions[] = $this->suggest('keyword_in_slug');
         }
 
         // A slug under ~75 chars keeps the URL clean and fully visible in SERPs.
@@ -999,7 +1227,7 @@ class SEOScoreCalculator {
         if ($slug === '' || $slug_length <= 75) {
             $score++;
         } else {
-            $suggestions[] = 'Shorten the URL slug - long URLs are harder to read and share';
+            $suggestions[] = $this->suggest('slug_too_long');
         }
 
         // Keyword in image alt text (2 points) - mirrors Rank Math's
@@ -1008,11 +1236,11 @@ class SEOScoreCalculator {
         // than capping the ceiling for legitimately image-less posts.
         if (empty($images)) {
             $score += 2;
-            $suggestions[] = 'Add a relevant image with the focus keyword in its alt text';
+            $suggestions[] = $this->suggest('image_with_keyword_alt');
         } elseif ($this->keyword_in_alt($images, $target_keyword)) {
             $score += 2;
         } else {
-            $suggestions[] = 'Include the focus keyword in at least one image alt attribute';
+            $suggestions[] = $this->suggest('keyword_in_image_alt');
         }
 
         return [
@@ -1046,7 +1274,7 @@ class SEOScoreCalculator {
             'score' => $score,
             'max_score' => $max_score,
             'suggestions' => $score < ($max_score * 0.7)
-                ? ['Improve readability and structure (shorter sentences, subheadings, shorter paragraphs)']
+                ? [$this->suggest('readability_structure')]
                 : [],
             'details' => ['engagement_estimate' => round(($score / $max_score) * 100, 1) . '%'],
         ];
@@ -1072,10 +1300,10 @@ class SEOScoreCalculator {
         } elseif ($external_links > 0) {
             // Cites sources but every external link is nofollow.
             $score = (int) round($max_score * 0.75);
-            $suggestions[] = 'Add at least one dofollow link to an authoritative external source';
+            $suggestions[] = $this->suggest('external_dofollow_link');
         } else {
             $score = (int) round($max_score * 0.6);
-            $suggestions[] = 'Cite authoritative external sources, and build quality backlinks to this page';
+            $suggestions[] = $this->suggest('cite_sources');
         }
 
         return [
@@ -1095,7 +1323,7 @@ class SEOScoreCalculator {
         return [
             'score' => $this->scoring_factors['trustworthiness'],
             'max_score' => $this->scoring_factors['trustworthiness'],
-            'suggestions' => ['Add author credentials, citations, and contact information to reinforce trustworthiness'],
+            'suggestions' => [$this->suggest('trust_signals')],
             'details' => ['trust_level' => 'Assumed adequate'],
         ];
     }
@@ -1116,14 +1344,14 @@ class SEOScoreCalculator {
         return [
             'score' => $ssl ? $max_score : 0,
             'max_score' => $max_score,
-            'suggestions' => $ssl ? [] : ['Serve the site over HTTPS (install an SSL certificate)'],
+            'suggestions' => $ssl ? [] : [$this->suggest('https')],
             'details' => ['ssl_enabled' => $ssl, 'security_level' => $ssl ? 'Good' : 'Insecure'],
         ];
     }
     private function check_semantic_keyword_match(string $text, string $keyword): bool {
         // Simple semantic matching - can be enhanced with AI/NLP
-        $keyword_parts = explode(' ', strtolower($keyword));
-        $text_lower = strtolower($text);
+        $keyword_parts = explode(' ', self::lower($keyword));
+        $text_lower = self::lower($text);
         
         $matches = 0;
         foreach ($keyword_parts as $part) {
@@ -1174,8 +1402,16 @@ class SEOScoreCalculator {
                 $priority = $this->determine_suggestion_priority($suggestion);
             }
 
+            // The key, and what the editor does with the suggestion, so nothing
+            // downstream has to read the (now translated) words (#1298). Null
+            // for a filter-added suggestion, which keeps the text fallback.
+            $key = $this->suggestion_keys[$suggestion] ?? null;
+
             $prioritized[] = [
                 'text' => $suggestion,
+                'key' => $key,
+                'action' => null === $key ? null : (self::SUGGESTION_ACTIONS[$key] ?? 'guidance'),
+                'category' => null === $key ? null : (self::SUGGESTION_CATEGORIES[$key] ?? 'general'),
                 'priority' => $priority,
                 'impact' => $this->estimate_impact($suggestion),
                 'effort' => $this->estimate_effort($suggestion),
@@ -1266,8 +1502,8 @@ class SEOScoreCalculator {
 
         // Occurrences and the word count both come from the reading text, so
         // shortcode syntax is in neither.
-        $content_lower = strtolower(self::reading_text_of($content));
-        $keyword_lower = strtolower($target_keyword);
+        $content_lower = self::lower(self::reading_text_of($content));
+        $keyword_lower = self::lower($target_keyword);
 
         // Calculate keyword and semantic term frequency
         $keyword_count = substr_count($content_lower, $keyword_lower);
@@ -1326,7 +1562,7 @@ class SEOScoreCalculator {
         }
 
         // Add common related terms based on keyword
-        $keyword_lower = strtolower($keyword);
+        $keyword_lower = self::lower($keyword);
 
         // SEO-related terms
         if (strpos($keyword_lower, 'seo') !== false) {
@@ -1355,12 +1591,12 @@ class SEOScoreCalculator {
         // Numerator and denominator from the same reading text. Counting the
         // keyword in wp_strip_all_tags() output found it inside shortcode
         // attributes the word count no longer includes.
-        $plain = strtolower(self::reading_text_of($content));
+        $plain = self::lower(self::reading_text_of($content));
         $word_count = \ThinkRank\SEO\Word_Count_Index::count_words($plain);
         if ($word_count === 0) {
             return 0.0;
         }
-        $occurrences = substr_count($plain, strtolower($target_keyword));
+        $occurrences = substr_count($plain, self::lower($target_keyword));
         return ($occurrences / $word_count) * 100;
     }
 
@@ -1375,8 +1611,8 @@ class SEOScoreCalculator {
         if (empty($content) || empty($target_keyword)) {
             return false;
         }
-        $plain = strtolower(wp_strip_all_tags($content));
-        if (strpos($plain, strtolower($target_keyword)) !== false) {
+        $plain = self::lower(wp_strip_all_tags($content));
+        if (strpos($plain, self::lower($target_keyword)) !== false) {
             return true;
         }
         return $this->check_semantic_keyword_match($plain, $target_keyword);
@@ -1393,10 +1629,10 @@ class SEOScoreCalculator {
         if (empty($content) || empty($target_keyword)) {
             return false;
         }
-        $plain = strtolower(self::reading_text_of($content));
+        $plain = self::lower(self::reading_text_of($content));
         $words = preg_split('/\s+/', $plain, -1, PREG_SPLIT_NO_EMPTY) ?: [];
         $window = array_slice($words, 0, max(50, (int) ceil(count($words) * 0.1)));
-        return strpos(implode(' ', $window), strtolower($target_keyword)) !== false;
+        return strpos(implode(' ', $window), self::lower($target_keyword)) !== false;
     }
 
     /**
@@ -1410,12 +1646,12 @@ class SEOScoreCalculator {
         if (empty($target_keyword)) {
             return false;
         }
-        $keyword_lower = strtolower($target_keyword);
+        $keyword_lower = self::lower($target_keyword);
         foreach ($headings as $heading) {
             if ((int) ($heading['level'] ?? 0) < 2) {
                 continue;
             }
-            $text = strtolower((string) ($heading['text'] ?? ''));
+            $text = self::lower((string) ($heading['text'] ?? ''));
             if ($text !== '' && strpos($text, $keyword_lower) !== false) {
                 return true;
             }
@@ -1456,7 +1692,7 @@ class SEOScoreCalculator {
         if ($meta_description === '' || $target_keyword === '') {
             return false;
         }
-        return strpos(strtolower($meta_description), strtolower($target_keyword)) !== false;
+        return strpos(self::lower($meta_description), self::lower($target_keyword)) !== false;
     }
 
     /**
@@ -1470,9 +1706,9 @@ class SEOScoreCalculator {
         if ($target_keyword === '') {
             return false;
         }
-        $keyword_lower = strtolower($target_keyword);
+        $keyword_lower = self::lower($target_keyword);
         foreach ($images as $image) {
-            $alt = strtolower((string) ($image['alt'] ?? ''));
+            $alt = self::lower((string) ($image['alt'] ?? ''));
             if ($alt !== '' && strpos($alt, $keyword_lower) !== false) {
                 return true;
             }
@@ -1483,12 +1719,13 @@ class SEOScoreCalculator {
     /**
      * Whether the title contains a common power word (CTR booster).
      *
-     * @param string $title Post title.
+     * @param string $title  Post title.
+     * @param string $locale The title's locale, or '' for the site's.
      * @return bool
      */
-    private function title_has_power_word(string $title): bool {
-        $title_lower = strtolower($title);
-        foreach (self::get_title_power_words() as $word) {
+    private function title_has_power_word(string $title, string $locale = ''): bool {
+        $title_lower = self::lower($title);
+        foreach (self::get_title_power_words($locale) as $word) {
             if (strpos($title_lower, $word) !== false) {
                 return true;
             }
@@ -1500,14 +1737,14 @@ class SEOScoreCalculator {
      * The power words rewarded by the title check. Single source of truth so the
      * AI title improver can require the generated title to actually contain one.
      *
+     * Per language since #1298, with the `thinkrank_title_power_words` filter;
+     * see Text_Language.
+     *
+     * @param string $locale The title's locale, or '' for the site's.
      * @return string[]
      */
-    public static function get_title_power_words(): array {
-        return [
-            'ultimate', 'essential', 'complete', 'proven', 'guide', 'best', 'top',
-            'free', 'easy', 'simple', 'quick', 'fast', 'powerful', 'secret', 'expert',
-            'effective', 'amazing', 'incredible', 'exclusive', 'definitive', 'step-by-step',
-        ];
+    public static function get_title_power_words(string $locale = ''): array {
+        return Text_Language::title_power_words($locale);
     }
 
     /**
@@ -1515,29 +1752,27 @@ class SEOScoreCalculator {
      * truth shared with the AI title improver so a generated title satisfies the
      * same validation.
      *
+     * Per language since #1298, with the `thinkrank_title_sentiment_words`
+     * filter; see Text_Language.
+     *
+     * @param string $locale The title's locale, or '' for the site's.
      * @return string[]
      */
-    public static function get_title_sentiment_words(): array {
-        return [
-            // Positive
-            'great', 'good', 'better', 'awesome', 'love', 'win', 'boost', 'improve',
-            'success', 'smart', 'brilliant', 'perfect', 'happy', 'beautiful',
-            // Negative (drives clicks too)
-            'avoid', 'mistake', 'worst', 'stop', 'never', 'bad', 'wrong', 'fail',
-            'danger', 'warning', 'painful', 'ugly',
-        ];
+    public static function get_title_sentiment_words(string $locale = ''): array {
+        return Text_Language::title_sentiment_words($locale);
     }
 
     /**
      * Whether the title carries an emotional/sentiment word (positive or
      * negative), which Rank Math rewards for higher engagement.
      *
-     * @param string $title Post title.
+     * @param string $title  Post title.
+     * @param string $locale The title's locale, or '' for the site's.
      * @return bool
      */
-    private function title_has_sentiment_word(string $title): bool {
-        $title_lower = strtolower($title);
-        foreach (self::get_title_sentiment_words() as $word) {
+    private function title_has_sentiment_word(string $title, string $locale = ''): bool {
+        $title_lower = self::lower($title);
+        foreach (self::get_title_sentiment_words($locale) as $word) {
             if (strpos($title_lower, $word) !== false) {
                 return true;
             }
@@ -1576,11 +1811,11 @@ class SEOScoreCalculator {
         } elseif ($days <= 365) {
             $score = (int) round($max_score * 0.66);
             $status = 'Aging';
-            $suggestions[] = 'Content is 6-12 months old - review and refresh it for better freshness signals';
+            $suggestions[] = $this->suggest('freshness_6_12_months');
         } else {
             $score = (int) round($max_score * 0.33);
             $status = 'Stale';
-            $suggestions[] = 'Content is over a year old - update it to maintain freshness signals';
+            $suggestions[] = $this->suggest('freshness_over_a_year');
         }
 
         return [
@@ -1661,8 +1896,9 @@ class SEOScoreCalculator {
         // before the counter saw it.
         $word_count = $this->calculate_word_count_js_style($content);
 
-        // Calculate readability
-        $readability_score = $this->calculate_readability_score($content);
+        // Readability by the post's own language (#1298).
+        $locale = Language_Resolver::resolve_locale($post_id);
+        $readability_score = $this->calculate_readability_score($content, $locale);
 
         // Count links
         $internal_links = $this->count_internal_links($content);
@@ -1681,6 +1917,7 @@ class SEOScoreCalculator {
             'headings' => $headings,
             'word_count' => $word_count,
             'readability_score' => $readability_score,
+            'locale' => $locale,
             'internal_links' => $internal_links,
             'external_links' => $external_links,
             'external_dofollow_links' => $external_dofollow_links,
@@ -1709,19 +1946,19 @@ class SEOScoreCalculator {
         $rounded = (int) round((float) ($content_data['readability_score'] ?? 0));
 
         if ($rounded >= 90) {
-            $level = 'Very Easy';
+            $level = __('Very Easy', 'thinkrank');
         } elseif ($rounded >= 80) {
-            $level = 'Easy';
+            $level = __('Easy', 'thinkrank');
         } elseif ($rounded >= 70) {
-            $level = 'Fairly Easy';
+            $level = __('Fairly Easy', 'thinkrank');
         } elseif ($rounded >= 60) {
-            $level = 'Standard';
+            $level = __('Standard', 'thinkrank');
         } elseif ($rounded >= 50) {
-            $level = 'Fairly Difficult';
+            $level = __('Fairly Difficult', 'thinkrank');
         } elseif ($rounded >= 30) {
-            $level = 'Difficult';
+            $level = __('Difficult', 'thinkrank');
         } else {
-            $level = 'Very Difficult';
+            $level = __('Very Difficult', 'thinkrank');
         }
 
         return "{$level} ({$rounded})";
@@ -1832,12 +2069,16 @@ class SEOScoreCalculator {
     }
 
     /**
-     * Calculate readability score using Flesch Reading Ease
+     * Calculate readability score on the 0-100 reading-ease scale.
+     *
+     * Flesch Reading Ease for English, Kandel-Moles for French, with the
+     * syllables counted by that language's rules (#1298); see Text_Language.
      *
      * @param string $content Content text
+     * @param string $locale  The content's locale, or '' for the site's
      * @return float Readability score
      */
-    private function calculate_readability_score(string $content): float {
+    private function calculate_readability_score(string $content, string $locale = ''): float {
         // Sentences, words and syllables all come from one reading text. The
         // word count drops shortcode syntax and punctuation-only tokens; when
         // sentences and syllables were still read off wp_strip_all_tags()
@@ -1852,14 +2093,13 @@ class SEOScoreCalculator {
 
         $sentence_count = self::count_sentences($text);
         $word_count     = \ThinkRank\SEO\Word_Count_Index::count_words($text);
-        $syllable_count = $this->count_syllables($text);
+        $syllable_count = Text_Language::count_syllables($text, $locale);
 
         if ($sentence_count === 0 || $word_count === 0) {
             return 0;
         }
 
-        // Flesch Reading Ease formula
-        $score = 206.835 - (1.015 * ($word_count / $sentence_count)) - (84.6 * ($syllable_count / $word_count));
+        $score = Text_Language::reading_ease($word_count, $sentence_count, $syllable_count, $locale);
 
         return max(0, min(100, $score));
     }
@@ -1883,43 +2123,6 @@ class SEOScoreCalculator {
         return count(preg_grep('/[\p{L}\p{N}]/u', $fragments) ?: []);
     }
 
-    /**
-     * Count syllables in text (approximate)
-     *
-     * Expects reading text ({@see self::reading_text_of()}); tags are not
-     * stripped here, so a decoded "<" in prose is not read as a tag.
-     *
-     * @param string $text Text to analyze
-     * @return int Syllable count
-     */
-    private function count_syllables(string $text): int {
-        $words = preg_split('/\s+/', trim(strtolower($text)), -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        $syllables = 0;
-
-        foreach ($words as $word) {
-            $word = preg_replace('/[^a-z]/', '', $word);
-            if ($word === '') {
-                continue;
-            }
-
-            $groups = preg_match_all('/[aeiouy]+/', $word);
-
-            // Standard Flesch heuristic: a trailing silent e does not form a
-            // syllable ("make", "time", "these") — but only when a consonant
-            // precedes it (a vowel+e ending like "movie" already shares its
-            // group) and never for consonant-le ("table"), which does count.
-            // Without this the counter inflated syllables/word by ~0.2-0.3 on
-            // ordinary prose, driving raw Flesch negative and the UI to a
-            // clamped "Very Difficult (0)" (#407).
-            if ($groups > 1 && preg_match('/[^aeiouy]e$/', $word) && !str_ends_with($word, 'le')) {
-                $groups--;
-            }
-
-            $syllables += max(1, $groups);
-        }
-
-        return $syllables;
-    }
 
     /**
      * Count internal links in content
@@ -2124,7 +2327,9 @@ class SEOScoreCalculator {
         $insert_data = [
             'post_id' => $post_id,
             'user_id' => $user_id,
-            'overall_score' => $score_data['overall_score'],
+            // Rounded, not truncated by the %d format below, for a score that
+            // did not come from compute_score() (#1311).
+            'overall_score' => (int) round((float) $score_data['overall_score']),
             'score_breakdown' => wp_json_encode($score_data['score_breakdown']),
             'suggestions' => wp_json_encode($score_data['suggestions']),
             'grade' => $score_data['grade'],
@@ -2222,7 +2427,7 @@ class SEOScoreCalculator {
             return [
                 'score' => $max,
                 'max_score' => $max,
-                'suggestions' => ['Ensure mobile-first design and fast loading on mobile devices'],
+                'suggestions' => [$this->suggest('mobile_assumed')],
                 'details' => ['mobile_score' => 'Assumed adequate', 'measured' => false],
             ];
         }
@@ -2233,7 +2438,7 @@ class SEOScoreCalculator {
             'score' => $score,
             'max_score' => $max,
             'suggestions' => $score < $max
-                ? ['Improve mobile page speed: the last PageSpeed run scored ' . $performance_score . '/100 on mobile']
+                ? [$this->suggest('mobile_speed', (string) $performance_score)]
                 : [],
             'details' => [
                 'mobile_score' => $performance_score,
@@ -2320,7 +2525,7 @@ class SEOScoreCalculator {
             return [
                 'score' => $max,
                 'max_score' => $max,
-                'suggestions' => ['Optimize Core Web Vitals: LCP, INP, and CLS for better user experience'],
+                'suggestions' => [$this->suggest('vitals_assumed')],
                 'details' => ['vitals_status' => 'Assumed adequate', 'measured' => false],
             ];
         }
@@ -2335,7 +2540,7 @@ class SEOScoreCalculator {
             // full 3 of 3 and used to swallow the suggestion naming the metric
             // that is actually failing.
             'suggestions' => !empty($rated['failing'])
-                ? ['Optimize Core Web Vitals: ' . implode(', ', $rated['failing']) . ' below target on mobile']
+                ? [$this->suggest('vitals_failing', implode(', ', $rated['failing']))]
                 : [],
             'details' => [
                 'vitals_status' => $rated['statuses'],
@@ -2411,7 +2616,7 @@ class SEOScoreCalculator {
         return [
             'score' => $score,
             'max_score' => $this->scoring_factors['internal_linking'],
-            'suggestions' => $score === 0 ? ['Add relevant internal links to other pages on your site'] : [],
+            'suggestions' => $score === 0 ? [$this->suggest('internal_links')] : [],
             'details' => ['internal_links_count' => $internal_links]
         ];
     }
@@ -2433,14 +2638,14 @@ class SEOScoreCalculator {
         if (!empty($meta_desc) && mb_strlen($meta_desc) >= self::DESCRIPTION_OPTIMAL_MIN && mb_strlen($meta_desc) <= self::DESCRIPTION_OPTIMAL_MAX) {
             $score += 0.5;
         } else {
-            $suggestions[] = 'Add a compelling meta description (120-160 characters)';
+            $suggestions[] = $this->suggest('meta_description_missing');
         }
 
         // Schema markup check (simplified)
         if (!empty($content_data['schema_present'])) {
             $score += 0.5;
         } else {
-            $suggestions[] = 'Consider adding structured data (schema markup)';
+            $suggestions[] = $this->suggest('schema_missing');
         }
 
         return [
@@ -2519,8 +2724,9 @@ class SEOScoreCalculator {
         // before the counter saw it.
         $word_count = $this->calculate_word_count_js_style($content);
 
-        // Calculate readability
-        $readability_score = $this->calculate_readability_score($content);
+        // Readability by the post's own language (#1298).
+        $locale = Language_Resolver::resolve_locale($post_id);
+        $readability_score = $this->calculate_readability_score($content, $locale);
 
         // Count links
         $internal_links = $this->count_internal_links($content);
@@ -2539,6 +2745,7 @@ class SEOScoreCalculator {
             'headings' => $headings,
             'word_count' => $word_count,
             'readability_score' => $readability_score,
+            'locale' => $locale,
             'internal_links' => $internal_links,
             'external_links' => $external_links,
             'external_dofollow_links' => $external_dofollow_links,

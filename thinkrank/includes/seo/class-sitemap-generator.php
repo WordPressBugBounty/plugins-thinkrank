@@ -337,6 +337,15 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     private static ?self $listener = null;
 
     /**
+     * Whether this request already queued the rebuild for a redirect rule
+     * change ({@see handle_redirect_rules_change()}).
+     *
+     * @since 2.18.0
+     * @var bool
+     */
+    private bool $redirect_rules_rebuild_queued = false;
+
+    /**
      * Constructor
      *
      * @since 1.0.0
@@ -427,6 +436,12 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         add_action('untrash_post', static function (int $post_id): void {
             self::listener()->handle_content_change_by_id($post_id);
         }, 20);
+        // save_post only queues a rebuild for published content, so taking a
+        // post off the site (publish to draft, pending, private or future) was
+        // never heard and the files kept listing a URL that now 404s (#1318).
+        add_action('transition_post_status', static function (string $new_status, string $old_status, \WP_Post $post): void {
+            self::listener()->handle_content_unpublished($new_status, $old_status, $post);
+        }, 20, 3);
 
         foreach (['created_term', 'edited_term', 'delete_term'] as $hook) {
             add_action($hook, static function (int $term_id, int $tt_id, string $taxonomy): void {
@@ -451,6 +466,36 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         add_action('thinkrank_object_redirect_saved', static function (): void {
             self::listener()->schedule_regeneration();
         }, 20, 0);
+
+        // A redirect rule added, edited or deleted in Pro's Redirections
+        // changes which URLs the sitemap leaves out, exactly like a per-post
+        // redirect does. Only per-post redirects were heard, so a redirected
+        // URL stayed listed, and one whose rule was deleted stayed missing,
+        // until unrelated content changed (#1284).
+        add_action('thinkrank_pro_redirects_changed', static function (): void {
+            self::listener()->handle_redirect_rules_change();
+        }, 20, 0);
+    }
+
+    /**
+     * Queue one rebuild for every redirect rule change in this request.
+     *
+     * The hook fires once per rule, and an import of redirect rules saves
+     * hundreds in one request. The cron event is already debounced, but each
+     * call would still rewrite the pending marker, so the first call in a
+     * request queues the rebuild and the rest are no-ops. The rebuild reads
+     * the rule set when it runs, so it sees every change made after this.
+     *
+     * @since 2.18.0
+     * @return void
+     */
+    public function handle_redirect_rules_change(): void {
+        if ($this->redirect_rules_rebuild_queued) {
+            return;
+        }
+
+        $this->redirect_rules_rebuild_queued = true;
+        $this->schedule_regeneration();
     }
 
     /**
@@ -1898,6 +1943,40 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         }
 
         // Schedule debounced regeneration
+        $this->schedule_debounced_regeneration();
+    }
+
+    /**
+     * Queue a rebuild when published content leaves the site.
+     *
+     * {@see handle_content_change()} returns for anything not published, so a
+     * post moved from publish to draft, pending, private or future kept its URL
+     * in the sitemap files until unrelated content changed (#1318). Trash is
+     * left to the wp_trash_post listener, which already covers it.
+     *
+     * @since 2.18.0
+     * @param string   $new_status New post status.
+     * @param string   $old_status Previous post status.
+     * @param \WP_Post $post       Post being transitioned.
+     * @return void
+     */
+    public function handle_content_unpublished(string $new_status, string $old_status, \WP_Post $post): void {
+        if ($old_status !== 'publish' || $new_status === 'publish' || $new_status === 'trash') {
+            return;
+        }
+
+        if (!$this->should_auto_generate()) {
+            return;
+        }
+
+        if (wp_is_post_autosave($post->ID) || wp_is_post_revision($post->ID)) {
+            return;
+        }
+
+        if (!$this->should_include_post_type($post->post_type)) {
+            return;
+        }
+
         $this->schedule_debounced_regeneration();
     }
 

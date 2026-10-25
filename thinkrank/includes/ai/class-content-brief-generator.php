@@ -1699,8 +1699,8 @@ class Content_Brief_Generator {
      * @return array Keyword analysis
      */
     private function analyze_keyword_density(string $text, string $title): array {
-        $combined_text = strtolower($title . ' ' . $text);
-        $words = str_word_count($combined_text, 1);
+        // Words of any script, since str_word_count() knew only a-z (#1298).
+        $words = Text_Language::words($title . ' ' . $text);
         $total_words = count($words);
 
         if ($total_words === 0) {
@@ -1710,10 +1710,9 @@ class Content_Brief_Generator {
         // Count word frequency
         $word_counts = array_count_values($words);
 
-        // Filter out common stop words
-        $stop_words = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them'];
-
-        foreach ($stop_words as $stop_word) {
+        // Filter out common stop words, in the site's language: a competitor
+        // page is assumed to be written in it (#1298).
+        foreach (Text_Language::stop_words() as $stop_word) {
             unset($word_counts[$stop_word]);
         }
 

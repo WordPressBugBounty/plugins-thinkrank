@@ -8,7 +8,8 @@
  * posts' SEO but leave the sitemap and robots.txt alone?"), so access is split
  * into areas, each granted `none`, `read` or `write`:
  *
- *   content    post and term SEO, alt text, FAQ, pillar flags, content reads
+ *   content    post and term SEO, post bodies and slugs, alt text, FAQ,
+ *              pillar flags, content reads
  *   settings   global defaults, site identity, schema, social, sitemap, imports
  *   indexing   robots.txt, IndexNow, llms.txt
  *   analytics  scores, audits, Search Console data, the MCP activity log
@@ -78,6 +79,9 @@ final class Mcp_Scopes {
 		'get-term-seo'                     => 'content',
 		'update-term-seo'                  => 'content',
 		'get-post-content'                 => 'content',
+		'update-post-content'              => 'content',
+		'restore-post-content'             => 'content',
+		'update-post-slug'                 => 'content',
 		'list-snippet-issues'              => 'content',
 		'get-duplicate-snippets'           => 'content',
 		'get-thin-content'                 => 'content',
@@ -562,7 +566,7 @@ final class Mcp_Scopes {
 		return [
 			'content'   => [
 				'label'       => __( 'Content', 'thinkrank' ),
-				'description' => __( 'Post and term SEO, image alt text, FAQ and pillar content.', 'thinkrank' ),
+				'description' => __( 'Post and term SEO, post bodies and URL slugs, image alt text, FAQ and pillar content.', 'thinkrank' ),
 			],
 			'settings'  => [
 				'label'       => __( 'Settings', 'thinkrank' ),

@@ -292,6 +292,7 @@ class Beaver_Metabox {
         // AJAX route used to persist all fields (no #post form in the builder).
         $data['saveAction'] = 'thinkrank_save_metabox';
 
+        wp_set_script_translations(self::HANDLE, 'thinkrank');
         wp_localize_script(self::HANDLE, 'thinkrankMetabox', $data);
 
         // Depend on wp-components so the @wordpress/components controls inside

@@ -68,7 +68,6 @@ class Get_Social_Meta_Settings extends Ability_Base {
 		'twitter_creator',
 		'twitter_card_type',
 		'default_twitter_image',
-		'twitter_site',
 		'default_image',
 		'facebook_app_id',
 		'facebook_admins',

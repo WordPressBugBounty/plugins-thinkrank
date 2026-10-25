@@ -227,9 +227,23 @@ const ImprovementSuggestions = ({
 
 	/**
 	 * Get suggestion category based on content - Enhanced categorization
+	 *
+	 * The score sends the category with each suggestion, decided in PHP by
+	 * key, because the text is translated and its words are no longer English
+	 * (#1298). A suggestion without one (a score cached before that, or one a
+	 * filter added) is categorised from the English text, as before.
+	 *
 	 * @param suggestion
 	 */
 	const getSuggestionCategory = (suggestion) => {
+		if (
+			suggestion &&
+			typeof suggestion === 'object' &&
+			suggestion.category
+		) {
+			return suggestion.category;
+		}
+
 		// Handle both string and object formats
 		let suggestionText = '';
 		if (typeof suggestion === 'string') {
@@ -341,6 +355,23 @@ const ImprovementSuggestions = ({
 		{}
 	);
 
+	// The category badge, in the site's language. The category itself is the
+	// internal name the score sends.
+	const CATEGORY_LABELS = {
+		title: __('Title', 'thinkrank'),
+		meta: __('Meta', 'thinkrank'),
+		headings: __('Headings', 'thinkrank'),
+		keywords: __('Keywords', 'thinkrank'),
+		content: __('Content', 'thinkrank'),
+		readability: __('Readability', 'thinkrank'),
+		links: __('Links', 'thinkrank'),
+		images: __('Images', 'thinkrank'),
+		url: __('URL', 'thinkrank'),
+		mobile: __('Mobile', 'thinkrank'),
+		performance: __('Performance', 'thinkrank'),
+		general: __('General', 'thinkrank'),
+	};
+
 	const priorityOrder = ['high', 'medium', 'low'];
 	const PRIORITY = {
 		high: {
@@ -426,7 +457,8 @@ const ImprovementSuggestions = ({
 									>
 										<div className="tr-flex tr-items-center tr-gap-1.5 tr-flex-wrap">
 											<span className="tr-inline-flex tr-items-center tr-h-5 tr-px-2 tr-rounded-full tr-text-[10px] tr-font-medium tr-bg-line-2 tr-text-secondary tr-capitalize">
-												{category}
+												{CATEGORY_LABELS[category] ||
+													category}
 											</span>
 											<span
 												className={`tr-inline-flex tr-items-center tr-h-5 tr-px-2 tr-rounded-full tr-text-[10px] tr-font-semibold ${cfg.badge}`}

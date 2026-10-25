@@ -105,6 +105,24 @@ class Object_Redirect {
     }
 
     /**
+     * The status code to save with a destination when none was submitted.
+     *
+     * The code the object's redirect already has, or the default when it has
+     * none. A caller changing only the destination used to fall back to the
+     * default, so correcting where a 302 or 307 points made it a permanent
+     * 301, which browsers cache (#1302).
+     *
+     * @since 2.18.0
+     *
+     * @param string $object_type 'post' or 'term'.
+     * @param int    $object_id   Object ID.
+     * @return int
+     */
+    public static function type_to_keep(string $object_type, int $object_id): int {
+        return self::get($object_type, $object_id)['type'];
+    }
+
+    /**
      * Set or clear an object's redirect.
      *
      * @since 2.7.0

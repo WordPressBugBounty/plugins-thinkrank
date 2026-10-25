@@ -134,6 +134,32 @@ final class Mcp_OAuth {
 	private const CLIENT_TTL = 86400; // 24 hours.
 
 	/**
+	 * Most redirect_uris one registration may carry (#1341). Real clients
+	 * register one or two (a loopback and a hosted callback); every entry is
+	 * stored in the option each bearer request loads.
+	 *
+	 * @since 2.18.0
+	 */
+	public const MAX_REDIRECT_URIS = 10;
+
+	/**
+	 * Longest redirect_uri accepted, in bytes. Matches the common URL limit
+	 * of browsers and proxies; a callback longer than this cannot be followed
+	 * reliably anyway.
+	 *
+	 * @since 2.18.0
+	 */
+	public const MAX_REDIRECT_URI_LENGTH = 2048;
+
+	/**
+	 * Longest client_name kept, in characters. The name is only shown on the
+	 * consent page and under Connected AI apps.
+	 *
+	 * @since 2.18.0
+	 */
+	public const MAX_CLIENT_NAME_LENGTH = 100;
+
+	/**
 	 * How many rotated-away refresh digests are remembered per family.
 	 *
 	 * Reuse detection needs the digests a client could plausibly still be
@@ -300,23 +326,52 @@ final class Mcp_OAuth {
 	 * Register a public client. We accept the client's redirect_uris and
 	 * mint a client_id (no secret — public clients rely on PKCE).
 	 *
+	 * Registration is unauthenticated, and everything it accepts is stored
+	 * in the option every bearer request loads, so the metadata is bounded
+	 * (#1341): more than MAX_REDIRECT_URIS entries, or one longer than
+	 * MAX_REDIRECT_URI_LENGTH, is refused with the RFC 7591 error, and a
+	 * client_name is cut to MAX_CLIENT_NAME_LENGTH characters. RFC 7591 §3.2.1
+	 * lets the server replace a requested value, and the response echoes the
+	 * name as stored, so a client with a long name still connects.
+	 *
 	 * @param array<string,mixed> $body Parsed JSON registration request.
 	 * @return array<string,mixed>|\WP_Error
 	 */
 	public static function register_client( array $body ) {
-		$redirect_uris = isset( $body['redirect_uris'] ) && is_array( $body['redirect_uris'] )
-			? array_values( array_filter( array_map( 'strval', $body['redirect_uris'] ), [ self::class, 'is_valid_redirect_uri' ] ) )
-			: [];
+		$requested = isset( $body['redirect_uris'] ) && is_array( $body['redirect_uris'] ) ? $body['redirect_uris'] : [];
 
-		if ( empty( $redirect_uris ) ) {
-			return new \WP_Error(
-				'invalid_redirect_uri',
-				__( 'At least one valid redirect_uri is required.', 'thinkrank' ),
-				[ 'status' => 400 ]
+		if ( count( $requested ) > self::MAX_REDIRECT_URIS ) {
+			return self::oauth_error(
+				'invalid_client_metadata',
+				/* translators: %d: the most redirect URIs one client may register. */
+				sprintf( __( 'A client may register at most %d redirect_uris.', 'thinkrank' ), self::MAX_REDIRECT_URIS )
 			);
 		}
+		foreach ( $requested as $uri ) {
+			if ( ! is_string( $uri ) ) {
+				return self::oauth_error( 'invalid_redirect_uri', __( 'Every redirect_uri must be a string.', 'thinkrank' ) );
+			}
+			if ( strlen( $uri ) > self::MAX_REDIRECT_URI_LENGTH ) {
+				return self::oauth_error(
+					'invalid_redirect_uri',
+					/* translators: %d: the longest redirect URI accepted, in bytes. */
+					sprintf( __( 'A redirect_uri may be at most %d bytes long.', 'thinkrank' ), self::MAX_REDIRECT_URI_LENGTH )
+				);
+			}
+		}
 
-		$name      = isset( $body['client_name'] ) ? sanitize_text_field( (string) $body['client_name'] ) : 'MCP Client';
+		$redirect_uris = array_values( array_filter( $requested, [ self::class, 'is_valid_redirect_uri' ] ) );
+
+		if ( empty( $redirect_uris ) ) {
+			return self::oauth_error( 'invalid_redirect_uri', __( 'At least one valid redirect_uri is required.', 'thinkrank' ) );
+		}
+
+		if ( isset( $body['client_name'] ) && ! is_string( $body['client_name'] ) ) {
+			return self::oauth_error( 'invalid_client_metadata', __( 'client_name must be a string.', 'thinkrank' ) );
+		}
+		$name = isset( $body['client_name'] ) ? sanitize_text_field( mb_substr( $body['client_name'], 0, self::MAX_CLIENT_NAME_LENGTH * 4 ) ) : 'MCP Client';
+		$name = rtrim( mb_substr( $name, 0, self::MAX_CLIENT_NAME_LENGTH ) );
+
 		$client_id = 'trk_' . bin2hex( random_bytes( 16 ) );
 
 		self::mutate(
@@ -1742,7 +1797,8 @@ final class Mcp_OAuth {
 
 	/**
 	 * Build a WP_Error whose data carries an OAuth 2.0 `error` code so the
-	 * token route can render the RFC 6749 error body.
+	 * token route can render the RFC 6749 error body, and the register route
+	 * the RFC 7591 one.
 	 *
 	 * @param string $code    OAuth error code (invalid_grant, ...).
 	 * @param string $message Human-readable description.

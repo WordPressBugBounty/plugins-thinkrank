@@ -126,8 +126,12 @@ class Deactivator {
         // cron_schedules filter is gone (#389).
         $manifest = require THINKRANK_PLUGIN_DIR . 'includes/cleanup-manifest.php';
 
+        // wp_unschedule_hook() removes every event of a hook whatever its
+        // arguments. wp_clear_scheduled_hook() with none removed only events
+        // scheduled without arguments, so queued IndexNow submissions, which
+        // carry their URLs, outlived the plugin (#1327).
         foreach ($manifest['cron_hooks'] as $hook) {
-            wp_clear_scheduled_hook($hook);
+            wp_unschedule_hook($hook);
         }
     }
     

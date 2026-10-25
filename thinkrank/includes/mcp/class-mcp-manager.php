@@ -102,6 +102,27 @@ final class Mcp_Manager {
 	private const AUTHORIZE_QUERY_VAR = 'thinkrank_mcp_authorize';
 
 	/**
+	 * Headers every OAuth page this class prints is sent with.
+	 *
+	 * The authorize URL is a front-end page, so neither core's
+	 * send_frame_options_header() (admin and login only) nor Security_Headers
+	 * (admin_init and REST only) runs for it. A consent page that can be
+	 * framed is a consent page that can be clickjacked: one Approve click from
+	 * a signed-in administrator, under a decoy, issues a code to whoever
+	 * registered the client. Both the legacy header and the CSP directive are
+	 * sent, since browsers that honour frame-ancestors ignore X-Frame-Options
+	 * and older ones only know the latter.
+	 *
+	 * @since 2.18.0
+	 */
+	public const OAUTH_PAGE_HEADERS = [
+		'Content-Type'            => 'text/html; charset=utf-8',
+		'Cache-Control'           => 'no-store',
+		'X-Frame-Options'         => 'DENY',
+		'Content-Security-Policy' => "frame-ancestors 'none'",
+	];
+
+	/**
 	 * Initialize (called by the plugin's component container).
 	 *
 	 * @return void
@@ -1555,6 +1576,10 @@ final class Mcp_Manager {
 	/**
 	 * POST /mcp/oauth/register — RFC 7591 dynamic client registration.
 	 *
+	 * Open to anyone, so each IP gets a bounded number of registrations per
+	 * window (#1341), counted only when a client is actually stored. A
+	 * refusal is the RFC 7591 §3.2.2 body (`error`, `error_description`).
+	 *
 	 * @param \WP_REST_Request $request JSON body with redirect_uris.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
@@ -1562,14 +1587,36 @@ final class Mcp_Manager {
 		if ( ! self::is_enabled() ) {
 			return new \WP_Error( 'thinkrank_mcp_disabled', __( 'MCP is disabled on this site.', 'thinkrank' ), [ 'status' => 403 ] );
 		}
+		if ( Mcp_Rate_Limiter::registration_limited() ) {
+			$response = new \WP_REST_Response(
+				[
+					'error'             => 'too_many_requests',
+					'error_description' => __( 'Too many client registrations from this address. Try again later.', 'thinkrank' ),
+				],
+				429
+			);
+			$response->header( 'Retry-After', (string) Mcp_Rate_Limiter::registration_retry_after() );
+			$response->header( 'Cache-Control', 'no-store' );
+			return $response;
+		}
 		$body = $request->get_json_params();
 		if ( ! is_array( $body ) ) {
 			$body = [];
 		}
 		$result = Mcp_OAuth::register_client( $body );
 		if ( is_wp_error( $result ) ) {
-			return $result;
+			$data     = $result->get_error_data();
+			$response = new \WP_REST_Response(
+				[
+					'error'             => isset( $data['error'] ) ? $data['error'] : $result->get_error_code(),
+					'error_description' => isset( $data['error_description'] ) ? $data['error_description'] : $result->get_error_message(),
+				],
+				isset( $data['status'] ) ? (int) $data['status'] : 400
+			);
+			$response->header( 'Cache-Control', 'no-store' );
+			return $response;
 		}
+		Mcp_Rate_Limiter::record_registration();
 		return new \WP_REST_Response( $result, 201 );
 	}
 
@@ -2028,8 +2075,7 @@ final class Mcp_Manager {
 		$hidden .= '<input type="hidden" name="response_type" value="code" />';
 
 		status_header( 200 );
-		header( 'Content-Type: text/html; charset=utf-8' );
-		header( 'Cache-Control: no-store' );
+		self::send_oauth_page_headers();
 
 		$host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
 		$logo = '<svg width="36" height="36" viewBox="0 0 29 29" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
@@ -2140,6 +2186,18 @@ final class Mcp_Manager {
 	}
 
 	/**
+	 * Send OAUTH_PAGE_HEADERS, replacing any earlier value of each.
+	 *
+	 * @since 2.18.0
+	 * @return void
+	 */
+	private static function send_oauth_page_headers(): void {
+		foreach ( self::OAUTH_PAGE_HEADERS as $name => $value ) {
+			header( $name . ': ' . $value, true );
+		}
+	}
+
+	/**
 	 * Render a standalone OAuth error page (no redirect).
 	 *
 	 * @param string $message Error message.
@@ -2148,8 +2206,7 @@ final class Mcp_Manager {
 	 */
 	private function emit_oauth_error_page( string $message, int $status = 400 ): void {
 		status_header( $status );
-		header( 'Content-Type: text/html; charset=utf-8' );
-		header( 'Cache-Control: no-store' );
+		self::send_oauth_page_headers();
 		echo '<!doctype html><html><head><meta charset="utf-8"><title>' . esc_html__( 'Authorization error', 'thinkrank' ) . '</title>';
 		echo '<style>body{font:15px/1.5 -apple-system,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}'
 			. '.card{background:#1e293b;border:1px solid #334155;border-radius:16px;max-width:440px;padding:32px;text-align:center}</style></head><body>';

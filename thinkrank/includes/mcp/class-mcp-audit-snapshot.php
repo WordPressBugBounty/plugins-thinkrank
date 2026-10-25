@@ -100,9 +100,18 @@ final class Mcp_Audit_Snapshot {
 	 * its check and without before/after, so it offers no Revert; its undo is
 	 * the `undo` the ability answers with, which ThinkRank Hub keeps.
 	 *
+	 * `update-post-content` sets `get` to '' for the same kind of reason. Its
+	 * name pairs it with `get-post-content`, whose `content` is the rendered
+	 * plain text, so a generic Revert would write that text over the block
+	 * markup. Its undo is restore-post-content with the revision the edit
+	 * returns. `update-post-slug` needs no entry: there is no `get-post-slug`.
+	 *
 	 * Extended by ThinkRank Pro through `thinkrank_mcp_audit_snapshot_map`.
 	 */
 	private const OVERRIDES = [
+		'update-post-content'          => [
+			'get' => '',
+		],
 		'update-faq'                   => [
 			'keys'  => [ 'items' ],
 			'extra' => [ 'mode' => 'replace' ],

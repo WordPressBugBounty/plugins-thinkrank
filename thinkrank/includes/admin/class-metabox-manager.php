@@ -45,13 +45,6 @@ class Metabox_Manager {
     private Settings $settings;
 
     /**
-     * Metadata generator instance
-     *
-     * @var Metadata_Generator
-     */
-    private Metadata_Generator $metadata_generator;
-
-    /**
      * SEO Score Calculator instance
      *
      * @var SEOScoreCalculator
@@ -62,12 +55,13 @@ class Metabox_Manager {
      * Constructor
      *
      * @param Settings|null $settings Settings instance
-     * @param Metadata_Generator|null $metadata_generator Metadata generator instance
+     * @param Metadata_Generator|null $metadata_generator Unused since 2.18.0. It fed the admin-ajax
+     *                                                metadata handler, removed in #1314; kept so the
+     *                                                positional $seo_calculator argument keeps its place.
      * @param SEOScoreCalculator|null $seo_calculator SEO Score Calculator instance
      */
     public function __construct(?Settings $settings = null, ?Metadata_Generator $metadata_generator = null, ?SEOScoreCalculator $seo_calculator = null) {
         $this->settings = $settings ?? Settings::instance();
-        $this->metadata_generator = $metadata_generator ?? new Metadata_Generator();
         $this->seo_calculator = $seo_calculator ?? new SEOScoreCalculator(new Database());
     }
 
@@ -82,9 +76,6 @@ class Metabox_Manager {
         add_action('admin_enqueue_scripts', [$this, 'enqueue_metabox_scripts']);
         add_action('admin_notices', [$this, 'render_redirect_notice']);
         add_action('init', [$this, 'register_meta_fields']);
-
-        // AJAX handlers for meta box functionality
-        add_action('wp_ajax_thinkrank_generate_post_metadata', [$this, 'ajax_generate_post_metadata']);
 
         // Full metabox save used by editors that don't submit the #post form
         // (e.g. the Elementor editor). Persists every metabox field at once.
@@ -586,6 +577,18 @@ class Metabox_Manager {
      * @return void
      */
     public function save_meta_boxes(int $post_id, \WP_Post $post): void {
+        // Core fires save_post for revisions and autosaves too, with the same
+        // $_POST. Preview on a published post goes through post_preview() →
+        // wp_create_post_autosave(), which never defines DOING_AUTOSAVE, and
+        // update_post_meta() on a revision ID writes to its parent. Saving here
+        // would publish the previewed SEO fields on the live post (#1306), and
+        // on a normal Update the revision's pass would re-run the redirect save
+        // for an ID with no permalink and store a false error notice. The
+        // parent's own save_post persists everything on Update.
+        if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) {
+            return;
+        }
+
         // Verify nonce
         if (!isset($_POST['thinkrank_metabox_nonce'])) {
             return;
@@ -985,6 +988,7 @@ class Metabox_Manager {
 
         // Localize script data (shared builder; reused by the Elementor editor
         // integration, which has no #post form / hidden inputs of its own).
+        wp_set_script_translations('thinkrank-metabox', 'thinkrank');
         wp_localize_script('thinkrank-metabox', 'thinkrankMetabox', $this->get_localized_data($post->ID));
 
         // Add defer attribute for non-blocking script loading
@@ -1050,6 +1054,9 @@ JS;
             'postRestBase' => $post_rest_base,
             'postPermalink' => get_permalink($post_id),
             'postSlug' => $post ? $post->post_name : '',
+            // The post's own language (Polylang/WPML, else the site's), so the
+            // editor's live readability uses that language's formula (#1298).
+            'locale' => \ThinkRank\AI\Language_Resolver::resolve_locale($post_id),
             'restUrl' => rest_url('thinkrank/v1/'),
             'restNonce' => wp_create_nonce('wp_rest'),
             'homeUrl' => home_url(),
@@ -1323,9 +1330,10 @@ JS;
             return null;
         }
 
+        // A destination sent without a code keeps the code it has (#1302).
         $type = array_key_exists('thinkrank_redirect_type', $src)
             ? $src['thinkrank_redirect_type']
-            : Object_Redirect::DEFAULT_TYPE;
+            : Object_Redirect::type_to_keep($object_type, $object_id);
 
         $result = Object_Redirect::save($object_type, $object_id, $url, $type);
 
@@ -1638,44 +1646,6 @@ JS;
         // substr() counts BYTES: on Thai or CJK this handed the model a third
         // of the intended content and cut the last character in half (#687).
         return \ThinkRank\Core\Seo_Text::trim_to_length($preview, self::AI_PREVIEW_LENGTH);
-    }
-
-    /**
-     * AJAX handler for generating post metadata
-     * 
-     * @return void
-     */
-    public function ajax_generate_post_metadata(): void {
-        // Verify nonce
-        $nonce = sanitize_text_field(wp_unslash($_POST['nonce'] ?? ''));
-        if (!wp_verify_nonce($nonce, 'thinkrank_metabox_ajax')) {
-            wp_die('Security check failed');
-        }
-
-        // Check permissions
-        $post_id = absint($_POST['post_id'] ?? 0);
-        if (!current_user_can('edit_post', $post_id)) {
-            wp_die('Insufficient permissions');
-        }
-
-        try {
-            $options = [
-                'target_keyword' => sanitize_text_field(wp_unslash($_POST['target_keyword'] ?? '')),
-                'content_type' => sanitize_text_field(wp_unslash($_POST['content_type'] ?? 'blog_post')),
-                'tone' => sanitize_text_field(wp_unslash($_POST['tone'] ?? 'professional')),
-            ];
-
-            $metadata = $this->metadata_generator->generate_for_post($post_id, $options);
-
-            wp_send_json_success([
-                'metadata' => $metadata,
-                'message' => __('SEO metadata generated successfully!', 'thinkrank'),
-            ]);
-        } catch (\Exception $e) {
-            wp_send_json_error([
-                'message' => $e->getMessage(),
-            ]);
-        }
     }
 
     /**

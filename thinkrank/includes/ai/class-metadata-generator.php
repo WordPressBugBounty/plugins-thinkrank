@@ -431,13 +431,14 @@ class Metadata_Generator {
      * @return array Keyword density analysis
      */
     private function analyze_keyword_density(string $content): array {
-        $words = str_word_count(strtolower($content), 1);
+        // Words of any script, and the site language's stop words (#1298):
+        // str_word_count() knew only a-z, and the list was English.
+        $words = Text_Language::words($content);
         $total_words = count($words);
         $word_counts = array_count_values($words);
-        
+
         // Remove common stop words
-        $stop_words = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'];
-        $word_counts = array_diff_key($word_counts, array_flip($stop_words));
+        $word_counts = array_diff_key($word_counts, array_flip(Text_Language::stop_words()));
         
         // Calculate density for top keywords
         arsort($word_counts);

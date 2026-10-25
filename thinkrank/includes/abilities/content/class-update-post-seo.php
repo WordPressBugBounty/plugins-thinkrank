@@ -59,7 +59,7 @@ class Update_Post_Seo extends Ability_Base {
 						'redirect_type'        => [
 							'type'        => 'integer',
 							'enum'        => Object_Redirect::TYPES,
-							'description' => __( 'Redirect status code. Defaults to 301.', 'thinkrank' ),
+							'description' => __( 'Redirect status code. When left out, an existing redirect keeps its code and a new one is 301.', 'thinkrank' ),
 						],
 						'focus_keyword'        => [ 'type' => 'string' ],
 						'focus_keywords'       => [

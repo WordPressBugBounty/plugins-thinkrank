@@ -64,6 +64,9 @@ use ThinkRank\Abilities\Media\Restore_Image_Alt_Text;
 use ThinkRank\Abilities\Media\Update_Image_Alt_Text;
 use ThinkRank\Abilities\Media\Fill_Missing_Alt_Text;
 use ThinkRank\Abilities\Content\Get_Post_Content;
+use ThinkRank\Abilities\Content\Update_Post_Content;
+use ThinkRank\Abilities\Content\Restore_Post_Content;
+use ThinkRank\Abilities\Content\Update_Post_Slug;
 use ThinkRank\Abilities\Maintenance\Purge_Caches;
 use ThinkRank\Abilities\Settings\Update_Robots_Meta_Settings;
 use ThinkRank\Abilities\Settings\Get_Instant_Indexing_Settings;
@@ -392,6 +395,9 @@ class Abilities_Registrar {
 			new Update_Image_Alt_Text(),
 			new Fill_Missing_Alt_Text(),
 			new Get_Post_Content(),
+			new Update_Post_Content(),
+			new Restore_Post_Content(),
+			new Update_Post_Slug(),
 			new Get_FAQ(),
 			new Update_FAQ(),
 			new Purge_Caches(),

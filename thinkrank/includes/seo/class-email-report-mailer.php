@@ -125,8 +125,12 @@ final class Email_Report_Mailer {
             $template = self::DEFAULT_SUBJECT;
         }
 
+        // The subject is plain text, while core stores `blogname` entity-
+        // encoded (sanitize_option() runs esc_html on it), so "Tom & Jerry's"
+        // arrives as "Tom &amp; Jerry&#039;s". Decode it the way core's own
+        // emails do (#1303).
         $defaults = [
-            '%site_title%'    => (string) get_bloginfo('name'),
+            '%site_title%'    => wp_specialchars_decode((string) get_bloginfo('name'), ENT_QUOTES),
             '%site_url%'      => (string) home_url(),
             '%date%'          => wp_date(get_option('date_format', 'Y-m-d')),
             '%period%'        => (string) ($tokens['%period%'] ?? ''),
