@@ -31,6 +31,11 @@ import {
 	dateRangeOptions,
 	getSearchPerformanceTotals,
 } from './utils';
+import {
+	dailyStatusNote,
+	dayStatusLabel,
+	preliminarySegment,
+} from '../../../utils/searchDailyStatus';
 
 /**
  * DashboardSection Component
@@ -1020,6 +1025,14 @@ const DashboardSection = ({
 									(() => {
 										const rows = searchDailyData.rows;
 
+										// Preliminary days draw dashed; a day
+										// without data is a null point, which
+										// Chart.js leaves as a gap (#1272).
+										const segment =
+											preliminarySegment(rows);
+										const statusNote =
+											dailyStatusNote(rows);
+
 										// Dot colors matching the metric card icon backgrounds
 										const COLORS = {
 											clicks: '#4794ff',
@@ -1107,33 +1120,49 @@ const DashboardSection = ({
 											const dataIndex =
 												tooltip.dataPoints?.[0]
 													?.dataIndex;
-											const dateLabel =
-												fullLabels[dataIndex] ?? '';
+											const statusLabel = dayStatusLabel(
+												rows[dataIndex]
+											);
+											const dateLabel = [
+												fullLabels[dataIndex] ?? '',
+												statusLabel,
+											]
+												.filter(Boolean)
+												.join(' · ');
+											// A day without the metric shows a dash, never 0.
+											const NO_VALUE = '—';
+											const day = rows[dataIndex] || {};
 
 											const metricRows = [
 												{
 													color: COLORS.clicks,
 													value:
-														rows[
-															dataIndex
-														]?.clicks?.toLocaleString() ??
-														'',
+														day.clicks?.toLocaleString() ??
+														NO_VALUE,
 												},
 												{
 													color: COLORS.impressions,
 													value:
-														rows[
-															dataIndex
-														]?.impressions?.toLocaleString() ??
-														'',
+														day.impressions?.toLocaleString() ??
+														NO_VALUE,
 												},
 												{
 													color: COLORS.ctr,
-													value: `${(rows[dataIndex]?.ctr ?? 0).toFixed(2)}%`,
+													value: Number.isFinite(
+														day.ctr
+													)
+														? `${day.ctr.toFixed(2)}%`
+														: NO_VALUE,
 												},
 												{
 													color: COLORS.position,
-													value: `${(rows[dataIndex]?.position ?? 0).toFixed(1)}`,
+													value: Number.isFinite(
+														day.position
+													)
+														? day.position.toFixed(
+																1
+															)
+														: NO_VALUE,
 												},
 											];
 
@@ -1215,6 +1244,7 @@ const DashboardSection = ({
 													pointHoverBorderColor:
 														'#ffffff',
 													pointHoverBorderWidth: 2,
+													segment,
 													yAxisID: 'yLeft',
 												},
 												{
@@ -1239,6 +1269,7 @@ const DashboardSection = ({
 													pointHoverBorderColor:
 														'#ffffff',
 													pointHoverBorderWidth: 2,
+													segment,
 													yAxisID: 'yLeft',
 												},
 												{
@@ -1262,6 +1293,7 @@ const DashboardSection = ({
 													pointHoverBorderColor:
 														'#ffffff',
 													pointHoverBorderWidth: 2,
+													segment,
 													yAxisID: 'yRight',
 												},
 												{
@@ -1286,6 +1318,7 @@ const DashboardSection = ({
 													pointHoverBorderColor:
 														'#ffffff',
 													pointHoverBorderWidth: 2,
+													segment,
 													yAxisID: 'yRight',
 												},
 											],
@@ -1363,20 +1396,33 @@ const DashboardSection = ({
 										};
 
 										return (
-											<div
-												style={{
-													height: '320px',
-													marginTop: '8px',
-													position: 'relative',
-													width: '100%',
-													overflow: 'hidden',
-												}}
-											>
-												<Line
-													data={chartData}
-													options={chartOptions}
-												/>
-											</div>
+											<>
+												<div
+													style={{
+														height: '320px',
+														marginTop: '8px',
+														position: 'relative',
+														width: '100%',
+														overflow: 'hidden',
+													}}
+												>
+													<Line
+														data={chartData}
+														options={chartOptions}
+													/>
+												</div>
+												{statusNote && (
+													<p
+														className="thinkrank-text-sm"
+														style={{
+															margin: '8px 0 0',
+															color: 'var(--tr-text-subtle)',
+														}}
+													>
+														{statusNote}
+													</p>
+												)}
+											</>
 										);
 									})()}
 							</div>

@@ -960,8 +960,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
 
         // Validate validation requirements
         if (isset($settings['validation_level'])) {
-            $valid_levels = ['strict', 'moderate', 'lenient'];
-            if (!in_array($settings['validation_level'], $valid_levels, true)) {
+            if (!in_array($settings['validation_level'], Schema_Settings_Config::VALIDATION_LEVELS, true)) {
                 $validation['errors'][] = 'Invalid validation level specified';
                 $validation['valid'] = false;
             }
@@ -1279,6 +1278,30 @@ class Schema_Management_System extends Abstract_SEO_Manager {
     }
 
     /**
+     * Sanitize a schema settings save.
+     *
+     * An organization_type ThinkRank does not offer is stored as the default
+     * rather than kept: it is published as the site entity's `@type`, so a
+     * value an importer or an older MCP write left behind would otherwise put
+     * a type no schema.org consumer knows on every page (#1344).
+     *
+     * @since 2.18.1
+     *
+     * @param array  $settings     Settings to save.
+     * @param string $context_type Context type.
+     * @return array
+     */
+    protected function sanitize_settings(array $settings, string $context_type = 'site'): array {
+        $sanitized = parent::sanitize_settings($settings, $context_type);
+
+        if (array_key_exists('organization_type', $sanitized) && !Schema_Settings_Config::is_organization_type($sanitized['organization_type'])) {
+            $sanitized['organization_type'] = 'Organization';
+        }
+
+        return $sanitized;
+    }
+
+    /**
      * Schema keys outside the shared config defaults.
      *
      * @since 2.0.1
@@ -1405,7 +1428,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
      * (Schema_Settings_Config::get_site_level_schema_types()). Other contexts
      * have no server-side list, so their types pass through unchanged.
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param string $context_type Context type.
      * @param array  $types        Schema types, as selected or stored.
@@ -1742,11 +1765,11 @@ class Schema_Management_System extends Abstract_SEO_Manager {
                 $content_data = [
                     'title' => $post->post_title,
                     'url' => get_permalink($post->ID),
-                    'excerpt' => $post->post_excerpt ?: \ThinkRank\Core\Seo_Text::trim_words($post->post_content, 30),
+                    'excerpt' => $this->generation_description($post),
                     'content' => $post->post_content,
                     'author' => [
                         'name' => get_the_author_meta('display_name', $post->post_author),
-                        'url' => get_author_posts_url($post->post_author)
+                        'url' => Author_Archives_Manager::author_url((int) $post->post_author)
                     ],
                     // ISO 8601 with offset. post_date/post_modified are raw
                     // MySQL columns in site-local time with no timezone, which
@@ -2149,7 +2172,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
     /**
      * Context types a deployed schema row can be stored under.
      *
-     * @since 2.15.0
+     * @since 2.14.3
      * @var string[]
      */
     public const CONTEXT_TYPES = ['site', 'post', 'page', 'product'];
@@ -2164,7 +2187,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
      * wrote: a reader that hard-coded 'post' never found a product's
      * deployed Product schema (#1008).
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param string $post_type Post type of the post.
      * @return string Context type.
@@ -2733,6 +2756,48 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         }
 
         return $deleted ?: 0;
+    }
+
+    /**
+     * The description a generated page node is given (#1356).
+     *
+     * Generation used the excerpt, or the first 30 words of the raw
+     * post_content, so an AboutPage or Article generated from the Schema
+     * tab, MCP or the Hub was empty on a builder or Etch page and the first
+     * paragraph on a block page, never the meta description. The live page
+     * already published the resolved description (refresh_deployed_description(),
+     * #766), so what was returned, previewed and stored disagreed with it.
+     *
+     * Order: the resolved meta description, the authored excerpt as plain
+     * text, then text derived from the visible content. A caller's
+     * content_data.description still overrides all three.
+     *
+     * @since 2.18.1
+     *
+     * @param \WP_Post $post Post.
+     * @return string
+     */
+    private function generation_description(\WP_Post $post): string {
+        // The meta description the page resolves: the post's own, or the
+        // post-type template rendered for it.
+        $description = Pattern_Resolver::effective_description((int) $post->ID);
+
+        // Then the authored excerpt, which is public even on a protected post.
+        if ('' === trim($description)) {
+            $description = (string) $post->post_excerpt;
+        }
+
+        // Then the visible text, never a protected body.
+        if ('' === trim($description) && !('' !== (string) $post->post_password && (!function_exists('post_password_required') || post_password_required($post)))) {
+            $description = Pattern_Resolver::derive_excerpt(Builder_Content::visible_content($post), 30);
+        }
+
+        // Normalised the way the live page normalises a description node
+        // (Global_SEO_Schema_Output::normalize_description()): tags stripped,
+        // entities decoded, core's trailing excerpt marker removed. An
+        // excerpt, and a template's %excerpt%, can be HTML (a WooCommerce
+        // short description is), and shortcodes are removed first.
+        return \ThinkRank\Core\Seo_Text::normalize_schema_text(strip_shortcodes($description));
     }
 
     /**

@@ -157,14 +157,6 @@ class Update_Site_Identity_Settings extends Ability_Base {
 
 		// The manager recorded why the save failed; pass it on rather than
 		// leaving the caller with a fixed string it cannot act on.
-		$reason = $mgr->get_last_save_error();
-
-		return [
-			'success' => false,
-			'message' => '' !== $reason
-				/* translators: %s: reason the save failed. */
-				? sprintf( __( 'Failed to update site identity settings: %s', 'thinkrank' ), $reason )
-				: __( 'Failed to update site identity settings.', 'thinkrank' ),
-		];
+		return self::settings_save_failed( __( 'Failed to update site identity settings.', 'thinkrank' ), $mgr->get_last_save_error(), $mgr->get_last_save_error_code() );
 	}
 }

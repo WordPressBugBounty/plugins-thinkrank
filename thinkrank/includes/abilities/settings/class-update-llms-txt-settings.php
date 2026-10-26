@@ -98,6 +98,9 @@ class Update_Llms_Txt_Settings extends Ability_Base {
 		}
 
 		$props['delivery_mode']['enum']        = [ 'auto', 'static', 'dynamic' ];
+		// The generator looks the description up by this key, and an unknown
+		// one left "is a  providing" in the published file (#1344).
+		$props['business_type']['enum']        = LLMs_Txt_Manager::business_type_names();
 		$props['delivery_mode']['description'] = __( 'How /llms.txt is served: "static" writes a physical file the web server answers, "dynamic" keeps the document in WordPress and serves it from PHP as UTF-8, "auto" prefers static on Apache/LiteSpeed but falls back to dynamic when the published file turns out to be served without a character set.', 'thinkrank' );
 
 		// The delimiter is not guessable from the field name, and getting it
@@ -184,11 +187,13 @@ class Update_Llms_Txt_Settings extends Ability_Base {
 			);
 		}
 
-		$result = $mgr->save_settings( 'site', null, $merged );
+		if ( ! $mgr->save_settings( 'site', null, $merged ) ) {
+			return self::settings_save_failed( __( 'Failed to update llms.txt settings.', 'thinkrank' ), $mgr->get_last_save_error(), $mgr->get_last_save_error_code() );
+		}
 
 		// A disable-save may persist the settings yet fail to remove the published
 		// file, so surface that partial failure instead of reporting plain success.
-		if ( $result && $mgr->unpublish_failed() ) {
+		if ( $mgr->unpublish_failed() ) {
 			return [
 				'success'          => true,
 				'file_unpublished' => false,
@@ -199,7 +204,7 @@ class Update_Llms_Txt_Settings extends Ability_Base {
 		// Likewise for a delivery-mode switch that could not move the published
 		// document — /llms.txt is still on the old path.
 		$delivery_warning = $mgr->delivery_switch_warning();
-		if ( $result && '' !== $delivery_warning ) {
+		if ( '' !== $delivery_warning ) {
 			return [
 				'success' => true,
 				'message' => $delivery_warning,
@@ -207,10 +212,8 @@ class Update_Llms_Txt_Settings extends Ability_Base {
 		}
 
 		return [
-			'success' => (bool) $result,
-			'message' => (bool) $result
-				? __( 'llms.txt settings updated.', 'thinkrank' )
-				: __( 'Failed to update llms.txt settings.', 'thinkrank' ),
+			'success' => true,
+			'message' => __( 'llms.txt settings updated.', 'thinkrank' ),
 		];
 	}
 }

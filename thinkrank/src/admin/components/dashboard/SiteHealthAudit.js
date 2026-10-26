@@ -102,6 +102,14 @@ const STATUS_STYLES = {
 		fg: '#027a48',
 		border: '#b9f1cf',
 	},
+	// A check about something the site switched off: listed, never scored
+	// (#1288), so it reads as neutral rather than as a warning.
+	not_applicable: {
+		label: __('Not scored', 'thinkrank'),
+		bg: '#f3f4f6',
+		fg: '#4b5563',
+		border: '#e5e7eb',
+	},
 };
 
 const StatusPill = ({ status }) => {
@@ -426,7 +434,9 @@ const CheckRow = ({ check, last, onFixed }) => {
 	const [open, setOpen] = useState(false);
 	const [fixing, setFixing] = useState(false);
 	const hasFix = Boolean(check.how_to_fix);
-	const passed = check.status === 'passed';
+	// A check that is not scored has nothing to fix, like a passing one.
+	const passed =
+		check.status === 'passed' || check.status === 'not_applicable';
 
 	// The server decides what is safe to auto-apply — the UI never guesses.
 	const canAutoFix = Boolean(check.can_auto_fix);
@@ -767,14 +777,27 @@ const SiteHealthAudit = ({ onRefresh, compact = true }) => {
 
 	const summaryText = useMemo(() => {
 		if (!data?.summary) return '';
-		const { passed = 0, warning = 0, failed = 0 } = data.summary;
-		return sprintf(
+		const {
+			passed = 0,
+			warning = 0,
+			failed = 0,
+			not_applicable: notScored = 0,
+		} = data.summary;
+		const text = sprintf(
 			/* translators: 1: passed count, 2: warning count, 3: failed count. */
 			__('%1$d passed · %2$d warnings · %3$d failed', 'thinkrank'),
 			passed,
 			warning,
 			failed
 		);
+		return notScored > 0
+			? sprintf(
+					/* translators: 1: the passed/warnings/failed counts, 2: checks not scored. */
+					__('%1$s · %2$d not scored', 'thinkrank'),
+					text,
+					notScored
+				)
+			: text;
 	}, [data]);
 
 	const detailsHref = getPageUrl('essential-seo', DETAILS_PARAMS);

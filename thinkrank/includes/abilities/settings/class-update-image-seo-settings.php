@@ -190,15 +190,15 @@ class Update_Image_Seo_Settings extends Ability_Base {
 			);
 		}
 
-		$result = $mgr->save_settings( 'site', null, $merged );
+		if ( ! $mgr->save_settings( 'site', null, $merged ) ) {
+			return self::settings_save_failed( __( 'Failed to update image SEO settings.', 'thinkrank' ), $mgr->get_last_save_error(), $mgr->get_last_save_error_code() );
+		}
 
 		// What was stored, not what was sent: a value the save reduces away
 		// is otherwise reported as saved (CLAUDE.md, pitfall 7).
 		return [
-			'success'  => (bool) $result,
-			'message'  => (bool) $result
-				? __( 'Image SEO settings updated.', 'thinkrank' )
-				: __( 'Failed to update image SEO settings.', 'thinkrank' ),
+			'success'  => true,
+			'message'  => __( 'Image SEO settings updated.', 'thinkrank' ),
 			'settings' => ( new Get_Image_Seo_Settings() )->execute( [] )['settings'],
 		];
 	}

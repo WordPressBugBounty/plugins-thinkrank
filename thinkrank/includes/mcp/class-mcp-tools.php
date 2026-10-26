@@ -241,7 +241,7 @@ final class Mcp_Tools {
 				'thinkrank_mcp_read_only',
 				sprintf(
 					/* translators: %s: tool name. */
-					__( 'This MCP connection is read-only; the "%s" tool changes state and is not permitted. Ask the site administrator to grant write access under ThinkRank > MCP > Connected AI apps (it applies on the next request), or reconnect with write access.', 'thinkrank' ),
+					__( 'This MCP connection is read-only; the "%s" tool changes state and is not permitted. Ask the site administrator to grant write access under ThinkRank > AI Tools > MCP > Connected AI apps (it applies on the next request), or reconnect with write access.', 'thinkrank' ),
 					$name
 				),
 				[ 'status' => 403 ]
@@ -288,7 +288,7 @@ final class Mcp_Tools {
 			'thinkrank_mcp_scope_denied',
 			sprintf(
 				/* translators: 1: tool name, 2: scope such as content:write. */
-				__( 'This MCP connection does not have the %2$s scope that the "%1$s" tool needs. It is the access the site administrator granted, not a fault: ask them to grant %2$s under ThinkRank > MCP > Connected AI apps. The change applies on the next request, without reconnecting.', 'thinkrank' ),
+				__( 'This MCP connection does not have the %2$s scope that the "%1$s" tool needs. It is the access the site administrator granted, not a fault: ask them to grant %2$s under ThinkRank > AI Tools > MCP > Connected AI apps. The change applies on the next request, without reconnecting.', 'thinkrank' ),
 				$name,
 				$scope
 			),

@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.18.0
+Stable tag: 2.18.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -164,7 +164,7 @@ Upgrade to **ThinkRank Pro** for advanced SEO automation, also available to your
 2. Import existing SEO data from Rank Math, Yoast SEO, AIOSEO, SEOPress, Squirrly SEO, or Slim SEO if needed.
 3. Choose your AI provider and enter your API key for AI features.
 4. Configure metadata, schema, XML sitemaps, robots meta, canonical URLs, social meta, Search Console, and llms.txt (GA4 with ThinkRank Pro).
-5. (Optional) Enable the MCP server under ThinkRank → MCP and connect Claude, ChatGPT, or Cursor.
+5. (Optional) Enable the MCP server under ThinkRank → AI Tools → MCP and connect Claude, ChatGPT, or Cursor.
 
 **Connect the MCP Server**
 * *Claude:* enable the MCP server, copy your site's MCP URL, add it in Claude, and approve the connection through the guided OAuth 2.1 flow - no manual API key required.
@@ -349,6 +349,20 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.18.1 =
+Release Date: 2026-10-26
+
+- Improved: The SEO Analyzer does not score llms.txt while it is off, and credits WordPress's sitemap
+- Changed: Focus keywords are no longer printed as a meta keywords tag
+- Fixed: Search charts mark days Google is still processing and leave gaps for days with no data
+- Fixed: A static posts page uses its own SEO title, description and social tags
+- Fixed: Descriptions keep spaces between blocks and use the excerpt before the body
+- Fixed: FAQ schema reads question headings, and HowTo and TOC schema stay off archives and search
+- Fixed: Sitemaps leave out a noindexed homepage and pages canonicalised to another URL
+- Fixed: Article author links point to a working URL when author archives are off
+- Fixed: Minor robots.txt, word count, WPML sitemap, schema, MCP and Claude AI issues
+- Removed: The Exclude Private Posts sitemap setting, which never had an effect
+
 = 2.18.0 =
 Release Date: 2026-10-25
 
@@ -402,26 +416,12 @@ Release Date: 2026-10-15
 - Fixed: Sitemaps for a deactivated plugin's content are no longer published, and are flagged
 - Fixed: Migration snapshot details count the records actually exported
 
-= 2.15.0 =
-Release Date: 2026-10-13
-
-- New: Connect to ThinkRank Hub from AI Tools or the setup wizard to see every site's SEO in one place
-- New: The MCP activity log records every AI change with what it replaced, and lets you revert it
-- New: Each AI connection gets Read or Read & Write access per area and an expiry under Connected AI apps
-- New: The MCP connection check runs on its own when the MCP tab opens
-- New: AI assistants can apply the SEO Analyzer's one-click fixes and undo them
-- Improved: The setup wizard offers ThinkRank Hub, and the onboarding call moved to the Ready step
-- Improved: The deactivation feedback dialog uses the native WordPress design
-- Changed: The MCP address with the token in its path is removed; connect with the bearer header instead
-- Fixed: The MCP activity log now works on WordPress 6.0 and 6.1
-- Fixed: Revoke all access keeps app registrations, so ChatGPT and other clients reconnect
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.18.1 =
+The SEO Analyzer stops scoring llms.txt while it is off, search charts mark preliminary days, and sitemaps skip a noindexed homepage. Recommended for all sites.
+
 = 2.18.0 =
 AI agents can edit post bodies and slugs over MCP with a preview and undo, and scores follow each post's language. Preview no longer publishes unsaved SEO fields. Recommended for all sites.
-
-= 2.17.1 =
-Titles with "<" are no longer cut off, breadcrumbs and WooCommerce schema are fuller, and AI replies from thinking models are read correctly. ThinkRank Pro users: update Pro to 2.9.1 to keep GA4 traffic reports. Recommended for all sites.

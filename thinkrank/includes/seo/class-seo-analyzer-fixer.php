@@ -155,6 +155,37 @@ class SEO_Analyzer_Fixer {
     }
 
     /**
+     * Whether the search visibility fix may run on this copy of the site.
+     *
+     * "Discourage search engines" is the switch people use to keep a staging,
+     * local or development copy out of Google, and the fix cannot be put
+     * back by any ability. Outside production it is refused, so one MCP call
+     * or a "fix every failing check" loop cannot make such a copy indexable
+     * (#1351). WordPress's own environment type decides; the filter is for a
+     * site that knows better, such as a production site wrongly marked.
+     *
+     * The audit offers Fix only where this holds
+     * (SEO_Analyzer::search_block_is_fixable()), so it never offers a fix
+     * this refuses.
+     *
+     * @since 2.18.1
+     * @return bool
+     */
+    public static function search_visibility_fix_allowed(): bool {
+        $environment = function_exists('wp_get_environment_type') ? (string) wp_get_environment_type() : 'production';
+
+        /**
+         * Filter whether the search visibility fix may run on this site.
+         *
+         * @since 2.18.1
+         *
+         * @param bool   $allowed     True only when the environment type is production.
+         * @param string $environment wp_get_environment_type().
+         */
+        return (bool) apply_filters('thinkrank_allow_search_visibility_fix', 'production' === $environment, $environment);
+    }
+
+    /**
      * Whether a check can be fixed automatically.
      *
      * @param string $check_id Analyzer check id.
@@ -235,11 +266,20 @@ class SEO_Analyzer_Fixer {
      * SEO_Manager::on_blog_public_changed(), under the same rule, so a file
      * that hook already repaired no longer blocks and is not synced again.
      *
+     * Refused before anything is written outside production
+     * (search_visibility_fix_allowed()).
+     *
      * @return array
-     * @throws \Exception When the setting cannot be saved, or when the served
-     *                    robots.txt still blocks search engines afterwards.
+     * @throws \Exception When the site is not production, when the setting
+     *                    cannot be saved, or when the served robots.txt still
+     *                    blocks search engines afterwards.
      */
     private function fix_search_visibility(): array {
+        if (!self::search_visibility_fix_allowed()) {
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            throw new \Exception(self::search_visibility_refusal());
+        }
+
         $has_manager = class_exists('ThinkRank\\SEO\\Site_Identity_Manager');
 
         if (!get_option('blog_public')) {
@@ -296,6 +336,17 @@ class SEO_Analyzer_Fixer {
     }
 
     /**
+     * Why the search visibility fix is refused outside production, in words
+     * to show the person.
+     *
+     * @since 2.18.1
+     * @return string
+     */
+    public static function search_visibility_refusal(): string {
+        return __('This site is not marked as production, so ThinkRank will not make it visible to search engines. A staging, local or development copy should stay hidden. On the live site, untick "Discourage search engines from indexing this site" under Settings → Reading.', 'thinkrank');
+    }
+
+    /**
      * Name what is still blocking search engines after the fix ran.
      *
      * @since 2.17.0
@@ -349,6 +400,10 @@ class SEO_Analyzer_Fixer {
         $settings  = $generator->get_settings('site');
         $settings  = is_array($settings) ? $settings : [];
 
+        // Read before the save: once ThinkRank's sitemap is on it switches
+        // core's off, and the person should hear that it was replaced (#1290).
+        $core_url = empty($settings['enabled']) ? SEO_Analyzer::core_sitemap_url() : '';
+
         $settings['enabled'] = true;
 
         if (!$generator->save_settings('site', null, $settings)) {
@@ -356,9 +411,17 @@ class SEO_Analyzer_Fixer {
             throw new \Exception(__('The sitemap setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause.', 'thinkrank'));
         }
 
+        $message = '' !== $core_url
+            ? sprintf(
+                /* translators: %s: URL of WordPress core's sitemap index. */
+                __('Your XML sitemap is now enabled. It replaces WordPress core\'s sitemap at %s, which ThinkRank switches off while its own is on.', 'thinkrank'),
+                $core_url
+            )
+            : __('Your XML sitemap is now enabled.', 'thinkrank');
+
         return [
             'fixed'   => true,
-            'message' => __('Your XML sitemap is now enabled.', 'thinkrank'),
+            'message' => $message,
             'data'    => [],
         ];
     }
@@ -422,7 +485,7 @@ class SEO_Analyzer_Fixer {
      * selection leaves out. A site with nothing deployed gets the site
      * defaults from Schema_Settings_Config.
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param string[] $deployed_types Schema types deployed in the site context.
      * @return string[] Site-level schema types to save as the selection.
@@ -661,7 +724,16 @@ class SEO_Analyzer_Fixer {
             throw new \Exception(__('The llms.txt module is unavailable.', 'thinkrank'));
         }
 
-        $manager   = new LLMs_Txt_Manager();
+        $manager = new LLMs_Txt_Manager();
+
+        // The audit does not score llms.txt while it is switched off and
+        // offers no Fix for it; fix-seo-check is refused the same way rather
+        // than publishing a file the site chose not to have (#1288).
+        if (!SEO_Analyzer::llms_txt_enabled($manager)) {
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            throw new \Exception(__('llms.txt is turned off in ThinkRank. Turn it on under Essential SEO → Crawling and AI Indexing → LLMs.txt first if you want it published.', 'thinkrank'));
+        }
+
         $generated = $manager->generate_llms_txt([], []);
 
         $validation = isset($generated['validation']) && is_array($generated['validation'])

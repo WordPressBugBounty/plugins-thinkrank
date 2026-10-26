@@ -103,6 +103,16 @@ class SEO_Analyzer {
     public const FAILED  = 'failed';
 
     /**
+     * A check that does not apply to this site, such as one about a feature
+     * the site switched off. Listed with the other checks but not scored: its
+     * weight is left out of the overall and category scores, and it is not
+     * counted as passed, warning or failed (#1288).
+     *
+     * @since 2.18.1
+     */
+    public const NOT_APPLICABLE = 'not_applicable';
+
+    /**
      * Human-readable labels for each category id.
      *
      * @return array<string,string>
@@ -198,7 +208,11 @@ class SEO_Analyzer {
      * @return array {
      *     @type int    $overall_score Weighted 0–100 site score.
      *     @type string $grade         Letter grade A–F.
-     *     @type array  $summary       passed/warning/failed/total counts.
+     *     @type array  $summary       passed/warning/failed/total counts of the
+     *                                 scored checks; not_applicable counts the
+     *                                 checks listed without a score, and is
+     *                                 present only when there are any. A
+     *                                 category carries the same key the same way.
      *     @type array  $categories    Per-category subtotal + its checks.
      *     @type array  $checks        Flat list of every check result.
      *     @type string $generated_at  ISO-8601 UTC timestamp.
@@ -220,15 +234,20 @@ class SEO_Analyzer {
         $categories   = [];
 
         foreach ($checks as $check) {
-            $weight = (float) $check['weight'];
             $status = $check['status'];
+            $scored = self::NOT_APPLICABLE !== $status;
+            // A check that does not apply is shown, never scored: it neither
+            // earns nor costs anything, in the overall score or its category.
+            $weight = $scored ? (float) $check['weight'] : 0.0;
             $frac   = $fraction[$status] ?? 0.0;
 
             $total_weight += $weight;
             $earned       += $weight * $frac;
 
             $summary[$status] = ($summary[$status] ?? 0) + 1;
-            $summary['total']++;
+            if ($scored) {
+                $summary['total']++;
+            }
 
             $cat = $check['category'];
             if (!isset($categories[$cat])) {
@@ -349,6 +368,7 @@ class SEO_Analyzer {
             // (#1204). It can only withhold one, never offer one that has no
             // fixer.
             $fixable = self::PASSED !== $status
+                && self::NOT_APPLICABLE !== $status
                 && SEO_Analyzer_Fixer::can_fix($id)
                 && false !== ($outcome['can_auto_fix'] ?? true);
             $fix     = $fixable ? (SEO_Analyzer_Fixer::fixable()[$id] ?? []) : [];
@@ -669,6 +689,12 @@ class SEO_Analyzer {
      * @return bool
      */
     public static function search_block_is_fixable(array $block): bool {
+        // The fix refuses to run outside production (#1351); offering it
+        // there would only lead to that refusal.
+        if (!SEO_Analyzer_Fixer::search_visibility_fix_allowed()) {
+            return false;
+        }
+
         switch ((string) ($block['source'] ?? '')) {
             case 'blog_public':
             case 'allow_search_engines':
@@ -858,10 +884,28 @@ class SEO_Analyzer {
         }
 
         if (!$enabled) {
+            // ThinkRank's sitemap being off is a choice, often so WordPress
+            // core's (or another plugin's, through the same filter) takes
+            // over. ThinkRank only switches core's off while its own is on,
+            // so ask core whether it is serving one before calling the site
+            // sitemap-less (#1290).
+            $core_url = self::core_sitemap_url();
+            if ('' !== $core_url) {
+                return [
+                    'label'   => __('XML sitemap is enabled', 'thinkrank'),
+                    'status'  => self::PASSED,
+                    'message' => sprintf(
+                        /* translators: %s: URL of WordPress core's sitemap index. */
+                        __('ThinkRank\'s XML sitemap is off, and WordPress core\'s sitemap is served at %s, so search engines still have one.', 'thinkrank'),
+                        $core_url
+                    ),
+                ];
+            }
+
             return [
                 'label'      => __('XML sitemap is enabled', 'thinkrank'),
                 'status'     => self::WARNING,
-                'message'    => __('Your XML sitemap is turned off. Search engines rely on it to discover new pages quickly.', 'thinkrank'),
+                'message'    => __('No XML sitemap is served. ThinkRank\'s sitemap is off and WordPress core\'s is not served either. Search engines rely on a sitemap to discover new pages quickly.', 'thinkrank'),
                 'how_to_fix' => __('Enable the XML sitemap under Essential SEO → Crawling & AI Indexing → XML Sitemap.', 'thinkrank'),
             ];
         }
@@ -871,6 +915,35 @@ class SEO_Analyzer {
             'status'  => self::PASSED,
             'message' => __('Your XML sitemap is enabled and pointing crawlers to your content.', 'thinkrank'),
         ];
+    }
+
+    /**
+     * The URL of WordPress core's sitemap index when core is serving it, or ''.
+     *
+     * Core's own test (WP_Sitemaps::sitemaps_enabled()): `blog_public`, then
+     * the `wp_sitemaps_enabled` filter, which ThinkRank uses to switch core's
+     * sitemap off while its own is on, and which other sitemap plugins use to
+     * do the same. Read without building core's sitemap server, which would
+     * register its providers mid-audit.
+     *
+     * @since 2.18.1
+     *
+     * @return string
+     */
+    public static function core_sitemap_url(): string {
+        if (!function_exists('get_sitemap_url')) {
+            return '';
+        }
+
+        /** This filter is documented in wp-includes/sitemaps/class-wp-sitemaps.php */
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core's own hook, asked exactly as core asks it.
+        if (!(bool) apply_filters('wp_sitemaps_enabled', (bool) get_option('blog_public'))) {
+            return '';
+        }
+
+        $url = get_sitemap_url('index');
+
+        return is_string($url) && '' !== $url ? $url : home_url('/wp-sitemap.xml');
     }
 
     /**
@@ -1410,6 +1483,15 @@ class SEO_Analyzer {
     private $content_sample = null;
 
     /**
+     * Word counts of the sampled posts, by ID, as Word_Count_Index reports
+     * them. Memoized with the sample.
+     *
+     * @since 2.18.1
+     * @var array<int,int>|null
+     */
+    private $sample_word_counts = null;
+
+    /**
      * The sampled post ids, memoized so the Content and GEO categories run one
      * query between them rather than one each over the same CONTENT_SAMPLE_SIZE
      * posts. Both want the same slice — the most recent published posts and
@@ -1495,7 +1577,7 @@ class SEO_Analyzer {
 
             $modified = isset($post->post_modified_gmt) ? strtotime((string) $post->post_modified_gmt . ' UTC') : false;
 
-            $content = $this->builder_content($post) ?? (string) $post->post_content;
+            $content = $this->builder_content($post) ?? $this->filtered_post_content($post);
 
             $sample[] = [
                 'id'       => (int) $post->ID,
@@ -1508,6 +1590,27 @@ class SEO_Analyzer {
         $this->content_sample = $sample;
 
         return $sample;
+    }
+
+    /**
+     * A sampled post's stored markup, through `thinkrank_analyzable_content`.
+     *
+     * The filter is documented as the content ThinkRank analyzes, and the
+     * editor score and Thin Content apply it to every post. The sample read
+     * raw `post_content` whenever it was non-empty, so content a site adds
+     * through the filter never reached these checks (#1309). Still the stored
+     * markup, not rendered: see get_content_sample().
+     *
+     * @since 2.18.1
+     *
+     * @param \WP_Post $post Sampled post.
+     * @return string
+     */
+    private function filtered_post_content(\WP_Post $post): string {
+        $raw = (string) $post->post_content;
+
+        /** This filter is documented in includes/seo/class-builder-content.php */
+        return (string) apply_filters('thinkrank_analyzable_content', $raw, $post, $raw);
     }
 
     /**
@@ -1524,7 +1627,7 @@ class SEO_Analyzer {
      * Guarded like builder_meta_keys(), so a partial checkout degrades to the
      * raw markup instead of fataling mid-audit.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param \WP_Post $post Sampled post.
      * @return string|null Resolved content, or null to use `post_content`.
@@ -1711,28 +1814,14 @@ class SEO_Analyzer {
      * @return string
      */
     private function content_to_text(string $content): string {
-        // Block delimiters are HTML comments, so strip_tags leaves their
-        // attribute JSON behind as text and inflates every word count.
-        $text = preg_replace('/<!--.*?-->/s', ' ', $content);
-        $text = preg_replace('/\[[^\]]*\]/', ' ', (string) $text);
-        $text = wp_strip_all_tags((string) $text);
-
-        // `/u` makes preg_replace() return NULL on content that is not valid
-        // UTF-8 — a latin1 install, a raw SQL import, a migrated dump — and
-        // trim(null) is a TypeError under strict_types. run_checks() catches
-        // Throwable and continues, so the check did not fail: it DISAPPEARED
-        // from the audit, taking its weight with it and pushing the overall
-        // score UP because a failing check had been removed rather than scored.
-        // Fall back to the byte-wise collapse when the Unicode pass cannot read
-        // the bytes; a slightly coarser word split is worth far more than a
-        // check that silently deletes itself.
-        $collapsed = preg_replace('/\s+/u', ' ', (string) $text);
-
-        if (null === $collapsed) {
-            $collapsed = preg_replace('/\s+/', ' ', (string) $text);
-        }
-
-        return trim((string) $collapsed);
+        // The reading text Thin Content and the per-post score count (#1309).
+        // The old wp_strip_all_tags() pass deleted tags instead of spacing
+        // them, so "<li>alpha</li><li>beta</li>" read as one word. It also
+        // strips block delimiters and shortcode syntax, and scrubs bytes that
+        // are not valid UTF-8 rather than failing on them, which a check here
+        // must never do: run_checks() would drop it from the audit, weight
+        // and all.
+        return Word_Count_Index::reading_text($content);
     }
 
     /**
@@ -1743,11 +1832,31 @@ class SEO_Analyzer {
      * @return int
      */
     private function word_count(string $text): int {
-        if ('' === $text) {
-            return 0;
+        return Word_Count_Index::count_words($text);
+    }
+
+    /**
+     * A sampled post's length as Thin Content and the per-post score count
+     * it: the resolved content (builder storage, rendered blocks and
+     * shortcodes, the `thinkrank_analyzable_content` filter) in the site's
+     * unit.
+     *
+     * Read from the word-count index, which stores each post's count; a post
+     * with no current entry is counted and stored within a time budget. A post
+     * not reached in the budget falls back to counting its sampled text the
+     * same way, which differs only by what rendering would have added.
+     *
+     * @since 2.18.1
+     *
+     * @param array{id: int, content: string, text: string} $row Sample row.
+     * @return int
+     */
+    private function sample_word_count(array $row): int {
+        if (null === $this->sample_word_counts) {
+            $this->sample_word_counts = Word_Count_Index::counts(array_column($this->get_content_sample(), 'id'));
         }
 
-        return count(preg_split('/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: []);
+        return $this->sample_word_counts[(int) $row['id']] ?? Word_Count_Index::count_text($row['content']);
     }
 
     /**
@@ -2078,6 +2187,18 @@ class SEO_Analyzer {
 
         $manager = new LLMs_Txt_Manager();
 
+        // Switched off is the site owner's decision, which the rest of the
+        // plugin respects (serve_llms_txt() never resurrects the file for a
+        // site that turned the feature off). Failing the check for it cost
+        // the site the check's whole weight for a choice it made (#1288).
+        if (!self::llms_txt_enabled($manager)) {
+            return [
+                'label'   => $label,
+                'status'  => self::NOT_APPLICABLE,
+                'message' => __('llms.txt is turned off in ThinkRank, so this check is not scored.', 'thinkrank'),
+            ];
+        }
+
         if ($manager->is_published()) {
             return [
                 'label'   => $label,
@@ -2093,6 +2214,27 @@ class SEO_Analyzer {
             'message'    => __('No llms.txt is published. It is the file AI assistants read to learn what your site is about and which pages matter.', 'thinkrank'),
             'how_to_fix' => __('Fill in the fields under Essential SEO → Crawling & AI Indexing → LLMs.txt and publish it.', 'thinkrank'),
         ];
+    }
+
+    /**
+     * Whether the site has the llms.txt feature switched on.
+     *
+     * The stored switch; a site that never saved the setting has the default,
+     * which is on.
+     *
+     * @since 2.18.1
+     *
+     * @param LLMs_Txt_Manager $manager LLMs.txt manager.
+     * @return bool
+     */
+    public static function llms_txt_enabled(LLMs_Txt_Manager $manager): bool {
+        try {
+            $settings = $manager->get_settings('site');
+        } catch (\Throwable $e) {
+            return true;
+        }
+
+        return !is_array($settings) || !array_key_exists('enabled', $settings) || !empty($settings['enabled']);
     }
 
     /**
@@ -2833,7 +2975,7 @@ class SEO_Analyzer {
         return $this->coverage_check(
             __('Pages have enough depth to cite', 'thinkrank'),
             function (array $row): bool {
-                return $this->word_count($row['text']) >= self::GEO_DEPTH_MIN_WORDS;
+                return $this->sample_word_count($row) >= self::GEO_DEPTH_MIN_WORDS;
             },
             /* translators: 1: matching posts, 2: sampled posts. */
             __('%1$d of your %2$d most recent pages have enough substance for an assistant to cite.', 'thinkrank'),

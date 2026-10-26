@@ -144,7 +144,7 @@ class Builder_Content {
      * active theme style's `tag`), and the walker, which only wraps text whose
      * node names a tag, read it as body copy (#908).
      *
-     * @since 2.15.0
+     * @since 2.14.1
      * @var string
      */
     private const BRICKS_HEADING_ELEMENT = 'heading';
@@ -152,7 +152,7 @@ class Builder_Content {
     /**
      * Tag a Bricks Heading renders when neither it nor a theme style sets one.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      * @var string
      */
     private const BRICKS_HEADING_DEFAULT_TAG = 'h3';
@@ -164,7 +164,7 @@ class Builder_Content {
      * left on its default size has no `header_size` in `_elementor_data`, and
      * that default is `h2` (#908).
      *
-     * @since 2.15.0
+     * @since 2.14.1
      * @var string
      */
     private const ELEMENTOR_HEADING_DEFAULT_TAG = 'h2';
@@ -640,7 +640,7 @@ class Builder_Content {
      * Anything the walk does not reach (an orphan, a cycle) keeps its stored
      * position after the rest, so no copy is dropped.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param array $elements Flat Bricks element list.
      * @return array The same elements, in render order.
@@ -1205,7 +1205,7 @@ class Builder_Content {
      * A `tag` of `custom` is left alone: the element then renders its
      * `customTag`, which is not necessarily a heading.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param array $tree Bricks content area.
      * @return array Tree with each untagged Heading's default tag filled in.
@@ -1246,7 +1246,7 @@ class Builder_Content {
      * a front-end render, so in admin, REST and CLI requests this is the
      * element's own default.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @return string Heading tag, h1 to h6.
      */
@@ -1271,7 +1271,7 @@ class Builder_Content {
     /**
      * Give each Elementor Heading widget its default `header_size` if unstored.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param array $elements Decoded `_elementor_data`.
      * @return array The same tree, with untagged Heading widgets tagged.
@@ -1460,7 +1460,7 @@ class Builder_Content {
      * the JSON-as-content failure back on corrupt data. Anything that is not
      * an envelope is returned unchanged, so a bare tree still resolves.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param array $decoded Decoded meta value.
      * @return array The node tree.

@@ -135,7 +135,57 @@ class Claude_Client {
             $body['temperature'] = $options['temperature'];
         }
 
+        $effort = $this->effort_for((string) $options['model'], (string) ($options['reasoning_effort'] ?? ''));
+        if ('' !== $effort) {
+            $body['output_config'] = ['effort' => $effort];
+        }
+
         return $this->make_request('messages', $body);
+    }
+
+    /**
+     * Claude's effort level for a caller's `reasoning_effort`, or '' to send none.
+     *
+     * Sonnet, Opus and Fable 5.x think by default when a request sends no
+     * thinking setting, and that thinking is billed against the same
+     * `max_tokens` as the answer. The content brief asks for 'low' through the
+     * provider-neutral `reasoning_effort` option, which this client used to
+     * drop, so Sonnet 5.5 thought at its default `high` and stopped at the
+     * brief's limit on every attempt (#1350). `output_config.effort` bounds
+     * that thinking; it is not a thinking switch, so it is valid whatever the
+     * model's thinking default.
+     *
+     * Only the levels every effort model accepts are sent. OpenAI's 'minimal'
+     * has no Claude equivalent and is sent as 'low'. A model without the
+     * parameter (Sonnet 4.5, Haiku 4.5, anything this list does not name)
+     * gets nothing, since it answers effort with a 400.
+     *
+     * @since 2.18.1
+     *
+     * @param string $model  Model ID.
+     * @param string $effort The caller's reasoning_effort, or ''.
+     * @return string 'low', 'medium', 'high', or ''.
+     */
+    private function effort_for(string $model, string $effort): string {
+        $map = [
+            'minimal' => 'low',
+            'low'     => 'low',
+            'medium'  => 'medium',
+            'high'    => 'high',
+        ];
+        $effort = $map[strtolower(trim($effort))] ?? '';
+
+        if ('' === $effort) {
+            return '';
+        }
+
+        foreach (self::EFFORT_MODELS as $prefix) {
+            if (0 === strpos($model, $prefix)) {
+                return $effort;
+            }
+        }
+
+        return '';
     }
 
     /**
@@ -268,6 +318,28 @@ class Claude_Client {
         'claude-sonnet-4-6'  => 128000,
         // 64K output.
         'claude-haiku-4-5'   => 64000,
+    ];
+
+    /**
+     * Model families that accept `output_config.effort`, by ID prefix.
+     *
+     * Effort arrived with Opus 4.5 and is on every Claude model since, except
+     * Sonnet 4.5 and Haiku 4.5, which reject it.
+     *
+     * @since 2.18.1
+     * @var string[]
+     */
+    private const EFFORT_MODELS = [
+        'claude-opus-4-5',
+        'claude-opus-4-6',
+        'claude-sonnet-4-6',
+        'claude-opus-4-7',
+        'claude-opus-4-8',
+        'claude-opus-5',
+        'claude-sonnet-5',
+        'claude-haiku-5',
+        'claude-fable-5',
+        'claude-mythos-5',
     ];
 
     /**

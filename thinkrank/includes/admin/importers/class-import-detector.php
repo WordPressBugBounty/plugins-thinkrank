@@ -428,7 +428,7 @@ class Import_Detector {
     /**
      * Detect SureRank data: per-post, per-term and per-author SEO rows.
      *
-     * @since 2.15.0
+     * @since 2.16.0
      *
      * @return array Counts array
      */

@@ -84,10 +84,13 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
     /**
      * Title format templates with dynamic placeholders
      *
+     * A constant since 2.18.1, so the ability schema can list the names
+     * without building a manager.
+     *
      * @since 1.0.0
      * @var array
      */
-    private array $title_templates = [
+    private const TITLE_TEMPLATES = [
         'default' => '%title% %separator% %sitename%',
         'reverse' => '%sitename% %separator% %title%',
         'title_only' => '%title%',
@@ -160,12 +163,65 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * What the site is, as the setup wizard asks it.
+     *
+     * The identity_type values. Nothing is published from it, but the
+     * update-site-identity-settings ability offers it, so it is declared
+     * once here for the ability's enum (#1344).
+     *
+     * @since 2.18.1
+     * @var string[]
+     */
+    public const IDENTITY_TYPES = ['blog', 'business', 'portfolio', 'other'];
+
+    /**
+     * Whom the site speaks for: the represents values.
+     *
+     * @since 2.18.1
+     * @var string[]
+     */
+    public const REPRESENTS = ['person', 'organization'];
+
+    /**
+     * The title_template names, the default first.
+     *
+     * @since 2.18.1
+     *
+     * @return string[]
+     */
+    public static function title_template_names(): array {
+        return array_map('strval', array_keys(self::TITLE_TEMPLATES));
+    }
+
+    /**
+     * The title_separator names, the default first.
+     *
+     * @since 2.18.1
+     *
+     * @return string[]
+     */
+    public static function title_separator_names(): array {
+        return array_map('strval', array_keys(self::$title_separators));
+    }
+
+    /**
+     * The breadcrumb_type names, the default first.
+     *
+     * @since 2.18.1
+     *
+     * @return string[]
+     */
+    public static function breadcrumb_type_names(): array {
+        return array_map('strval', array_keys(self::BREADCRUMB_TYPES));
+    }
+
+    /**
      * Breadcrumb types and their configurations
      *
      * @since 1.0.0
      * @var array
      */
-    private array $breadcrumb_types = [
+    private const BREADCRUMB_TYPES = [
         'hierarchical' => [
             'name' => 'Hierarchical',
             'description' => 'Based on page hierarchy and categories',
@@ -347,7 +403,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      * independently: that flag is only set when a physical robots.txt exists,
      * and the sitemap index needs rebuilding whether or not it does.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      * @var string
      */
     public const SITEMAP_RESYNC_OPTION = 'thinkrank_sitemap_contributors_changed';
@@ -465,7 +521,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      * still runs with the outgoing plugin's `thinkrank_additional_sitemaps`
      * callback attached.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      * @return void
      */
     public static function flag_sitemap_resync(): void {
@@ -481,7 +537,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      * cached dynamic documents, so sites serving the sitemap from PHP drop the
      * entry as well.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      * @return void
      */
     public static function maybe_resync_sitemap(): void {
@@ -843,7 +899,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
     }
     public function generate_title(string $template_name = 'default', array $data = [], string $context = 'site'): string {
         // Get template
-        $template = $this->title_templates[$template_name] ?? $this->title_templates['default'];
+        $template = self::TITLE_TEMPLATES[$template_name] ?? self::TITLE_TEMPLATES['default'];
 
         // Get site settings
         $settings = $this->get_settings('site');
@@ -2202,7 +2258,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
 
         // Validate title template
         if (isset($settings['title_template'])) {
-            if (!isset($this->title_templates[$settings['title_template']])) {
+            if (!isset(self::TITLE_TEMPLATES[$settings['title_template']])) {
                 $validation['errors'][] = 'Invalid title template specified';
                 $validation['valid'] = false;
             }
@@ -2270,7 +2326,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
 
         // Validate breadcrumb settings
         if (isset($settings['breadcrumb_type'])) {
-            if (!isset($this->breadcrumb_types[$settings['breadcrumb_type']])) {
+            if (!isset(self::BREADCRUMB_TYPES[$settings['breadcrumb_type']])) {
                 $validation['errors'][] = 'Invalid breadcrumb type specified';
                 $validation['valid'] = false;
             }
@@ -3487,7 +3543,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
                 'type' => 'string',
                 'title' => 'Title Template',
                 'description' => 'Template for generating page titles',
-                'enum' => array_keys($this->title_templates),
+                'enum' => array_keys(self::TITLE_TEMPLATES),
                 'default' => 'default'
             ],
             'title_separator' => [
@@ -3521,7 +3577,7 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
                 'type' => 'string',
                 'title' => 'Breadcrumb Type',
                 'description' => 'Type of breadcrumb navigation to generate',
-                'enum' => array_keys($this->breadcrumb_types),
+                'enum' => array_keys(self::BREADCRUMB_TYPES),
                 'default' => 'hierarchical'
             ],
             'robots_txt_enabled' => [
@@ -4115,6 +4171,20 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         }
 
         return $rules;
+    }
+
+    /**
+     * The sitemap URLs this install advertises in robots.txt.
+     *
+     * The same list the managed robots.txt writes, for the path where
+     * ThinkRank does not own the robots.txt body but still has to name its
+     * sitemap there (#1323).
+     *
+     * @since 2.18.1
+     * @return string[]
+     */
+    public function get_advertised_sitemap_urls(): array {
+        return $this->get_sitemap_urls_for_robots();
     }
 
     /**

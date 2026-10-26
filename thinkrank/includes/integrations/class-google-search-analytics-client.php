@@ -46,7 +46,7 @@ class Google_Search_Analytics_Client extends Google_API_Base_Client {
      * @param int    $row_limit  Maximum number of rows to return (the API
      *                           accepts up to 25,000).
      * @param int    $start_row  Zero-based offset of the first row, for
-     *                           paging past $row_limit. @since 2.15.0
+     *                           paging past $row_limit. @since 2.14.1
      * @return array Analytical data including rows and totals.
      * @throws \Exception If the API request fails.
      */

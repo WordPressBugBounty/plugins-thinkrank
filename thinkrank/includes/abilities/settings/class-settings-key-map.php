@@ -10,6 +10,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\Abilities\Settings;
 
+use ThinkRank\SEO\Site_Identity_Manager;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -76,8 +78,10 @@ final class Settings_Key_Map {
 			'site_description'         => self::string( __( 'Short description of the site.', 'thinkrank' ) ),
 			'tagline'                  => self::string( __( 'Site tagline.', 'thinkrank' ) ),
 			'alternate_name'           => self::alternate_name(),
-			'identity_type'            => self::string( __( 'What the site is, e.g. "blog", "business", "portfolio".', 'thinkrank' ) ),
-			'represents'               => self::string( __( 'Whether the site represents a "person" or an "organization".', 'thinkrank' ) ),
+			// Unset first: read() reads a value outside the enum as its first
+			// entry, and an unset identity is what these fall back to (#1344).
+			'identity_type'            => self::choice( __( 'What the site is. An empty string means not set.', 'thinkrank' ), array_merge( [ '' ], Site_Identity_Manager::IDENTITY_TYPES ) ),
+			'represents'               => self::choice( __( 'Whether the site represents a person or an organization. An empty string means not set.', 'thinkrank' ), array_merge( [ '' ], Site_Identity_Manager::REPRESENTS ) ),
 			'default_meta_description' => self::string( __( 'Meta description used where no more specific one is set.', 'thinkrank' ) ),
 			'default_social_image'     => self::string( __( 'URL of the fallback social sharing image.', 'thinkrank' ) ),
 			'social_media_accounts'    => [
@@ -88,8 +92,8 @@ final class Settings_Key_Map {
 
 			// Titles. These are %token% templates; the manager sanitizes them
 			// without stripping their tokens.
-			'title_template'           => self::string( __( 'Named title layout, e.g. "default", "reverse", "category".', 'thinkrank' ) ),
-			'title_separator'          => self::string( __( 'Separator between title parts, e.g. "pipe", "dash".', 'thinkrank' ) ),
+			'title_template'           => self::choice( __( 'Named title layout.', 'thinkrank' ), Site_Identity_Manager::title_template_names() ),
+			'title_separator'          => self::choice( __( 'Separator between title parts: pipe (|), dash (-), bullet, colon, greater (>) or tilde (~).', 'thinkrank' ), Site_Identity_Manager::title_separator_names() ),
 			'homepage_title'           => self::template( __( 'the homepage', 'thinkrank' ), '' ),
 			'homepage_description'     => self::string(
 				sprintf(
@@ -106,7 +110,7 @@ final class Settings_Key_Map {
 
 			// Breadcrumbs.
 			'breadcrumbs_enabled'      => self::boolean( __( 'Whether breadcrumb markup is generated.', 'thinkrank' ) ),
-			'breadcrumb_type'          => self::string( __( 'Breadcrumb structure, e.g. "hierarchical".', 'thinkrank' ) ),
+			'breadcrumb_type'          => self::choice( __( 'Breadcrumb structure.', 'thinkrank' ), Site_Identity_Manager::breadcrumb_type_names() ),
 			'breadcrumb_home_text'     => self::string( __( 'Label for the home link in breadcrumbs.', 'thinkrank' ) ),
 			'breadcrumb_separator'     => self::string( __( 'Separator drawn between breadcrumb items.', 'thinkrank' ) ),
 			'breadcrumb_prefix'        => self::string( __( 'Text shown before the breadcrumb trail.', 'thinkrank' ) ),
@@ -214,7 +218,6 @@ final class Settings_Key_Map {
 			// What stays out.
 			'exclude_posts'              => self::string( __( 'Comma-separated post IDs to leave out.', 'thinkrank' ) ),
 			'exclude_terms'              => self::string( __( 'Comma-separated term IDs to leave out.', 'thinkrank' ) ),
-			'exclude_private_posts'      => self::boolean( __( 'Whether privately published posts are left out.', 'thinkrank' ) ),
 			'exclude_password_protected' => self::boolean( __( 'Whether password-protected posts are left out.', 'thinkrank' ) ),
 		];
 	}
@@ -511,6 +514,24 @@ final class Settings_Key_Map {
 	private static function string( string $description ): array {
 		return [
 			'type'        => 'string',
+			'description' => $description,
+		];
+	}
+
+	/**
+	 * A string property limited to a list, ordered so the first entry is the
+	 * value the manager falls back to ({@see read_value()}).
+	 *
+	 * @since 2.18.1
+	 *
+	 * @param string   $description Translated text describing the value.
+	 * @param string[] $values      Allowed values.
+	 * @return array<string, mixed>
+	 */
+	private static function choice( string $description, array $values ): array {
+		return [
+			'type'        => 'string',
+			'enum'        => array_values( $values ),
 			'description' => $description,
 		];
 	}

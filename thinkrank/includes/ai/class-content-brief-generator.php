@@ -60,6 +60,17 @@ class Content_Brief_Generator {
     private const MIN_BRIEF_TOKENS = 2000;
 
     /**
+     * What a brief cut off at the output token limit tells the person.
+     *
+     * The same request stops at the same point, and each attempt is billed,
+     * so it says that a plain retry will not help (#1350).
+     *
+     * @since 2.18.1
+     * @var string
+     */
+    private const TRUNCATED_MESSAGE = 'The AI stopped at its output token limit before finishing the brief. Trying again with the same settings will stop at the same point. Try fewer competitor URLs, or a model with a larger output limit. A shorter content length will not help: it asks for a smaller budget, not a smaller answer.';
+
+    /**
      * Content-length → budget multipliers, applied to the model-aware base.
      *
      * NOTE: provisional starting points (issue #287). They make Short/Medium/
@@ -225,8 +236,11 @@ class Content_Brief_Generator {
      * ground between 'minimal' and the model's default.
      * The level is filterable so a site can trade latency for more reasoning;
      * returning '' opts out entirely and lets the model use its default effort.
-     * Only the GPT-5 family consumes this — o1/o3, gpt-4o and the non-OpenAI
-     * clients ignore an unrecognised option key.
+     * The GPT-5 family reads it as `reasoning_effort`, OpenRouter as its
+     * `reasoning` effort, and Claude as `output_config.effort` (#1350), where
+     * Sonnet, Opus and Fable 5.x otherwise think at their default and spend
+     * the brief's budget before the answer. o1/o3, gpt-4o and Gemini ignore
+     * the option key.
      *
      * @param string $model  The resolved model ID (passed to the filter).
      * @param array  $params The brief generation parameters (passed to the filter).
@@ -358,10 +372,9 @@ class Content_Brief_Generator {
             $base_tokens = (int) $this->ai_client->get_recommended_tokens('content_brief');
             $max_tokens = $this->scale_tokens_for_length($base_tokens, $content_length);
 
-            // Bound hidden reasoning on the GPT-5 family (issue #286). See
-            // resolve_reasoning_effort(). Only the GPT-5 family reads this;
-            // o1/o3, gpt-4o and the non-OpenAI clients ignore the option, and
-            // an empty string opts out (model default effort).
+            // Bound hidden reasoning (issues #286, #1350). See
+            // resolve_reasoning_effort() for which clients read it; an empty
+            // string opts out (model default effort).
             $reasoning_effort = $this->resolve_reasoning_effort($this->get_current_model(), $params);
 
             $completion_options = [
@@ -574,7 +587,7 @@ class Content_Brief_Generator {
                 )));
             }
             if ('length' === $finish) {
-                throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try fewer competitor URLs, or a model with a larger output limit. A shorter content length will not help: it asks for a smaller budget, not a smaller answer.');
+                throw new \Exception(self::TRUNCATED_MESSAGE);
             }
         }
 
@@ -595,7 +608,7 @@ class Content_Brief_Generator {
                 throw new \Exception('The AI declined to generate this brief for this topic. Try a different topic or less sensitive keywords.');
             }
             if ('max_tokens' === $stop_reason) {
-                throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try fewer competitor URLs, or a model with a larger output limit. A shorter content length will not help: it asks for a smaller budget, not a smaller answer.');
+                throw new \Exception(self::TRUNCATED_MESSAGE);
             }
         }
 
@@ -620,7 +633,7 @@ class Content_Brief_Generator {
             throw new \Exception('The AI stopped because its answer repeated published text too closely. Try a different topic or angle.');
         }
         if ('MAX_TOKENS' === $gemini_finish) {
-            throw new \Exception('The AI stopped at its output token limit before finishing the brief. Try fewer competitor URLs, or a model with a larger output limit. A shorter content length will not help: it asks for a smaller budget, not a smaller answer.');
+            throw new \Exception(self::TRUNCATED_MESSAGE);
         }
     }
 

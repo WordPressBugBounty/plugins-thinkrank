@@ -4,7 +4,8 @@
  * The same react-chartjs-2 <Line> chart used on Analytics › Dashboard
  * (see src/admin/components/essential-seo/analytics/DashboardSection.js):
  * Clicks / Impressions on the left axis, Avg. CTR / Avg. Position on the right,
- * same colors, tension, and dual-axis options. Fed by the search-daily rows.
+ * same colors, tension, and dual-axis options. Fed by the search-daily rows:
+ * a preliminary day is drawn dashed and a day without data is a gap (#1272).
  *
  * Concrete hex colors are used (not the --tr-* CSS vars the SPA relies on)
  * because those tokens are not present on the wp-admin Dashboard screen.
@@ -26,6 +27,11 @@ import {
 	Legend,
 	Filler,
 } from 'chart.js';
+import {
+	dailyStatusNote,
+	dayStatusLabel,
+	preliminarySegment,
+} from '../../utils/searchDailyStatus';
 
 ChartJS.register(
 	CategoryScale,
@@ -51,16 +57,18 @@ const TICK_COLOR = '#7c828d';
 /**
  * Shared dataset styling for every line.
  *
- * @param {string} label  Dataset label.
- * @param {Array}  data   Data points.
- * @param {string} color  Line color.
- * @param {string} axisId Target axis id.
+ * @param {string} label   Dataset label.
+ * @param {Array}  data    Data points.
+ * @param {string} color   Line color.
+ * @param {string} axisId  Target axis id.
+ * @param {Object} segment Chart.js segment styling.
  * @return {Object} Chart.js dataset.
  */
-function dataset(label, data, color, axisId) {
+function dataset(label, data, color, axisId, segment) {
 	return {
 		label,
 		data,
+		segment,
 		borderColor: color,
 		backgroundColor: 'transparent',
 		borderWidth: 2,
@@ -91,6 +99,9 @@ export default function SearchTrafficChart({ rows }) {
 		});
 	});
 
+	const segment = preliminarySegment(rows);
+	const note = dailyStatusNote(rows);
+
 	const chartData = {
 		labels,
 		datasets: [
@@ -98,25 +109,29 @@ export default function SearchTrafficChart({ rows }) {
 				__('Clicks', 'thinkrank'),
 				rows.map((r) => r.clicks),
 				COLORS.clicks,
-				'yLeft'
+				'yLeft',
+				segment
 			),
 			dataset(
 				__('Impressions', 'thinkrank'),
 				rows.map((r) => r.impressions),
 				COLORS.impressions,
-				'yLeft'
+				'yLeft',
+				segment
 			),
 			dataset(
 				__('Avg. CTR (%)', 'thinkrank'),
 				rows.map((r) => r.ctr),
 				COLORS.ctr,
-				'yRight'
+				'yRight',
+				segment
 			),
 			dataset(
 				__('Avg. Position', 'thinkrank'),
 				rows.map((r) => r.position),
 				COLORS.position,
-				'yRight'
+				'yRight',
+				segment
 			),
 		],
 	};
@@ -142,6 +157,10 @@ export default function SearchTrafficChart({ rows }) {
 			},
 			tooltip: {
 				enabled: true,
+				callbacks: {
+					footer: (items) =>
+						dayStatusLabel(rows[items[0]?.dataIndex]),
+				},
 			},
 		},
 		scales: {
@@ -180,8 +199,13 @@ export default function SearchTrafficChart({ rows }) {
 	};
 
 	return (
-		<div className="thinkrank-dashboard-widget__chart">
-			<Line data={chartData} options={chartOptions} />
-		</div>
+		<>
+			<div className="thinkrank-dashboard-widget__chart">
+				<Line data={chartData} options={chartOptions} />
+			</div>
+			{note && (
+				<p className="thinkrank-dashboard-widget__chart-note">{note}</p>
+			)}
+		</>
 	);
 }

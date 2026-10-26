@@ -291,6 +291,14 @@ class FAQ_Element extends \Bricks\Element {
             && !\ThinkRank\Frontend\Schema_Graph::output_allowed()) {
             return;
         }
+
+        // Only on the singular URL of the post that holds this content. A
+        // listing renders many posts under one URL, and each would print its
+        // own unlinked script beside the head's CollectionPage (#1329).
+        if (class_exists('ThinkRank\\Frontend\\Schema_Graph')
+            && !\ThinkRank\Frontend\Schema_Graph::renders_queried_post()) {
+            return;
+        }
         unset($items);
 
         if (!self::schema_enabled($settings)) {

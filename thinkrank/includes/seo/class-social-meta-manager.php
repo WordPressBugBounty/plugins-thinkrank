@@ -49,7 +49,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             'description_max_length' => 160
         ],
         'twitter' => [
-            'card_types' => ['summary', 'summary_large_image', 'app', 'player'],
+            'card_types' => self::TWITTER_CARD_TYPES,
             'required' => ['twitter:card', 'twitter:title'],
             'recommended' => ['twitter:description', 'twitter:image', 'twitter:site'],
             'optional' => ['twitter:creator', 'twitter:player', 'twitter:app:name'],
@@ -88,6 +88,29 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             'title_max_length' => 65,
             'description_max_length' => 160
         ]
+    ];
+
+    /**
+     * The twitter_card_type values.
+     *
+     * @since 2.18.1
+     * @var string[]
+     */
+    public const TWITTER_CARD_TYPES = ['summary', 'summary_large_image', 'app', 'player'];
+
+    /**
+     * Every og_type value the plugin has offered: the settings screen's
+     * (website, article, blog, business), the per-context defaults
+     * (product), the keys of the type map below and the standard Open Graph
+     * types the validator recommends. The update ability and this manager's
+     * schema both read it (#1344).
+     *
+     * @since 2.18.1
+     * @var string[]
+     */
+    public const OG_TYPES = [
+        'website', 'article', 'blog', 'business', 'product', 'book', 'profile', 'video', 'music',
+        'music.song', 'music.album', 'video.movie', 'video.episode',
     ];
 
     /**
@@ -462,7 +485,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
 
             // Validate Twitter card type
             if (isset($settings['twitter_card_type'])) {
-                $valid_types = ['summary', 'summary_large_image', 'app', 'player'];
+                $valid_types = self::TWITTER_CARD_TYPES;
                 if (!in_array($settings['twitter_card_type'], $valid_types, true)) {
                     $validation['errors'][] = 'twitter_card_type must be one of: ' . implode(', ', $valid_types);
                     $validation['valid'] = false;
@@ -902,7 +925,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             }
 
             // Card Type validation
-            $valid_card_types = ['summary', 'summary_large_image', 'app', 'player'];
+            $valid_card_types = self::TWITTER_CARD_TYPES;
             if (!empty($settings['twitter_card_type']) && in_array($settings['twitter_card_type'], $valid_card_types, true)) {
                 $field_details[] = [
                     'field' => 'twitter_card_type',
@@ -1387,7 +1410,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 'type' => 'string',
                 'title' => 'Open Graph Type',
                 'description' => 'The Open Graph type for this content',
-                'enum' => array_keys($this->og_types),
+                'enum' => self::OG_TYPES,
                 'default' => $this->get_default_settings($context_type)['og_type']
             ],
             'default_image' => [
@@ -1586,9 +1609,21 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             // the blogname is treated as "not explicitly overridden" and we fall
             // through to the passed effective SEO title. (og:site_name itself is
             // set separately from og_site_name and is unaffected.)
+            //
+            // The homepage overrides belong to the front page only. A static
+            // posts page reaches this branch too (detect_current_context()
+            // calls it 'homepage'), but it is a page with its own title and
+            // Social tab, so it takes the page's values instead (#1333).
             $blogname     = get_bloginfo('name');
             $og_site_name = $settings['og_site_name'] ?? '';
-            if ($og_site_name !== '' && $og_site_name !== $blogname) {
+            $posts_page   = self::static_posts_page();
+            if ($posts_page) {
+                $data['title'] = self::first_filled(
+                    Pattern_Resolver::resolve_value((string) get_post_meta($posts_page->ID, '_thinkrank_og_title', true), $posts_page->ID),
+                    (string) $fallback_title,
+                    (string) get_the_title($posts_page)
+                );
+            } elseif ($og_site_name !== '' && $og_site_name !== $blogname) {
                 $data['title'] = $og_site_name;
             } elseif ($fallback_title !== null && $fallback_title !== '') {
                 $data['title'] = $fallback_title;
@@ -1601,7 +1636,24 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             // printed as the meta description while og:/twitter:description
             // kept the tagline (#897).
             $og_description = (string) ($settings['og_description'] ?? '');
-            if ($og_description !== '' && $og_description !== get_bloginfo('description')) {
+            if ($posts_page) {
+                $data['description'] = self::first_filled(
+                    Pattern_Resolver::resolve_value((string) get_post_meta($posts_page->ID, '_thinkrank_og_description', true), $posts_page->ID),
+                    (string) $fallback_description,
+                    (string) get_bloginfo('description')
+                );
+
+                // The page's Twitter-specific fields, which
+                // generate_twitter_tags() prefers when set.
+                $data['twitter_title'] = Pattern_Resolver::resolve_value(
+                    (string) get_post_meta($posts_page->ID, '_thinkrank_twitter_title', true),
+                    $posts_page->ID
+                );
+                $data['twitter_description'] = Pattern_Resolver::resolve_value(
+                    (string) get_post_meta($posts_page->ID, '_thinkrank_twitter_description', true),
+                    $posts_page->ID
+                );
+            } elseif ($og_description !== '' && $og_description !== get_bloginfo('description')) {
                 $data['description'] = $og_description;
             } elseif ($fallback_description !== null && $fallback_description !== '') {
                 $data['description'] = $fallback_description;
@@ -1641,7 +1693,9 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             // or the logo was published in their place (#1273). The order is
             // the post/page branch's: per-page override, featured image, then
             // the site-wide defaults.
-            $front_page        = self::static_front_page();
+            //
+            // The static posts page is a page in the same way (#1333).
+            $front_page        = self::static_front_page() ?? $posts_page;
             $og_image_override = $front_page
                 ? Absolute_Url::from((string) get_post_meta($front_page->ID, '_thinkrank_og_image', true))
                 : '';
@@ -1727,7 +1781,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 $author_id = $post->post_author;
                 $data['author'] = [
                     'name' => get_the_author_meta('display_name', $author_id),
-                    'url' => get_author_posts_url($author_id),
+                    'url' => Author_Archives_Manager::author_url((int) $author_id),
                     'twitter' => get_the_author_meta('twitter', $author_id)
                 ];
 
@@ -1939,6 +1993,47 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         $page    = $page_id > 0 ? get_post($page_id) : null;
 
         return $page instanceof \WP_Post ? $page : null;
+    }
+
+    /**
+     * The page a static posts page is rendered from.
+     *
+     * Null everywhere except the posts page itself, page 2 and beyond
+     * included. It is answered as the blog index rather than as a singular
+     * page, so it reaches the 'site' context; this is what tells it apart
+     * from the front page there (#1333).
+     *
+     * @since 2.18.1
+     *
+     * @return \WP_Post|null
+     */
+    private static function static_posts_page(): ?\WP_Post {
+        if (!function_exists('is_home') || !is_home() || is_front_page()) {
+            return null;
+        }
+
+        $page_id = (int) get_option('page_for_posts');
+        $page    = $page_id > 0 ? get_post($page_id) : null;
+
+        return $page instanceof \WP_Post ? $page : null;
+    }
+
+    /**
+     * The first of the given values that is not blank.
+     *
+     * @since 2.18.1
+     *
+     * @param string ...$values Candidates, in priority order.
+     * @return string The first non-blank value, or ''.
+     */
+    private static function first_filled(string ...$values): string {
+        foreach ($values as $value) {
+            if ('' !== trim($value)) {
+                return $value;
+            }
+        }
+
+        return '';
     }
 
     /**
@@ -2162,7 +2257,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
      */
     private function archive_fallback_description(int $term_id): string {
         if ($term_id > 0) {
-            $description = trim(wp_strip_all_tags((string) term_description($term_id)));
+            $description = \ThinkRank\Core\Seo_Text::plain_text((string) term_description($term_id));
 
             if ('' !== $description) {
                 return $description;
@@ -2170,7 +2265,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         }
 
         if (is_author()) {
-            $bio = trim(wp_strip_all_tags((string) get_the_author_meta('description', (int) get_query_var('author'))));
+            $bio = \ThinkRank\Core\Seo_Text::plain_text((string) get_the_author_meta('description', (int) get_query_var('author')));
 
             if ('' !== $bio) {
                 return $bio;
@@ -2508,8 +2603,11 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
     private function add_context_specific_og_tags(array $og_tags, string $context, array $data, string $og_type): array {
         switch ($og_type) {
             case 'article':
-                if (!empty($data['author']['name'])) {
-                    $og_tags['article:author'] = $data['author']['name'];
+                // A profile URL, as the Open Graph article vocabulary defines
+                // article:author; the bare display name told a consumer nothing
+                // it could follow (#1337).
+                if (!empty($data['author']['url'])) {
+                    $og_tags['article:author'] = $data['author']['url'];
                 }
                 if (!empty($data['published_time'])) {
                     $og_tags['article:published_time'] = $data['published_time'];
@@ -2700,8 +2798,11 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                         $og_tags['og:description'] = $this->make_description_professional($og_tags['og:description']);
                     }
                     // Add LinkedIn-specific type if appropriate
-                    if ($og_tags['og:type'] === 'article') {
-                        $og_tags['article:author'] = $data['author'] ?? '';
+                    // The author's profile URL, the same value the article
+                    // branch sets. This used to assign the whole author array,
+                    // which printed "Array" (#1337).
+                    if ($og_tags['og:type'] === 'article' && !empty($data['author']['url'])) {
+                        $og_tags['article:author'] = $data['author']['url'];
                     }
                 }
                 break;

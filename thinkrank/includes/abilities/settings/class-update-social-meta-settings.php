@@ -127,6 +127,12 @@ class Update_Social_Meta_Settings extends Ability_Base {
 			$props[ $key ] = [ 'type' => 'string' ];
 		}
 
+		// The manager's own lists, so an agent sees the allowed values. A bad
+		// twitter_card_type used to be refused only after the call, and any
+		// og_type was stored and published with just a warning (#1344).
+		$props['og_type']['enum']           = Social_Meta_Manager::OG_TYPES;
+		$props['twitter_card_type']['enum'] = Social_Meta_Manager::TWITTER_CARD_TYPES;
+
 		return $props;
 	}
 
@@ -216,13 +222,13 @@ class Update_Social_Meta_Settings extends Ability_Base {
 			);
 		}
 
-		$result = $mgr->save_settings( 'site', null, $merged );
+		if ( ! $mgr->save_settings( 'site', null, $merged ) ) {
+			return self::settings_save_failed( __( 'Failed to update social meta settings.', 'thinkrank' ), $mgr->get_last_save_error(), $mgr->get_last_save_error_code() );
+		}
 
 		return [
-			'success' => (bool) $result,
-			'message' => (bool) $result
-				? __( 'Social meta settings updated.', 'thinkrank' )
-				: __( 'Failed to update social meta settings.', 'thinkrank' ),
+			'success' => true,
+			'message' => __( 'Social meta settings updated.', 'thinkrank' ),
 		];
 	}
 }

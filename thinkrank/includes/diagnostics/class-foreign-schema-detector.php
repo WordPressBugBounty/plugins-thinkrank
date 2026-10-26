@@ -419,7 +419,7 @@ class Foreign_Schema_Detector {
     /**
      * The id attribute of a script tag, lowercased.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param string $attributes Attribute text from the opening script tag.
      * @return string Id, or an empty string when the tag has none.

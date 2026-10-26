@@ -592,7 +592,7 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
         $stats = [
             'character_count' => strlen($clean_content),
             'character_count_no_spaces' => strlen(str_replace(' ', '', $clean_content)),
-            'word_count' => str_word_count($clean_content),
+            'word_count' => \ThinkRank\SEO\Word_Count_Index::count_words(\ThinkRank\SEO\Word_Count_Index::reading_text($content)),
             'sentence_count' => 0,
             'paragraph_count' => 0,
             'syllable_count' => 0,

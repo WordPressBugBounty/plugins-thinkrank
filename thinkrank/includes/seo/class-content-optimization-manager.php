@@ -737,7 +737,7 @@ class Content_Optimization_Manager extends Abstract_SEO_Manager {
      */
     private function perform_quick_analysis(string $content, array $keywords, string $content_type): array {
         $analysis = [
-            'word_count' => str_word_count(wp_strip_all_tags($content)),
+            'word_count' => \ThinkRank\SEO\Word_Count_Index::count_words(\ThinkRank\SEO\Word_Count_Index::reading_text($content)),
             'character_count' => strlen(wp_strip_all_tags($content)),
             'paragraph_count' => count(preg_split('/\n\s*\n/', trim($content), -1, PREG_SPLIT_NO_EMPTY)),
             'heading_count' => preg_match_all('/<h[1-6][^>]*>/i', $content),
@@ -1236,7 +1236,7 @@ class Content_Optimization_Manager extends Abstract_SEO_Manager {
      */
 
     private function analyze_word_count_compliance(string $content, array $template): array {
-        $word_count = str_word_count(wp_strip_all_tags($content));
+        $word_count = \ThinkRank\SEO\Word_Count_Index::count_words(\ThinkRank\SEO\Word_Count_Index::reading_text($content));
         $min_words = $template['min_word_count'];
         $optimal_words = $template['optimal_word_count'];
 
@@ -1290,7 +1290,7 @@ class Content_Optimization_Manager extends Abstract_SEO_Manager {
 
     private function analyze_keyword_compliance(string $content, array $keywords, array $template): array {
         $content_lower = strtolower(wp_strip_all_tags($content));
-        $word_count = str_word_count($content_lower);
+        $word_count = \ThinkRank\SEO\Word_Count_Index::count_words(\ThinkRank\SEO\Word_Count_Index::reading_text($content));
         $compliance_data = [];
 
         foreach ($keywords as $index => $keyword) {

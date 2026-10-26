@@ -345,7 +345,7 @@ final class Email_Report_Data_Provider {
      * request failed, are neither: they are left out of the comparison,
      * since saying nothing is better than reporting a loss nobody measured.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param object $sc         Search Console client.
      * @param string $site_url   Property URL.
@@ -457,7 +457,7 @@ final class Email_Report_Data_Provider {
      * so every punctuation character is escaped, not only the ones that are
      * special today.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param string $literal Text to match exactly.
      * @return string

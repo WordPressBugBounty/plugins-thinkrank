@@ -87,6 +87,22 @@ class Beaver_Modules_Manager {
     ];
 
     /**
+     * Comments wrapping an editor-only placeholder.
+     *
+     * When Beaver Builder publishes, `FLBuilderModel::save_layout()` renders
+     * the layout through `FLBuilder::render_editor_content()` with the builder
+     * still active and saves the result into `post_content`. An empty module's
+     * "Add a question to get started." placeholder was therefore stored there,
+     * and ThinkRank reads `post_content` for the description fallback,
+     * og/twitter descriptions, schema and the score (#1307). Beaver strips
+     * divs, spans and class attributes from that render but leaves comments,
+     * so the markers survive to `fl_builder_editor_content`, which drops
+     * everything between them.
+     */
+    public const PLACEHOLDER_OPEN  = '<!-- thinkrank:builder-placeholder -->';
+    public const PLACEHOLDER_CLOSE = '<!-- /thinkrank:builder-placeholder -->';
+
+    /**
      * Wire up hooks. Safe without Beaver Builder — every one of them checks.
      *
      * @return void
@@ -94,6 +110,43 @@ class Beaver_Modules_Manager {
     public function init(): void {
         add_action('init', [$this, 'register_modules'], 11);
         add_action('wp_enqueue_scripts', [$this, 'register_styles']);
+        add_filter('fl_builder_editor_content', [self::class, 'strip_placeholders']);
+    }
+
+    /**
+     * Markup for an empty module's builder-only placeholder.
+     *
+     * The canvas shows the text as before; the markers keep it out of the
+     * copy Beaver Builder saves into `post_content`.
+     *
+     * @since 2.18.1
+     * @param string $wrapper_class CSS class of the module's wrapper.
+     * @param string $text  Placeholder text, unescaped.
+     * @return string
+     */
+    public static function placeholder(string $wrapper_class, string $text): string {
+        return '<div class="' . esc_attr($wrapper_class) . '">'
+            . self::PLACEHOLDER_OPEN . esc_html($text) . self::PLACEHOLDER_CLOSE
+            . '</div>';
+    }
+
+    /**
+     * Remove placeholders from the layout Beaver Builder saves to the post.
+     *
+     * @since 2.18.1
+     * @param mixed $content Stripped-down layout content.
+     * @return mixed
+     */
+    public static function strip_placeholders($content) {
+        if (!is_string($content) || false === strpos($content, self::PLACEHOLDER_OPEN)) {
+            return $content;
+        }
+
+        return (string) preg_replace(
+            '/' . preg_quote(self::PLACEHOLDER_OPEN, '/') . '.*?' . preg_quote(self::PLACEHOLDER_CLOSE, '/') . '/s',
+            '',
+            $content
+        );
     }
 
     /**

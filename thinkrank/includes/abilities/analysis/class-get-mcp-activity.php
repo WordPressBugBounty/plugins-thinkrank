@@ -33,7 +33,7 @@ class Get_Mcp_Activity extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-mcp-activity';
 		$this->label       = __( 'Get MCP Activity', 'thinkrank' );
-		$this->description = __( 'Read the log of what AI assistants did on this site through the ThinkRank MCP server, newest first: every change with the values before and after it, every refused call, and a daily count of reads per connection. Use it to answer what was changed and when, or to review another assistant\'s changes. Credentials are masked, and for a change in an area this connection cannot read, the arguments, values, message and target title are withheld (`withheld: true`). To see a value as it stands now, call the matching get- tool, such as get-post-seo for an update-post-seo entry. Only the site administrator can revert a change, from ThinkRank > MCP > Activity.', 'thinkrank' );
+		$this->description = __( 'Read the log of what AI assistants did on this site through the ThinkRank MCP server, newest first: every change with the values before and after it, every refused call, and a daily count of reads per connection. Use it to answer what was changed and when, or to review another assistant\'s changes. Credentials are masked, and for a change in an area this connection cannot read, the arguments, values, message and target title are withheld (`withheld: true`). To see a value as it stands now, call the matching get- tool, such as get-post-seo for an update-post-seo entry. Only the site administrator can revert a change, from ThinkRank > AI Tools > MCP > Activity.', 'thinkrank' );
 	}
 
 	/**

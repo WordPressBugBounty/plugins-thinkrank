@@ -37,7 +37,6 @@ export const getDefaultSettings = () => ({
 	exclude_posts: '',
 	exclude_terms: '',
 	exclude_password_protected: true,
-	exclude_private_posts: true,
 	enable_styling: true,
 	custom_url_pattern: 'sitemap-{type}.xml',
 	// Branding is unset by default, and '' is what keeps it that way: it means

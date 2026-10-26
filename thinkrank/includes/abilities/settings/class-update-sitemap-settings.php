@@ -132,14 +132,8 @@ class Update_Sitemap_Settings extends Ability_Base {
 			);
 		}
 
-		$result = $gen->save_settings( 'site', null, $merged );
-
-		if ( ! $result ) {
-			return [
-				'success' => false,
-				'message' => __( 'Failed to update sitemap settings.', 'thinkrank' ),
-				'rebuilt' => false,
-			];
+		if ( ! $gen->save_settings( 'site', null, $merged ) ) {
+			return self::settings_save_failed( __( 'Failed to update sitemap settings.', 'thinkrank' ), $gen->get_last_save_error(), $gen->get_last_save_error_code() );
 		}
 
 		// Mark the rebuild outstanding either way, so a caller that opts out of

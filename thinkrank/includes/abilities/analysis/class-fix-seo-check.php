@@ -42,6 +42,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  * something else in the way is answered as fixed, with its undo, not as an
  * error; and the AI crawler fix is refused where it would delete a robots.txt
  * ThinkRank does not manage (see refusal_for()).
+ *
+ * The search visibility fix makes the site indexable and no ability can put
+ * that back, so it is never applied in passing (#1351): it is refused outside
+ * production, as the Fix button is, and here it also needs `confirm: true`,
+ * which a caller sends only after the person agreed to the fix's warning.
  */
 class Fix_Seo_Check extends Ability_Base {
 
@@ -65,7 +70,7 @@ class Fix_Seo_Check extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/fix-seo-check';
 		$this->label       = __( 'Fix Site SEO Analyzer Check', 'thinkrank' );
-		$this->description = __( 'Apply the Site SEO Analyzer\'s one-click fix for one check, as the Fix button on the audit does: search_visibility, xml_sitemap, schema, image_alt_text, ai_crawler_access or llms_txt. Read get-seo-analyzer first, fix only a check whose can_auto_fix is true, and show the person its fix_label and fix_warning before applying it. Returns fixed, message and data; image_alt_text fills one batch per call, so call again while data.remaining is above zero. A fix that saved its change but found something else still in the way answers fixed true with that in the message; only a fix that changed nothing answers an error. undo is the existing write that puts back what the fix changed, with the arguments read just before it ran (update-sitemap-settings for xml_sitemap, update-site-identity-settings for ai_crawler_access), or null where no tool can, as the audit\'s fix_undoable says beforehand. Call run-seo-analyzer afterwards for the updated audit.', 'thinkrank' );
+		$this->description = __( 'Apply the Site SEO Analyzer\'s one-click fix for one check, as the Fix button on the audit does: search_visibility, xml_sitemap, schema, image_alt_text, ai_crawler_access or llms_txt. Read get-seo-analyzer first, fix only a check whose can_auto_fix is true, and show the person its fix_label and fix_warning before applying it. search_visibility makes the whole site visible to search engines and cannot be undone: it is refused unless the site is production, and needs confirm true, sent only after the person agreed to its fix_warning. Returns fixed, message and data; image_alt_text fills one batch per call, so call again while data.remaining is above zero. A fix that saved its change but found something else still in the way answers fixed true with that in the message; only a fix that changed nothing answers an error. undo is the existing write that puts back what the fix changed, with the arguments read just before it ran (update-sitemap-settings for xml_sitemap, update-site-identity-settings for ai_crawler_access), or null where no tool can, as the audit\'s fix_undoable says beforehand. Call run-seo-analyzer afterwards for the updated audit.', 'thinkrank' );
 	}
 
 	/**
@@ -82,7 +87,10 @@ class Fix_Seo_Check extends Ability_Base {
 			// calls that lose something or reach outside the site for good
 			// (docs/mcp-server.md, "What destructive means here"). Making a
 			// site visible to search engines is the same kind of change as the
-			// robots settings, which are not destructive either.
+			// robots settings, which are not destructive either. The one fix
+			// with no way back, search_visibility, asks for `confirm` in its
+			// own input instead, so the routine fixes need no approval (#675,
+			// #1351).
 			'destructive'   => false,
 			// A fix moves its settings to one fixed state, so applying it
 			// again changes nothing more. The alt text fill continues with the
@@ -108,6 +116,10 @@ class Fix_Seo_Check extends Ability_Base {
 					'type'        => 'string',
 					'enum'        => array_keys( SEO_Analyzer_Fixer::built_in() ),
 					'description' => __( 'The check to fix, by the id get-seo-analyzer gives it in checks[].id.', 'thinkrank' ),
+				],
+				'confirm'  => [
+					'type'        => 'boolean',
+					'description' => __( 'Required as true for search_visibility, and sent only after the person agreed to its fix_warning: that fix makes the site visible to search engines and cannot be undone. Ignored for the other checks.', 'thinkrank' ),
 				],
 			],
 		];
@@ -173,7 +185,8 @@ class Fix_Seo_Check extends Ability_Base {
 		$check_id = isset( $input['check_id'] ) && is_string( $input['check_id'] ) ? $input['check_id'] : '';
 		$fixable  = SEO_Analyzer_Fixer::can_fix( $check_id );
 
-		$refusal = $fixable ? self::refusal_for( $check_id ) : null;
+		$confirm = isset( $input['confirm'] ) && true === $input['confirm'];
+		$refusal = $fixable ? self::refusal_for( $check_id, $confirm ) : null;
 		if ( null !== $refusal ) {
 			return $refusal;
 		}
@@ -295,10 +308,35 @@ class Fix_Seo_Check extends Ability_Base {
 	 * The fix is refused here before it changes anything. The REST route the
 	 * audit screen uses is unchanged.
 	 *
+	 * The search visibility fix is refused outside production, with the
+	 * fixer's own reason, and without `confirm: true` (#1351). Both answer
+	 * before anything is read or written.
+	 *
 	 * @param string $check_id Check id.
+	 * @param bool   $confirm  Whether the caller sent `confirm: true`.
 	 * @return \WP_Error|null
 	 */
-	private static function refusal_for( string $check_id ): ?\WP_Error {
+	private static function refusal_for( string $check_id, bool $confirm ): ?\WP_Error {
+		if ( 'search_visibility' === $check_id ) {
+			if ( ! SEO_Analyzer_Fixer::search_visibility_fix_allowed() ) {
+				return new \WP_Error(
+					'thinkrank_seo_check_fix_refused',
+					SEO_Analyzer_Fixer::search_visibility_refusal(),
+					[ 'status' => 409 ]
+				);
+			}
+
+			if ( ! $confirm ) {
+				return new \WP_Error(
+					'thinkrank_seo_check_confirmation_required',
+					__( 'This fix makes the whole site visible to search engines, and no tool can undo it. Show the person the fix warning, and call again with confirm set to true only if they agree.', 'thinkrank' ),
+					[ 'status' => 409 ]
+				);
+			}
+
+			return null;
+		}
+
 		if ( 'ai_crawler_access' !== $check_id || ! file_exists( ABSPATH . 'robots.txt' ) ) {
 			return null;
 		}

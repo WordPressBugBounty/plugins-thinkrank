@@ -770,6 +770,62 @@ class Word_Count_Index {
     }
 
     /**
+     * The current count of each of a set of posts, the number Thin Content and
+     * the per-post score report.
+     *
+     * A post with a current entry is answered from it. One without is counted
+     * and its entry stored, as a refresh batch would, until the time budget
+     * runs out; a post not reached is left out of the answer, so the caller
+     * decides what to fall back to. The Site SEO Analyzer reads its content
+     * depth through this, so the audit and Thin Content cannot disagree about
+     * a page (#1309).
+     *
+     * @since 2.18.1
+     *
+     * @param int[] $post_ids    Post IDs.
+     * @param float $max_seconds Budget for counting posts with no entry.
+     * @return array<int,int> Count in {@see self::unit()}, keyed by post ID.
+     */
+    public static function counts(array $post_ids, float $max_seconds = self::REFRESH_MAX_SECONDS): array {
+        $counts  = [];
+        $built   = false;
+        $started = microtime(true);
+
+        foreach ($post_ids as $post_id) {
+            $post_id = (int) $post_id;
+            if ($post_id <= 0) {
+                continue;
+            }
+
+            $entry = self::decode((string) get_post_meta($post_id, self::META_KEY, true));
+            if (null !== $entry) {
+                $counts[$post_id] = $entry;
+                continue;
+            }
+
+            if (microtime(true) - $started > $max_seconds) {
+                continue;
+            }
+
+            $post = get_post($post_id);
+            if (!$post instanceof \WP_Post) {
+                continue;
+            }
+
+            $count = self::count_post($post);
+            update_post_meta($post_id, self::META_KEY, self::encode($count));
+            $counts[$post_id] = $count;
+            $built = true;
+        }
+
+        if ($built) {
+            self::bump_revision();
+        }
+
+        return $counts;
+    }
+
+    /**
      * Compute and store one entry.
      *
      * @param int $post_id Post ID.

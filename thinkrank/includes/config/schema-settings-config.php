@@ -30,6 +30,62 @@ if (!defined('ABSPATH')) {
 class Schema_Settings_Config {
 
     /**
+     * Organization types the site entity can be published as.
+     *
+     * What the organization_type setting offers, besides LocalBusiness and its
+     * subtypes ({@see organization_types()}). The settings screen, the
+     * update-schema-settings ability, the save path and the JSON-LD builder
+     * all read this one list (#1344).
+     *
+     * @since 2.18.1
+     * @var string[]
+     */
+    public const ORGANIZATION_TYPES = [
+        'Organization',
+        'Corporation',
+        'EducationalOrganization',
+        'GovernmentOrganization',
+        'NGO',
+        'PerformingGroup',
+        'SportsOrganization',
+    ];
+
+    /**
+     * The validation_level values, the default first.
+     *
+     * @since 2.18.1
+     * @var string[]
+     */
+    public const VALIDATION_LEVELS = ['moderate', 'strict', 'lenient'];
+
+    /**
+     * Every value organization_type accepts: the organization types, then
+     * LocalBusiness and its subtypes.
+     *
+     * @since 2.18.1
+     *
+     * @return string[]
+     */
+    public static function organization_types(): array {
+        return array_values(array_unique(array_merge(
+            self::ORGANIZATION_TYPES,
+            Local_Business_Types_Config::get_types()
+        )));
+    }
+
+    /**
+     * Whether a value is an organization_type ThinkRank publishes.
+     *
+     * @since 2.18.1
+     *
+     * @param mixed $type Candidate.
+     * @return bool
+     */
+    public static function is_organization_type($type): bool {
+        return is_string($type) && in_array($type, self::organization_types(), true);
+    }
+
+    /**
      * Get default schema settings
      *
      * @since 1.0.0
@@ -242,7 +298,7 @@ class Schema_Settings_Config {
      * src/admin/config/schema-settings-config.js, which is the list the
      * Site-Level Schema Types grid renders and Generate sends.
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @return string[] Site-level schema types.
      */

@@ -82,6 +82,8 @@ class Multilingual_Manager {
         add_filter('thinkrank_sitemap_query_args', [$this, 'filter_sitemap_query_args']);
         add_filter('thinkrank_sitemap_term_query_args', [$this, 'filter_sitemap_term_query_args']);
         add_filter('thinkrank_sitemap_post_permalink', [$this, 'localize_sitemap_permalink'], 10, 2);
+        add_filter('thinkrank_sitemap_is_front_page', [$this, 'filter_sitemap_is_front_page'], 10, 2);
+        add_filter('thinkrank_sitemap_homepage_page_id', [$this, 'filter_sitemap_homepage_page_id']);
 
         if (!is_admin()) {
             // WPML prints at wp_head priority 1 and Polylang at 10, so run
@@ -595,12 +597,6 @@ class Multilingual_Manager {
     }
 
     /**
-     * Widen a sitemap post query to every language.
-     *
-     * @param array<string, mixed> $args Query args.
-     * @return array<string, mixed>
-     */
-    /**
      * Resolve a sitemap entry's permalink in the post's own language.
      *
      * The sitemap query runs with suppress_filters pinned (see
@@ -640,12 +636,134 @@ class Multilingual_Manager {
             return $url;
         }
 
-        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
-        $localized = apply_filters('wpml_permalink', $url, $lang, true);
+        if ($this->is_front_page_translation($post)) {
+            // A translation of the static front page lives at its language's
+            // home, but get_permalink() hands back the bare default home URL
+            // for it, and full resolution maps that URL straight back to the
+            // front page and returns it unchanged. So the translated home was
+            // missing and the default home <loc> appeared twice (#1196).
+            // Convert the home URL itself, without resolving it to a post.
+            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+            $localized = apply_filters('wpml_permalink', home_url('/'), $lang, false);
+        } else {
+            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+            $localized = apply_filters('wpml_permalink', $url, $lang, true);
+        }
 
         return is_string($localized) && $localized !== '' ? $localized : $url;
     }
 
+    /**
+     * Tell the sitemap that a translation of the static front page is a front
+     * page too.
+     *
+     * The sitemap only knows `page_on_front`, which is one ID in one language,
+     * so every other language's front page was scored as an ordinary page
+     * (yearly, normal priority) (#1196).
+     *
+     * @since 2.18.1
+     * @param bool     $is_front Whether the sitemap already treats it as the front page.
+     * @param \WP_Post $post     Post the entry describes.
+     * @return bool
+     */
+    public function filter_sitemap_is_front_page($is_front, \WP_Post $post): bool {
+        return (bool) $is_front || $this->is_front_page_translation($post);
+    }
+
+    /**
+     * Pin the sitemap's homepage entry to the default-language front page.
+     *
+     * WPML and Polylang translate `page_on_front` into the request's language.
+     * A rebuild in a translated context then excluded the translation from the
+     * post walk instead of the default page, so the translated home never got
+     * an entry and the bare home URL was listed twice (#1196).
+     *
+     * @since 2.18.1
+     * @param int $front_id `page_on_front` as read in this request.
+     * @return int
+     */
+    public function filter_sitemap_homepage_page_id($front_id): int {
+        $front_id = (int) $front_id;
+        if ($front_id <= 0) {
+            return $front_id;
+        }
+
+        $source = 0;
+
+        if ($this->provider === 'wpml') {
+            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPML hook, not ours to name.
+            $default = apply_filters('wpml_default_language', null);
+            if (is_string($default) && $default !== '') {
+                // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPML hook, not ours to name.
+                $source = (int) apply_filters('wpml_object_id', $front_id, 'page', false, $default);
+            }
+        } elseif ($this->provider === 'polylang' && function_exists('pll_get_post') && function_exists('pll_default_language')) {
+            $default = pll_default_language();
+            if (is_string($default) && $default !== '') {
+                $source = (int) pll_get_post($front_id, $default);
+            }
+        }
+
+        // No default-language translation: the page itself is the homepage.
+        return $source > 0 ? $source : $front_id;
+    }
+
+    /**
+     * Whether a post is the static front page in some language.
+     *
+     * Both sides are mapped to the default language before comparing:
+     * WPML translates `page_on_front` into the current language, which is
+     * whatever the request (or none, on cron) happens to carry.
+     *
+     * @since 2.18.1
+     * @param \WP_Post $post Post to check.
+     * @return bool
+     */
+    private function is_front_page_translation(\WP_Post $post): bool {
+        if (get_option('show_on_front') !== 'page') {
+            return false;
+        }
+
+        // Core only lets a page be the static front page.
+        $front_id = (int) get_option('page_on_front');
+        if ($front_id <= 0 || $post->post_type !== 'page') {
+            return false;
+        }
+
+        if ((int) $post->ID === $front_id) {
+            return true;
+        }
+
+        if ($this->provider === 'wpml') {
+            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPML hook, not ours to name.
+            $default = apply_filters('wpml_default_language', null);
+            if (!is_string($default) || $default === '') {
+                return false;
+            }
+
+            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPML hook, not ours to name.
+            $post_source = (int) apply_filters('wpml_object_id', $post->ID, 'page', false, $default);
+            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPML hook, not ours to name.
+            $front_source = (int) apply_filters('wpml_object_id', $front_id, 'page', false, $default);
+
+            return $post_source > 0 && $post_source === $front_source;
+        }
+
+        if ($this->provider === 'polylang' && function_exists('pll_get_post_translations')) {
+            $translations = array_map('intval', (array) pll_get_post_translations($front_id));
+
+            return in_array((int) $post->ID, $translations, true);
+        }
+
+        return false;
+    }
+
+    /**
+     * Widen a sitemap post query to every language.
+     *
+     * @param array<string, mixed> $args Query args.
+     * @return array<string, mixed>
+     */
     public function filter_sitemap_query_args(array $args): array {
         if ($this->provider === 'polylang') {
             // Polylang filters through parse_query, which suppress_filters does

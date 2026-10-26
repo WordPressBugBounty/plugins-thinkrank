@@ -108,14 +108,16 @@ class Update_Robots_Txt extends Ability_Base {
 		$updated['robots_txt_content'] = $content;
 		$updated['robots_txt_enabled'] = array_key_exists( 'enabled', (array) $input ) ? (bool) $input['enabled'] : true;
 
-		$result = $mgr->save_settings( 'site', null, $updated );
+		if ( ! $mgr->save_settings( 'site', null, $updated ) ) {
+			return self::settings_save_failed( __( 'Failed to update robots.txt.', 'thinkrank' ), $mgr->get_last_save_error(), $mgr->get_last_save_error_code() );
+		}
 
 		// Keep the physical robots.txt in step with the saved override so the
 		// change is served immediately, matching a Save from the admin screen.
 		$mgr->sync_robots_txt_file();
 
 		return [
-			'success'  => (bool) $result,
+			'success'  => true,
 			'content'  => $content,
 			'rendered' => (string) $mgr->get_effective_robots_txt()['content'],
 		];

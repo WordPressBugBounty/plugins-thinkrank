@@ -175,6 +175,16 @@ class Autoloader {
             }
         }
 
+        // A few config files carry no class- prefix (schema-settings-config.php
+        // holds Schema_Settings_Config). Without this, a class constant read
+        // from one of them fataled unless an earlier require_once had loaded it.
+        if (!file_exists($file)) {
+            $unprefixed = $this->base_dir . $directory . substr($class_file, strlen('class-'));
+            if (file_exists($unprefixed)) {
+                return $unprefixed;
+            }
+        }
+
         return $file;
     }
     

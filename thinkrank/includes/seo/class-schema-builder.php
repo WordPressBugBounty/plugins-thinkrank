@@ -258,7 +258,7 @@ class Schema_Builder {
         if (!empty($data['content'])) {
             // Use frontend-calculated word count if provided (from SEO Analysis method)
             // Otherwise fallback to backend calculation
-            $schema['wordCount'] = isset($data['word_count']) ? (int) $data['word_count'] : str_word_count(wp_strip_all_tags($data['content']));
+            $schema['wordCount'] = isset($data['word_count']) ? (int) $data['word_count'] : \ThinkRank\SEO\Word_Count_Index::count_words(\ThinkRank\SEO\Word_Count_Index::reading_text($data['content']));
 
             // Use focus keywords if available, otherwise extract from content.
             $focus_keywords = $this->resolve_focus_keywords($data);
@@ -477,7 +477,7 @@ class Schema_Builder {
      * query, so the default WordPress search URL is used instead, as it is
      * when the field is empty.
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param array $settings Schema settings or site_data.
      * @return array|null SearchAction node, or null when switched off.
@@ -1682,44 +1682,308 @@ class Schema_Builder {
     }
 
     /**
-     * Extract FAQ data from content
-     * PRESERVED: Exact same method logic from original Schema_Generator
+     * Extract FAQ data from content.
+     *
+     * Three readings, tried in order, and the first that yields a usable pair
+     * wins:
+     *
+     * 1. Explicit "Q: … A: …" markers.
+     * 2. Headings that ask a question, each answered by everything after it up
+     *    to the next heading of the same or a higher level.
+     * 3. Paragraphs or lines that end in "?", each answered by the text up to
+     *    the next one.
+     *
+     * The old loop stopped at the first regex that matched anything, even when
+     * every pair it produced was empty, and its second regex (`\?\s*(.+?)\n`)
+     * matched almost any page, so the heading reading was never tried. Where
+     * it did run, a single non-greedy `<p>` kept only the first paragraph of
+     * each answer, and the block comments Gutenberg writes between `</h2>` and
+     * `<p>` stopped it matching block content at all (#1282).
      *
      * @since 1.0.0
      *
      * @param string $content Content to analyze
-     * @return array Extracted FAQ data
+     * @return array<int, array{question: string, answer: string}> Extracted FAQ data
      */
     private function extract_faq_data(string $content): array {
-        $faq_data = [];
+        if ('' === trim($content)) {
+            return [];
+        }
 
-        // Look for question/answer patterns
-        $patterns = [
-            '/Q:\s*(.+?)\s*A:\s*(.+?)(?=Q:|$)/s',
-            '/\?\s*(.+?)\n(.+?)(?=\?|$)/s',
-            '/<h[1-6][^>]*>\s*(.+?)\s*<\/h[1-6]>\s*<p>\s*(.+?)\s*<\/p>/s'
-        ];
-
-        foreach ($patterns as $pattern) {
-            if (preg_match_all($pattern, $content, $matches, PREG_SET_ORDER)) {
-                foreach ($matches as $match) {
-                    if (count($match) >= 3) {
-                        $question = trim(wp_strip_all_tags($match[1]));
-                        $answer = trim(wp_strip_all_tags($match[2]));
-
-                        if (!empty($question) && !empty($answer)) {
-                            $faq_data[] = [
-                                'question' => $question,
-                                'answer' => $answer
-                            ];
-                        }
-                    }
-                }
-                break; // Use first matching pattern
+        foreach ([
+            $this->extract_marked_faq($content),
+            $this->extract_heading_faq($content),
+            $this->extract_question_line_faq($content),
+        ] as $pairs) {
+            if (!empty($pairs)) {
+                return $pairs;
             }
         }
 
-        return $faq_data;
+        return [];
+    }
+
+    /**
+     * Q&A pairs written with explicit "Q:" and "A:" markers.
+     *
+     * @since 2.18.1
+     *
+     * @param string $content Content markup.
+     * @return array<int, array{question: string, answer: string}>
+     */
+    private function extract_marked_faq(string $content): array {
+        if (!preg_match_all('/\bQ:\s*(.+?)\s*\bA:\s*(.+?)(?=\bQ:|$)/s', $content, $matches, PREG_SET_ORDER)) {
+            return [];
+        }
+
+        $pairs = [];
+        foreach ($matches as $match) {
+            $pairs[] = [self::faq_text($match[1]), self::faq_text($match[2])];
+        }
+
+        return self::usable_faq_pairs($pairs, false);
+    }
+
+    /**
+     * Q&A pairs read from question headings and the content under them.
+     *
+     * The answer is every node after the heading up to the next heading of the
+     * same or a higher level, so a multi-paragraph answer, a list or a
+     * sub-heading inside it is kept whole. When a heading sits alone in a
+     * wrapper (a builder's heading widget), the search moves up and carries on
+     * after the wrapper.
+     *
+     * @since 2.18.1
+     *
+     * @param string $content Content markup.
+     * @return array<int, array{question: string, answer: string}>
+     */
+    private function extract_heading_faq(string $content): array {
+        if (!class_exists('DOMDocument') || !preg_match('/<h[1-6][\s>]/i', $content)) {
+            return [];
+        }
+
+        $dom      = new \DOMDocument();
+        $previous = libxml_use_internal_errors(true);
+        $loaded   = $dom->loadHTML(
+            '<?xml encoding="UTF-8"><div id="thinkrank-faq-root">' . $content . '</div>',
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOERROR | LIBXML_NOWARNING
+        );
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        if (!$loaded) {
+            return [];
+        }
+
+        $root = null;
+        foreach ($dom->getElementsByTagName('div') as $div) {
+            if ('thinkrank-faq-root' === $div->getAttribute('id')) {
+                $root = $div;
+                break;
+            }
+        }
+        if (!$root instanceof \DOMElement) {
+            return [];
+        }
+
+        $xpath    = new \DOMXPath($dom);
+        $headings = $xpath->query('.//h1|.//h2|.//h3|.//h4|.//h5|.//h6', $root);
+        if (false === $headings) {
+            return [];
+        }
+
+        $pairs = [];
+        foreach ($headings as $heading) {
+            $question = self::faq_text($heading->textContent);
+            if (false === strpos($question, '?')) {
+                continue;
+            }
+
+            $level = (int) substr(strtolower($heading->nodeName), 1);
+            $pairs[] = [$question, self::faq_text(implode(' ', self::heading_answer_parts($heading, $level, $root)))];
+        }
+
+        return self::usable_faq_pairs($pairs, true);
+    }
+
+    /**
+     * The text after a heading, up to the next heading at its level or above.
+     *
+     * @since 2.18.1
+     *
+     * @param \DOMNode $heading The question heading.
+     * @param int      $level   Its level, 1-6.
+     * @param \DOMNode $root    Where the search stops climbing.
+     * @return array<int, string> Text of each answer node, in order.
+     */
+    private static function heading_answer_parts(\DOMNode $heading, int $level, \DOMNode $root): array {
+        $parts = [];
+        $node  = $heading;
+
+        while (null !== $node && !$node->isSameNode($root)) {
+            // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOMNode API.
+            for ($sibling = $node->nextSibling; null !== $sibling; $sibling = $sibling->nextSibling) {
+                if (self::starts_faq_section($sibling, $level)) {
+                    return $parts;
+                }
+
+                if ($sibling instanceof \DOMElement && in_array(strtolower($sibling->nodeName), ['script', 'style'], true)) {
+                    continue;
+                }
+
+                $text = self::node_text($sibling);
+                if ('' !== $text) {
+                    $parts[] = $text;
+                }
+            }
+
+            // Nothing after the heading in its own wrapper: carry on after
+            // the wrapper. Once an answer has started, its wrapper's end is
+            // where it ends.
+            if (!empty($parts)) {
+                return $parts;
+            }
+
+            $node = $node->parentNode;
+        }
+
+        return $parts;
+    }
+
+    /**
+     * Whether a node is, or holds, a heading at the given level or above.
+     *
+     * @since 2.18.1
+     *
+     * @param \DOMNode $node  Candidate node.
+     * @param int      $level Level of the current question heading.
+     * @return bool
+     */
+    private static function starts_faq_section(\DOMNode $node, int $level): bool {
+        if (!$node instanceof \DOMElement) {
+            return false;
+        }
+
+        for ($i = 1; $i <= $level; $i++) {
+            if ('h' . $i === strtolower($node->nodeName) || $node->getElementsByTagName('h' . $i)->length > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * A node's text, with a space wherever one block ends and another starts.
+     *
+     * textContent joins adjacent elements with nothing between them.
+     *
+     * @since 2.18.1
+     *
+     * @param \DOMNode $node Node.
+     * @return string
+     */
+    private static function node_text(\DOMNode $node): string {
+        if ($node instanceof \DOMComment) {
+            return '';
+        }
+
+        if (!$node instanceof \DOMElement || !$node->hasChildNodes()) {
+            return self::faq_text((string) $node->textContent);
+        }
+
+        $parts = [];
+        foreach ($node->childNodes as $child) {
+            $parts[] = self::node_text($child);
+        }
+
+        return self::faq_text(implode(' ', $parts));
+    }
+
+    /**
+     * Q&A pairs from paragraphs or lines that end in a question mark.
+     *
+     * For classic content with no headings: each block that ends in "?" is a
+     * question, answered by the blocks after it up to the next question.
+     *
+     * @since 2.18.1
+     *
+     * @param string $content Content markup.
+     * @return array<int, array{question: string, answer: string}>
+     */
+    private function extract_question_line_faq(string $content): array {
+        $text = (string) preg_replace('/<!--.*?-->/s', '', $content);
+        $text = (string) preg_replace('/<\/?(?:p|div|h[1-6]|li|ul|ol|br|section|details|summary|dt|dd|blockquote|tr|td|th|table)\b[^>]*>/i', "\n", $text);
+        $lines = array_values(array_filter(array_map(
+            static fn(string $line): string => self::faq_text($line),
+            explode("\n", $text)
+        ), static fn(string $line): bool => '' !== $line));
+
+        $pairs    = [];
+        $question = '';
+        $answer   = [];
+
+        foreach ($lines as $line) {
+            if ('?' === substr($line, -1)) {
+                if ('' !== $question) {
+                    $pairs[] = [$question, implode(' ', $answer)];
+                }
+                $question = $line;
+                $answer   = [];
+            } elseif ('' !== $question) {
+                $answer[] = $line;
+            }
+        }
+
+        if ('' !== $question) {
+            $pairs[] = [$question, implode(' ', $answer)];
+        }
+
+        return self::usable_faq_pairs($pairs, true);
+    }
+
+    /**
+     * Keep the pairs that have both halves, and a question mark when required.
+     *
+     * @since 2.18.1
+     *
+     * @param array<int, array{0: string, 1: string}> $pairs      Question, answer.
+     * @param bool                                    $needs_mark Require "?" in the question.
+     * @return array<int, array{question: string, answer: string}>
+     */
+    private static function usable_faq_pairs(array $pairs, bool $needs_mark): array {
+        $usable = [];
+
+        foreach ($pairs as [$question, $answer]) {
+            if ('' === $question || '' === $answer) {
+                continue;
+            }
+            if ($needs_mark && false === strpos($question, '?')) {
+                continue;
+            }
+
+            $usable[] = [
+                'question' => $question,
+                'answer'   => $answer,
+            ];
+        }
+
+        return $usable;
+    }
+
+    /**
+     * Plain, single-spaced text for a question or an answer.
+     *
+     * @since 2.18.1
+     *
+     * @param string $text Markup or text.
+     * @return string
+     */
+    private static function faq_text(string $text): string {
+        $text = (string) preg_replace('/<\/?(?:p|div|h[1-6]|li|br|td|th|dt|dd)\b[^>]*>/i', ' ', $text);
+
+        return trim((string) preg_replace('/\s+/u', ' ', wp_strip_all_tags($text)));
     }
 
     /**

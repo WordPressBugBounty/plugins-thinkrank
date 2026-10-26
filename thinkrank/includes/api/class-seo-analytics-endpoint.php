@@ -19,6 +19,7 @@ namespace ThinkRank\API;
 
 use ThinkRank\SEO\Analytics_Manager;
 use ThinkRank\API\Traits\API_Cache;
+use ThinkRank\Integrations\Search_Daily_Series;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -610,8 +611,11 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
     /**
      * Get daily Search Console data grouped by date for chart rendering.
      *
-     * Returns rows sorted ascending by date, each containing:
-     * clicks, impressions, ctr (as %), position.
+     * Returns rows sorted ascending by date, each containing: status (final,
+     * preliminary, zero or unavailable), clicks, impressions, ctr (as %) and
+     * position. An unavailable day has null metrics, and a zero day a null
+     * position, so neither plots as a real value (#1272). See
+     * {@see Search_Daily_Series}.
      *
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error Response object
@@ -624,12 +628,12 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
                 $days = 30;
             }
 
-            // Window = exactly $days back from today (inclusive of today).
+            // Window = exactly $days back from today (inclusive of today), in
+            // Google's timezone: Search Analytics dates are Pacific Time.
             // 7d  → today-6  ... today
             // 30d → today-29 ... today
             // 90d → today-89 ... today
-            $end_date   = gmdate('Y-m-d');
-            $start_date = gmdate('Y-m-d', strtotime('-' . ($days - 1) . ' days'));
+            [$start_date, $end_date] = Search_Daily_Series::window($days);
 
             $context = $this->resolve_search_console();
             if (is_wp_error($context)) {
@@ -641,7 +645,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
             $response = $this->cached_response(
                 'search_daily',
                 function () use ($search_console, $site_url, $start_date, $end_date, $days) {
-                    $raw_rows = $search_console->get_search_performance_by_dates(
+                    $result = $search_console->query_search_performance_by_dates(
                         $site_url,
                         $start_date,
                         $end_date,
@@ -649,43 +653,24 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
                         ['date']
                     );
 
-                    // Index GSC rows by date so we can pad missing days (GSC's lag means
-                    // the most recent few days often have no data yet).
-                    $by_date = [];
-                    foreach ($raw_rows as $row) {
-                        $date = $row['keys'][0] ?? '';
-                        if (!$date) {
-                            continue;
-                        }
-                        $by_date[$date] = [
-                            'clicks'      => (int) ($row['clicks'] ?? 0),
-                            'impressions' => (int) ($row['impressions'] ?? 0),
-                            'ctr'         => round(($row['ctr'] ?? 0) * 100, 2),
-                            'position'    => round($row['position'] ?? 0, 1),
-                        ];
-                    }
-
-                    // Build a contiguous N-day series from $start_date → $end_date.
-                    // Days GSC has no data for (today minus 2-4 days, typically) come
-                    // through as zeros so the chart x-axis always spans the full window.
-                    $rows = [];
-                    $cursor = strtotime($start_date);
-                    $end_ts = strtotime($end_date);
-                    while ($cursor <= $end_ts) {
-                        $date = gmdate('Y-m-d', $cursor);
-                        $rows[] = array_merge(
-                            ['date' => $date],
-                            $by_date[$date] ?? ['clicks' => 0, 'impressions' => 0, 'ctr' => 0, 'position' => 0]
-                        );
-                        $cursor = strtotime('+1 day', $cursor);
-                    }
+                    // A contiguous N-day series, so the chart x-axis always
+                    // spans the full window, with each day's status.
+                    $rows = Search_Daily_Series::build(
+                        $result['rows'],
+                        $start_date,
+                        $end_date,
+                        $result['first_incomplete_date']
+                    );
 
                     return [
                         'success' => true,
                         'data'    => [
-                            'rows'       => $rows,
-                            'start_date' => $start_date,
-                            'end_date'   => $end_date,
+                            'rows'                  => $rows,
+                            'start_date'            => $start_date,
+                            'end_date'              => $end_date,
+                            'first_incomplete_date' => '' === $result['first_incomplete_date'] ? null : $result['first_incomplete_date'],
+                            'data_state'            => 'all',
+                            'timezone'              => Search_Daily_Series::TIMEZONE,
                         ],
                         'message' => 'Daily search data retrieved',
                     ];

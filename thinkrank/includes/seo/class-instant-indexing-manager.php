@@ -444,7 +444,9 @@ class Instant_Indexing_Manager {
         // longer one is submitted once more, so engines recrawl it and drop it.
         $this->pending_transitions[(int) $post->ID] = [
             'was_published' => $old_status === 'publish',
-            'was_excluded'  => Indexability::is_post_noindexed($post) || Indexability::is_post_redirected($post),
+            'was_excluded'  => Indexability::is_post_noindexed($post)
+                || Indexability::is_post_redirected($post)
+                || Indexability::is_post_canonicalized_away($post),
         ];
     }
 
@@ -530,7 +532,7 @@ class Instant_Indexing_Manager {
      * unless it was one before this save: that transition is submitted so
      * engines recrawl the page and drop it.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param int           $post_id     Post ID.
      * @param \WP_Post      $post        Post object after the save.

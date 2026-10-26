@@ -501,7 +501,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     /**
      * Options holding robots directives the sitemap's item filter reads.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      * @var string[]
      */
     private const ROBOTS_SETTINGS_OPTIONS = [
@@ -515,7 +515,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * Both options carry far more than robots directives (titles, schema,
      * feature switches), so only a change to a noindex outcome rebuilds.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param mixed $old_value Previous option value.
      * @param mixed $value     New option value.
@@ -541,7 +541,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * A row that is on but stores no `noindex` key changes nothing, matching
      * the array_merge() the robots tag does.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param mixed $value Option value.
      * @return array<string, bool|null>
@@ -604,9 +604,8 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
         }
 
-        // Add homepage. Use the static front page's real modified time when set,
-        // so lastmod reflects real changes rather than the generation time.
-        $xml .= $this->generate_url_entry(home_url('/'), $this->get_homepage_lastmod(), 1.0, 'daily');
+        // Add homepage, unless its own robots tag says noindex.
+        $xml .= $this->homepage_entry();
 
         // MEMORY-EFFICIENT: Generate posts using chunked processing.
         // Note: the single "general" sitemap includes every URL (no per-file cap);
@@ -789,7 +788,10 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             'exclude_posts' => '',
             'exclude_terms' => '',
             'exclude_password_protected' => true,
-            'exclude_private_posts' => true,
+            // `exclude_private_posts` used to sit here. The walk only ever
+            // fetched published posts, so it changed nothing, and a private
+            // post 404s for crawlers anyway (#1326). A value still stored on an
+            // older site is read along with the rest and ignored.
 
             // Advanced Options
             'enable_styling' => true,
@@ -1005,7 +1007,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * parse (#978). Decode every HTML entity to its character first, drop the
      * control characters XML 1.0 does not allow, then escape for XML.
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param string $value Text, possibly HTML-encoded.
      * @return string XML-safe text.
@@ -1019,6 +1021,70 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $value = (string) preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $value);
 
         return htmlspecialchars($value, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+    /**
+     * lastmod for the homepage <url> entry.
+     *
+     * A static front page reports its own modification time. A homepage that
+     * lists the latest posts changes when a post does, so it reports the
+     * newest published post's modification time. It used to fall back to the
+     * generation time, which told search engines the homepage had just changed
+     * on every rebuild (#1322). When neither is known the element is omitted.
+     *
+     * @return string ISO-8601 date, or '' when unknown.
+     */
+    private function get_homepage_lastmod(): string {
+        $front_id = $this->get_homepage_page_id();
+        if ($front_id) {
+            $modified = get_post_field('post_modified_gmt', $front_id);
+
+            return self::gmt_to_iso((string) $modified);
+        }
+
+        return self::gmt_to_iso((string) get_lastpostmodified('gmt', 'post'));
+    }
+
+    /**
+     * An ISO-8601 date from a GMT MySQL datetime, or '' for an empty one.
+     *
+     * @param string $gmt GMT datetime.
+     * @return string
+     */
+    private static function gmt_to_iso(string $gmt): string {
+        if ($gmt === '' || $gmt === '0000-00-00 00:00:00') {
+            return '';
+        }
+
+        $time = strtotime($gmt . ' UTC');
+
+        return $time === false ? '' : gmdate('c', $time);
+    }
+
+    /**
+     * The homepage <url> entry, or '' when the homepage is not indexable.
+     *
+     * It was listed unconditionally. A static front page is left out of the
+     * page walk to avoid a duplicate and only comes back through this entry,
+     * so a front page set to noindex (or redirected) was still submitted, and
+     * so was a latest-posts homepage whose "Blog posts index" row is noindex
+     * (#1322). The decision is the one the homepage's robots tag makes.
+     *
+     * @return string
+     */
+    private function homepage_entry(): string {
+        $front_id = $this->get_homepage_page_id();
+        if ($front_id > 0) {
+            $front = get_post($front_id);
+
+            if ($front instanceof \WP_Post && (Indexability::is_post_noindexed($front) || Indexability::is_post_redirected($front))) {
+                return '';
+            }
+        } elseif (Indexability::is_blog_index_noindexed()) {
+            return '';
+        }
+
+        return $this->generate_url_entry(home_url('/'), $this->get_homepage_lastmod(), 1.0, 'daily');
     }
 
     /**
@@ -1037,22 +1103,39 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return array<string> Individual <url>…</url> entry strings
      */
     /**
-     * lastmod for the homepage <url> entry: the static front page's real
-     * modification time when one is set, otherwise the generation time.
+     * The page the explicit homepage <url> entry stands for, or 0 when the
+     * front page shows posts.
      *
-     * @return string ISO-8601 date.
+     * Multilingual plugins translate `page_on_front` into the request's
+     * language, so a rebuild in a translated context read the translation
+     * here. The post walk then excluded that translation and kept the
+     * default-language front page, whose permalink is the bare home URL:
+     * `/` appeared twice and the translated home was missing (#1196).
+     * The multilingual manager pins it to the default language through the
+     * filter.
+     *
+     * @since 2.18.1
+     *
+     * @return int
      */
-    private function get_homepage_lastmod(): string {
-        if (get_option('show_on_front') === 'page') {
-            $front_id = (int) get_option('page_on_front');
-            if ($front_id) {
-                $modified = get_post_field('post_modified_gmt', $front_id);
-                if (!empty($modified) && $modified !== '0000-00-00 00:00:00') {
-                    return gmdate('c', strtotime($modified));
-                }
-            }
+    private function get_homepage_page_id(): int {
+        if (get_option('show_on_front') !== 'page') {
+            return 0;
         }
-        return gmdate('c');
+
+        $front_id = (int) get_option('page_on_front');
+        if ($front_id <= 0) {
+            return 0;
+        }
+
+        /**
+         * Filter the page the sitemap's homepage entry stands for.
+         *
+         * @since 2.18.1
+         *
+         * @param int $front_id `page_on_front` as read in this request.
+         */
+        return (int) apply_filters('thinkrank_sitemap_homepage_page_id', $front_id);
     }
 
     private function collect_post_entries(array $post_types, array $settings): array {
@@ -1090,12 +1173,11 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
 
         // The static front page is emitted once as the explicit homepage entry,
         // so exclude it here to avoid a duplicate <loc> (its permalink equals
-        // home_url('/')).
-        if (get_option('show_on_front') === 'page') {
-            $front_id = (int) get_option('page_on_front');
-            if ($front_id) {
-                $exclude_ids[] = $front_id;
-            }
+        // home_url('/')). Translations of it stay: each is its own language's
+        // home.
+        $front_id = $this->get_homepage_page_id();
+        if ($front_id) {
+            $exclude_ids[] = $front_id;
         }
 
         // Resolve the ordered ID list in one indexed query, then hydrate in
@@ -1470,7 +1552,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * so `alt="Tom's dog"` became "Tom", and it returned entities such as
      * `&eacute;` still encoded (#978).
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param string $content Post content.
      * @return array<int, array{src: string, title: string, alt: string}>
@@ -1492,7 +1574,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     /**
      * read_img_tags() through WP_HTML_Tag_Processor (WordPress 6.2+).
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param string $content Post content.
      * @return array<int, array{src: string, title: string, alt: string}>
@@ -1518,7 +1600,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * Matches the tag and each attribute so a quoted value runs to its own
      * closing quote, then decodes it.
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param string $content Post content.
      * @return array<int, array{src: string, title: string, alt: string}>
@@ -1747,7 +1829,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         if ($post_type === 'page') {
             $page_template = get_page_template_slug($post->ID);
             if (in_array($page_template, ['page-home.php', 'front-page.php'], true) ||
-                (int) $post->ID === (int) get_option('page_on_front')) {
+                $this->is_front_page_post($post)) {
                 $base_priority = 1.0; // Homepage gets maximum priority
             } elseif (in_array($page_template, ['page-contact.php', 'page-about.php'], true)) {
                 $adjustments += 0.05; // Important pages boost
@@ -1758,6 +1840,33 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $final_priority = max(0.1, min(1.0, $base_priority + $adjustments));
 
         return round($final_priority, 1);
+    }
+
+    /**
+     * Whether a post is the static front page, in any language.
+     *
+     * `page_on_front` holds one ID, so a translation of the front page (WPML,
+     * Polylang) was scored as an ordinary page. The multilingual manager widens
+     * the check through the filter (#1196).
+     *
+     * @since 2.18.1
+     *
+     * @param \WP_Post $post Post the entry describes.
+     * @return bool
+     */
+    private function is_front_page_post(\WP_Post $post): bool {
+        $is_front = get_option('show_on_front') === 'page'
+            && (int) $post->ID === (int) get_option('page_on_front');
+
+        /**
+         * Filter whether a sitemap entry is the static front page.
+         *
+         * @since 2.18.1
+         *
+         * @param bool     $is_front Whether it is `page_on_front` itself.
+         * @param \WP_Post $post     Post the entry describes.
+         */
+        return (bool) apply_filters('thinkrank_sitemap_is_front_page', $is_front, $post);
     }
 
     /**
@@ -1773,7 +1882,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // Pages typically change less frequently
         if ($post_type === 'page') {
             $page_template = get_page_template_slug($post->ID);
-            if ((int) $post->ID === (int) get_option('page_on_front')) {
+            if ($this->is_front_page_post($post)) {
                 return 'daily'; // Homepage changes frequently
             } elseif (in_array($page_template, ['page-contact.php', 'page-about.php'], true)) {
                 return 'monthly'; // Static pages change monthly
@@ -1819,20 +1928,17 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             return false;
         }
 
-        // Respect user setting for private posts
-        if ($post->post_status === 'private' && !empty($settings['exclude_private_posts'])) {
-            return false;
-        }
-
-        // Only published (and, per setting, private) content belongs in the
-        // sitemap. Content-quality heuristics (length, "demo"/"test"/"sample"
+        // Only published content belongs in the sitemap. A private post 404s
+        // for everyone a crawler could be, so it is never a destination; the
+        // "Exclude Private Posts" setting that pretended otherwise was removed
+        // (#1326). Content-quality heuristics (length, "demo"/"test"/"sample"
         // in the title, "lorem ipsum" text) were intentionally removed: an XML
         // sitemap should list every indexable published URL. Filtering by
         // description length silently dropped legitimate WooCommerce products
         // with short descriptions, and the substring title match excluded real
         // pages such as "Demo" or "Product Samples". Indexability is governed
         // by noindex directives below, not by heuristics.
-        if (!in_array($post->post_status, ['publish', 'private'], true)) {
+        if ($post->post_status !== 'publish') {
             return false;
         }
 
@@ -1841,8 +1947,14 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // post type set to No-index still had every item listed, and redirected
         // posts were submitted as "Page with redirect" (#911). The password
         // check stays with the setting above: listing protected posts is a
-        // choice this sitemap has always offered.
-        if (Indexability::is_post_noindexed($post) || Indexability::is_post_redirected($post)) {
+        // choice this sitemap has always offered. A post whose canonical names
+        // another URL is left out too, since its page asks for that one to be
+        // indexed instead (#1320).
+        if (
+            Indexability::is_post_noindexed($post)
+            || Indexability::is_post_redirected($post)
+            || Indexability::is_post_canonicalized_away($post)
+        ) {
             return false;
         }
 
@@ -3504,7 +3616,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * and the admin would otherwise list it as a live sitemap whose link 404s
      * (#1049). The entry is kept so reactivating the plugin brings it back.
      *
-     * @since 2.15.0
+     * @since 2.16.0
      *
      * @param array|null $settings Sitemap settings (falls back to saved ones).
      * @return string[] The `url` of each such child, as stored.
@@ -3648,7 +3760,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * children stand for an object a plugin registers, so they are only while
      * it does. Anything else is a post type or taxonomy slug.
      *
-     * @since 2.15.0
+     * @since 2.16.0
      *
      * @param string $type Child sitemap type.
      * @return bool
@@ -4650,7 +4762,10 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 // output) and is emitted first; collect_post_entries_iter()
                 // already excludes the static front page, so there's no duplicate.
                 $entries = (function () use ($settings) {
-                    yield $this->generate_url_entry(home_url('/'), $this->get_homepage_lastmod(), 1.0, 'daily');
+                    $home = $this->homepage_entry();
+                    if ($home !== '') {
+                        yield $home;
+                    }
                     yield from $this->collect_post_entries_iter(['page'], $settings);
                 })();
                 return ['entries' => $entries, 'image_ns' => true];

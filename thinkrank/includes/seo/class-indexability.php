@@ -4,7 +4,7 @@
  *
  * @package ThinkRank
  * @subpackage SEO
- * @since 2.15.0
+ * @since 2.14.1
  */
 
 declare(strict_types=1);
@@ -31,7 +31,7 @@ if (!defined('ABSPATH')) {
  * reads, and every feed asks it. It is public so ThinkRank Pro's feeds (news
  * and video sitemaps, llms-full.txt, internal-link targets) can use it too.
  *
- * Three things make an object a non-destination:
+ * Four things make an object a non-destination:
  * - the effective robots decision is noindex, resolved through the cascade
  *   {@see \ThinkRank\Frontend\SEO_Manager} uses for the robots tag: site-wide
  *   directives, then the content type's row in the matrix, then the object's
@@ -39,9 +39,11 @@ if (!defined('ABSPATH')) {
  * - the post has a password;
  * - the object redirects elsewhere, either through its own "Redirect this to"
  *   field ({@see Object_Redirect}) or because a redirect provider answers the
- *   `thinkrank_url_redirects` filter for its URL.
+ *   `thinkrank_url_redirects` filter for its URL;
+ * - its canonical override names another URL, so the page itself tells search
+ *   engines to index that one instead.
  *
- * @since 2.15.0
+ * @since 2.14.1
  */
 final class Indexability {
 
@@ -61,11 +63,17 @@ final class Indexability {
     public const REASON_NOINDEX  = 'noindex';
     public const REASON_PASSWORD = 'password';
     public const REASON_REDIRECT = 'redirect';
+    public const REASON_CANONICAL = 'canonical';
+
+    /**
+     * Meta key holding a post's or term's canonical override.
+     */
+    private const CANONICAL_META = '_thinkrank_canonical_url';
 
     /**
      * Whether a post or term may be submitted to search engines.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param \WP_Post|\WP_Term $item Post or term.
      * @return bool
@@ -85,7 +93,7 @@ final class Indexability {
     /**
      * Whether a post may be submitted to search engines.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param \WP_Post $post Post.
      * @return bool
@@ -97,7 +105,7 @@ final class Indexability {
     /**
      * Whether a term archive may be submitted to search engines.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param \WP_Term $term Term.
      * @return bool
@@ -113,7 +121,7 @@ final class Indexability {
      * reads options and primed meta, and a redirect lookup may query the
      * redirect provider's table.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param \WP_Post $post Post.
      * @return string|null One of the REASON_* constants, or null.
@@ -131,13 +139,17 @@ final class Indexability {
             return self::REASON_REDIRECT;
         }
 
+        if (self::is_post_canonicalized_away($post)) {
+            return self::REASON_CANONICAL;
+        }
+
         return null;
     }
 
     /**
      * Why a term is not indexable, or null when it is.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param \WP_Term $term Term.
      * @return string|null One of the REASON_* constants, or null.
@@ -151,13 +163,17 @@ final class Indexability {
             return self::REASON_REDIRECT;
         }
 
+        if (self::is_term_canonicalized_away($term)) {
+            return self::REASON_CANONICAL;
+        }
+
         return null;
     }
 
     /**
      * Whether the post has a password.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param \WP_Post $post Post.
      * @return bool
@@ -173,7 +189,7 @@ final class Indexability {
      * is on), then the post's override. A post-level `noindex: false` beats a
      * noindexed type, exactly as it does in the tag.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param \WP_Post $post Post.
      * @return bool
@@ -191,12 +207,29 @@ final class Indexability {
     }
 
     /**
+     * Whether the robots tag on the blog posts index says noindex.
+     *
+     * The listing has no object of its own to carry an override: the tag reads
+     * the site-wide directives, then the "Blog posts index" row. On a site that
+     * shows its latest posts this is the homepage.
+     *
+     * @since 2.18.1
+     *
+     * @return bool
+     */
+    public static function is_blog_index_noindexed(): bool {
+        $settings = self::merge_entity_robots(self::global_robots(), Content_Type_Settings::ENTITY_BLOG_INDEX);
+
+        return !empty($settings['noindex']);
+    }
+
+    /**
      * Whether the robots tag on this term's archive says noindex.
      *
      * Site-wide directives, then the taxonomy's matrix row, then the term's
      * override.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param \WP_Term $term Term.
      * @return bool
@@ -219,7 +252,7 @@ final class Indexability {
     /**
      * Whether a request for this post is redirected elsewhere.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param \WP_Post $post Post.
      * @return bool
@@ -237,7 +270,7 @@ final class Indexability {
     /**
      * Whether a request for this term's archive is redirected elsewhere.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param \WP_Term $term Term.
      * @return bool
@@ -250,6 +283,80 @@ final class Indexability {
         $url = get_term_link($term);
 
         return is_string($url) && $url !== '' && self::url_is_redirected($url, $term);
+    }
+
+    /**
+     * Whether the post's canonical override points at another URL.
+     *
+     * The canonical tag prints the override as typed, so a post canonicalised
+     * to another page asks search engines to index that page instead. Listing
+     * it in the sitemap contradicted the page (#1320). A canonical that is the
+     * post's own permalink, in any scheme or with or without the trailing
+     * slash, keeps it.
+     *
+     * @since 2.18.1
+     *
+     * @param \WP_Post $post Post.
+     * @return bool
+     */
+    public static function is_post_canonicalized_away(\WP_Post $post): bool {
+        $canonical = Absolute_Url::from((string) get_post_meta($post->ID, self::CANONICAL_META, true));
+        if ($canonical === '') {
+            return false;
+        }
+
+        $permalink = get_permalink($post);
+
+        return is_string($permalink) && $permalink !== '' && !self::is_same_url($canonical, $permalink);
+    }
+
+    /**
+     * Whether the term's canonical override points at another URL.
+     *
+     * Mirrors the archive canonical, which ignores an override that is just
+     * the archive's own link.
+     *
+     * @since 2.18.1
+     *
+     * @param \WP_Term $term Term.
+     * @return bool
+     */
+    public static function is_term_canonicalized_away(\WP_Term $term): bool {
+        $canonical = Absolute_Url::from((string) get_term_meta($term->term_id, self::CANONICAL_META, true));
+        if ($canonical === '') {
+            return false;
+        }
+
+        $link = get_term_link($term);
+
+        return is_string($link) && $link !== '' && !self::is_same_url($canonical, $link);
+    }
+
+    /**
+     * Whether two URLs name the same page: host, port, path with or without
+     * the trailing slash, and query. The scheme is ignored, since the
+     * canonical tag normalises it to the site's own.
+     *
+     * @param string $a URL.
+     * @param string $b URL.
+     * @return bool
+     */
+    private static function is_same_url(string $a, string $b): bool {
+        $key = static function (string $url): ?string {
+            $parts = wp_parse_url($url);
+            if (!is_array($parts) || empty($parts['host'])) {
+                return null;
+            }
+
+            return strtolower((string) $parts['host'])
+                . (isset($parts['port']) ? ':' . $parts['port'] : '')
+                . trailingslashit((string) ($parts['path'] ?? '/'))
+                . (isset($parts['query']) && $parts['query'] !== '' ? '?' . $parts['query'] : '');
+        };
+
+        $key_a = $key($a);
+
+        return $key_a !== null && $key_a === $key($b);
     }
 
     /**
@@ -268,7 +375,7 @@ final class Indexability {
          * or term's URL. Nothing answers it in the free plugin; a redirect
          * provider such as ThinkRank Pro does, from its own rule store.
          *
-         * @since 2.15.0
+         * @since 2.14.1
          *
          * @param bool              $redirected Whether the URL redirects. Default false.
          * @param string            $url        The post's permalink or the term's archive link.

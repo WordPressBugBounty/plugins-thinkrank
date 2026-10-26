@@ -811,6 +811,37 @@ class Schema_Graph {
     }
 
     /**
+     * Whether content rendering now may print its own inline JSON-LD.
+     *
+     * True only while rendering the singular post that is actually being
+     * viewed. A listing (archive, blog home, search) renders many posts under
+     * one URL, and an FAQPage or HowTo there would describe a document that
+     * does not exist, beside a head that already declares a CollectionPage.
+     * Outside a front-end query (the editor, a REST render) there is no page
+     * to describe either.
+     *
+     * Moved here from Blocks_Manager, where the #400 fix applied it to the FAQ
+     * block alone: the HowTo and TOC blocks and every builder FAQ, HowTo and
+     * TOC widget echo their own script too, and kept printing it on every
+     * listing that showed the post (#1329).
+     *
+     * @since 2.18.1
+     * @return bool
+     */
+    public static function renders_queried_post(): bool {
+        if (!function_exists('is_singular') || !is_singular()) {
+            return false;
+        }
+
+        $queried_id = (int) get_queried_object_id();
+        $current_id = (int) get_the_ID();
+
+        // A secondary loop inside a singular template can render other posts;
+        // their content is not this URL's content.
+        return $queried_id > 0 && $queried_id === $current_id;
+    }
+
+    /**
      * Assemble and emit the graph. Safe to call more than once.
      *
      * @since 1.32.0

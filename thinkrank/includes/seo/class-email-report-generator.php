@@ -309,7 +309,7 @@ final class Email_Report_Generator {
      * `available: false` without an `error` is not a failure, so it is not
      * reported as one.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param array $shared The data provider's fetch() result.
      * @return string The error message, or '' when nothing failed.
@@ -336,7 +336,7 @@ final class Email_Report_Generator {
      * MAX_SEND_ATTEMPTS are spent the schedule rejoins the normal cadence.
      * The reason and the message are recorded for the panel.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param array  $config  Per-site config.
      * @param array  $context Render context (period bounds).
@@ -381,7 +381,7 @@ final class Email_Report_Generator {
      * An error message fit for the log row and the panel: plain text, one
      * line, at most 300 characters.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param string $error Raw error message.
      * @return string

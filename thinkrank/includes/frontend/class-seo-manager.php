@@ -519,6 +519,23 @@ class SEO_Manager {
             }
         }
 
+        // A static posts page is a page with its own SEO title and meta
+        // description, but it is not singular: WordPress answers it as the
+        // blog index, so the singular branch above never read them and the
+        // page printed the Site Identity homepage values instead. The static
+        // front page, a singular view, always honoured its own (#1333).
+        //
+        // Only the metadata is loaded. current_post_id stays empty because
+        // the request is still the blog listing for everything that reads the
+        // post id (canonical, schema, breadcrumbs, the content-derived
+        // description).
+        if (self::is_static_posts_page()) {
+            $posts_page = get_post((int) get_option('page_for_posts'));
+            if ($posts_page instanceof \WP_Post) {
+                $this->current_metadata = $this->get_post_seo_metadata($posts_page->ID);
+            }
+        }
+
         // Load site identity data
         $this->load_site_identity_data();
     }
@@ -683,7 +700,7 @@ class SEO_Manager {
      * get_effective_seo_title() there gave og:title and twitter:title the Site
      * Identity author title, so the share card and the tab disagreed (#977).
      *
-     * @since 2.15.0
+     * @since 2.14.3
      * @return string|null Fallback title, or null if none applies.
      */
     private function get_social_fallback_title(): ?string {
@@ -705,7 +722,7 @@ class SEO_Manager {
      * knows nothing about it, so og:description and twitter:description were
      * missing there even while the description tag was printed (#977).
      *
-     * @since 2.15.0
+     * @since 2.14.3
      * @return string|null Fallback description, or null if none applies.
      */
     private function get_social_fallback_description(): ?string {
@@ -978,12 +995,26 @@ class SEO_Manager {
             echo '<meta name="robots" content="' . esc_attr($robots_content) . '" />' . "\n";
         }
 
-        // Output focus keywords as meta keywords (all keywords, comma-separated)
+        // Focus keywords are an editor-only analysis input. Search engines
+        // ignore `meta keywords`, so printing them only published each page's
+        // target keywords to anyone reading the source (#1361). Off unless a
+        // site asks for it.
         $focus_keywords = $this->current_metadata['focus_keywords'] ?? [];
         if (empty($focus_keywords) && !empty($this->current_metadata['focus_keyword'])) {
             $focus_keywords = [$this->current_metadata['focus_keyword']];
         }
-        if (!empty($focus_keywords)) {
+
+        /**
+         * Filter whether the focus keywords are printed as `<meta name="keywords">`.
+         *
+         * @since 2.18.1
+         *
+         * @param bool     $output         False by default.
+         * @param string[] $focus_keywords The page's focus keywords.
+         */
+        $output_keywords = (bool) apply_filters('thinkrank_output_meta_keywords', false, (array) $focus_keywords);
+
+        if ($output_keywords && !empty($focus_keywords)) {
             $keywords = implode(', ', array_filter(array_map('trim', (array) $focus_keywords), 'strlen'));
             if (!empty($keywords)) {
                 echo '<meta name="keywords" content="' . esc_attr($keywords) . '" />' . "\n";
@@ -1578,6 +1609,8 @@ class SEO_Manager {
             $og_tags['og:type'] = apply_filters('thinkrank_og_type', $og_tags['og:type']);
         }
 
+        $og_tags = self::drop_foreign_article_tags($og_tags);
+
         echo "<!-- ThinkRank SEO Open Graph Tags (Enhanced) -->\n";
 
         // Define optimal order for Open Graph tags
@@ -1623,6 +1656,36 @@ class SEO_Manager {
         self::output_extra_og_images($extra_images);
 
         echo "<!-- /ThinkRank SEO Open Graph Tags -->\n";
+    }
+
+    /**
+     * Remove article:* properties when the final og:type is not `article`.
+     *
+     * The Social Meta Manager adds article:published_time, article:modified_time,
+     * article:author and article:section while it still believes the page is an
+     * article. The `thinkrank_og_type` filter runs only afterwards, at output, so
+     * when an add-on changes the type (Pro's WooCommerce module sets `product`
+     * on product pages) the article properties used to stay next to the new
+     * type. They belong to the article vocabulary only, so the final type
+     * decides whether they are printed (#1337).
+     *
+     * @since 2.18.1
+     *
+     * @param array $og_tags Open Graph tags keyed by property.
+     * @return array Tags without article:* when the type is not an article.
+     */
+    public static function drop_foreign_article_tags(array $og_tags): array {
+        if (($og_tags['og:type'] ?? '') === 'article') {
+            return $og_tags;
+        }
+
+        foreach (array_keys($og_tags) as $property) {
+            if (strpos((string) $property, 'article:') === 0) {
+                unset($og_tags[$property]);
+            }
+        }
+
+        return $og_tags;
     }
 
     /**
@@ -1724,7 +1787,7 @@ class SEO_Manager {
         $value = (string) $value;
         $url_keys = [
             'og:image', 'og:image:url', 'og:image:secure_url', 'og:url',
-            'twitter:image', 'twitter:player',
+            'article:author', 'twitter:image', 'twitter:player',
         ];
         return in_array($key, $url_keys, true) ? esc_url($value) : esc_attr($value);
     }
@@ -2029,10 +2092,12 @@ class SEO_Manager {
                 echo '<meta property="article:published_time" content="' . esc_attr(get_the_date('c', $this->current_post_id)) . '" />' . "\n";
                 echo '<meta property="article:modified_time" content="' . esc_attr(get_the_modified_date('c', $this->current_post_id)) . '" />' . "\n";
 
-                // Add author
-                $author_id = get_post_field('post_author', $this->current_post_id);
-                $author_name = get_the_author_meta('display_name', $author_id);
-                echo "<meta property=\"article:author\" content=\"" . esc_attr($author_name) . "\" />\n";
+                // Add author: a profile URL, as the Open Graph article
+                // vocabulary defines article:author (#1337).
+                $author_id = (int) get_post_field('post_author', $this->current_post_id);
+                if ($author_id > 0) {
+                    echo '<meta property="article:author" content="' . esc_url(get_author_posts_url($author_id)) . '" />' . "\n";
+                }
 
                 // Add categories as article:section
                 if (is_single()) {
@@ -2683,7 +2748,8 @@ class SEO_Manager {
                 // derive-from-content priority below, so guarding only that one
                 // would leave this path open (#363).
                 if (!empty($post->post_excerpt)) {
-                    $placeholders['%excerpt%'] = $post->post_excerpt;
+                    // As plain text: a WooCommerce short description is HTML (#1355).
+                    $placeholders['%excerpt%'] = \ThinkRank\SEO\Pattern_Resolver::excerpt_text($post->post_excerpt);
                 } elseif (!$this->is_content_password_protected($post->ID)) {
                     $placeholders['%excerpt%'] = \ThinkRank\SEO\Pattern_Resolver::derive_excerpt(
                         \ThinkRank\SEO\Builder_Content::visible_content($post)
@@ -2970,7 +3036,7 @@ class SEO_Manager {
      * @return string Description, or ''.
      */
     public static function term_archive_fallback_description(\WP_Term $term): string {
-        $description = trim(wp_strip_all_tags((string) $term->description));
+        $description = \ThinkRank\Core\Seo_Text::plain_text((string) $term->description);
         if ('' !== $description) {
             return \ThinkRank\Core\Seo_Text::trim_to_length($description);
         }
@@ -3138,7 +3204,20 @@ class SEO_Manager {
             }
         }
 
-        // Fourth priority: Generate from content for posts/pages.
+        // Fourth priority: the authored excerpt. WooCommerce keeps a product's
+        // short description here, and og:description and twitter:description
+        // already use it, so a product with only a short description had both
+        // of those and no meta description (#1355). An authored excerpt is
+        // written for public consumption, so it is used on a protected post
+        // too, as the social tags and %excerpt% do (#973).
+        if (is_singular() && $this->current_post_id) {
+            $excerpt = \ThinkRank\SEO\Pattern_Resolver::excerpt_text((string) get_post_field('post_excerpt', $this->current_post_id));
+            if ('' !== $excerpt) {
+                return $excerpt;
+            }
+        }
+
+        // Fifth priority: Generate from content for posts/pages.
         // Never for a password-protected post — deriving the description from a
         // gated body published its first ~25 words in the page head, and the
         // same value is reused for og:description and twitter:description, so
@@ -3159,7 +3238,7 @@ class SEO_Manager {
             }
         }
 
-        // Fifth priority: Site description for homepage
+        // Sixth priority: Site description for homepage
         if (is_home() || is_front_page()) {
             $site_description = get_bloginfo('description');
             if (!empty($site_description)) {
@@ -3193,7 +3272,7 @@ class SEO_Manager {
             $description = term_description() ?: '';
         }
 
-        $description = trim(wp_strip_all_tags((string) $description));
+        $description = \ThinkRank\Core\Seo_Text::plain_text((string) $description);
         if ($description === '') {
             return null;
         }
@@ -3410,18 +3489,10 @@ class SEO_Manager {
      * The values the organization_type setting offers. LocalBusiness and its
      * subtypes are recognised through Local_Business_Types_Config instead.
      *
-     * @since 2.15.0
+     * @since 2.14.3
      * @var string[]
      */
-    private const SITE_ENTITY_ORGANIZATION_TYPES = [
-        'Organization',
-        'Corporation',
-        'EducationalOrganization',
-        'GovernmentOrganization',
-        'NGO',
-        'PerformingGroup',
-        'SportsOrganization',
-    ];
+    private const SITE_ENTITY_ORGANIZATION_TYPES = \ThinkRank\Config\Schema_Settings_Config::ORGANIZATION_TYPES;
 
     /**
      * Whether deployed schemas already describe the site's own entity.
@@ -3432,7 +3503,7 @@ class SEO_Manager {
      * node's resolved @type are checked, since a LocalBusiness row is
      * published as "Dentist" and an Organization row can carry a subtype.
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param array $schemas Deployed schemas keyed by schema type, each with a 'data' node.
      * @return bool
@@ -3565,13 +3636,19 @@ class SEO_Manager {
             return null;
         }
 
-        // Determine organization type (Schema Manager setting or default)
+        // Determine organization type (Schema Manager setting or default).
+        // Only a type ThinkRank offers is published: the setting used to be
+        // a free string over MCP, and whatever it held became the @type
+        // verbatim (#1344).
         $org_type = $schema_settings['organization_type'] ?? 'Organization';
+        if (!\ThinkRank\Config\Schema_Settings_Config::is_organization_type($org_type)) {
+            $org_type = 'Organization';
+        }
 
         $schema = [
             '@context' => 'https://schema.org',
             '@type' => $org_type,
-            '@id' => home_url() . '#organization',
+            '@id' => home_url('/#organization'),
             'name' => $org_name,
             'url' => $org_url,
         ];
@@ -3593,7 +3670,7 @@ class SEO_Manager {
         if (!empty($logo_url)) {
             $schema['logo'] = [
                 '@type' => 'ImageObject',
-                '@id' => home_url() . '#logo',
+                '@id' => home_url('/#logo'),
                 'url' => $logo_url,
                 'contentUrl' => $logo_url,
                 'caption' => $org_name . ' Logo'
@@ -4151,12 +4228,12 @@ class SEO_Manager {
     public function filter_robots_txt(string $output, string $is_public): string {
         // Only override if Site Identity is enabled and robots.txt management is enabled
         if (!$this->site_identity_data || !$this->site_identity_data['enabled']) {
-            return $output;
+            return $this->advertise_own_sitemaps($output, $is_public);
         }
 
         $settings = $this->site_identity_manager->get_settings('site');
         if (empty($settings['robots_txt_enabled'])) {
-            return $output;
+            return $this->advertise_own_sitemaps($output, $is_public);
         }
 
         // Serve the effective content (manual textarea edit if present, else
@@ -4172,7 +4249,62 @@ class SEO_Manager {
         }
 
         // Fallback to default output if rendering fails
-        return $output;
+        return $this->advertise_own_sitemaps($output, $is_public);
+    }
+
+    /**
+     * Add ThinkRank's Sitemap lines to a robots.txt ThinkRank does not manage.
+     *
+     * filter_wp_sitemaps_enabled() turns core's sitemap off whenever ThinkRank
+     * can serve its own, and that also removes the "Sitemap:" line core writes
+     * into robots.txt. With robots.txt management off (or Site Identity off)
+     * nothing wrote ThinkRank's line instead, so robots.txt stopped
+     * advertising the sitemap at all, or kept only Pro's news and video lines
+     * (#1323). The lines are only added when core's was taken away, so a site
+     * still on core's sitemap is left exactly as it was, and a URL the output
+     * already names is not repeated.
+     *
+     * @since 2.18.1
+     *
+     * @param string $output    robots.txt output so far.
+     * @param string $is_public Whether the site is public ('1' or '0').
+     * @return string
+     */
+    private function advertise_own_sitemaps(string $output, string $is_public): string {
+        if ('0' === (string) $is_public || !$this->site_identity_manager || !$this->should_disable_core_sitemap()) {
+            return $output;
+        }
+
+        try {
+            $urls = $this->site_identity_manager->get_advertised_sitemap_urls();
+        } catch (\Exception $e) {
+            return $output;
+        }
+
+        $advertised = [];
+        foreach (preg_split('/\R/', $output) ?: [] as $line) {
+            $line = trim($line);
+            if (0 === stripos($line, 'sitemap:')) {
+                $advertised[] = strtolower(trim(substr($line, strlen('sitemap:'))));
+            }
+        }
+
+        $block = '';
+        foreach ($urls as $url) {
+            $url = esc_url_raw((string) $url);
+            if ('' === $url || in_array(strtolower($url), $advertised, true)) {
+                continue;
+            }
+
+            $advertised[] = strtolower($url);
+            $block       .= 'Sitemap: ' . $url . "\n";
+        }
+
+        if ('' === $block) {
+            return $output;
+        }
+
+        return rtrim($output) . "\n\n" . $block;
     }
 
     /**

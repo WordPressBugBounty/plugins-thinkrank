@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace ThinkRank\Abilities\Content;
 
 use ThinkRank\Abilities\Ability_Base;
+use ThinkRank\Core\Seo_Text;
 use ThinkRank\SEO\Builder_Content;
 use ThinkRank\SEO\Post_Content_Editor;
 use ThinkRank\SEO\Word_Count_Index;
@@ -194,7 +195,9 @@ class Get_Post_Content extends Ability_Base {
 		}
 
 		$source   = Builder_Content::resolve( $post );
-		$resolved = trim( wp_strip_all_tags( $source ) );
+		// A space at each block boundary, so two paragraphs do not read as one
+		// glued word; line breaks are kept (#1338).
+		$resolved = Seo_Text::plain_text( $source, false );
 		// Counted over the reading text rather than the body returned, so shortcode
 		// syntax is not counted as words and two words split only by a tag stay
 		// two (#893), and a token of punctuation alone is not a word. Words,

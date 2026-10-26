@@ -103,6 +103,49 @@ class Seo_Text {
     }
 
     /**
+     * Elements whose start and end separate words when a browser renders them.
+     *
+     * @since 2.18.1
+     */
+    private const BLOCK_TAG_PATTERN = '/<\/?(?:address|article|aside|blockquote|br|caption|dd|details|dialog|div|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|header|hr|legend|li|main|nav|ol|option|p|pre|section|summary|table|tbody|td|tfoot|th|thead|tr|ul)\b[^>]*>/i';
+
+    /**
+     * Strip markup to plain text, keeping a space at every block boundary.
+     *
+     * wp_strip_all_tags() deletes tags without leaving anything in their
+     * place, so `<p>Free teaser.</p><p>Secret</p>` became "Free
+     * teaser.Secret" and an Elementor heading glued itself to the accordion
+     * after it ("Frequently asked questionsThinkRank"). A browser separates
+     * those words, so the text derived from them should too: a space goes in
+     * at every block-level tag before the strip. Inline tags (a, strong,
+     * span) are left alone, so a word split by one stays one word (#1338).
+     *
+     * @since 2.18.1
+     *
+     * @param string $html     Markup or text.
+     * @param bool   $collapse Collapse all whitespace to single spaces. Pass
+     *                         false to keep line breaks, e.g. for a body text.
+     * @return string Plain text, trimmed.
+     */
+    public static function plain_text(string $html, bool $collapse = true): string {
+        if ('' === trim($html)) {
+            return '';
+        }
+
+        $text = wp_strip_all_tags((string) preg_replace(self::BLOCK_TAG_PATTERN, ' $0 ', $html));
+
+        if ($collapse) {
+            return trim((string) preg_replace('/\s+/u', ' ', $text));
+        }
+
+        // Only the spaces added here: runs of blanks become one, and none
+        // hang off either side of a line break.
+        $text = (string) preg_replace('/[ \t]{2,}/', ' ', $text);
+
+        return trim((string) preg_replace('/[ \t]*\n[ \t]*/', "\n", $text));
+    }
+
+    /**
      * Strip leading and trailing whitespace and title separators.
      *
      * The separator is removed as a whole string, never byte by byte.
@@ -113,7 +156,7 @@ class Seo_Text {
      * UTF-8 left behind made `<title>` invalid and `esc_attr()` blank out
      * og:title and twitter:title (#972).
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param string $value     Title or description.
      * @param string $separator The active separator, possibly multibyte.
@@ -224,7 +267,7 @@ class Seo_Text {
      * ellipsis was written that way and keeps it. A decoded `<` stays safe
      * because the graph is encoded with JSON_HEX_TAG (#118).
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param string $text Raw title or name.
      * @return string Plain text with tags removed and entities decoded.

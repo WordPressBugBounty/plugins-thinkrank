@@ -218,10 +218,12 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
     /**
      * Business type templates for content generation
      *
+     * A constant since 2.18.1, so the update ability can list the names.
+     *
      * @since 1.0.0
      * @var array
      */
-    private array $business_types = [
+    private const BUSINESS_TYPES = [
         'website' => 'website',
         'blog' => 'Personal or professional blog',
         'business' => 'Business/corporate website',
@@ -235,6 +237,17 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
         'agency' => 'Agency/service provider',
         'other' => 'Other type of website'
     ];
+
+    /**
+     * The business_type names, the default first.
+     *
+     * @since 2.18.1
+     *
+     * @return string[]
+     */
+    public static function business_type_names(): array {
+        return array_keys(self::BUSINESS_TYPES);
+    }
 
     /**
      * Constructor
@@ -1373,7 +1386,7 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
         }
 
         // Validate business type
-        if (!empty($user_input['business_type']) && !isset($this->business_types[$user_input['business_type']])) {
+        if (!empty($user_input['business_type']) && !isset(self::BUSINESS_TYPES[$user_input['business_type']])) {
             $validation['warnings'][] = 'Unknown business type specified';
             $validation['score'] -= 5;
         }
@@ -2084,7 +2097,7 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
                 'type' => 'string',
                 'title' => 'Business Type',
                 'description' => 'Type of website or business',
-                'enum' => array_keys($this->business_types),
+                'enum' => array_keys(self::BUSINESS_TYPES),
                 'default' => 'website'
             ],
             'technical_stack' => [
@@ -2171,7 +2184,7 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
         if (empty($description)) {
             $site_name = sanitize_text_field($user_input['site_name'] ?? $settings['site_name'] ?? get_bloginfo('name'));
             $business_type = $user_input['business_type'] ?? 'website';
-            $description = "{$site_name} is a {$this->business_types[$business_type]} providing valuable resources and information.";
+            $description = "{$site_name} is a " . (self::BUSINESS_TYPES[$business_type] ?? self::BUSINESS_TYPES['website']) . ' providing valuable resources and information.';
         }
 
         // Format as blockquote (required by spec)

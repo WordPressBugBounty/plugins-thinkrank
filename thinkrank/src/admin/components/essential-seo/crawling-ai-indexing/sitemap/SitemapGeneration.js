@@ -1160,29 +1160,6 @@ const SitemapGeneration = () => {
 										disabled={!settings.enabled}
 									/>
 								</div>
-								<div className="tr-pt-6">
-									<Toggle
-										id="exclude-private-posts"
-										label={__(
-											'Exclude Private Posts',
-											'thinkrank'
-										)}
-										description={__(
-											'When enabled, private posts will be excluded from sitemaps',
-											'thinkrank'
-										)}
-										checked={
-											!!settings.exclude_private_posts
-										}
-										onChange={(value) =>
-											handleSettingChange(
-												'exclude_private_posts',
-												value
-											)
-										}
-										disabled={!settings.enabled}
-									/>
-								</div>
 
 								{/* Auto quality filtering info */}
 								<div className="tr-pt-6">
@@ -1204,7 +1181,11 @@ const SitemapGeneration = () => {
 													'thinkrank'
 												),
 												__(
-													'Password-protected and private content only when those toggles are enabled above',
+													'Password-protected content unless it is excluded above',
+													'thinkrank'
+												),
+												__(
+													'Never private, draft or scheduled content, which crawlers cannot open',
 													'thinkrank'
 												),
 											].map((item, i) => (

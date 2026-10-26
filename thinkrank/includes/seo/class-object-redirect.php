@@ -201,7 +201,7 @@ class Object_Redirect {
          * A redirected object is left out of the sitemap, so the published
          * files have to be rebuilt when one changes.
          *
-         * @since 2.15.0
+         * @since 2.14.1
          *
          * @param string $object_type 'post' or 'term'.
          * @param int    $object_id   Object ID.

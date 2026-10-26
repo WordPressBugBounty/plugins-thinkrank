@@ -148,6 +148,9 @@ final class Mcp_Manager {
 		// server, and refuse before dispatch() parses (#1097).
 		add_action( 'parse_request', [ $this, 'cap_rest_body_read' ], 9 );
 		add_filter( 'rest_pre_dispatch', [ $this, 'refuse_oversized_rest_body' ], 10, 3 );
+		// The route is POST only, so core answered any other method with a
+		// 404 rest_no_route; answer it as the pretty endpoint does (#1349).
+		add_filter( 'rest_pre_dispatch', [ $this, 'refuse_other_rest_methods' ], 10, 3 );
 
 		// The one broken state the server can't see from inside a request:
 		// MCP enabled but the bundled Abilities runtime absent. Everything
@@ -673,7 +676,10 @@ final class Mcp_Manager {
 		// and was invisible to those checks (#764).
 		self::$serving_request = true;
 
-		$request = new \WP_REST_Request( 'POST', '/' . self::NS . '/mcp' );
+		// The real method, so a GET or DELETE is answered 405 rather than
+		// read as a POST with an empty body (#1349).
+		$method  = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : 'POST';
+		$request = new \WP_REST_Request( '' !== $method ? $method : 'POST', '/' . self::NS . '/mcp' );
 		$request->set_header( 'content-type', 'application/json' );
 		// Carry the auth header + raw body from the live PHP request. The
 		// header is the only place a credential is read from: the token
@@ -770,6 +776,39 @@ final class Mcp_Manager {
 
 		$refused->header( 'MCP-Protocol-Version', Mcp_Server::PROTOCOL_VERSION );
 		return $refused;
+	}
+
+	/**
+	 * Answer a non-POST request to the MCP wp-json route as the pretty
+	 * endpoint does.
+	 *
+	 * The route is registered for POST only, so core answered a GET (an SDK
+	 * opening an SSE stream) or a DELETE (ending a session) with a 404
+	 * rest_no_route. Mcp_Server::handle() checks the credential first, so an
+	 * unauthenticated call still gets the 401 challenge, and then answers
+	 * 405 with `Allow: POST`. Answered here, ahead of route matching, so
+	 * core's own Allow header for the route does not replace that one.
+	 * OPTIONS is left to core.
+	 *
+	 * @since 2.18.1
+	 *
+	 * @param mixed            $result  A response already chosen, or null.
+	 * @param \WP_REST_Server  $server  Server instance.
+	 * @param \WP_REST_Request $request The request.
+	 * @return mixed The answer, or $result unchanged.
+	 */
+	public function refuse_other_rest_methods( $result, $server, $request ) {
+		if ( null !== $result || ! $request instanceof \WP_REST_Request ) {
+			return $result;
+		}
+
+		$method = strtoupper( (string) $request->get_method() );
+
+		if ( 'POST' === $method || 'OPTIONS' === $method || ! self::is_mcp_rest_route( (string) $request->get_route() ) ) {
+			return $result;
+		}
+
+		return $this->rest_mcp( $request );
 	}
 
 	// -- REST registration --
@@ -1201,6 +1240,23 @@ final class Mcp_Manager {
 	 */
 	public function rest_doctor(): \WP_REST_Response {
 		return rest_ensure_response( Mcp_Self_Test::doctor() );
+	}
+
+	/**
+	 * What the consent screen says about changing the grant later, under
+	 * ThinkRank > AI Tools > MCP. ThinkRank Hub's grant can be narrowed there
+	 * and never widened back (Connected AI apps), so for the hub the screen
+	 * says narrow; any other client's can be changed either way (#1294).
+	 *
+	 * @since 2.17.2
+	 *
+	 * @param bool $for_hub Whether the request is ThinkRank Hub's.
+	 * @return string
+	 */
+	public static function consent_later_note( bool $for_hub ): string {
+		return $for_hub
+			? __( 'Narrow it per area below. You can narrow it further later under ThinkRank > AI Tools > MCP.', 'thinkrank' )
+			: __( 'Narrow it per area below. You can change it later under ThinkRank > AI Tools > MCP without reconnecting.', 'thinkrank' );
 	}
 
 	/**
@@ -2144,7 +2200,7 @@ final class Mcp_Manager {
 		}
 		echo '<div class="access"><div class="k">' . esc_html__( 'Access', 'thinkrank' ) . '</div>';
 		echo '<span class="badge ' . ( $read_only ? 'ro' : '' ) . '">' . esc_html( $access_label ) . '</span>';
-		echo '<div class="d">' . esc_html( $access_desc ) . ' ' . esc_html__( 'Narrow it per area below. You can change it later under ThinkRank > MCP without reconnecting.', 'thinkrank' ) . '</div></div>';
+		echo '<div class="d">' . esc_html( $access_desc ) . ' ' . esc_html( self::consent_later_note( $for_hub ) ) . '</div></div>';
 		echo '</div>';
 
 		// Per-area access, preselected from what the client asked for. The
@@ -2173,7 +2229,7 @@ final class Mcp_Manager {
 		}
 		echo '</div>';
 
-		echo '<p class="note">' . $lock . '<span>' . esc_html__( 'Secured with OAuth. Revoke anytime in ThinkRank → MCP.', 'thinkrank' ) . '</span></p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- static icon; text esc_html'd.
+		echo '<p class="note">' . $lock . '<span>' . esc_html__( 'Secured with OAuth. Revoke it any time under ThinkRank > AI Tools > MCP.', 'thinkrank' ) . '</span></p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- static icon; text esc_html'd.
 
 		echo '<form id="tr-consent" method="post" action="' . esc_url( $action_url ) . '">';
 		echo $hidden; // phpcs:ignore WordPress.Security.EscapeOutput -- built from esc_attr() above.

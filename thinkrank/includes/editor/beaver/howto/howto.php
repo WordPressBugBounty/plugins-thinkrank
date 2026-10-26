@@ -67,7 +67,8 @@ class ThinkRank_Beaver_Howto_Module extends FLBuilderModule {
 
         if (empty($items)) {
             if (self::in_builder()) {
-                echo '<div class="thinkrank-howto">' . esc_html__('Add a step to get started.', 'thinkrank') . '</div>';
+                // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- placeholder() escapes the class and text.
+                echo \ThinkRank\Editor\Beaver_Modules_Manager::placeholder('thinkrank-howto', __('Add a step to get started.', 'thinkrank'));
             }
             return;
         }
@@ -243,6 +244,14 @@ class ThinkRank_Beaver_Howto_Module extends FLBuilderModule {
         // publishing with Schema switched off (#688).
         if (class_exists('ThinkRank\\Frontend\\Schema_Graph')
             && !\ThinkRank\Frontend\Schema_Graph::output_allowed()) {
+            return;
+        }
+
+        // Only on the singular URL of the post that holds this content. A
+        // listing renders many posts under one URL, and each would print its
+        // own unlinked script beside the head's CollectionPage (#1329).
+        if (class_exists('ThinkRank\\Frontend\\Schema_Graph')
+            && !\ThinkRank\Frontend\Schema_Graph::renders_queried_post()) {
             return;
         }
         if (empty($settings['output_schema']) || self::in_builder()) {

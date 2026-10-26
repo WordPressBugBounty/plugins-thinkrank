@@ -571,14 +571,19 @@ class Global_SEO_Schema_Output {
             $schema['description'] = $description;
         }
 
-        // Add author
-        $author_id = $post->post_author;
+        // Add author. No url when author archives are off and the user has
+        // no website: the archive would only redirect home (#1339).
+        $author_id = (int) $post->post_author;
         if ($author_id) {
             $schema['author'] = [
                 '@type' => 'Person',
                 'name' => self::normalize_name((string) get_the_author_meta('display_name', $author_id)),
-                'url' => get_author_posts_url($author_id),
             ];
+
+            $author_url = \ThinkRank\SEO\Author_Archives_Manager::author_url($author_id);
+            if ('' !== $author_url) {
+                $schema['author']['url'] = $author_url;
+            }
         }
 
         // Add publisher (site info)
@@ -1498,7 +1503,7 @@ class Global_SEO_Schema_Output {
      * `&#038;`, `&#8217;`, `&amp;` and tags while the description beside them
      * was already decoded (#976).
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param string $name Raw title or name.
      * @return string

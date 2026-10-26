@@ -836,7 +836,7 @@ class Analytics_Manager {
      * Rows per page when counting the position distribution. The most the
      * Search Analytics API returns in one request.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      */
     private const POSITION_PAGE_SIZE = 25000;
 
@@ -844,7 +844,7 @@ class Analytics_Manager {
      * Pages read before the count stops: 200,000 queries. A property past
      * that is counted over its top 200,000 by clicks and flagged incomplete.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      */
     private const POSITION_MAX_PAGES = 8;
 
@@ -864,7 +864,7 @@ class Analytics_Manager {
      * refresh runs) leaves the count at what was read so far, flagged
      * `complete: false`, rather than failing the whole dashboard.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param string $site_url   Search Console property.
      * @param string $start_date Window start (Y-m-d).
@@ -922,7 +922,7 @@ class Analytics_Manager {
      * `10_50` is the historical key for positions 11-50. Rows past 100 are
      * counted in `over_100`: they still had impressions.
      *
-     * @since 2.15.0
+     * @since 2.14.1
      *
      * @param array $rows     Search Console rows.
      * @param bool  $complete Whether $rows is every query in the window.

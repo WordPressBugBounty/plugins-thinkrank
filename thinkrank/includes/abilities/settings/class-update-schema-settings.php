@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace ThinkRank\Abilities\Settings;
 
 use ThinkRank\Abilities\Ability_Base;
+use ThinkRank\Config\Schema_Settings_Config;
 use ThinkRank\SEO\Schema_Management_System;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -151,6 +152,13 @@ class Update_Schema_Settings extends Ability_Base {
 			$props[ $key ] = [ 'type' => 'string' ];
 		}
 
+		// The same lists the settings screen offers and the save path checks,
+		// so an agent sees the allowed values instead of learning them by
+		// being refused, or by having a made-up @type published (#1344).
+		$props['organization_type']['enum']        = Schema_Settings_Config::organization_types();
+		$props['organization_type']['description'] = __( 'schema.org type the site entity is published as: Organization, one of its subtypes, or LocalBusiness or one of its subtypes.', 'thinkrank' );
+		$props['validation_level']['enum']         = Schema_Settings_Config::VALIDATION_LEVELS;
+
 		return $props;
 	}
 
@@ -237,7 +245,7 @@ class Update_Schema_Settings extends Ability_Base {
 				// save, silently dropping the other valid fields — so skip an
 				// invalid value here and let the rest of the payload save.
 				if ( 'validation_level' === $key
-					&& ! in_array( $value, [ 'strict', 'moderate', 'lenient' ], true ) ) {
+					&& ! in_array( $value, Schema_Settings_Config::VALIDATION_LEVELS, true ) ) {
 					continue;
 				}
 
@@ -254,13 +262,13 @@ class Update_Schema_Settings extends Ability_Base {
 			);
 		}
 
-		$result = $mgr->save_settings( 'site', null, $merged );
+		if ( ! $mgr->save_settings( 'site', null, $merged ) ) {
+			return self::settings_save_failed( __( 'Failed to update schema settings.', 'thinkrank' ), $mgr->get_last_save_error(), $mgr->get_last_save_error_code() );
+		}
 
 		return [
-			'success' => (bool) $result,
-			'message' => (bool) $result
-				? __( 'Schema settings updated.', 'thinkrank' )
-				: __( 'Failed to update schema settings.', 'thinkrank' ),
+			'success' => true,
+			'message' => __( 'Schema settings updated.', 'thinkrank' ),
 		];
 	}
 }

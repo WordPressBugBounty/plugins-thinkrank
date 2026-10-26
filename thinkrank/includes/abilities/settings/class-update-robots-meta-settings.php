@@ -147,11 +147,17 @@ class Update_Robots_Meta_Settings extends Ability_Base {
 			);
 		}
 
-		$result = update_option( self::OPTION, $merged );
+		// update_option() answers false both when the value is already stored
+		// and when the write failed; only the second is a failure.
+		$changed = update_option( self::OPTION, $merged );
+
+		if ( ! $changed && get_option( self::OPTION ) !== $merged ) {
+			return self::settings_save_failed( __( 'Failed to update robots meta settings.', 'thinkrank' ) );
+		}
 
 		return [
-			'success' => (bool) $result,
-			'message' => (bool) $result
+			'success' => true,
+			'message' => $changed
 				? __( 'Robots meta settings updated.', 'thinkrank' )
 				: __( 'Robots meta settings were unchanged.', 'thinkrank' ),
 		];

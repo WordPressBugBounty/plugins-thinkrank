@@ -191,7 +191,6 @@ class Settings_Manager {
                 'exclude_posts',
                 'exclude_terms',
                 'exclude_password_protected',
-                'exclude_private_posts',
                 'enable_styling',
                 'custom_url_pattern',
                 'links_per_sitemap',

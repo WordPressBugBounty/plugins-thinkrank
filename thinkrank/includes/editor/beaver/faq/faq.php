@@ -88,7 +88,8 @@ class ThinkRank_Beaver_FAQ_Module extends FLBuilderModule {
             // A module with nothing in it still needs a box in the builder, or
             // the author cannot select what they just dropped on the canvas.
             if (self::in_builder()) {
-                echo '<div class="thinkrank-faq">' . esc_html__('Add a question to get started.', 'thinkrank') . '</div>';
+                // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- placeholder() escapes the class and text.
+                echo \ThinkRank\Editor\Beaver_Modules_Manager::placeholder('thinkrank-faq', __('Add a question to get started.', 'thinkrank'));
             }
             return;
         }
@@ -253,6 +254,14 @@ class ThinkRank_Beaver_FAQ_Module extends FLBuilderModule {
         // publishing with Schema switched off (#688).
         if (class_exists('ThinkRank\\Frontend\\Schema_Graph')
             && !\ThinkRank\Frontend\Schema_Graph::output_allowed()) {
+            return;
+        }
+
+        // Only on the singular URL of the post that holds this content. A
+        // listing renders many posts under one URL, and each would print its
+        // own unlinked script beside the head's CollectionPage (#1329).
+        if (class_exists('ThinkRank\\Frontend\\Schema_Graph')
+            && !\ThinkRank\Frontend\Schema_Graph::renders_queried_post()) {
             return;
         }
         if (!self::schema_enabled($settings)) {

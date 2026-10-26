@@ -256,11 +256,34 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
      * @param int    $row_limit  Maximum rows to return
      * @param array  $dimensions Dimensions to group by
      * @param array  $filters    Optional dimension filters (ANDed), each
-     *                           {dimension, operator, expression}. @since 2.15.0
+     *                           {dimension, operator, expression}. @since 2.14.1
      * @return array Raw rows from GSC API
      * @throws \Exception If API request fails
      */
     public function get_search_performance_by_dates(string $site_url, string $start_date, string $end_date, int $row_limit = 500, array $dimensions = ['query'], array $filters = []): array {
+        return $this->query_search_performance_by_dates($site_url, $start_date, $end_date, $row_limit, $dimensions, $filters)['rows'];
+    }
+
+    /**
+     * Search performance for explicit dates, with Google's incomplete-data marker.
+     *
+     * The rows of {@see self::get_search_performance_by_dates()}, plus
+     * `metadata.firstIncompleteDate`: the first day whose numbers are still
+     * preliminary. Google sends it only when the rows are grouped by date and
+     * the range holds incomplete data, so it is '' otherwise (#1272).
+     *
+     * @since 2.17.2
+     *
+     * @param string $site_url   Site URL to get data for
+     * @param string $start_date Start date (Y-m-d)
+     * @param string $end_date   End date (Y-m-d)
+     * @param int    $row_limit  Maximum rows to return
+     * @param array  $dimensions Dimensions to group by
+     * @param array  $filters    Optional dimension filters (ANDed)
+     * @return array{rows: array, first_incomplete_date: string}
+     * @throws \Exception If API request fails
+     */
+    public function query_search_performance_by_dates(string $site_url, string $start_date, string $end_date, int $row_limit = 500, array $dimensions = ['query'], array $filters = []): array {
         $endpoint = '/sites/' . rawurlencode($site_url) . '/searchAnalytics/query';
 
         $request_body = [
@@ -283,7 +306,12 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
         $full_url = self::API_BASE_URL . $endpoint;
         $response = $this->make_request($full_url, $request_body, 'POST');
 
-        return $response['rows'] ?? [];
+        $first_incomplete = (string) ($response['metadata']['firstIncompleteDate'] ?? '');
+
+        return [
+            'rows'                  => $response['rows'] ?? [],
+            'first_incomplete_date' => preg_match('/^\d{4}-\d{2}-\d{2}$/', $first_incomplete) ? $first_incomplete : '',
+        ];
     }
 
     /**

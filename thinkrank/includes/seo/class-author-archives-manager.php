@@ -157,6 +157,33 @@ class Author_Archives_Manager {
     }
 
     /**
+     * The URL to publish for an author in schema and social data.
+     *
+     * The author archive while archives are on. With them off,
+     * maybe_redirect_author_archives() 302s every /author/<name>/ to the
+     * homepage, so pointing a Person at it links the author to a redirect.
+     * The user's own website (the profile's Website field) stands in then,
+     * and with none set there is no URL at all (#1339).
+     *
+     * @since 2.18.1
+     * @param int $user_id Author user ID.
+     * @return string Absolute URL, or '' when the author has none to publish.
+     */
+    public static function author_url(int $user_id): string {
+        if ($user_id <= 0) {
+            return '';
+        }
+
+        if (Settings::instance()->get('author_archives_enabled', true)) {
+            return (string) get_author_posts_url($user_id);
+        }
+
+        $website = trim((string) get_the_author_meta('user_url', $user_id));
+
+        return '' === $website ? '' : (string) esc_url_raw($website);
+    }
+
+    /**
      * The SEO title an author archive renders, without the page indicator.
      *
      * A per-author SEO title (e.g. imported from another SEO plugin) overrides
@@ -165,7 +192,7 @@ class Author_Archives_Manager {
      * the Site Identity author title instead, so the share card disagreed with
      * the document <title> this class prints (#977).
      *
-     * @since 2.15.0
+     * @since 2.14.3
      * @param int $author_id Queried author.
      * @return string Rendered title, or '' when the template is empty.
      */
@@ -190,7 +217,7 @@ class Author_Archives_Manager {
      * template. Public for the same reason as resolve_title(): it is also the
      * og:description and twitter:description of the archive (#977).
      *
-     * @since 2.15.0
+     * @since 2.14.3
      * @param int $author_id Queried author.
      * @return string Rendered description, or '' when there is none.
      */
@@ -227,7 +254,7 @@ class Author_Archives_Manager {
      * already contains it does not leak the literal string; the indicator
      * itself comes from the one helper every other context uses (#397 review).
      *
-     * @since 2.15.0
+     * @since 2.14.3
      * @param string $template  Title or description template.
      * @param int    $author_id Queried author.
      * @return string Rendered text with whitespace tidied.

@@ -27,7 +27,7 @@
  * `%site_name%`, …). An unknown token resolves to nothing.
  *
  * @package ThinkRank\Admin\Importers
- * @since 2.15.0
+ * @since 2.16.0
  */
 
 declare(strict_types=1);
@@ -41,7 +41,7 @@ if (!defined('ABSPATH')) {
 /**
  * SureRank Exporter Class
  *
- * @since 2.15.0
+ * @since 2.16.0
  */
 class SureRank_Exporter extends Abstract_Plugin_Exporter {
 
@@ -197,10 +197,7 @@ class SureRank_Exporter extends Abstract_Plugin_Exporter {
     /**
      * Organization subtypes ThinkRank's Organization setting renders.
      */
-    private const ORGANIZATION_TYPES = [
-        'Organization', 'Corporation', 'EducationalOrganization', 'GovernmentOrganization',
-        'NGO', 'PerformingGroup', 'SportsOrganization',
-    ];
+    private const ORGANIZATION_TYPES = \ThinkRank\Config\Schema_Settings_Config::ORGANIZATION_TYPES;
 
     /**
      * SureRank per-post tokens ThinkRank resolves per request: kept as tags

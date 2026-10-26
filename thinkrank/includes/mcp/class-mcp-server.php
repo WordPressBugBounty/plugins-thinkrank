@@ -128,7 +128,7 @@ final class Mcp_Server {
 			// An expired pairing token is named as such: "invalid" sends the
 			// owner looking for a typo when the fix is Reset token (#717).
 			$message = '' !== $presented && Mcp_Pairing::presented_is_expired( $presented )
-				? 'Unauthorized: this connection token has expired. Ask the site administrator to reset it under ThinkRank > MCP, then reconnect with the new token.'
+				? 'Unauthorized: this connection token has expired. Ask the site administrator to reset it under ThinkRank > AI Tools > MCP, then reconnect with the new token.'
 				: 'Unauthorized: invalid or missing connection token.';
 
 			$response = self::error_response( null, self::UNAUTHORIZED, $message, 401 );
@@ -138,6 +138,25 @@ final class Mcp_Server {
 			return $response;
 		}
 		Mcp_Rate_Limiter::clear();
+
+		// Streamable HTTP takes messages by POST only. A GET asks for an SSE
+		// stream and a DELETE ends a session; this server opens neither, and
+		// the spec's answer for that is 405, which tells an SDK to carry on
+		// over POST. Reading the empty body as JSON answered 400 Parse error,
+		// which a client takes for a broken server (#1349). After the
+		// credential check, so an unauthenticated probe still gets the 401
+		// challenge that starts OAuth.
+		$method = strtoupper( (string) $request->get_method() );
+		if ( 'POST' !== $method ) {
+			$response = self::error_response(
+				null,
+				self::INVALID_REQUEST,
+				sprintf( 'Method not allowed: %s. This endpoint takes JSON-RPC messages by POST and offers no SSE stream or session to end.', $method ),
+				405
+			);
+			$response->header( 'Allow', 'POST' );
+			return $response;
+		}
 
 		$raw = $request->get_body();
 		$msg = json_decode( $raw, true );
@@ -218,7 +237,7 @@ final class Mcp_Server {
 	public static function preflight( \WP_REST_Request $request ): ?\WP_REST_Response {
 		// The admin toggle is the master switch: off = no MCP surface at all.
 		if ( ! Mcp_Manager::is_enabled() ) {
-			return self::error_response( null, self::UNAUTHORIZED, 'MCP is disabled on this site. Enable it under ThinkRank → MCP.', 403 );
+			return self::error_response( null, self::UNAUTHORIZED, 'MCP is disabled on this site. Enable it under ThinkRank > AI Tools > MCP.', 403 );
 		}
 
 		// Before the credential, because the size of what arrived is decided

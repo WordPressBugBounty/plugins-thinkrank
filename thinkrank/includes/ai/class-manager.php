@@ -954,7 +954,7 @@ class Manager {
             $tokens_used += (int) $completion['tokens'];
             $ai_text = $completion['ai_text'];
             $candidate = $this->extract_json_field($completion['ai_text'], 'paragraph');
-            if (str_word_count(wp_strip_all_tags($candidate)) >= 40) {
+            if (\ThinkRank\SEO\Word_Count_Index::count_words(\ThinkRank\SEO\Word_Count_Index::reading_text($candidate)) >= 40) {
                 $paragraph = $candidate;
                 break;
             }
@@ -969,7 +969,7 @@ class Manager {
 
         // Report the density this addition achieves so the UI can tell the user
         // whether the check is now satisfied or needs another pass.
-        $added_words = str_word_count(wp_strip_all_tags($paragraph));
+        $added_words = \ThinkRank\SEO\Word_Count_Index::count_words(\ThinkRank\SEO\Word_Count_Index::reading_text($paragraph));
         $added_mentions = substr_count(strtolower(wp_strip_all_tags($paragraph)), strtolower($target_keyword));
         $new_density = ($word_count + $added_words) > 0
             ? (($keyword_count + $added_mentions) / ($word_count + $added_words)) * 100

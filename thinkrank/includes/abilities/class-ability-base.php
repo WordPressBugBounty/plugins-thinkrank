@@ -106,6 +106,44 @@ abstract class Ability_Base {
 	}
 
 	/**
+	 * The error a settings ability returns when its save did not happen.
+	 *
+	 * A failed save used to come back as data, `success: false` beside a fixed
+	 * sentence. Mcp_Tools::call_tool() and Mcp_Audit::record() treat anything
+	 * that is not a WP_Error as success, so the client saw `isError: false`
+	 * and the activity log recorded the write as `ok`, while the agent had no
+	 * way to tell which value was refused (#1343). The manager's own reason
+	 * (Abstract_SEO_Manager::get_last_save_error()) is passed on when there is
+	 * one, so the agent can correct its input.
+	 *
+	 * @since 2.18.1
+	 *
+	 * @param string $fallback Sentence for the failure, e.g. "Failed to update sitemap settings."
+	 * @param string $reason   Why the save failed, or '' when nothing recorded it.
+	 * @param string $code     The manager's failure code (validation_failed, db_insert_failed, ...), or ''.
+	 * @return \WP_Error
+	 */
+	protected static function settings_save_failed( string $fallback, string $reason = '', string $code = '' ): \WP_Error {
+		$message = '' === $reason
+			? $fallback
+			/* translators: 1: the failure, e.g. "Failed to update sitemap settings", 2: the reason the save was refused. */
+			: sprintf( __( '%1$s: %2$s', 'thinkrank' ), rtrim( $fallback, '.' ), $reason );
+
+		// A value the manager refused is the caller's to fix; anything else
+		// (a missing table, a failed insert) is the site's.
+		$status = in_array( $code, [ 'validation_failed', 'unsupported_context' ], true ) ? 422 : 500;
+
+		return new \WP_Error(
+			'thinkrank_settings_save_failed',
+			$message,
+			[
+				'status' => $status,
+				'reason' => '' !== $code ? $code : 'save_failed',
+			]
+		);
+	}
+
+	/**
 	 * Get the JSON Schema for ability input.
 	 *
 	 * @return array<string, mixed>

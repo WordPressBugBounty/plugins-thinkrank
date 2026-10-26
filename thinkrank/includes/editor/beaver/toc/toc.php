@@ -99,7 +99,10 @@ class ThinkRank_Beaver_TOC_Module extends FLBuilderModule {
         // switched off (#688).
         $schema = !empty($settings['output_schema'])
             && (!class_exists('ThinkRank\\Frontend\\Schema_Graph')
-                || \ThinkRank\Frontend\Schema_Graph::output_allowed());
+                || (\ThinkRank\Frontend\Schema_Graph::output_allowed()
+                    // Only on the singular URL of the post it belongs to,
+                    // never once per post on a listing (#1329).
+                    && \ThinkRank\Frontend\Schema_Graph::renders_queried_post()));
 
         $this->render_builder_script($uid, $max_level, $schema);
     }

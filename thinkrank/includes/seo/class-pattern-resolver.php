@@ -151,6 +151,9 @@ class Pattern_Resolver {
      * excerpt_remove_blocks() first; this path did neither, which is why the
      * two disagreed about the same post (#387).
      *
+     * Tags are stripped with Seo_Text::plain_text(), so words either side of
+     * a block boundary stay apart rather than gluing together (#1338).
+     *
      * @since 2.0.1
      *
      * @param string $content Raw post content.
@@ -164,7 +167,7 @@ class Pattern_Resolver {
 
         $text = excerpt_remove_blocks($content);
         $text = strip_shortcodes($text);
-        $text = wp_strip_all_tags($text);
+        $text = \ThinkRank\Core\Seo_Text::plain_text($text);
 
         // $words is a WORD cap, but wp_trim_words() counts CHARACTERS on
         // th/ja/zh_*, where it would cut to ~25 characters instead of ~25
@@ -172,6 +175,27 @@ class Pattern_Resolver {
         // word cap where words are the unit and falls back to a character
         // budget where they are not.
         return trim(\ThinkRank\Core\Seo_Text::trim_words($text, $words));
+    }
+
+    /**
+     * An authored excerpt as plain text, whole.
+     *
+     * WooCommerce keeps a product's short description in post_excerpt, and
+     * it is HTML (`<p>`, `<strong>`, lists). Used as written, a template's
+     * %excerpt% put that markup into the meta description, where esc_attr()
+     * showed it as `&lt;p&gt;` in search results and og:description (#1355).
+     * Unlike derive_excerpt(), nothing is cut: the author chose the length,
+     * and the description is trimmed at output.
+     *
+     * @since 2.18.1
+     *
+     * @param string $excerpt post_excerpt as stored.
+     * @return string
+     */
+    public static function excerpt_text(string $excerpt): string {
+        $text = wp_strip_all_tags(strip_shortcodes($excerpt));
+
+        return trim((string) preg_replace('/\s+/u', ' ', $text));
     }
 
     /**
@@ -395,7 +419,7 @@ class Pattern_Resolver {
      * The same test SEO_Manager uses for the Global SEO path (#363), guarded
      * because this class is also exercised outside a front-end request.
      *
-     * @since 2.15.0
+     * @since 2.14.3
      *
      * @param \WP_Post $post Post.
      * @return bool
@@ -426,7 +450,7 @@ class Pattern_Resolver {
         $excerpt = '';
         if ($post) {
             if (!empty($post->post_excerpt)) {
-                $excerpt = $post->post_excerpt;
+                $excerpt = self::excerpt_text($post->post_excerpt);
             } elseif (!self::is_password_required($post)) {
                 $excerpt = self::derive_excerpt(Builder_Content::visible_content($post));
             }
