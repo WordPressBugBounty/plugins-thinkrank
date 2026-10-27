@@ -43,6 +43,7 @@ import GeneralPanel from './panels/GeneralPanel';
 import AnalysisPanel from './panels/AnalysisPanel';
 import AdvancedPanel from './panels/AdvancedPanel';
 import { withoutServerOwnedFields } from '../utils/draftFields';
+import useCustomFieldVariables from '../utils/useCustomFieldVariables';
 
 // Nav icons
 import {
@@ -230,7 +231,7 @@ const MetaboxApp = ({
 	// Resolved Global/Bulk SEO patterns, shown as previews when a field is empty.
 	const patternPreviews = metaboxConfig.patternPreviews || {};
 	// Token => value map for live preview of custom patterns typed in fields.
-	const patternVariables = metaboxConfig.patternVariables || {};
+	const basePatternVariables = metaboxConfig.patternVariables || {};
 	const focusKeywordsCap = focusKeywordsMax > 0 ? focusKeywordsMax : Infinity;
 
 	// Parse the focus keywords initial value (JSON-encoded array from the PHP
@@ -304,6 +305,27 @@ const MetaboxApp = ({
 			existingMetadata.twitter_description || '',
 		thinkrank_twitter_image: existingMetadata.twitter_image || '',
 	});
+
+	// The page carries only the custom fields its saved fields name; a
+	// %customfield(key)% typed since is looked up (#1277).
+	const {
+		vars: patternVariables,
+		status: customFieldStatus,
+		error: customFieldError,
+		retry: retryCustomFields,
+	} = useCustomFieldVariables(
+		basePatternVariables,
+		[
+			formData.thinkrank_seo_title,
+			formData.thinkrank_meta_description,
+			formData.thinkrank_og_title,
+			formData.thinkrank_og_description,
+			formData.thinkrank_twitter_title,
+			formData.thinkrank_twitter_description,
+		],
+		'post',
+		postId
+	);
 
 	// Live post title — the mount-time prop goes stale as the user types, so
 	// track edits from both the block editor store and the classic #title input.
@@ -1685,6 +1707,9 @@ const MetaboxApp = ({
 									homeUrl={homeUrl}
 									patternPreviews={patternPreviews}
 									patternVariables={patternVariables}
+									customFieldStatus={customFieldStatus}
+									customFieldError={customFieldError}
+									onRetryCustomFields={retryCustomFields}
 								/>
 							</ErrorBoundary>
 						)}
@@ -1748,6 +1773,9 @@ const MetaboxApp = ({
 									showNotice={showNotice}
 									patternPreviews={patternPreviews}
 									patternVariables={patternVariables}
+									customFieldStatus={customFieldStatus}
+									customFieldError={customFieldError}
+									onRetryCustomFields={retryCustomFields}
 								/>
 							</ErrorBoundary>
 						)}

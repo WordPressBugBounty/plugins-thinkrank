@@ -43,6 +43,23 @@ class Pattern_Resolver {
     private const DEFAULT_DESCRIPTION = '%excerpt%';
 
     /**
+     * A meta key a `%customfield(key)%` token can name: no percent sign,
+     * parenthesis or whitespace, so the token always ends where it seems to.
+     *
+     * @since 2.19.0
+     * @var string
+     */
+    private const CUSTOM_FIELD_KEY = '[^\s%()]+';
+
+    /**
+     * `%customfield(key)%`, with the key captured.
+     *
+     * @since 2.19.0
+     * @var string
+     */
+    private const CUSTOM_FIELD_TOKEN = '/%customfield\((' . self::CUSTOM_FIELD_KEY . ')\)%/i';
+
+    /**
      * Post meta key holding the per-post SEO title.
      */
     private const META_TITLE = '_thinkrank_seo_title';
@@ -79,7 +96,7 @@ class Pattern_Resolver {
         if (strpos($value, '%') === false) {
             return $value;
         }
-        return self::process($value, self::placeholders_for($post_id));
+        return self::process($value, self::placeholders_for($post_id) + self::custom_field_placeholders($value, 'post', $post_id));
     }
 
     /**
@@ -218,7 +235,210 @@ class Pattern_Resolver {
         if (strpos($value, '%') === false) {
             return $value;
         }
-        return self::process($value, self::placeholders_for_term($term_id));
+        return self::process($value, self::placeholders_for_term($term_id) + self::custom_field_placeholders($value, 'term', $term_id));
+    }
+
+    /**
+     * The tokens a Global SEO post-type template resolves on top of the
+     * shared ones: the WooCommerce product tokens and any
+     * `%customfield(key)%` the template names.
+     *
+     * SEO_Manager resolves the Bulk SEO Optimization templates on the page
+     * with its own placeholder map, which had neither, so a "%title% - Only
+     * %price%" template scored and previewed with the price here and was
+     * published with "%price%" written out (#1277). It adds these, so the page
+     * and this class resolve the same tokens to the same values.
+     *
+     * @since 2.19.0
+     *
+     * @param string $template Template being resolved.
+     * @param int    $post_id  Post ID.
+     * @return array<string,string> Token => value.
+     */
+    public static function template_tokens(string $template, int $post_id): array {
+        return self::product_placeholders($post_id) + self::custom_field_placeholders($template, 'post', $post_id);
+    }
+
+    /**
+     * Values for the `%customfield(key)%` tokens a template names.
+     *
+     * Each resolves to the object's own value for that meta key, so one
+     * template gives every item its own value (#1277). Keyed by the token as
+     * written, so process() and strip_unresolved_tokens() treat it like any
+     * other token.
+     *
+     * Only public meta: a protected key (one starting with an underscore, or
+     * one a plugin marks protected through `is_protected_meta`) resolves to
+     * an empty string. Per-post SEO fields are written by anyone who can edit
+     * the post, and protected meta is where plugins keep what is not meant
+     * for the page, such as edit locks, internal state and tokens. A value
+     * that is not a string or a number (an array, an object) is empty too,
+     * and markup is stripped, since the value lands in a `<title>` and a meta
+     * description.
+     *
+     * @since 2.19.0
+     *
+     * @param string $template  Template being resolved.
+     * @param string $meta_type 'post' or 'term'.
+     * @param int    $object_id Post or term ID.
+     * @return array<string,string> Token => value.
+     */
+    private static function custom_field_placeholders(string $template, string $meta_type, int $object_id): array {
+        if (false === stripos($template, '%customfield(')) {
+            return [];
+        }
+
+        if (!preg_match_all(self::CUSTOM_FIELD_TOKEN, $template, $found, PREG_SET_ORDER)) {
+            return [];
+        }
+
+        // Each distinct key is read once, and only the first
+        // CUSTOM_FIELD_LIMIT of them; a token past the limit resolves to ''
+        // (#1277 review). Tokens differing only in the case of "customfield"
+        // name the same key.
+        $values = [];
+        $map    = [];
+        foreach ($found as $match) {
+            $key = $match[1];
+
+            if (!array_key_exists($key, $values)) {
+                $values[$key] = count($values) < self::CUSTOM_FIELD_LIMIT
+                    ? self::custom_field_value($meta_type, $object_id, $key)
+                    : null;
+            }
+
+            $map[$match[0]] = (string) $values[$key];
+        }
+
+        return $map;
+    }
+
+    /**
+     * One custom field's value as text, or '' when it is protected or holds
+     * no text.
+     *
+     * @since 2.19.0
+     *
+     * @param string $meta_type 'post' or 'term'.
+     * @param int    $object_id Post or term ID.
+     * @param string $key       Meta key.
+     * @return string
+     */
+    private static function custom_field_value(string $meta_type, int $object_id, string $key): string {
+        if ($object_id <= 0 || is_protected_meta($key, $meta_type)) {
+            return '';
+        }
+
+        $raw = 'term' === $meta_type ? get_term_meta($object_id, $key, true) : get_post_meta($object_id, $key, true);
+        $value = is_scalar($raw) ? (string) $raw : '';
+
+        /**
+         * Filter the value a `%customfield(key)%` token resolves to.
+         *
+         * For a field plugin that stores something other than the text to
+         * show, such as an ACF select's value instead of its label. Runs only
+         * for public meta; the result is stripped of markup like the raw
+         * value.
+         *
+         * @since 2.19.0
+         *
+         * @param string $value     The meta value as text, '' when it is not text.
+         * @param string $key       Meta key.
+         * @param int    $object_id Post or term ID.
+         * @param string $meta_type 'post' or 'term'.
+         */
+        $value = apply_filters('thinkrank_custom_field_variable', $value, $key, $object_id, $meta_type);
+        $value = is_scalar($value) ? (string) $value : '';
+
+        $value = html_entity_decode(wp_strip_all_tags($value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        return trim((string) preg_replace('/\s+/u', ' ', $value));
+    }
+
+    /**
+     * The most distinct custom fields one template, an editor preview map
+     * or a lookup resolves. Beyond it a `%customfield(key)%` resolves to
+     * nothing, so a long template costs a bounded number of meta reads and
+     * filter calls on every page view (#1277 review).
+     *
+     * @since 2.19.0
+     * @var int
+     */
+    public const CUSTOM_FIELD_LIMIT = 20;
+
+    /**
+     * The longest custom field value, in characters, a preview receives.
+     * A title or description shows far less; the rest is payload.
+     *
+     * @since 2.19.0
+     * @var int
+     */
+    public const PREVIEW_VALUE_LENGTH = 300;
+
+    /**
+     * Custom field values for the editor's live preview, keyed as the
+     * client-side resolver reads them (`customfield(key)`).
+     *
+     * Bounded (#1277 review): it used to carry every public meta key the
+     * object had, so a post from a field, commerce or page-builder plugin
+     * sent hundreds of values, each run through the format filter, into
+     * every editor page. Only keys named by the templates given are looked
+     * up, at most CUSTOM_FIELD_LIMIT of them, each cut to
+     * PREVIEW_VALUE_LENGTH characters. A key the author types later is
+     * resolved by `GET /custom-fields`.
+     *
+     * @since 2.19.0
+     *
+     * @param string   $meta_type 'post' or 'term'.
+     * @param int      $object_id Post or term ID.
+     * @param string[] $keys      Meta keys wanted.
+     * @return array<string,string> 'customfield(key)' => value.
+     */
+    public static function custom_field_values(string $meta_type, int $object_id, array $keys): array {
+        if ($object_id <= 0) {
+            return [];
+        }
+
+        $wanted = [];
+        foreach ($keys as $key) {
+            $key = is_scalar($key) ? (string) $key : '';
+            if (preg_match('/^' . self::CUSTOM_FIELD_KEY . '$/', $key)) {
+                $wanted[$key] = true;
+            }
+        }
+
+        $map = [];
+        foreach (array_slice(array_keys($wanted), 0, self::CUSTOM_FIELD_LIMIT) as $key) {
+            $key   = (string) $key;
+            $value = self::custom_field_value($meta_type, $object_id, $key);
+
+            $map['customfield(' . $key . ')'] = function_exists('mb_substr')
+                ? mb_substr($value, 0, self::PREVIEW_VALUE_LENGTH)
+                : substr($value, 0, self::PREVIEW_VALUE_LENGTH);
+        }
+
+        return $map;
+    }
+
+    /**
+     * The meta keys the `%customfield(key)%` tokens in some templates name.
+     *
+     * @since 2.19.0
+     *
+     * @param string[] $templates Templates.
+     * @return string[]
+     */
+    public static function custom_field_keys(array $templates): array {
+        $keys = [];
+        foreach ($templates as $template) {
+            if (is_string($template) && preg_match_all(self::CUSTOM_FIELD_TOKEN, $template, $found)) {
+                foreach ($found[1] as $key) {
+                    $keys[$key] = true;
+                }
+            }
+        }
+
+        return array_keys($keys);
     }
 
     /**
@@ -243,7 +463,7 @@ class Pattern_Resolver {
         return [
             '%title%'     => $name,
             '%term%'      => $name,
-            '%sitename%'  => get_bloginfo('name'),
+            '%sitename%'  => self::site_name(),
             '%sep%'       => self::separator(),
             // Same locale trap as derive_excerpt(): a word cap here is a
             // ~25-character cap on th/ja/zh_* (#687).
@@ -274,7 +494,12 @@ class Pattern_Resolver {
         foreach (self::placeholders_for_term($term_id) as $token => $value) {
             $map[trim($token, '%')] = (string) $value;
         }
-        return $map;
+        // The term's own SEO fields are the templates a preview resolves.
+        $templates = class_exists('ThinkRank\\SEO\\Term_Seo_Meta')
+            ? array_filter(Term_Seo_Meta::read($term_id), 'is_string')
+            : [];
+
+        return $map + self::custom_field_values('term', $term_id, self::custom_field_keys($templates));
     }
 
     /**
@@ -290,7 +515,17 @@ class Pattern_Resolver {
         foreach (self::placeholders_for($post_id) as $token => $value) {
             $map[trim($token, '%')] = $value;
         }
-        return $map;
+        // The post's own SEO fields and its post-type templates are what the
+        // editor previews; a key typed later is looked up on demand.
+        $templates = [
+            self::template_for($post_id, 'title', ''),
+            self::template_for($post_id, 'description', ''),
+        ];
+        foreach ([self::META_TITLE, self::META_DESCRIPTION, '_thinkrank_og_title', '_thinkrank_og_description', '_thinkrank_twitter_title', '_thinkrank_twitter_description'] as $meta_key) {
+            $templates[] = (string) get_post_meta($post_id, $meta_key, true);
+        }
+
+        return $map + self::custom_field_values('post', $post_id, self::custom_field_keys($templates));
     }
 
     /**
@@ -312,6 +547,49 @@ class Pattern_Resolver {
         $description = \ThinkRank\Core\Seo_Text::trim_to_length($description);
 
         return $description;
+    }
+
+    /**
+     * What a Bulk SEO Optimization template gives one item, before it is
+     * saved: the title or description the page would publish for that item
+     * from this template, when the item has no value of its own (#1277).
+     *
+     * An empty template stands for the default one, as template_for() reads
+     * an unset one.
+     *
+     * @since 2.19.0
+     *
+     * @param string $template Template as typed, unsaved.
+     * @param int    $post_id  Post ID.
+     * @param string $field    'title' or 'description'.
+     * @return string
+     */
+    public static function preview_template(string $template, int $post_id, string $field): string {
+        $is_description = 'description' === $field;
+
+        if ('' === trim($template)) {
+            $template = $is_description ? self::DEFAULT_DESCRIPTION : self::DEFAULT_TITLE;
+        }
+
+        $value = self::resolve_value($template, $post_id);
+
+        return $is_description ? \ThinkRank\Core\Seo_Text::trim_to_length($value) : $value;
+    }
+
+    /**
+     * Whether a post has its own value for a field, so the post-type
+     * template does not reach it.
+     *
+     * @since 2.19.0
+     *
+     * @param int    $post_id Post ID.
+     * @param string $field   'title' or 'description'.
+     * @return bool
+     */
+    public static function has_own_value(int $post_id, string $field): bool {
+        $key = 'description' === $field ? self::META_DESCRIPTION : self::META_TITLE;
+
+        return '' !== trim((string) get_post_meta($post_id, $key, true));
     }
 
     /**
@@ -467,7 +745,7 @@ class Pattern_Resolver {
         return array_merge(
             [
                 '%title%' => get_the_title($post_id),
-                '%sitename%' => get_bloginfo('name'),
+                '%sitename%' => self::site_name(),
                 '%sep%' => self::separator(),
                 '%excerpt%' => $excerpt,
                 '%date%' => get_the_date('', $post_id),
@@ -601,6 +879,21 @@ class Pattern_Resolver {
         }
 
         return '';
+    }
+
+    /**
+     * The site name %sitename% resolves to: the Site Identity Site Name, else
+     * the WordPress title (#1331).
+     *
+     * @since 2.19.0
+     *
+     * @return string Site name.
+     */
+    private static function site_name(): string {
+        if (class_exists('\ThinkRank\SEO\Site_Identity_Manager')) {
+            return Site_Identity_Manager::site_name();
+        }
+        return (string) get_bloginfo('name');
     }
 
     /**

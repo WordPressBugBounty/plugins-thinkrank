@@ -25,6 +25,8 @@ import { IconDocument } from '../../metabox/components/ui/icons';
 import SerpPreview from '../../metabox/components/SerpPreview';
 import MetaboxRobotsTab from '../../metabox/components/MetaboxRobotsTab';
 import { resolvePattern } from '../../metabox/utils/resolvePattern';
+import useCustomFieldVariables from '../../metabox/utils/useCustomFieldVariables';
+import CustomFieldStatus from '../../metabox/components/ui/CustomFieldStatus';
 
 /**
  * Robots flags a freshly enabled override starts from — the same defaults the
@@ -242,7 +244,18 @@ const TermSeoPanel = ({ config }) => {
 	const [robotsDirty, setRobotsDirty] = useState(false);
 	const [advancedDirty, setAdvancedDirty] = useState(false);
 
-	const vars = config.patternVariables || {};
+	// A %customfield(key)% typed since the page loaded is looked up (#1277).
+	const {
+		vars,
+		status: customFieldStatus,
+		error: customFieldError,
+		retry: retryCustomFields,
+	} = useCustomFieldVariables(
+		config.patternVariables || {},
+		Object.values(form),
+		'term',
+		config.termId
+	);
 	const fieldName = config.fieldName || 'thinkrank_term_seo';
 	const redirect = config.redirect || {};
 
@@ -408,6 +421,12 @@ const TermSeoPanel = ({ config }) => {
 								vars={vars}
 							/>
 						</Field>
+
+						<CustomFieldStatus
+							status={customFieldStatus}
+							error={customFieldError}
+							onRetry={retryCustomFields}
+						/>
 
 						<SerpPreview
 							title={resolvedTitle || config.fallbackTitle}

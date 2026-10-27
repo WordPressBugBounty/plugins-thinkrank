@@ -401,8 +401,8 @@ final class Settings_Key_Map {
 	 * The opening hours object, one entry per day.
 	 *
 	 * A real sub-schema rather than string coercion: the value is a map of day
-	 * name to {open, close, closed}, and flattening it to a string would make
-	 * it unwritable over MCP.
+	 * name to {open, close, closed, slots}, and flattening it to a string would
+	 * make it unwritable over MCP.
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -422,6 +422,26 @@ final class Settings_Key_Map {
 				'closed' => [
 					'type'        => 'boolean',
 					'description' => __( 'Whether the business is closed all day.', 'thinkrank' ),
+				],
+				// More than one range a day, such as a lunch break (#1119).
+				'slots'  => [
+					'type'        => 'array',
+					'maxItems'    => \ThinkRank\SEO\Business_Hours::MAX_SLOTS,
+					'description' => __( 'Opening ranges for the day, earliest first, e.g. a lunch break as two ranges (09:00-13:00 and 14:00-18:00). When set, open and close are stored as the first range.', 'thinkrank' ),
+					'items'       => [
+						'type'                 => 'object',
+						'additionalProperties' => false,
+						'properties'           => [
+							'open'  => [
+								'type'        => 'string',
+								'description' => __( 'Opening time as 24-hour HH:MM.', 'thinkrank' ),
+							],
+							'close' => [
+								'type'        => 'string',
+								'description' => __( 'Closing time as 24-hour HH:MM.', 'thinkrank' ),
+							],
+						],
+					],
 				],
 			],
 		];

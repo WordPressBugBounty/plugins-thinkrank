@@ -83,6 +83,13 @@ const TTL_RULES = [
 	// response returned the same `pending` to every poll, and the scan froze
 	// after its first batch on any site with more than 50 pages (#565).
 	['/thinkrank/v1/global-seo/thin-content', 0],
+	// The Bulk SEO template preview resolves each sample item's own price
+	// and custom fields, which change out-of-band (a product edit, a sale
+	// starting), and it is asked again as the template is typed (#1277).
+	['/thinkrank/v1/global-seo/preview', 0],
+	// A custom field the author typed into an editor preview: the value is
+	// edited out-of-band, in the field plugin's own box (#1277).
+	['/thinkrank/v1/custom-fields', 0],
 	['/thinkrank/v1/seo-analytics/', HOUR],
 	['/thinkrank/v1/performance/history', 30 * MINUTE],
 	['/thinkrank/v1/performance/', 10 * MINUTE],

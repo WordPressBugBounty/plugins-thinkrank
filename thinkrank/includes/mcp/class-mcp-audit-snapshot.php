@@ -93,6 +93,16 @@ final class Mcp_Audit_Snapshot {
 	 *             once it has run. `item_*` say how to undo one entry.
 	 * - object:   type and id for the log's object column, when the
 	 *             arguments do not name a target.
+	 * - merge:    a callable answering, per key the update ability merges
+	 *             subkey by subkey instead of replacing, the value each
+	 *             subkey has when it is absent. A revert sends that value
+	 *             for every subkey the write added, since leaving it out
+	 *             would keep what the write set.
+	 * - implied:  trigger key => key the ability also writes when the
+	 *             trigger is sent without it. The implied key joins the
+	 *             snapshot so a revert puts it back too.
+	 * - booleans: keys snapshotted as true/false, for a flag that reads back
+	 *             as '' when never set and '0' once switched off.
 	 *
 	 * `fix-seo-check` has no entry, on purpose. Revert re-runs the row's own
 	 * tool with the before values, which for a fix would apply the fix again,
@@ -122,6 +132,21 @@ final class Mcp_Audit_Snapshot {
 		],
 		'update-email-report-settings' => [
 			'view' => 'config',
+		],
+		// Writing a robots blob without the toggle switches the per-post
+		// override on, so the toggle is part of what a revert puts back.
+		// It reads back as '' when never set and '0' once switched off;
+		// both mean off (#1433).
+		'update-post-seo'              => [
+			'implied'  => [
+				'robots_meta'          => 'robots_meta_enabled',
+				'advanced_robots_meta' => 'robots_meta_enabled',
+			],
+			'booleans' => [ 'robots_meta_enabled' ],
+		],
+		// robots_meta and advanced_robots_meta are merged subkey by subkey.
+		'update-global-settings'       => [
+			'merge' => [ \ThinkRank\API\Global_SEO_Endpoint::class, 'nested_defaults' ],
 		],
 		// The write also switches robots.txt management on, so the switch
 		// is part of what a revert has to put back.
@@ -265,6 +290,13 @@ final class Mcp_Audit_Snapshot {
 			}
 		}
 
+		// A key the write changes as a side effect of another one.
+		foreach ( (array) ( $override['implied'] ?? [] ) as $trigger => $implied ) {
+			if ( in_array( (string) $trigger, $keys, true ) ) {
+				$keys[] = (string) $implied;
+			}
+		}
+
 		return [
 			'strategy' => 'counterpart',
 			'object'   => $object,
@@ -272,6 +304,7 @@ final class Mcp_Audit_Snapshot {
 			'get_args' => $get_args,
 			'identity' => $identity,
 			'keys'     => array_values( array_unique( $keys ) ),
+			'booleans' => array_values( array_map( 'strval', (array) ( $override['booleans'] ?? [] ) ) ),
 			'wrapped'  => $wrapped,
 			'view'     => isset( $override['view'] ) ? (string) $override['view'] : '',
 			'extra'    => is_array( $override['extra'] ?? null ) ? $override['extra'] : [],
@@ -307,7 +340,9 @@ final class Mcp_Audit_Snapshot {
 					$projected = null;
 					break;
 				}
-				$projected[ $key ] = $source[ $key ];
+				$projected[ $key ] = in_array( $key, (array) ( $plan['booleans'] ?? [] ), true )
+					? ! in_array( $source[ $key ], [ '', '0', 0, false, null ], true )
+					: $source[ $key ];
 			}
 
 			if ( null !== $projected ) {
@@ -384,6 +419,55 @@ final class Mcp_Audit_Snapshot {
 		}
 
 		return array_merge( $input, (array) ( $plan['extra'] ?? [] ) );
+	}
+
+	/**
+	 * The values a revert has to leave behind, for a write whose update
+	 * ability merges some keys subkey by subkey.
+	 *
+	 * Replaying `before` through such a merge keeps every subkey the write
+	 * added: a robots_meta of `{index: true}` written back over
+	 * `{index: true, noindex: true}` leaves the page noindex. So each subkey
+	 * that is in `after` but not in `before` is sent with the value it has
+	 * when absent, which the tool's `merge` override supplies.
+	 *
+	 * @since 2.19.0
+	 *
+	 * @param string              $tool   Bare write tool name.
+	 * @param array<string,mixed> $before Projected before-values.
+	 * @param array<string,mixed> $after  Projected after-values.
+	 * @return array<string,mixed>|null `before` with the added subkeys set
+	 *                                  back, or null when a subkey has no
+	 *                                  known absent value to send.
+	 */
+	public static function pad_merged( string $tool, array $before, array $after ): ?array {
+		$merge = self::override( $tool )['merge'] ?? null;
+		if ( null === $merge ) {
+			return $before;
+		}
+
+		$defaults = is_callable( $merge ) ? call_user_func( $merge ) : $merge;
+		if ( ! is_array( $defaults ) ) {
+			return null;
+		}
+
+		foreach ( $defaults as $key => $absent ) {
+			// A key the write replaced outright, or did not touch, needs nothing.
+			if ( ! isset( $before[ $key ], $after[ $key ] ) || ! is_array( $before[ $key ] ) || ! is_array( $after[ $key ] ) ) {
+				continue;
+			}
+			foreach ( array_keys( $after[ $key ] ) as $sub ) {
+				if ( array_key_exists( $sub, $before[ $key ] ) ) {
+					continue;
+				}
+				if ( ! is_array( $absent ) || ! array_key_exists( $sub, $absent ) ) {
+					return null;
+				}
+				$before[ $key ][ $sub ] = $absent[ $sub ];
+			}
+		}
+
+		return $before;
 	}
 
 	/**

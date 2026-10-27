@@ -78,12 +78,41 @@ class Builder_Content {
         '_ct_builder_shortcodes',  // Oxygen classic 4.8.3+ (shortcode tree)
         'ct_builder_shortcodes',   // Oxygen classic < 4.8.3 (shortcode tree)
         '_elementor_data',         // Elementor
-        // Beaver Builder. Published layout first: `_fl_builder_draft` holds
-        // unsaved changes and would score content the visitor cannot see.
-        // Both are arrays of stdClass nodes, which is why the walker below
-        // has to treat objects like arrays (#449).
+        // Beaver Builder. Both are arrays of stdClass nodes, which is why the
+        // walker below has to treat objects like arrays (#449).
+        //
+        // `_fl_builder_draft` holds changes that were never published, so it is
+        // never read as content (see UNREAD_META_KEYS): a page whose layout was
+        // only ever saved as a draft resolved to copy the visitor cannot see,
+        // and Pro's Markdown for AI served it (#910). It stays on this list
+        // because the list is also what the word-count index watches and what
+        // FAQ detection and attachment usage scan.
         '_fl_builder_data',        // Beaver Builder (published)
         '_fl_builder_draft',       // Beaver Builder (unsaved changes)
+    ];
+
+    /**
+     * Builder meta keys that are watched and scanned but never read as content.
+     *
+     * @since 2.19.0
+     * @var string[]
+     */
+    private const UNREAD_META_KEYS = ['_fl_builder_draft'];
+
+    /**
+     * Builder meta keys that only count while their builder renders the post.
+     *
+     * Elementor and Beaver Builder both keep their layout data after the
+     * author stops using them, so data alone does not mean the builder renders
+     * the post. Each key maps to the method that asks the builder's own flag,
+     * the same tests FAQ_Content::builder() uses (#910).
+     *
+     * @since 2.19.0
+     * @var array<string,string>
+     */
+    private const OWNED_META_KEYS = [
+        '_elementor_data'  => 'elementor_renders_post',
+        '_fl_builder_data' => 'beaver_renders_post',
     ];
 
     /**
@@ -1409,6 +1438,10 @@ class Builder_Content {
                 continue;
             }
 
+            if (!self::meta_key_renders($post_id, $key)) {
+                continue;
+            }
+
             $stored = get_post_meta($post_id, $key, true);
 
             if (is_string($stored) && '' !== trim($stored)) {
@@ -1442,6 +1475,60 @@ class Builder_Content {
         }
 
         return '';
+    }
+
+    /**
+     * Whether a builder meta key holds what the visitor sees for this post.
+     *
+     * @since 2.19.0
+     *
+     * @param int    $post_id Post being resolved.
+     * @param string $key     Builder meta key.
+     * @return bool
+     */
+    private static function meta_key_renders(int $post_id, string $key): bool {
+        if (in_array($key, self::UNREAD_META_KEYS, true)) {
+            return false;
+        }
+
+        if (isset(self::OWNED_META_KEYS[$key])) {
+            return (bool) call_user_func([self::class, self::OWNED_META_KEYS[$key]], $post_id);
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether Elementor renders this post.
+     *
+     * Elementor's own test, `Document::is_built_with_elementor()`, reads
+     * `_elementor_edit_mode`, which is `builder` while Elementor owns the page.
+     * Switching back to the WordPress editor clears it and keeps
+     * `_elementor_data`.
+     *
+     * @since 2.19.0
+     *
+     * @param int $post_id Post ID.
+     * @return bool
+     */
+    public static function elementor_renders_post(int $post_id): bool {
+        return 'builder' === (string) get_post_meta($post_id, '_elementor_edit_mode', true);
+    }
+
+    /**
+     * Whether Beaver Builder renders this post.
+     *
+     * Beaver's own test, `FLBuilderModel::is_builder_enabled()`, is the
+     * `_fl_builder_enabled` flag. Turning the builder off clears it and keeps
+     * `_fl_builder_data`.
+     *
+     * @since 2.19.0
+     *
+     * @param int $post_id Post ID.
+     * @return bool
+     */
+    public static function beaver_renders_post(int $post_id): bool {
+        return !empty(get_post_meta($post_id, '_fl_builder_enabled', true));
     }
 
     /**

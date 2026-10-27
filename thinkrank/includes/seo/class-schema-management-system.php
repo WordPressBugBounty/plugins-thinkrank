@@ -1715,6 +1715,12 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             case 'product':
                 $detected_types = ['Product'];
                 break;
+            default:
+                // Another shop's product type (#256).
+                if (\ThinkRank\Integrations\Commerce::is_product_post_type($context_type)) {
+                    $detected_types = ['Product'];
+                }
+                break;
         }
 
         return $detected_types;

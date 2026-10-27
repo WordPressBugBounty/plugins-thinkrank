@@ -90,6 +90,12 @@ class Schema_Validator {
             $schema_type = 'LocalBusiness';
         }
 
+        // Likewise an Event published under the subtype the form chose
+        // ("MusicEvent") is validated as an Event (#1012).
+        if (Schema_Factory::is_event_type($schema_type)) {
+            $schema_type = 'Event';
+        }
+
         $spec =$this->schema_factory->get_schema_specification($schema_type);
 
         if (empty($spec)) {

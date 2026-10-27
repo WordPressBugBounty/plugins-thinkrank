@@ -46,6 +46,29 @@ const replaceVariables = (template, siteInfo) => {
 	);
 };
 
+/**
+ * Build the preview text for one title format.
+ *
+ * The separator handling (%sep% and the legacy literal pipe) runs on the
+ * template before the variables go in, as the server does, so a "|" inside a
+ * site name is shown as written rather than swapped for the separator (#982).
+ *
+ * @since 2.19.0
+ *
+ * @param {string} template  Title format.
+ * @param {string} separator Separator type key (pipe, dash, ...).
+ * @param {Object} siteInfo  Site name, description and tagline.
+ * @return {string} Preview text.
+ */
+export const buildTitlePreview = (template, separator, siteInfo) => {
+	const separatorChar = ` ${getSeparatorChar(separator)} `;
+	const tidied = template
+		.replace(/\s*\|\s*/g, separatorChar)
+		.replace(/\s*%sep%\s*/g, separatorChar);
+
+	return replaceVariables(tidied, siteInfo);
+};
+
 const PAGE_LABELS = {
 	homepage_title: __('Homepage', 'thinkrank'),
 	post_title: __('Blog Post', 'thinkrank'),
@@ -195,18 +218,12 @@ const TitlePreview = ({
 	const [previews, setPreviews] = useState({});
 
 	useEffect(() => {
-		const separatorChar = ` ${getSeparatorChar(separator)} `;
 		const next = {};
 		Object.keys(titleFormats).forEach((pageType) => {
 			const tpl = titleFormats[pageType];
-			if (!tpl) {
-				next[pageType] = '';
-				return;
-			}
-			let out = replaceVariables(tpl, siteInfo);
-			out = out.replace(/\s*%sep%\s*/g, separatorChar);
-			out = out.replace(/\s*\|\s*/g, separatorChar);
-			next[pageType] = out;
+			next[pageType] = tpl
+				? buildTitlePreview(tpl, separator, siteInfo)
+				: '';
 		});
 		setPreviews(next);
 	}, [titleFormats, separator, siteInfo]);

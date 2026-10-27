@@ -352,7 +352,7 @@ class Instant_Indexing_Manager {
 
             $redirect_to = add_query_arg([
                 'thinkrank_indexed_count' => 1,
-                'thinkrank_index_status' => $result['success'] ? 'success' : 'failed',
+                'thinkrank_index_status' => !empty($result['paused']) ? 'paused' : ($result['success'] ? 'success' : 'failed'),
             ], $redirect_to);
         }
 
@@ -615,6 +615,9 @@ class Instant_Indexing_Manager {
             return;
         }
 
+        // Off, paused on a staging or hidden site (#1354, via
+        // should_process_post()), or not an indexable post: abort before
+        // resolving the permalink.
         if (!$this->should_process_post($post) || !Indexability::is_indexable_post($post)) {
             return;
         }
@@ -640,6 +643,12 @@ class Instant_Indexing_Manager {
             return false;
         }
 
+        // A staging or local copy, or a site hidden from search engines,
+        // queues nothing (#1354).
+        if ('' !== self::paused_reason()) {
+            return false;
+        }
+
         // 2. Check if post type is supported
         if (!$this->is_post_type_supported($post->post_type)) {
             return false;
@@ -651,6 +660,64 @@ class Instant_Indexing_Manager {
         }
 
         return true;
+    }
+
+    /**
+     * Why submissions are paused on this site, or '' when they are not.
+     *
+     * A staging or local copy carries the live site's settings and IndexNow
+     * key, so it pinged search engines about its own URLs on every publish,
+     * update and delete (#1354). Submissions are paused outside production
+     * (`environment`) and while "Discourage search engines" is ticked
+     * (`search_engines_discouraged`): a site that asks not to be indexed
+     * should not be announcing its pages. Every submission path goes
+     * through submit_urls(), which checks this, and the settings screen and
+     * the get-instant-indexing-settings ability report it.
+     *
+     * @since 2.19.0
+     *
+     * @return string '', 'environment' or 'search_engines_discouraged'.
+     */
+    public static function paused_reason(): string {
+        $environment = function_exists('wp_get_environment_type') ? (string) wp_get_environment_type() : 'production';
+
+        $reason = '';
+        if ('production' !== $environment) {
+            $reason = 'environment';
+        } elseif (!get_option('blog_public')) {
+            $reason = 'search_engines_discouraged';
+        }
+
+        /**
+         * Filter why IndexNow submissions are paused; '' lets them through.
+         *
+         * @since 2.19.0
+         *
+         * @param string $reason      '', 'environment' or 'search_engines_discouraged'.
+         * @param string $environment wp_get_environment_type().
+         */
+        $reason = (string) apply_filters('thinkrank_instant_indexing_paused_reason', $reason, $environment);
+
+        return in_array($reason, ['', 'environment', 'search_engines_discouraged'], true) ? $reason : 'environment';
+    }
+
+    /**
+     * The pause explained, in words to show the person.
+     *
+     * @since 2.19.0
+     *
+     * @param string $reason A paused_reason() value.
+     * @return string '' when nothing is paused.
+     */
+    public static function paused_message(string $reason): string {
+        switch ($reason) {
+            case 'environment':
+                return __('IndexNow submissions are paused because this site is not marked as production. A staging, local or development copy does not notify search engines.', 'thinkrank');
+            case 'search_engines_discouraged':
+                return __('IndexNow submissions are paused because "Discourage search engines from indexing this site" is ticked under Settings → Reading.', 'thinkrank');
+        }
+
+        return '';
     }
 
     /**
@@ -741,6 +808,19 @@ class Instant_Indexing_Manager {
 
         if (empty($urls)) {
             return ['success' => false, 'message' => 'No URLs provided', 'submitted_count' => 0];
+        }
+
+        // Nothing leaves a staging or local copy, or a site hidden from
+        // search engines (#1354). No history row is written: nothing was
+        // submitted, and the reconciler reads the history as what was.
+        $paused = self::paused_reason();
+        if ('' !== $paused) {
+            return [
+                'success'         => false,
+                'paused'          => $paused,
+                'message'         => self::paused_message($paused),
+                'submitted_count' => 0,
+            ];
         }
 
         $host = wp_parse_url(home_url(), PHP_URL_HOST);
@@ -849,17 +929,24 @@ class Instant_Indexing_Manager {
      * together, which further de-dupes rapid repeat saves of the same URL.
      *
      * @since 1.16.0
+     * @since 2.19.0 Returns whether anything was queued.
      * @param array $urls List of URLs to submit.
-     * @return void
+     * @return bool False when nothing was queued (no URLs, or paused).
      */
-    private function schedule_url_submission(array $urls): void {
-        if (empty($urls)) {
-            return;
+    private function schedule_url_submission(array $urls): bool {
+        // Nothing is queued while submissions are paused (#1354): the event
+        // would only wake up later for submit_urls() to refuse it, and a bulk
+        // delete on a staging copy would fill the cron option with them. Every
+        // caller (publish, delete, bulk action, reconciler) lands here.
+        if (empty($urls) || '' !== self::paused_reason()) {
+            return false;
         }
 
         if (!wp_next_scheduled(self::CRON_SUBMIT_HOOK, [$urls])) {
             wp_schedule_single_event(time(), self::CRON_SUBMIT_HOOK, [$urls]);
         }
+
+        return true;
     }
 
     /**
@@ -1033,12 +1120,12 @@ class Instant_Indexing_Manager {
             $urls = array_slice($urls, 0, self::MAX_URLS_PER_SUBMISSION);
         }
         $count = count($urls);
-        $this->schedule_url_submission($urls);
+        $scheduled = $this->schedule_url_submission($urls);
 
         // Add query args for admin notice
         $redirect_to = add_query_arg([
             'thinkrank_indexed_count' => $count,
-            'thinkrank_index_status' => 'scheduled',
+            'thinkrank_index_status' => $scheduled ? 'scheduled' : 'paused',
         ], $redirect_to);
 
         return $redirect_to;
@@ -1061,7 +1148,14 @@ class Instant_Indexing_Manager {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Admin notice display reads URL params.
         $status = sanitize_key(wp_unslash($_GET['thinkrank_index_status']));
 
-        if ($status === 'skipped') {
+        if ($status === 'paused') {
+            // Nothing was sent or queued (#1354); say why instead of "failed".
+            $class   = 'notice-warning';
+            $message = self::paused_message(self::paused_reason());
+            if ('' === $message) {
+                return;
+            }
+        } elseif ($status === 'skipped') {
             $class = 'notice-warning';
             $message = __('Nothing was submitted to IndexNow. Only published, indexable posts you can edit are submitted, and only while Instant Indexing is on.', 'thinkrank');
         } elseif ($status === 'scheduled') {

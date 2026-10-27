@@ -10,6 +10,7 @@
 
 import { __ } from '@wordpress/i18n';
 import { isValidUrl } from './utils';
+import { rangesOf } from '../../../utils/businessHours';
 
 /**
  * Validate settings before saving (basic validation only)
@@ -250,9 +251,15 @@ export const formatBusinessHoursForContact = (businessHours) => {
 	const formattedDays = [];
 	Object.keys(dayNames).forEach((day) => {
 		const dayData = businessHours[day];
-		if (dayData && !dayData.closed && dayData.open && dayData.close) {
+		// Every range of a split day, as the schema publishes it (#1119).
+		const ranges = dayData?.closed
+			? []
+			: rangesOf(dayData).filter((range) => range.open && range.close);
+		if (ranges.length > 0) {
 			formattedDays.push(
-				`${dayNames[day]} ${dayData.open}-${dayData.close}`
+				`${dayNames[day]} ${ranges
+					.map((range) => `${range.open}-${range.close}`)
+					.join(', ')}`
 			);
 		}
 	});

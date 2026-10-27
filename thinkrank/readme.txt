@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.18.1
+Stable tag: 2.19.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -349,6 +349,20 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.19.0 =
+Release Date: 2026-10-27
+
+- New: Bulk SEO templates take price, SKU, stock and custom field variables, previewed on real items
+- New: Business hours can have more than one opening range a day, such as a lunch break
+- New: A Help drawer shows the documentation for the screen you are on
+- New: SureCart support, with ThinkRank's title, Open Graph and Product schema on product pages
+- New: Connect opencode, or any other MCP client, to your site
+- Improved: Breadcrumb and hero texts translate per language with WPML and Polylang
+- Improved: IndexNow pauses on staging copies and hidden sites, and the settings screen says so
+- Improved: Content Type Matrix search matches slugs and keeps the content type column in view
+- Fixed: Your Site Identity Site Name now appears everywhere the site is named
+- Fixed: Minor schema, sitemap, robots.txt, image alt, title, WooCommerce sharing, MCP and AI issues
+
 = 2.18.1 =
 Release Date: 2026-10-26
 
@@ -405,23 +419,12 @@ Release Date: 2026-10-18
 - Fixed: ThinkRank no longer overwrites or deletes a robots.txt it did not write
 - Fixed: Minor Image SEO, term preview, import preview and ThinkRank Hub issues
 
-= 2.16.0 =
-Release Date: 2026-10-15
-
-- New: SEO title, description, social, canonical and robots fields on category, tag and term screens
-- New: Import your SEO titles, descriptions, robots and settings from SureRank
-- Improved: The dashboard and setup wizard show how Claude or ChatGPT can do your SEO over MCP
-- Fixed: Term archives now output the canonical URL set for them
-- Fixed: Sitemap URL rows show the right type for custom post types, taxonomies and WooCommerce
-- Fixed: Sitemaps for a deactivated plugin's content are no longer published, and are flagged
-- Fixed: Migration snapshot details count the records actually exported
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.19.0 =
+Bulk SEO templates take price and custom field variables with a live preview, business hours allow split ranges, and SureCart products are supported. IndexNow pauses on staging. Recommended for all sites.
+
 = 2.18.1 =
 The SEO Analyzer stops scoring llms.txt while it is off, search charts mark preliminary days, and sitemaps skip a noindexed homepage. Recommended for all sites.
-
-= 2.18.0 =
-AI agents can edit post bodies and slugs over MCP with a preview and undo, and scores follow each post's language. Preview no longer publishes unsaved SEO fields. Recommended for all sites.

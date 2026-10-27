@@ -261,7 +261,11 @@ class Author_Archives_Manager {
      */
     private static function render_template(string $template, int $author_id): string {
         $author_name = (string) get_the_author_meta('display_name', $author_id);
-        $site_title  = (string) get_bloginfo('name');
+        // The Site Identity Site Name, as everywhere else %site_title% and
+        // %sitename% are resolved (#1331).
+        $site_title  = class_exists('ThinkRank\SEO\Site_Identity_Manager')
+            ? \ThinkRank\SEO\Site_Identity_Manager::site_name()
+            : (string) get_bloginfo('name');
         $tagline     = (string) get_bloginfo('description');
 
         $separator = '-';

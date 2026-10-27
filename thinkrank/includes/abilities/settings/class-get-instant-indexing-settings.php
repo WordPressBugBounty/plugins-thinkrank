@@ -42,7 +42,7 @@ class Get_Instant_Indexing_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-instant-indexing-settings';
 		$this->label       = __( 'Get ThinkRank Instant Indexing Settings', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank instant indexing (IndexNow) settings. The API key is auto-generated and is not exposed; only whether a key is set is reported. Use update-instant-indexing-settings to change them.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank instant indexing (IndexNow) settings. The API key is auto-generated and is not exposed; only whether a key is set is reported. paused_reason says whether submissions are paused on this site (not production, or search engines discouraged). Use update-instant-indexing-settings to change them.', 'thinkrank' );
 	}
 
 	/**
@@ -88,6 +88,15 @@ class Get_Instant_Indexing_Settings extends Ability_Base {
 					'items' => [ 'type' => 'string' ],
 				],
 				'api_key_set'            => [ 'type' => 'boolean' ],
+				'paused_reason'          => [
+					'type'        => 'string',
+					'enum'        => [ '', 'environment', 'search_engines_discouraged' ],
+					'description' => __( 'Why submissions to IndexNow are paused on this site, or "" when they are not: environment (the site is not marked as production) or search_engines_discouraged ("Discourage search engines" is ticked). While paused, nothing is submitted, automatically or by submit-urls-to-index.', 'thinkrank' ),
+				],
+				'paused_message'         => [
+					'type'        => 'string',
+					'description' => __( 'The pause explained, in words to show the person; "" when not paused.', 'thinkrank' ),
+				],
 			],
 		];
 	}
@@ -101,6 +110,8 @@ class Get_Instant_Indexing_Settings extends Ability_Base {
 	public function execute( $input ) {
 		$settings = wp_parse_args( (array) get_option( self::OPTION, [] ), self::DEFAULTS );
 
+		$paused = \ThinkRank\SEO\Instant_Indexing_Manager::paused_reason();
+
 		$post_types = is_array( $settings['auto_submit_post_types'] ?? null )
 			? array_values( array_map( 'sanitize_key', $settings['auto_submit_post_types'] ) )
 			: [];
@@ -109,6 +120,8 @@ class Get_Instant_Indexing_Settings extends Ability_Base {
 			'enabled'                => (bool) ( $settings['enabled'] ?? false ),
 			'auto_submit_post_types' => $post_types,
 			'api_key_set'            => '' !== (string) ( $settings['api_key'] ?? '' ),
+			'paused_reason'          => $paused,
+			'paused_message'         => \ThinkRank\SEO\Instant_Indexing_Manager::paused_message( $paused ),
 		];
 	}
 }

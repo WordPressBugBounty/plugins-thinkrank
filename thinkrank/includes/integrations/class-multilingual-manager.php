@@ -46,6 +46,29 @@ if (!defined('ABSPATH')) {
 class Multilingual_Manager {
 
     /**
+     * Site Identity keys that hold free text a visitor reads.
+     *
+     * Only these. Every other Site Identity value is a URL, an id, a toggle or a
+     * schema type, and running those through a string translator would invite a
+     * translator to break them.
+     *
+     * The name registered with the provider is the key itself, so a string stays
+     * attached to its setting if the label on the settings screen is reworded.
+     *
+     * @since 2.19.0
+     */
+    private const TRANSLATABLE_TEXT_KEYS = [
+        'breadcrumb_home_text',
+        'breadcrumb_prefix',
+        'hero_title',
+        'hero_subtitle',
+        'hero_cta_text',
+    ];
+
+    /** Translation domain both providers group these strings under. */
+    private const STRING_DOMAIN = 'ThinkRank';
+
+    /**
      * Active provider: 'wpml', 'polylang', 'translatepress', or '' when the
      * site is monolingual.
      *
@@ -76,6 +99,26 @@ class Multilingual_Manager {
         if ($this->provider === '') {
             return;
         }
+
+        // Per-language Site Identity text (#846).
+        //
+        // The translation filter is registered unconditionally, and the
+        // front-end-only separation the issue asks for is structural rather than
+        // a request check: `thinkrank_site_identity_settings` is applied by one
+        // accessor in SEO_Manager, which is output code. The settings screen and
+        // the REST routes read Site_Identity_Manager directly and never pass
+        // through it, so they always see the originals and a save can never write
+        // a translation back.
+        //
+        // An is_admin() gate here looked equivalent and is not: it is false for
+        // REST and for WP-CLI, so it would have translated exactly the requests
+        // that must not be, while skipping output rendered outside a page view.
+        add_filter('thinkrank_site_identity_settings', [$this, 'translate_site_identity_text']);
+
+        // Registration only needs to reach the provider's string UI, so the admin
+        // is the only place it has to run.
+        add_action('thinkrank_seo_settings_saved', [$this, 'register_site_identity_strings'], 10, 2);
+        add_action('admin_init', [$this, 'register_stored_site_identity_strings']);
 
         // Keep sitemap queries covering every language. Registered for admin
         // and front end alike: the sitemap can be generated from either.
@@ -169,6 +212,147 @@ class Multilingual_Manager {
         }
 
         return '';
+    }
+
+    /**
+     * Register the free-text Site Identity values with the active provider.
+     *
+     * Hooked to the save, so a value typed into the settings screen shows up in
+     * WPML's String Translation or Polylang's Strings screen without the user
+     * having to do anything first.
+     *
+     * @since 2.19.0
+     *
+     * @param string               $manager_type Settings category that was saved.
+     * @param array<string,mixed>  $settings     The sanitized settings written.
+     * @return void
+     */
+    public function register_site_identity_strings($manager_type, $settings = []): void {
+        if ('site_identity' !== $manager_type || !is_array($settings)) {
+            return;
+        }
+
+        $this->register_strings($settings);
+    }
+
+    /**
+     * Register whatever is already stored, once per admin request.
+     *
+     * Without this a site that set its Home Text before installing WPML would
+     * never see the string offered for translation: registration would wait for
+     * the next save of a screen the user has no reason to touch again.
+     *
+     * @since 2.19.0
+     *
+     * @return void
+     */
+    public function register_stored_site_identity_strings(): void {
+        if (!class_exists('\ThinkRank\SEO\Site_Identity_Manager')) {
+            return;
+        }
+
+        $manager = new \ThinkRank\SEO\Site_Identity_Manager();
+
+        $this->register_strings((array) $manager->get_settings('site'));
+    }
+
+    /**
+     * Hand the provider each non-empty free-text value.
+     *
+     * @param array<string,mixed> $settings Site Identity settings.
+     * @return void
+     */
+    private function register_strings(array $settings): void {
+        foreach (self::TRANSLATABLE_TEXT_KEYS as $key) {
+            $value = isset($settings[$key]) ? (string) $settings[$key] : '';
+
+            if ('' === trim($value)) {
+                continue;
+            }
+
+            if ('wpml' === $this->provider) {
+                // WPML's own registration action. Harmless if String Translation
+                // is not active: nothing is listening.
+                // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPML's documented API; prefixing it with thinkrank_ would call nothing.
+                do_action('wpml_register_single_string', self::STRING_DOMAIN, $key, $value);
+                continue;
+            }
+
+            if ('polylang' === $this->provider && function_exists('pll_register_string')) {
+                pll_register_string($key, $value, self::STRING_DOMAIN, true);
+            }
+        }
+    }
+
+    /**
+     * Translate the free-text Site Identity values for the current language.
+     *
+     * Filters `thinkrank_site_identity_settings`, which the front end reads
+     * through a single accessor in SEO_Manager, so the visible breadcrumb trail
+     * and the BreadcrumbList JSON-LD both follow the language without either
+     * knowing a provider exists (#846).
+     *
+     * TranslatePress is deliberately not handled. It translates rendered output
+     * rather than storing per-language copies, so it already reaches these
+     * strings on the page; registering them here would be a second translation of
+     * the same text. Same reasoning as the sitemap filters, which are a no-op
+     * there.
+     *
+     * @since 2.19.0
+     *
+     * @param mixed $settings Site Identity settings.
+     * @return array<string,mixed>
+     */
+    public function translate_site_identity_text($settings): array {
+        $settings = (array) $settings;
+
+        if ('wpml' !== $this->provider && 'polylang' !== $this->provider) {
+            return $settings;
+        }
+
+        foreach (self::TRANSLATABLE_TEXT_KEYS as $key) {
+            if (!isset($settings[$key])) {
+                continue;
+            }
+
+            $original = (string) $settings[$key];
+
+            if ('' === trim($original)) {
+                continue;
+            }
+
+            $settings[$key] = $this->translate_string($key, $original);
+        }
+
+        return $settings;
+    }
+
+    /**
+     * One string through the active provider's string API.
+     *
+     * Falls back to the original whenever the provider has no translation, which
+     * is also what both APIs do, so a missing translation reads as the default
+     * language rather than as an empty breadcrumb.
+     *
+     * @param string $key      Setting key, used as the string name.
+     * @param string $original Value in the default language.
+     * @return string
+     */
+    private function translate_string(string $key, string $original): string {
+        if ('wpml' === $this->provider) {
+            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPML's documented API; prefixing it with thinkrank_ would read nothing. One line because phpcs:ignore covers the next line only, and the sniff reports the line the hook name is on.
+            $translated = apply_filters('wpml_translate_single_string', $original, self::STRING_DOMAIN, $key);
+
+            return is_string($translated) && '' !== $translated ? $translated : $original;
+        }
+
+        if (function_exists('pll__')) {
+            $translated = pll__($original);
+
+            return is_string($translated) && '' !== $translated ? $translated : $original;
+        }
+
+        return $original;
     }
 
     /**

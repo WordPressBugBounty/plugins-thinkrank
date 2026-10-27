@@ -30,6 +30,36 @@ if (!defined('ABSPATH')) {
 class Schema_Factory {
 
     /**
+     * Event and the subtypes the Event schema form offers as "Event Type".
+     *
+     * The node is published under the chosen subtype (#1012), so anything
+     * that checks an Event's type has to accept all of them, the way
+     * LocalBusiness subtypes are accepted through Local_Business_Types_Config.
+     * Keep in step with EVENT_TYPE_OPTIONS in SchemaEventForm.js.
+     *
+     * @since 2.19.0
+     * @var array<int,string>
+     */
+    public const EVENT_TYPES = [
+        'Event', 'BusinessEvent', 'ChildrensEvent', 'ComedyEvent', 'CourseInstance',
+        'DanceEvent', 'DeliveryEvent', 'EducationEvent', 'ExhibitionEvent', 'Festival',
+        'FoodEvent', 'LiteraryEvent', 'MusicEvent', 'PublicationEvent', 'SaleEvent',
+        'ScreeningEvent', 'SocialEvent', 'SportsEvent', 'TheaterEvent', 'VisualArtsEvent',
+    ];
+
+    /**
+     * Whether a type is Event or one of the subtypes the form offers.
+     *
+     * @since 2.19.0
+     *
+     * @param mixed $type Candidate @type.
+     * @return bool
+     */
+    public static function is_event_type($type): bool {
+        return is_string($type) && in_array($type, self::EVENT_TYPES, true);
+    }
+
+    /**
      * Supported schema types with their Schema.org specifications
      * PRESERVED: Exact same data structure from original Schema_Generator
      *

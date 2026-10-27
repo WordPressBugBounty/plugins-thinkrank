@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { SkeletonCard, Card, Input, Button, Container } from '../../ui';
+import { SkeletonCard, Card, Input, Button, Container, Alert } from '../../ui';
 import apiFetch from '@wordpress/api-fetch';
 import SettingsCard from '../../common/SettingsCard';
 import SectionHeader from '../../common/SectionHeader';
@@ -100,6 +100,9 @@ const InstantIndexingSettings = () => {
 	// Active reachability check of the advertised key file (#247). null until a
 	// check has run.
 	const [keyStatus, setKeyStatus] = useState(null);
+	// Why submissions are paused on this site (not production, or search
+	// engines discouraged), or null (#1354).
+	const [paused, setPaused] = useState(null);
 	const [keyChecking, setKeyChecking] = useState(false);
 
 	useEffect(() => {
@@ -130,6 +133,11 @@ const InstantIndexingSettings = () => {
 
 			if (settingsResponse && settingsResponse.data) {
 				setLoadError(false);
+				setPaused(
+					settingsResponse.paused?.reason
+						? settingsResponse.paused
+						: null
+				);
 				setSettings({
 					enabled:
 						settingsResponse.data.enabled !== undefined
@@ -352,6 +360,10 @@ const InstantIndexingSettings = () => {
 				)}
 			>
 				<Container direction="column" gap={4}>
+					{paused && (
+						<Alert variant="warning">{paused.message}</Alert>
+					)}
+
 					{/* ── Auto-Submit Post Types ─────────────────────────────── */}
 					<Card padding={false}>
 						<SectionHeader

@@ -17,6 +17,7 @@ import KeywordUsageNotice from '../KeywordUsageNotice';
 import SerpPreview from '../SerpPreview';
 import VariableTags from '../ui/VariableTags';
 import { resolvePattern } from '../../utils/resolvePattern';
+import CustomFieldStatus from '../ui/CustomFieldStatus';
 
 // Variable tags offered per field — mirrors the Bulk SEO Optimization UI.
 const TITLE_VARIABLES = [
@@ -51,16 +52,28 @@ const PRODUCT_VARIABLES = [
 ];
 
 /**
+ * A custom field (post meta) value, on any post type. `field-name` is
+ * replaced with the key (#1277).
+ */
+const CUSTOM_FIELD_VARIABLE = {
+	label: __('+ Custom field', 'thinkrank'),
+	value: '%customfield(field-name)%',
+};
+
+/**
  * The variable chips for a field, with the product tokens appended on a
- * product.
+ * product and the custom field token last.
  *
  * @param {Array} base The tokens every post type offers.
  * @return {Array} The chips to render.
  */
-const variablesFor = (base) =>
-	window.thinkrankMetabox?.postType === 'product'
-		? [...base, ...PRODUCT_VARIABLES]
-		: base;
+const variablesFor = (base) => [
+	...base,
+	...(window.thinkrankMetabox?.postType === 'product'
+		? PRODUCT_VARIABLES
+		: []),
+	CUSTOM_FIELD_VARIABLE,
+];
 
 const GeneralPanel = ({
 	formData,
@@ -72,6 +85,9 @@ const GeneralPanel = ({
 	homeUrl,
 	patternPreviews = {},
 	patternVariables = {},
+	customFieldStatus = 'idle',
+	customFieldError = '',
+	onRetryCustomFields,
 }) => {
 	// Append a %tag% to a field, keeping a space between tokens.
 	const insertVariable = (field, token) => {
@@ -103,6 +119,11 @@ const GeneralPanel = ({
 				)}
 				bodyClassName="tr-flex tr-flex-col tr-gap-5"
 			>
+				<CustomFieldStatus
+					status={customFieldStatus}
+					error={customFieldError}
+					onRetry={onRetryCustomFields}
+				/>
 				<Field
 					label={__('SEO Title', 'thinkrank')}
 					htmlFor="thinkrank_seo_title"

@@ -5,16 +5,18 @@
  * automatically when MCP is enabled (see #244), so there is no manual
  * "create a token" step — this component just presents the ready-to-use
  * client recipes, split across two tabs:
- *   - "OAuth" for the connector clients (Claude web/mobile/desktop, ChatGPT)
- *     that just need the server URL and sign in with a one-time approval.
- *   - "Editors & CLI" for deep-link installs (Cursor, VS Code) and
- *     copy-a-payload clients (Claude Code).
+ *   - "OAuth" for the connector clients (Claude web/mobile/desktop, ChatGPT,
+ *     opencode) that just need the server URL and sign in with a one-time
+ *     approval, and for any other client that does the same (#1287).
+ *   - "Editors & CLI" for deep-link installs (Cursor, VS Code),
+ *     copy-a-payload clients (Claude Code), and any other client that takes
+ *     the connection token as a header.
  *
  * @package
  * @since 1.0.0
  */
 
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import {
@@ -73,6 +75,18 @@ const IconCode = (props) => (
 const IconSpark = (props) => (
 	<Svg {...props}>
 		<path d="M12 3v18M3 12h18M6.3 6.3l11.4 11.4M17.7 6.3L6.3 17.7" />
+	</Svg>
+);
+const IconTerminal = (props) => (
+	<Svg {...props}>
+		<polyline points="4 17 10 11 4 5" />
+		<line x1="12" y1="19" x2="20" y2="19" />
+	</Svg>
+);
+// Any other client: a plug, since it is the server URL it plugs into.
+const IconPlug = (props) => (
+	<Svg {...props}>
+		<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0V8zM12 18v4" />
 	</Svg>
 );
 // Real OpenAI / ChatGPT logomark. Uses fill (not stroke), so it can't share
@@ -345,6 +359,59 @@ const MCPConnectionConfig = () => {
 				),
 			],
 		},
+		{
+			// opencode reads remote servers from its config file and signs in
+			// with OAuth by itself (opencode.ai/docs/mcp-servers).
+			id: 'opencode',
+			name: 'opencode',
+			Icon: IconTerminal,
+			accent: '#0f172a',
+			snippetLabel: 'opencode.json',
+			snippet: JSON.stringify(
+				{
+					mcp: {
+						thinkrank: {
+							type: 'remote',
+							url: endpoint,
+							enabled: true,
+						},
+					},
+				},
+				null,
+				2
+			),
+			steps: [
+				__(
+					'Add the entry above to opencode.json in your project, or to ~/.config/opencode/opencode.json, keeping your other servers.',
+					'thinkrank'
+				),
+				__(
+					'Start opencode. It asks you to sign in, or run opencode mcp auth thinkrank.',
+					'thinkrank'
+				),
+				__('Approve access when this site asks.', 'thinkrank'),
+			],
+		},
+		{
+			id: 'other',
+			name: __('Other MCP client', 'thinkrank'),
+			Icon: IconPlug,
+			accent: '#475467',
+			steps: [
+				__(
+					'In your client, add a remote MCP server over HTTP with the connector URL above.',
+					'thinkrank'
+				),
+				__(
+					'If it asks how to sign in, choose OAuth. It opens this site for you to approve access.',
+					'thinkrank'
+				),
+				__(
+					'Approve access, and the client connects. A client that only takes a fixed header can use the connection token under Editors & CLI.',
+					'thinkrank'
+				),
+			],
+		},
 	];
 
 	// Editors & CLI clients — same card design as the OAuth connectors, but
@@ -401,6 +468,28 @@ const MCPConnectionConfig = () => {
 				__('Confirm the install when VS Code asks.', 'thinkrank'),
 			],
 		},
+		{
+			// Any client that takes a fixed header rather than OAuth (#1287).
+			id: 'other-token',
+			name: __('Other MCP client', 'thinkrank'),
+			Icon: IconPlug,
+			accent: '#475467',
+			badge: __('Token', 'thinkrank'),
+			action: 'copy',
+			fieldLabel: __('Header', 'thinkrank'),
+			payload: `Authorization: Bearer ${token}`,
+			steps: [
+				sprintf(
+					/* translators: %s: this site's MCP server URL. */
+					__(
+						'In your client, add a remote MCP server over HTTP with the URL %s.',
+						'thinkrank'
+					),
+					endpoint
+				),
+				__('Add the header above to it, then connect.', 'thinkrank'),
+			],
+		},
 	];
 
 	const TABS = [
@@ -453,6 +542,15 @@ const MCPConnectionConfig = () => {
 							endpoint={endpoint}
 							copied={copiedId === connector.id}
 							onCopy={() => copyWith(endpoint, connector.id)}
+							snippetCopied={
+								copiedId === `${connector.id}-snippet`
+							}
+							onCopySnippet={() =>
+								copyWith(
+									connector.snippet,
+									`${connector.id}-snippet`
+								)
+							}
 						/>
 					))}
 				</div>
@@ -562,8 +660,16 @@ const MCPConnectionConfig = () => {
 
 // An OAuth connector card (Auth tab): client header, the connector URL to
 // copy, and a numbered setup walkthrough for that client.
-const AuthConnectorCard = ({ connector, endpoint, copied, onCopy }) => {
-	const { name, Icon, accent, steps, learnMore } = connector;
+const AuthConnectorCard = ({
+	connector,
+	endpoint,
+	copied,
+	onCopy,
+	snippetCopied,
+	onCopySnippet,
+}) => {
+	const { name, Icon, accent, steps, learnMore, snippet, snippetLabel } =
+		connector;
 
 	return (
 		<div className="tr-rounded-lg tr-border tr-border-secondary tr-bg-white tr-p-4 tr-flex tr-flex-col tr-gap-4">
@@ -620,6 +726,38 @@ const AuthConnectorCard = ({ connector, endpoint, copied, onCopy }) => {
 					</button>
 				</div>
 			</div>
+
+			{/* A client that reads its servers from a file: the entry to copy. */}
+			{snippet && (
+				<div className="tr-flex tr-flex-col tr-gap-1.5">
+					<span className="tr-text-xs tr-font-medium tr-text-secondary">
+						{snippetLabel}
+					</span>
+					<div className="tr-flex tr-items-start tr-gap-2 tr-rounded-lg tr-border-[1.5px] tr-border-secondary tr-bg-transparent tr-pl-3 tr-pr-1.5 tr-py-1.5 focus-within:tr-border-brand tr-transition-colors">
+						<pre className="tr-flex-1 tr-min-w-0 tr-m-0 tr-text-xs tr-font-mono tr-text-secondary tr-whitespace-pre tr-overflow-x-auto tr-bg-transparent tr-p-0">
+							{snippet}
+						</pre>
+						<button
+							type="button"
+							onClick={onCopySnippet}
+							className="tr-flex tr-items-center tr-gap-1.5 tr-h-7 tr-px-2.5 tr-rounded-md tr-text-brand hover:tr-bg-brand-bg tr-bg-transparent tr-border-0 tr-cursor-pointer tr-shrink-0 tr-text-xs tr-font-medium tr-transition-colors"
+							title={__('Copy', 'thinkrank')}
+						>
+							{snippetCopied ? (
+								<>
+									<IconCheck size={14} color="#027A48" />
+									{__('Copied!', 'thinkrank')}
+								</>
+							) : (
+								<>
+									<IconCopy size={14} />
+									{__('Copy', 'thinkrank')}
+								</>
+							)}
+						</button>
+					</div>
+				</div>
+			)}
 
 			{/* Step-by-step */}
 			<ol className="tr-flex tr-flex-col tr-gap-2.5 tr-m-0 tr-p-0 tr-list-none">

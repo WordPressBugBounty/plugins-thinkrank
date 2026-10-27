@@ -656,6 +656,8 @@ class Metabox_Manager {
      * @return void
      */
     private function persist_metadata(int $post_id, array $src): void {
+        $indexability_before = $this->indexability_snapshot($post_id, $src);
+
         // Title & meta description are handled separately below: they can be
         // written out-of-band (Auto AI on publish, imports)
         // after an editor was opened, so a plain save from that now-stale editor
@@ -732,6 +734,80 @@ class Metabox_Manager {
 
         // Update last modified timestamp
         update_post_meta($post_id, '_thinkrank_last_updated', current_time('mysql'));
+
+        $this->announce_indexability_change($post_id, $indexability_before);
+    }
+
+    /**
+     * Fields whose value can change whether a post is an indexable destination.
+     *
+     * @var string[]
+     */
+    private const INDEXABILITY_FIELDS = [
+        'thinkrank_robots_meta_enabled',
+        'thinkrank_robots_meta',
+        'thinkrank_canonical_url',
+    ];
+
+    /**
+     * The post's indexability before a save, when the save can change it.
+     *
+     * @param int   $post_id Post being saved.
+     * @param array $src     Submitted fields.
+     * @return array{reason: string|null}|null Null when no field in this save
+     *                                          can change the answer.
+     */
+    private function indexability_snapshot(int $post_id, array $src): ?array {
+        if (!array_intersect(self::INDEXABILITY_FIELDS, array_keys($src))) {
+            return null;
+        }
+
+        $post = get_post($post_id);
+
+        return $post instanceof \WP_Post
+            ? ['reason' => \ThinkRank\SEO\Indexability::post_exclusion_reason($post)]
+            : null;
+    }
+
+    /**
+     * Tell the URL feeds when a save changed whether the post is a destination.
+     *
+     * These fields are post meta, and writing them fires no save_post or
+     * status transition. The sitemap listened on save_post only, so a noindex
+     * set through the update-post-seo ability, the SEO quick edit or the
+     * Elementor panel left the URL listed until unrelated content changed
+     * (#1285). The editor form path fires save_post as well; the listeners
+     * debounce, so hearing both is harmless.
+     *
+     * @since 2.19.0
+     *
+     * @param int        $post_id Post that was saved.
+     * @param array|null $before  {@see indexability_snapshot()}.
+     * @return void
+     */
+    private function announce_indexability_change(int $post_id, ?array $before): void {
+        if (null === $before) {
+            return;
+        }
+
+        $post = get_post($post_id);
+        if (!$post instanceof \WP_Post) {
+            return;
+        }
+
+        if (\ThinkRank\SEO\Indexability::post_exclusion_reason($post) === $before['reason']) {
+            return;
+        }
+
+        /**
+         * Fires when saved ThinkRank fields change whether a post is an
+         * indexable destination (its robots, canonical or redirect answer).
+         *
+         * @since 2.19.0
+         *
+         * @param int $post_id Post whose indexability changed.
+         */
+        do_action('thinkrank_post_indexability_changed', $post_id);
     }
 
     /**

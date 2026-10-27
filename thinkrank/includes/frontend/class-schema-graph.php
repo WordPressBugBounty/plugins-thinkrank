@@ -291,7 +291,8 @@ class Schema_Graph {
         // A per-post deployment can be something that isn't what the page is
         // about (an Organization, say). Letting it win the slot would drop the
         // page's real entity, so it joins the graph as a supporting node.
-        if (!in_array($type, self::PAGE_LEVEL_TYPES, true)) {
+        // An Event subtype ("MusicEvent", #1012) is an Event for this purpose.
+        if (!in_array($type, self::PAGE_LEVEL_TYPES, true) && !\ThinkRank\SEO\Schema_Factory::is_event_type($type)) {
             $this->supporting[] = $schema;
             return;
         }
@@ -1700,6 +1701,16 @@ class Schema_Graph {
         $url = $primary['schema']['url'] ?? null;
         if (is_string($url) && $url !== '') {
             return $url;
+        }
+
+        // No page entity: key off the page's own canonical, so a breadcrumb
+        // on an archive without one does not claim the homepage's
+        // #breadcrumb @id (#1336). Search and 404 have no canonical.
+        if (!is_front_page() && class_exists(SEO_Manager::class)) {
+            $canonical = SEO_Manager::get_non_singular_canonical_url();
+            if ('' !== $canonical) {
+                return $canonical;
+            }
         }
 
         return home_url('/');

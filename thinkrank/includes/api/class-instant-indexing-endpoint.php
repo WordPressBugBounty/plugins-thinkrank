@@ -329,9 +329,17 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
             }
         }
 
+        // Beside `data`, not in it: the screen posts `data` back on save, and
+        // the pause is a state of the site, not a setting (#1354).
+        $paused = \ThinkRank\SEO\Instant_Indexing_Manager::paused_reason();
+
         return new WP_REST_Response([
             'success' => true,
-            'data' => $settings
+            'data' => $settings,
+            'paused' => [
+                'reason' => $paused,
+                'message' => \ThinkRank\SEO\Instant_Indexing_Manager::paused_message($paused),
+            ],
         ], 200);
     }
 

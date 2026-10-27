@@ -193,6 +193,17 @@ class Schema_Settings_Config {
                 $defaults['validation_level'] = 'strict';
                 $defaults['rich_snippets_optimization'] = true;
                 break;
+            default:
+                // The third place that keyed off the literal slug 'product',
+                // and so answered WebPage-ish defaults for a SureCart store's
+                // sc_product (#256). ProductPostTypeDefaultsTest scans for a
+                // fourth.
+                if (\ThinkRank\Integrations\Commerce::is_product_post_type($context_type)) {
+                    $defaults['enabled_schema_types'] = ['Product'];
+                    $defaults['validation_level'] = 'strict';
+                    $defaults['rich_snippets_optimization'] = true;
+                }
+                break;
         }
 
         return $defaults;

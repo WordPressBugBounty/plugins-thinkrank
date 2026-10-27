@@ -757,7 +757,7 @@ class SEO_Analyzer {
         }
 
         $effective = $manager->get_effective_robots_txt();
-        $groups    = $this->parse_robots_disallow_all((string) ($effective['content'] ?? ''));
+        $groups    = self::parse_robots_disallow_all((string) ($effective['content'] ?? ''));
         $agents    = $this->search_engines_blocked_by($groups);
 
         if (empty($agents)) {
@@ -787,7 +787,7 @@ class SEO_Analyzer {
                 // nothing about the custom body and the file stays fixable.
                 $fresh_agents = [];
                 if (!empty($settings['allow_search_engines'] ?? true)) {
-                    $fresh        = $this->parse_robots_disallow_all($manager->render_robots_txt_file());
+                    $fresh        = self::parse_robots_disallow_all($manager->render_robots_txt_file());
                     $fresh_agents = $this->search_engines_blocked_by($fresh);
                 }
 
@@ -2019,7 +2019,7 @@ class SEO_Analyzer {
             return [];
         }
 
-        $groups = $this->parse_robots_disallow_all($body);
+        $groups = self::parse_robots_disallow_all($body);
 
         if (empty($groups)) {
             return [];
@@ -2079,11 +2079,16 @@ class SEO_Analyzer {
      * narrower rules is recorded as false rather than omitted — otherwise it
      * would fall through to the wildcard group it is meant to override.
      *
+     * Public and static so the robots.txt optimisation warning
+     * (Site_Identity_Manager::optimize_robots_txt()) reads a body the same
+     * way this check does, rather than with a regex of its own (#999).
+     *
      * @since 2.5.0
+     * @since 2.19.0 Public and static.
      * @param string $body Robots.txt content.
      * @return array<string,bool>
      */
-    private function parse_robots_disallow_all(string $body): array {
+    public static function parse_robots_disallow_all(string $body): array {
         $groups  = [];
         $current = [];
         // Whether the next `User-agent:` continues this group or opens a new

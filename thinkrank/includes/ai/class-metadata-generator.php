@@ -275,6 +275,14 @@ class Metadata_Generator {
      * @return string Content type
      */
     private function determine_content_type(\WP_Post $post): string {
+        // Asked before the switch: a product is a product whoever sells it, and
+        // keying off the literal WooCommerce slug meant a SureCart product was
+        // written up as a blog post, with the prompt and tone that go with
+        // one (#256).
+        if (\ThinkRank\Integrations\Commerce::is_product_post_type((string) $post->post_type)) {
+            return 'product';
+        }
+
         switch ($post->post_type) {
             case 'page':
                 return 'page';

@@ -472,6 +472,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-left-3{
   left: 0.75rem;
 }
+.tr-root .tr-left-4{
+  left: 1rem;
+}
 .tr-root .tr-left-\[6rem\]{
   left: 6rem;
 }
@@ -528,6 +531,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-z-50{
   z-index: 50;
+}
+.tr-root .tr-z-\[100000\]{
+  z-index: 100000;
 }
 .tr-root .tr-z-\[99990\]{
   z-index: 99990;
@@ -1592,6 +1598,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-bg-ink-2{
   --tw-bg-opacity: 1;
   background-color: rgb(83 83 83 / var(--tw-bg-opacity, 1));
+}
+.tr-root .tr-bg-ink-2\/30{
+  background-color: rgb(83 83 83 / 0.3);
 }
 .tr-root .tr-bg-ink-2\/40{
   background-color: rgb(83 83 83 / 0.4);
@@ -2812,6 +2821,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   }
   .tr-root .sm\:tr-w-80{
     width: 20rem;
+  }
+  .tr-root .sm\:tr-w-\[420px\]{
+    width: 420px;
   }
   .tr-root .sm\:tr-flex-1{
     flex: 1 1 0%;

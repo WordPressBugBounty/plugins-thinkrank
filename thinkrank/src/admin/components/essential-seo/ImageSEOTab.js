@@ -199,6 +199,10 @@ const ImageSEOTab = () => {
 		let offset = 0;
 		let totalUpdated = 0;
 		let totalLowQuality = 0;
+		// AI source only: images the vision call failed for, and the first
+		// reason, so a run that fell back to the template says so (#1039).
+		let aiFailed = 0;
+		let aiError = '';
 		let completed = false;
 		try {
 			// Loop batches until the server reports it has processed the whole
@@ -217,6 +221,10 @@ const ImageSEOTab = () => {
 				});
 				totalUpdated += res.updated || 0;
 				totalLowQuality += res.skipped_low_quality || 0;
+				aiFailed += res.ai_failed || 0;
+				if (!aiError && res.ai_error) {
+					aiError = res.ai_error;
+				}
 				offset = res.next_offset;
 				if (res.total > 0) {
 					setFillProgress(
@@ -260,6 +268,25 @@ const ImageSEOTab = () => {
 							totalLowQuality
 						)
 					: '';
+
+			if (aiFailed > 0) {
+				setNotice({
+					status: 'error',
+					message:
+						sprintf(
+							/* translators: 1: number of images updated, 2: number of images the AI failed on, 3: the AI provider's error message */
+							__(
+								'Done. Alt text saved for %1$d image(s), but the AI could not describe %2$d image(s): %3$s Those images kept their alt text, or fell back to the Alt attribute format when they had none.',
+								'thinkrank'
+							),
+							totalUpdated,
+							aiFailed,
+							aiError
+						) + lowQualityNote,
+				});
+				await loadMediaStats();
+				return;
+			}
 
 			setNotice({
 				status: 'success',

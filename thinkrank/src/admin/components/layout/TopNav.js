@@ -1,6 +1,7 @@
 import { __ } from '@wordpress/i18n';
 import classnames from 'classnames';
 import NavSearch from './NavSearch';
+import HelpLauncher from '../help/HelpDrawer';
 import {
 	navigate,
 	getPageUrl,
@@ -516,24 +517,6 @@ const ThinkRankLogo = () => (
 	</svg>
 );
 
-const IconDocs = () => (
-	<svg
-		width="15"
-		height="15"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		strokeWidth="2"
-		strokeLinecap="round"
-		strokeLinejoin="round"
-		aria-hidden="true"
-	>
-		<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-		<path d="M14 2v6h6" />
-		<path d="M8 13h8M8 17h8M8 9h2" />
-	</svg>
-);
-
 const IconCalendar = () => (
 	<svg
 		width="14"
@@ -765,17 +748,18 @@ export default function TopNav({ currentPage }) {
 					</span>
 				</a>
 
-				{/* Help */}
-				<a
-					href="https://thinkrank.ai/docs"
-					target="_blank"
-					rel="noopener noreferrer"
-					className="tr-flex tr-items-center tr-justify-center tr-w-7 tr-h-7 tr-rounded-md tr-text-tertiary hover:tr-text-secondary hover:tr-bg-white tr-no-underline tr-transition-colors"
-					title={__('Documentation', 'thinkrank')}
-					aria-label={__('Documentation', 'thinkrank')}
-				>
-					<IconDocs />
-				</a>
+				{/*
+				 * Help. Used to be a link straight out to thinkrank.ai/docs;
+				 * it now opens the drawer, which starts on the articles for
+				 * the screen the reader is actually on and still links out
+				 * (#731).
+				 */}
+				<HelpLauncher
+					currentPage={currentPage}
+					screenLabel={
+						NAV_ITEMS.find((item) => item.id === currentPage)?.label
+					}
+				/>
 
 				{!isPro && (
 					<a

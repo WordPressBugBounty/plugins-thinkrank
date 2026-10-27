@@ -37,6 +37,7 @@ import ContentTypeMatrix from './ContentTypeMatrix';
 import AutoAiSection from './AutoAiSection';
 import BulkSnippetsTab from './bulk-snippets/BulkSnippetsTab';
 import ThinContentTab from './thin-content/ThinContentTab';
+import TemplatePreview from './TemplatePreview';
 import notify from '../../utils/notify';
 import { restUrl } from '../../utils/restUrl';
 import logger from '../../../shared/utils/logger';
@@ -49,6 +50,30 @@ const SAMPLE_EXCERPT = __(
 	'This is a sample excerpt showing how your description will appear in search results.',
 	'thinkrank'
 );
+
+/**
+ * Tokens that resolve on a WooCommerce product only. The same list the
+ * editor's General panel offers on a product.
+ */
+const PRODUCT_VARIABLES = [
+	{ label: __('+ Price', 'thinkrank'), value: '%price%' },
+	{ label: __('+ Sale price', 'thinkrank'), value: '%sale_price%' },
+	{ label: __('+ SKU', 'thinkrank'), value: '%sku%' },
+	{ label: __('+ Stock status', 'thinkrank'), value: '%stock_status%' },
+	{
+		label: __('+ Short description', 'thinkrank'),
+		value: '%short_description%',
+	},
+	{ label: __('+ Brand', 'thinkrank'), value: '%brand%' },
+];
+
+/**
+ * A custom field (post meta) value. `field-name` is replaced with the key.
+ */
+const CUSTOM_FIELD_VARIABLE = {
+	label: __('+ Custom field', 'thinkrank'),
+	value: '%customfield(field-name)%',
+};
 
 const truncate = (str, max) => {
 	if (!str) {
@@ -382,10 +407,20 @@ const GlobalSEOTab = ({ activeSubSection }) => {
 		</Text>
 	);
 
+	// The product tokens resolve to nothing off a WooCommerce product, so
+	// they are offered on the product screen only, as in the editor (#715).
+	// A custom field resolves on any type, so it is offered everywhere; the
+	// chip inserts the token with a placeholder key to replace (#1277).
+	const extraVariables = [
+		...('product' === currentPostType ? PRODUCT_VARIABLES : []),
+		CUSTOM_FIELD_VARIABLE,
+	];
+
 	const titleVariables = [
 		{ label: __('+ Title', 'thinkrank'), value: '%title%' },
 		{ label: __('+ Site Title', 'thinkrank'), value: '%sitename%' },
 		{ label: __('+ Separator', 'thinkrank'), value: '%sep%' },
+		...extraVariables,
 	];
 
 	const descriptionVariables = [
@@ -393,6 +428,7 @@ const GlobalSEOTab = ({ activeSubSection }) => {
 		{ label: __('+ Site Title', 'thinkrank'), value: '%sitename%' },
 		{ label: __('+ Title', 'thinkrank'), value: '%title%' },
 		{ label: __('+ Separator', 'thinkrank'), value: '%sep%' },
+		...extraVariables,
 	];
 
 	const siteName = window.thinkrankAdmin?.siteName || '';
@@ -565,6 +601,14 @@ const GlobalSEOTab = ({ activeSubSection }) => {
 							)}
 						/>
 					</Container>
+				</div>
+
+				<div className="tr-pt-6">
+					<TemplatePreview
+						postType={currentPostType}
+						title={titleTemplate}
+						description={descriptionTemplate}
+					/>
 				</div>
 			</Container>
 		</Card>

@@ -268,18 +268,26 @@ class Global_SEO_Schema_Output {
     }
 
     /**
-     * Output CollectionPage schema for archive contexts.
+     * Output the page entity for archive contexts.
      *
-     * Covers the blog home, post type archives (e.g. a docs archive) and
-     * taxonomy archives. Search results, 404s and other contexts get nothing.
+     * Covers the blog home, post type archives (e.g. a docs archive), taxonomy
+     * and date archives with a CollectionPage, and author archives with a
+     * ProfilePage about the author. Search results, 404s and other contexts
+     * get nothing.
+     *
+     * Author and date archives used to return early, so they published only a
+     * BreadcrumbList, and with no page entity to key off Schema_Graph minted
+     * the homepage's #breadcrumb @id for it (#1336).
      *
      * @since 1.16.0
      * @return void
      */
     private function output_archive_schema(): void {
+        $type = 'CollectionPage';
         $name = '';
         $url = '';
         $description = '';
+        $main_entity = [];
 
         if (is_home() && !is_front_page()) {
             $posts_page_id = (int) get_option('page_for_posts');
@@ -318,6 +326,38 @@ class Global_SEO_Schema_Output {
             $name = $term->name;
             $url = $term_link;
             $description = (string) term_description($term);
+        } elseif (is_author()) {
+            $author_id = (int) get_queried_object_id();
+            $author    = $author_id > 0 ? get_userdata($author_id) : false;
+            if (!$author instanceof \WP_User) {
+                return;
+            }
+
+            $type = 'ProfilePage';
+            $name = (string) $author->display_name;
+            // Through author_url() like every other author URL (#1339).
+            // This archive only renders with archives on, so it is the
+            // archive URL here.
+            $url = \ThinkRank\SEO\Author_Archives_Manager::author_url($author_id);
+            if ('' === $url) {
+                return;
+            }
+            // The archive's own meta description, so the page describes
+            // itself here the way it does in the head (#766).
+            $description = \ThinkRank\SEO\Author_Archives_Manager::resolve_description($author_id);
+
+            $main_entity = [
+                '@type' => 'Person',
+                'name'  => self::normalize_name($name),
+                'url'   => $url,
+            ];
+
+            $bio = self::normalize_description((string) get_the_author_meta('description', $author_id));
+            if ('' !== $bio) {
+                $main_entity['description'] = $bio;
+            }
+        } elseif (is_date()) {
+            [$name, $url] = self::date_archive_name_and_link();
         } else {
             return;
         }
@@ -337,7 +377,7 @@ class Global_SEO_Schema_Output {
 
         $schema = [
             '@context' => self::SCHEMA_CONTEXT,
-            '@type'    => 'CollectionPage',
+            '@type'    => $type,
             'name'     => self::normalize_name((string) $name),
             'url'      => $url,
             'isPartOf' => [
@@ -354,8 +394,14 @@ class Global_SEO_Schema_Output {
             $schema['description'] = $description;
         }
 
+        if (!empty($main_entity)) {
+            $schema['mainEntity'] = $main_entity;
+        }
+
         /**
-         * Filter the archive CollectionPage schema before output.
+         * Filter the archive page schema before output.
+         *
+         * A CollectionPage, or a ProfilePage on an author archive.
          *
          * @since 1.16.0
          *
@@ -367,7 +413,53 @@ class Global_SEO_Schema_Output {
             return;
         }
 
-        $this->register_schema($schema, 'CollectionPage', 'global_seo');
+        $this->register_schema($schema, $type, 'global_seo');
+    }
+
+    /**
+     * The name and un-paginated link of the current date archive.
+     *
+     * Reads the year/monthnum/day query vars, or the ?m=YYYY[MM[DD]] form
+     * plain permalinks use, the same way the breadcrumb trail does. The month
+     * and day are formatted at noon UTC in UTC, so no site timezone moves them
+     * into a neighbouring day.
+     *
+     * @since 2.19.0
+     * @return array{0:string,1:string} [name, url], both '' when no year resolves.
+     */
+    private static function date_archive_name_and_link(): array {
+        $year  = (int) get_query_var('year');
+        $month = (int) get_query_var('monthnum');
+        $day   = (int) get_query_var('day');
+
+        $m = preg_replace('/\D/', '', (string) get_query_var('m'));
+        if (!$year && strlen((string) $m) >= 4) {
+            $year  = (int) substr($m, 0, 4);
+            $month = (int) substr($m, 4, 2);
+            $day   = (int) substr($m, 6, 2);
+        }
+
+        if (!$year) {
+            return ['', ''];
+        }
+
+        $utc = new \DateTimeZone('UTC');
+
+        if ($month && $day && is_day()) {
+            return [
+                (string) wp_date((string) get_option('date_format', 'F j, Y'), gmmktime(12, 0, 0, $month, $day, $year), $utc),
+                (string) get_day_link($year, $month, $day),
+            ];
+        }
+
+        if ($month && (is_month() || is_day())) {
+            return [
+                (string) wp_date('F Y', gmmktime(12, 0, 0, $month, 15, $year), $utc),
+                (string) get_month_link($year, $month),
+            ];
+        }
+
+        return [(string) $year, (string) get_year_link($year)];
     }
 
     /**
@@ -471,6 +563,14 @@ class Global_SEO_Schema_Output {
                     ? ['schema_type' => 'Product', 'article_type' => '', 'media_type' => '']
                     : ['schema_type' => 'WebPage', 'article_type' => '', 'media_type' => ''];
             default:
+                // Another shop's product type, SureCart's sc_product among
+                // them. The second of two places that resolve this default;
+                // fixing only the settings endpoint would leave the frontend
+                // still publishing WebPage (#256).
+                if (\ThinkRank\Integrations\Commerce::is_product_post_type($post_type)) {
+                    return ['schema_type' => 'Product', 'article_type' => '', 'media_type' => ''];
+                }
+
                 // Public custom post types (e.g. BetterDocs `docs`) get WebPage.
                 $object = get_post_type_object($post_type);
                 if ($object && empty($object->public)) {
@@ -934,7 +1034,9 @@ class Global_SEO_Schema_Output {
      * @return array Publisher schema
      */
     private function get_publisher_schema(): array {
-        $site_name = get_bloginfo('name');
+        // The Site Identity Site Name, the name the WebSite node carries, so
+        // the publisher and the site it publishes agree (#1331).
+        $site_name = \ThinkRank\SEO\Site_Identity_Manager::site_name();
         $site_url = home_url();
 
         $publisher = [
@@ -1060,6 +1162,11 @@ class Global_SEO_Schema_Output {
             }
         }
 
+        // Any other shop ThinkRank knows about, SureCart included (#256).
+        if (empty($sku)) {
+            $sku = \ThinkRank\Integrations\Commerce::product_data($post->ID)['sku'];
+        }
+
         return (string) $sku;
     }
 
@@ -1082,6 +1189,10 @@ class Global_SEO_Schema_Output {
             }
         }
 
+        if (empty($brand)) {
+            $brand = \ThinkRank\Integrations\Commerce::product_data($post->ID)['brand'];
+        }
+
         return (string) $brand;
     }
 
@@ -1093,6 +1204,22 @@ class Global_SEO_Schema_Output {
      * @return array Product offers data
      */
     private function get_product_offers(\WP_Post $post): array {
+        // A shop whose product carries several named prices publishes one
+        // Offer each: a SureCart "Standard" and "Pro" are two offers a shopper
+        // chooses between, not one price with a range (#256). Meta set by hand
+        // still wins, because it is the site owner speaking.
+        if ('' === (string) get_post_meta($post->ID, '_thinkrank_product_price', true)) {
+            $commerce = \ThinkRank\Integrations\Commerce::product_data($post->ID);
+
+            if (count($commerce['offers']) > 1) {
+                return $commerce['offers'];
+            }
+
+            if (1 === count($commerce['offers'])) {
+                return $commerce['offers'][0];
+            }
+        }
+
         $offers = [
             '@type' => 'Offer',
             'url' => get_permalink($post),
@@ -1117,6 +1244,10 @@ class Global_SEO_Schema_Output {
                 $price = $product->get_price();
             }
 
+            if (empty($price)) {
+                $price = \ThinkRank\Integrations\Commerce::product_data($post->ID)['price'];
+            }
+
             if (!empty($price)) {
                 $offers['price'] = (string) $price;
             }
@@ -1128,6 +1259,10 @@ class Global_SEO_Schema_Output {
         // Try WooCommerce currency if available
         if (empty($currency) && function_exists('get_woocommerce_currency')) {
             $currency = get_woocommerce_currency();
+        }
+
+        if (empty($currency)) {
+            $currency = \ThinkRank\Integrations\Commerce::product_data($post->ID)['currency'];
         }
 
         // Default to USD
@@ -1143,6 +1278,10 @@ class Global_SEO_Schema_Output {
         // Try WooCommerce if available
         if (empty($availability) && null !== $product) {
             $availability = $this->woocommerce_availability($product);
+        }
+
+        if (empty($availability)) {
+            $availability = \ThinkRank\Integrations\Commerce::product_data($post->ID)['availability'];
         }
 
         // Default to InStock
@@ -1174,7 +1313,7 @@ class Global_SEO_Schema_Output {
         if (null !== $product) {
             $offers['seller'] = [
                 '@type' => 'Organization',
-                'name'  => self::normalize_name((string) get_bloginfo('name')),
+                'name'  => self::normalize_name(\ThinkRank\SEO\Site_Identity_Manager::site_name()),
                 'url'   => home_url('/'),
             ];
         }
@@ -1354,6 +1493,15 @@ class Global_SEO_Schema_Output {
                     $rating_value = $wc_average;
                     $rating_count = $wc_rating_count;
                 }
+            }
+        }
+
+        if (empty($rating_value) || empty($rating_count)) {
+            $commerce = \ThinkRank\Integrations\Commerce::product_data($post->ID);
+
+            if ('' !== $commerce['rating_value'] && $commerce['rating_count'] > 0) {
+                $rating_value = $commerce['rating_value'];
+                $rating_count = $commerce['rating_count'];
             }
         }
 

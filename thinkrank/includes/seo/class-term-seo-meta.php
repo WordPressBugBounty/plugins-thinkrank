@@ -130,6 +130,7 @@ class Term_Seo_Meta {
 	 */
 	public static function write( int $term_id, array $settings ): bool {
 		$touched = false;
+		$before  = self::exclusion_reason( $term_id, $settings );
 
 		foreach ( self::TEMPLATE_FIELDS as $key => $meta_key ) {
 			if ( array_key_exists( $key, $settings ) ) {
@@ -186,7 +187,42 @@ class Term_Seo_Meta {
 			}
 		}
 
+		// Term meta writes fire no edited_term, so a noindex set through the
+		// update-term-seo ability left the archive in the sitemap (#1285).
+		if ( false !== $before && self::exclusion_reason( $term_id, $settings ) !== $before ) {
+			$term = get_term( $term_id );
+
+			/**
+			 * Fires when saved ThinkRank fields change whether a term archive
+			 * is an indexable destination.
+			 *
+			 * @since 2.19.0
+			 *
+			 * @param int    $term_id  Term whose indexability changed.
+			 * @param string $taxonomy Its taxonomy.
+			 */
+			do_action( 'thinkrank_term_indexability_changed', $term_id, $term instanceof \WP_Term ? $term->taxonomy : '' );
+		}
+
 		return $touched;
+	}
+
+	/**
+	 * The term's exclusion reason, when this write can change it.
+	 *
+	 * @param int                  $term_id  Term ID.
+	 * @param array<string, mixed> $settings Fields being written.
+	 * @return string|null|false Reason or null; false when no field in the
+	 *                           write can change it, or the term is gone.
+	 */
+	private static function exclusion_reason( int $term_id, array $settings ) {
+		if ( ! array_intersect( [ 'robots_meta_enabled', 'robots_meta', 'canonical_url' ], array_keys( $settings ) ) ) {
+			return false;
+		}
+
+		$term = get_term( $term_id );
+
+		return $term instanceof \WP_Term ? Indexability::term_exclusion_reason( $term ) : false;
 	}
 
 	/**

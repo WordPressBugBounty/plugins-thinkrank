@@ -616,6 +616,18 @@ class SEO_Analyzer_Fixer {
                 $updated
             );
 
+        // AI mode: some images fell back to the template, or kept what they
+        // had, because the vision call failed. Say why (#1039).
+        $ai_error = (string) ($result['ai_error'] ?? '');
+        if ((int) ($result['ai_failed'] ?? 0) > 0 && '' !== $ai_error) {
+            $message .= ' ' . sprintf(
+                /* translators: 1: number of images, 2: the AI provider's error message. */
+                __('The AI could not describe %1$d of them: %2$s', 'thinkrank'),
+                (int) $result['ai_failed'],
+                $ai_error
+            );
+        }
+
         // The write is done, but a cache ThinkRank cannot reach still decides
         // what the visitor sees. Saying so beats a green toast over a page
         // that has not changed (#763).

@@ -186,7 +186,8 @@ final class Indexability {
      * Whether the robots tag on this post's page says noindex.
      *
      * Site-wide directives, then the post type's own (when its robots switch
-     * is on), then the post's override. A post-level `noindex: false` beats a
+     * is on; the "Blog posts index" row for the static posts page), then the
+     * post's override. A post-level `noindex: false` beats a
      * noindexed type, exactly as it does in the tag.
      *
      * @since 2.14.1
@@ -195,7 +196,14 @@ final class Indexability {
      * @return bool
      */
     public static function is_post_noindexed(\WP_Post $post): bool {
-        $settings = self::merge_entity_robots(self::global_robots(), (string) $post->post_type);
+        // The static posts page is served as the blog listing, so its tag reads
+        // the "Blog posts index" row, not the page row. Reading the page row
+        // here listed a posts page the tag noindexed (#1321).
+        $entity_key = self::is_static_posts_page($post)
+            ? Content_Type_Settings::ENTITY_BLOG_INDEX
+            : (string) $post->post_type;
+
+        $settings = self::merge_entity_robots(self::global_robots(), $entity_key);
 
         $settings = self::merge_override(
             $settings,
@@ -221,6 +229,24 @@ final class Indexability {
         $settings = self::merge_entity_robots(self::global_robots(), Content_Type_Settings::ENTITY_BLOG_INDEX);
 
         return !empty($settings['noindex']);
+    }
+
+    /**
+     * Whether the post is the page WordPress serves as the blog posts index.
+     *
+     * @since 2.19.0
+     *
+     * @param \WP_Post $post Post.
+     * @return bool
+     */
+    private static function is_static_posts_page(\WP_Post $post): bool {
+        if ($post->post_type !== 'page' || get_option('show_on_front') !== 'page') {
+            return false;
+        }
+
+        $posts_page = (int) get_option('page_for_posts');
+
+        return $posts_page > 0 && $posts_page === (int) $post->ID;
     }
 
     /**

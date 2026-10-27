@@ -18,11 +18,21 @@
  * `%%x%%` is matched whole and never kept: the placeholder vocabulary is the
  * single-percent form, so a double-percent token is always unresolved, and
  * eating the inner `%x%` out of it would leave a stray percent at each end. A
- * bare percent is not a token, so "50% off" is left alone.
+ * bare percent is not a token, so "50% off" is left alone. `%customfield(key)%`
+ * is one token, whose map key is `customfield(key)` (#1277).
  *
  * @type {RegExp}
  */
-const TOKEN = /%%[a-z0-9_-]+%%|%([a-z0-9_-]+)%/gi;
+const TOKEN = /%%[a-z0-9_-]+%%|%(customfield\([^\s%()]+\)|[a-z0-9_-]+)%/gi;
+
+/**
+ * The map key for a token: `%CustomField(x)%` resolves like
+ * `%customfield(x)%`, as Pattern_Resolver matches it.
+ *
+ * @param {string} key Token without its percents.
+ * @return {string} Map key.
+ */
+const keyFor = (key) => key.replace(/^customfield\(/i, 'customfield(');
 
 /**
  * Resolve a variable-tag template against a token => value map.
@@ -33,5 +43,7 @@ const TOKEN = /%%[a-z0-9_-]+%%|%([a-z0-9_-]+)%/gi;
  */
 export const resolvePattern = (template, vars = {}) =>
 	(template || '').replace(TOKEN, (match, key) =>
-		key && Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : ''
+		key && Object.prototype.hasOwnProperty.call(vars, keyFor(key))
+			? vars[keyFor(key)]
+			: ''
 	);

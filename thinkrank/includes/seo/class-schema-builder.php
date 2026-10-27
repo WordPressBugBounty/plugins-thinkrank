@@ -343,6 +343,11 @@ class Schema_Builder {
             $schema['gtin'] = $data['site_data']['product_gtin'];
         }
 
+        // Keywords from user configuration (#1012)
+        if (!empty($data['site_data']['product_keywords']) && is_string($data['site_data']['product_keywords'])) {
+            $schema['keywords'] = trim($data['site_data']['product_keywords']);
+        }
+
         // URL from user configuration or fallback
         if (!empty($data['site_data']['product_url'])) {
             $schema['url'] = $data['site_data']['product_url'];
@@ -403,9 +408,16 @@ class Schema_Builder {
         }
 
         // Offers - prioritize user-configured price
+        // The form offers five availability values; anything else, or none,
+        // keeps the long-standing InStock default (#1012).
+        $availability = $data['site_data']['product_availability'] ?? '';
+        if (!in_array($availability, ['InStock', 'OutOfStock', 'PreOrder', 'BackOrder', 'Discontinued'], true)) {
+            $availability = 'InStock';
+        }
+
         $offers = [
             '@type' => 'Offer',
-            'availability' => 'https://schema.org/InStock',
+            'availability' => 'https://schema.org/' . $availability,
             'priceCurrency' => $data['site_data']['product_currency'] ?? 'USD'
         ];
 
@@ -2043,8 +2055,12 @@ class Schema_Builder {
             // list (e.g. from an import/API); cast before strtolower() so it does
             // not throw a TypeError under strict_types.
             $day_code = $day_mapping[strtolower((string) $day)] ?? $day;
-            if (!empty($hours['open']) && !empty($hours['close'])) {
-                $opening_hours[] = "{$day_code} {$hours['open']}-{$hours['close']}";
+
+            // One entry per range, which schema.org allows for the same day:
+            // a lunch break is "Mo 09:00-13:00" and "Mo 14:00-18:00" (#1119).
+            // A day marked closed publishes nothing, whatever times it kept.
+            foreach (Business_Hours::get_ranges($hours) as $range) {
+                $opening_hours[] = "{$day_code} {$range['open']}-{$range['close']}";
             }
         }
 
@@ -2066,6 +2082,10 @@ class Schema_Builder {
         // Required properties - prioritize user-configured fields
         $schema['name'] = $data['site_data']['software_name'] ?? $data['title'] ?? get_bloginfo('name');
         $schema['applicationCategory'] = $data['site_data']['software_category'] ?? 'WebApplication';
+
+        if (!empty($data['site_data']['software_alternate_name'])) {
+            $schema['alternateName'] = $data['site_data']['software_alternate_name'];
+        }
 
         // Recommended properties
         if (!empty($data['site_data']['software_description'])) {
@@ -2158,6 +2178,27 @@ class Schema_Builder {
             if (!empty($data['site_data']['software_price_valid_until'])) {
                 $schema['offers']['priceValidUntil'] = $data['site_data']['software_price_valid_until'];
             }
+        } elseif (in_array($data['site_data']['software_license'] ?? '', ['Free', 'Open Source'], true)) {
+            // A free app has a price, and it is zero: Google reads an Offer
+            // without one as incomplete, so publish 0 rather than nothing.
+            $schema['offers'] = [
+                '@type' => 'Offer',
+                'price' => '0',
+                'priceCurrency' => $data['site_data']['software_currency'] ?? 'USD',
+            ];
+        }
+
+        // "License Type" offers pricing models (Free, Freemium, Paid...), not
+        // a licence document, which is what schema.org's `license` means. It
+        // describes the offer, alongside the Pricing Description (#1012).
+        if (isset($schema['offers'])) {
+            $license = rtrim(trim((string) ($data['site_data']['software_license'] ?? '')), '.');
+            $pricing = trim((string) ($data['site_data']['software_pricing_description'] ?? ''));
+            $description = implode('. ', array_filter([$license, $pricing], 'strlen'));
+
+            if ('' !== $description) {
+                $schema['offers']['description'] = $description;
+            }
         }
 
         // Optional properties
@@ -2174,6 +2215,10 @@ class Schema_Builder {
 
         if (!empty($data['site_data']['software_download_url'])) {
             $schema['downloadUrl'] = $data['site_data']['software_download_url'];
+        }
+
+        if (!empty($data['site_data']['software_file_size'])) {
+            $schema['fileSize'] = $data['site_data']['software_file_size'];
         }
 
         // Image/Screenshot
@@ -2198,6 +2243,12 @@ class Schema_Builder {
      * @return array Populated schema
      */
     private function populate_event_schema(array $schema, array $data, string $context): array {
+        // Publish under the subtype the form's Event Type chose (#1012).
+        $event_type = $data['site_data']['event_type'] ?? '';
+        if (Schema_Factory::is_event_type($event_type)) {
+            $schema['@type'] = $event_type;
+        }
+
         // Required properties - prioritize user-configured fields
         $schema['name'] = $data['site_data']['event_name'] ?? $data['title'] ?? '';
 

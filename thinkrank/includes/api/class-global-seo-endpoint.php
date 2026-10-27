@@ -105,6 +105,22 @@ class Global_SEO_Endpoint extends WP_REST_Controller {
     ];
 
     /**
+     * The value each subkey of the two nested robots structures has when it
+     * is absent. update-global-settings merges these subkey by subkey, so
+     * the MCP activity log sends these values to undo a subkey a write added.
+     *
+     * @since 2.19.0
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function nested_defaults(): array {
+        return [
+            'robots_meta' => self::DEFAULT_SETTINGS['robots_meta'],
+            'advanced_robots_meta' => self::DEFAULT_SETTINGS['advanced_robots_meta'],
+        ];
+    }
+
+    /**
      * Register API routes
      *
      * @since 1.0.0
@@ -126,6 +142,39 @@ class Global_SEO_Endpoint extends WP_REST_Controller {
                     'callback' => [$this, 'save_settings'],
                     'permission_callback' => [$this, 'check_manage_permissions'],
                     'args' => $this->get_save_settings_args()
+                ]
+            ]
+        );
+
+        // Preview unsaved templates against a few real items (#1277).
+        register_rest_route(
+            $this->namespace,
+            '/' . $this->rest_base . '/preview',
+            [
+                [
+                    // A read: a POST would purge the admin's whole API cache
+                    // on every keystroke (utils/apiCache.js).
+                    'methods' => 'GET',
+                    'callback' => [$this, 'preview_templates'],
+                    'permission_callback' => [$this, 'check_manage_permissions'],
+                    'args' => [
+                        'post_type' => [
+                            'required' => true,
+                            'type' => 'string',
+                            'description' => 'Post type whose templates to preview',
+                            'sanitize_callback' => 'sanitize_key'
+                        ],
+                        'title' => [
+                            'type' => 'string',
+                            'default' => '',
+                            'description' => 'Title template as typed; empty for the default'
+                        ],
+                        'description' => [
+                            'type' => 'string',
+                            'default' => '',
+                            'description' => 'Description template as typed; empty for the default'
+                        ]
+                    ]
                 ]
             ]
         );
@@ -270,6 +319,86 @@ class Global_SEO_Endpoint extends WP_REST_Controller {
             'Failed to save settings',
             ['status' => 500]
         );
+    }
+
+    /**
+     * How many items the template preview resolves.
+     *
+     * @since 2.19.0
+     * @var int
+     */
+    private const PREVIEW_ITEMS = 3;
+
+    /**
+     * Resolve unsaved title and description templates for the post type's
+     * newest published items, so the admin sees each item's own price,
+     * custom field and title before saving (#1277).
+     *
+     * The templates go through the same sanitizer the save uses, so the
+     * preview shows what would be stored. Each item says whether it has its
+     * own title or description, which the template does not replace.
+     *
+     * @since 2.19.0
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return WP_REST_Response|WP_Error
+     */
+    public function preview_templates(WP_REST_Request $request) {
+        $post_type = (string) $request->get_param('post_type');
+
+        $validation = $this->validate_post_type($post_type);
+        if (is_wp_error($validation)) {
+            return $validation;
+        }
+
+        $title       = Pattern_Resolver::sanitize_template((string) $request->get_param('title'));
+        $description = Pattern_Resolver::sanitize_template((string) $request->get_param('description'));
+
+        $ids = get_posts([
+            'post_type'        => $post_type,
+            // Media is never "publish"; its published state is "inherit".
+            'post_status'      => 'attachment' === $post_type ? 'inherit' : 'publish',
+            'numberposts'      => self::PREVIEW_ITEMS,
+            'orderby'          => 'date',
+            'order'            => 'DESC',
+            'fields'           => 'ids',
+            'no_found_rows'    => true,
+            'suppress_filters' => false,
+        ]);
+
+        $items = [];
+        foreach (is_array($ids) ? $ids : [] as $id) {
+            $id = (int) $id;
+
+            // Plain text: the screen renders these as text, where the
+            // entities get_the_title() returns would be shown as written.
+            $items[] = [
+                'id'              => $id,
+                'name'            => self::plain(get_the_title($id)),
+                'title'           => self::plain(Pattern_Resolver::preview_template($title, $id, 'title')),
+                'description'     => self::plain(Pattern_Resolver::preview_template($description, $id, 'description')),
+                'own_title'       => Pattern_Resolver::has_own_value($id, 'title'),
+                'own_description' => Pattern_Resolver::has_own_value($id, 'description'),
+            ];
+        }
+
+        return new WP_REST_Response([
+            'success'   => true,
+            'post_type' => $post_type,
+            'items'     => $items,
+        ], 200);
+    }
+
+    /**
+     * Text with its HTML entities decoded, for a JSON answer shown as text.
+     *
+     * @since 2.19.0
+     *
+     * @param string $text Text as WordPress returns it.
+     * @return string
+     */
+    private static function plain(string $text): string {
+        return html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     /**
@@ -424,6 +553,19 @@ class Global_SEO_Endpoint extends WP_REST_Controller {
                 break;
 
             default:
+                // A product is a product whoever sells it. This case used to
+                // match the literal slug 'product', so a SureCart store's
+                // sc_product defaulted to WebPage and its pages published
+                // WebPage schema while SureCart published its own Product
+                // alongside (#256).
+                if (\ThinkRank\Integrations\Commerce::is_product_post_type($post_type)) {
+                    $defaults['schema_type'] = 'Product';
+                    $defaults['article_type'] = '';
+                    $defaults['media_type'] = '';
+                    $defaults['link_suggestions'] = false;
+                    break;
+                }
+
                 // For custom post types, use generic defaults
                 $defaults['schema_type'] = 'WebPage';
                 $defaults['article_type'] = '';

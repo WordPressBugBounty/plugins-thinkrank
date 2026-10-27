@@ -232,10 +232,13 @@ class Schema_Input_Validator {
 
         // The deploy routes read the type from the node's @type, and a
         // LocalBusiness is published under the business type chosen in Local
-        // SEO ("Restaurant", #1005). Validate it as the LocalBusiness it is;
-        // the @type match below accepts the subtype.
+        // SEO ("Restaurant", #1005), an Event under the subtype its form chose
+        // ("MusicEvent", #1012). Validate each as the parent type it is; the
+        // @type match below accepts the subtype.
         if (\ThinkRank\Config\Local_Business_Types_Config::is_local_business($schema_type)) {
             $schema_type = 'LocalBusiness';
+        } elseif (Schema_Factory::is_event_type($schema_type)) {
+            $schema_type = 'Event';
         }
 
         try {
@@ -426,11 +429,13 @@ class Schema_Input_Validator {
                 : [(string) $schema_data['@type']];
 
             // A LocalBusiness is deployed under the business subtype the site
-            // chose (#1005).
+            // chose (#1005), an Event under the subtype its form chose (#1012).
             $is_local_business_subtype = 'LocalBusiness' === $schema_type
                 && [] !== array_filter($declared_types, [\ThinkRank\Config\Local_Business_Types_Config::class, 'is_local_business']);
+            $is_event_subtype = 'Event' === $schema_type
+                && [] !== array_filter($declared_types, [Schema_Factory::class, 'is_event_type']);
 
-            if (!$is_local_business_subtype && !in_array($schema_type, $declared_types, true)) {
+            if (!$is_local_business_subtype && !$is_event_subtype && !in_array($schema_type, $declared_types, true)) {
                 $result['errors'][] = sprintf(
                     "Schema @type '%s' does not match expected type '%s'",
                     implode(', ', $declared_types),

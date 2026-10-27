@@ -16,6 +16,7 @@ import Badge from '../../admin/components/ui/Badge';
 import MediaPicker from '../../admin/components/common/MediaPicker';
 import VariableTags from './ui/VariableTags';
 import { resolvePattern } from '../utils/resolvePattern';
+import CustomFieldStatus from './ui/CustomFieldStatus';
 
 const PLATFORMS = [
 	{ label: __('Facebook', 'thinkrank'), value: 'facebook' },
@@ -69,6 +70,9 @@ const SocialTab = ({
 	showNotice,
 	patternPreviews = {},
 	patternVariables = {},
+	customFieldStatus = 'idle',
+	customFieldError = '',
+	onRetryCustomFields,
 }) => {
 	const [selectedPlatform, setSelectedPlatform] = useState('facebook');
 	const [socialPreview, setSocialPreview] = useState(null);
@@ -408,6 +412,11 @@ const SocialTab = ({
 
 	return (
 		<div className="tr-flex tr-flex-col tr-gap-4">
+			<CustomFieldStatus
+				status={customFieldStatus}
+				error={customFieldError}
+				onRetry={onRetryCustomFields}
+			/>
 			{/* Open Graph + Twitter — side by side, equal height */}
 			<div className="tr-flex tr-flex-col md:tr-flex-row tr-gap-4 md:tr-items-stretch">
 				{/* Open Graph editor */}

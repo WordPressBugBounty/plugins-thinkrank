@@ -36,6 +36,8 @@ class Role_Manager {
     public function init(): void {
         add_action('init', [Capability_Manager::class, 'ensure']);
         add_filter('user_has_cap', [$this, 'grant_admin_caps'], 10, 2);
+        // After the bypass, and late enough to see grants other plugins add.
+        add_filter('user_has_cap', [$this, 'withhold_below_baseline'], 20, 2);
         add_filter('rest_pre_dispatch', [$this, 'gate_rest'], 10, 3);
     }
 
@@ -84,6 +86,47 @@ class Role_Manager {
         }
 
         return $allcaps + $thinkrank_caps;
+    }
+
+    /**
+     * Make ThinkRank grants inert for a user below the baseline capability.
+     *
+     * The Role Manager labels a role without Capability_Manager::BASELINE_CAPABILITY
+     * "cannot use ThinkRank" and says a grant to it takes effect once the role
+     * gains that capability (#576). That held only for the handful of routes
+     * that run their own edit_posts check: a Subscriber holding every
+     * ThinkRank capability passed the REST gate and the route on more than a
+     * hundred others, writes included, among them the settings that hold the
+     * AI keys and the Role Manager itself (#1315).
+     *
+     * Withholding the capabilities here, rather than adding a check to the
+     * REST gate alone, keeps every consumer in agreement: the gate, the
+     * admin menu (add_menu_page() asks core), the capabilities localized to
+     * the admin app, and any route or ability that asks current_user_can().
+     * The role keeps its stored grants, so the matrix still shows them and
+     * they apply as soon as the role is given the baseline capability.
+     *
+     * manage_options users are left alone: they hold every ThinkRank
+     * capability through grant_admin_caps(), whatever else their role has.
+     *
+     * @since 2.19.0
+     *
+     * @param array $allcaps Capabilities the user holds.
+     * @param array $caps    Capabilities being checked (unused).
+     * @return array
+     */
+    public function withhold_below_baseline(array $allcaps, array $caps): array {
+        if (!empty($allcaps['manage_options']) || !empty($allcaps[Capability_Manager::BASELINE_CAPABILITY])) {
+            return $allcaps;
+        }
+
+        foreach (Capability_Manager::slugs() as $cap) {
+            if (isset($allcaps[$cap])) {
+                $allcaps[$cap] = false;
+            }
+        }
+
+        return $allcaps;
     }
 
     /**

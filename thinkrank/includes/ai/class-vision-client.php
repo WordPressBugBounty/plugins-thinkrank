@@ -138,8 +138,8 @@ class Vision_Client {
      *
      * @param int    $attachment_id Attachment to describe.
      * @param string $context       Optional context (post title) to disambiguate.
-     * @return string Alt text, or '' when it could not be produced.
-     * @throws \Exception When the provider is unusable or the call fails.
+     * @return string Alt text, never empty.
+     * @throws \Exception When the provider is unusable, the call fails, or the answer is empty.
      */
     public function describe_attachment(int $attachment_id, string $context = ''): string {
         $provider = (string) $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
@@ -167,7 +167,7 @@ class Vision_Client {
                 throw new \Exception(esc_html__('The image file could not be read, or is larger than the provider allows.', 'thinkrank'));
             }
 
-            return $this->clean($this->call_openai(
+            return $this->finish($this->call_openai(
                 (string) $this->settings->get('openai_compatible_api_key', ''),
                 trim((string) $this->settings->get('openai_compatible_model', '')),
                 $this->build_prompt($context),
@@ -209,7 +209,30 @@ class Vision_Client {
                 break;
         }
 
-        return $this->clean($text);
+        return $this->finish($text);
+    }
+
+    /**
+     * Clean a provider's answer into alt text, failing when nothing is left.
+     *
+     * An empty answer is a failure, not a description. Returning '' let the
+     * caller write the filename template and count it as a success with
+     * nothing to say why (#1039).
+     *
+     * @since 2.19.0
+     *
+     * @param string $text Raw provider text.
+     * @return string Alt text, never empty.
+     * @throws \Exception When the answer holds no usable text.
+     */
+    private function finish(string $text): string {
+        $alt = $this->clean($text);
+
+        if ('' === $alt) {
+            throw new \Exception(esc_html__('The AI returned no description for this image.', 'thinkrank'));
+        }
+
+        return $alt;
     }
 
     /**
@@ -379,7 +402,12 @@ class Vision_Client {
             'Content-Type'      => 'application/json',
         ], [
             'model'      => $model,
-            'max_tokens' => 300,
+            // The default vision model (Sonnet 5) thinks by default, and its
+            // thinking counts against this cap. 300 could all go on thinking
+            // and leave no text block (#1039); 2000 matches the Gemini call
+            // below, which needed the same room for the same reason. It is a
+            // ceiling only: a one-line description costs no more.
+            'max_tokens' => 2000,
             'messages'   => [[
                 'role'    => 'user',
                 'content' => [
@@ -396,7 +424,46 @@ class Vision_Client {
             ]],
         ]);
 
-        return (string) ($response['content'][0]['text'] ?? '');
+        return $this->claude_text($response);
+    }
+
+    /**
+     * The description in a Claude reply, or an exception that says why there is none.
+     *
+     * A model that thinks first puts a `thinking` block at content[0] and its
+     * answer after it, so reading content[0]['text'] returned '' for a valid
+     * reply, and the alt text silently fell back to the filename (#1039). The
+     * text blocks are joined in order; every other block type is skipped.
+     *
+     * @since 2.19.0
+     *
+     * @param array $response Decoded Messages API response.
+     * @return string Description text ('' only when the reply ended normally with none).
+     * @throws \Exception On a refusal, or a reply cut off at max_tokens.
+     */
+    private function claude_text(array $response): string {
+        $stop_reason = (string) ($response['stop_reason'] ?? '');
+
+        if ('refusal' === $stop_reason) {
+            throw new \Exception(esc_html__('The AI declined to describe this image.', 'thinkrank'));
+        }
+
+        $text = '';
+        foreach ((array) ($response['content'] ?? []) as $block) {
+            if (!is_array($block) || !isset($block['text']) || !is_string($block['text'])) {
+                continue;
+            }
+            if ('text' !== (string) ($block['type'] ?? 'text')) {
+                continue;
+            }
+            $text .= $block['text'];
+        }
+
+        if ('' === trim($text) && 'max_tokens' === $stop_reason) {
+            throw new \Exception(esc_html__('The AI ran out of output tokens before it described the image.', 'thinkrank'));
+        }
+
+        return $text;
     }
 
     /**

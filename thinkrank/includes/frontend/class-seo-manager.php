@@ -906,7 +906,7 @@ class SEO_Manager {
 
         // First priority: Post-specific ThinkRank metadata
         if ($this->has_thinkrank_metadata() && !empty($this->current_metadata['title'])) {
-            $site_name = get_bloginfo('name');
+            $site_name = \ThinkRank\SEO\Site_Identity_Manager::site_name();
             return self::with_page_suffix(
                 $this->current_metadata['title'] . ($sep ? " $sep " : ' | ') . $site_name
             );
@@ -1326,6 +1326,15 @@ class SEO_Manager {
             }
         }
 
+        // 3b. The static posts page's own override. Its request is is_home(),
+        // not singular, so the post override above never ran and a per-page
+        // noindex on the posts page was not printed, while the sitemap read it
+        // and dropped the page (#1321). Like the term override below it comes
+        // after the archive block, so it is final on every page of the listing.
+        if (self::is_static_posts_page()) {
+            $robots = $this->apply_post_robots_override((int) get_option('page_for_posts'), $robots, $current_settings);
+        }
+
         // 4. Term meta override for taxonomy archives (Overrides everything).
         //
         // Terms had no branch here at all — not a wrong key or a skipped
@@ -1485,7 +1494,7 @@ class SEO_Manager {
             return;
         }
 
-        $settings = $this->site_identity_manager->get_settings('site');
+        $settings = $this->site_identity_settings();
 
         // Only output if local SEO is enabled and business info is available
         if (empty($settings['local_seo_enabled']) || empty($settings['business_name'])) {
@@ -1581,13 +1590,17 @@ class SEO_Manager {
 
         foreach ($day_abbreviations as $day => $abbrev) {
             if (isset($business_hours[$day]) && !empty($business_hours[$day])) {
-                $day_data = $business_hours[$day];
+                // Every range of the day, joined with a comma (#1119).
+                $ranges = \ThinkRank\SEO\Business_Hours::get_ranges($business_hours[$day]);
 
-                if (!empty($day_data['closed']) || empty($day_data['open']) || empty($day_data['close'])) {
+                if ([] === $ranges) {
                     continue; // Skip closed days
                 }
 
-                $formatted_days[] = $abbrev . ' ' . $day_data['open'] . '-' . $day_data['close'];
+                $formatted_days[] = $abbrev . ' ' . implode(', ', array_map(
+                    static fn(array $range): string => $range['open'] . '-' . $range['close'],
+                    $ranges
+                ));
             }
         }
 
@@ -2634,7 +2647,7 @@ class SEO_Manager {
             return null;
         }
 
-        $settings = $this->site_identity_manager->get_settings('site');
+        $settings = $this->site_identity_settings();
 
         if (empty($settings['breadcrumbs_enabled'])) {
             return null;
@@ -2701,7 +2714,7 @@ class SEO_Manager {
         }
 
         $template = $global_seo_settings['title'];
-        $placeholders = $this->get_global_seo_placeholders();
+        $placeholders = $this->get_global_seo_placeholders($template);
 
         return $this->process_global_seo_template($template, $placeholders);
     }
@@ -2720,12 +2733,18 @@ class SEO_Manager {
     /**
      * Get placeholders for Global SEO template processing
      *
+     * The product tokens and the `%customfield(key)%` tokens come from
+     * Pattern_Resolver::template_tokens(), the map the score, the editor
+     * preview and og/twitter resolve with, so the page publishes what they
+     * show (#1277).
+     *
+     * @param string $template Template being resolved.
      * @return array Placeholder values
      */
-    private function get_global_seo_placeholders(): array {
+    private function get_global_seo_placeholders(string $template = ''): array {
         $placeholders = [
             '%title%' => '',
-            '%sitename%' => get_bloginfo('name'),
+            '%sitename%' => \ThinkRank\SEO\Site_Identity_Manager::site_name(),
             '%sep%' => $this->get_global_seo_separator(),
             '%excerpt%' => '',
             '%date%' => get_the_date(),
@@ -2766,6 +2785,8 @@ class SEO_Manager {
                 $categories = get_the_category($this->current_post_id);
                 $placeholders['%category%'] = !empty($categories) ? $categories[0]->name : '';
             }
+
+            $placeholders += \ThinkRank\SEO\Pattern_Resolver::template_tokens($template, (int) $this->current_post_id);
         }
 
         return $placeholders;
@@ -2812,7 +2833,7 @@ class SEO_Manager {
      * @return string|null Template string or null if not found
      */
     private function get_title_template_for_context(): ?string {
-        $settings = $this->site_identity_manager->get_settings('site');
+        $settings = $this->site_identity_settings();
 
         switch ($this->current_context) {
             case 'homepage':
@@ -2853,7 +2874,7 @@ class SEO_Manager {
     private function get_title_placeholders(): array {
         global $post, $wp_query;
 
-        $settings     = $this->site_identity_manager->get_settings('site');
+        $settings     = $this->site_identity_settings();
         $placeholders = self::base_title_placeholders($settings);
 
         // Context-specific placeholders
@@ -3086,18 +3107,50 @@ class SEO_Manager {
     /**
      * Process title template with placeholders
      *
+     * The separator cleanup (legacy pipe, doubled separators, a trailing
+     * separator) is meant for the template's own text. It used to run after
+     * the placeholders were substituted, so it rewrote the post title too: a
+     * literal "|" in "Cats | Dogs" became the active separator (#982). Values
+     * are now held as opaque markers while the template is tidied and put in
+     * last, so nothing inside them is touched.
+     *
      * @param string $template Template string
      * @param array $placeholders Placeholder values
      * @return string Processed title
      */
     private static function process_title_template(string $template, array $placeholders): string {
-        $title = str_replace(array_keys($placeholders), array_values($placeholders), $template);
-
-        // Clean up multiple separators and extra spaces
         $separator = $placeholders['%separator%'] ?? ' | ';
 
-        // Legacy templates stored a literal pipe as separator — apply the active separator to them
-        $title = preg_replace('/\s*\|\s*/', $separator, $title);
+        // Legacy templates stored a literal pipe as separator — apply the active
+        // separator to them. On the template only: a pipe in a value is content.
+        $template = (string) preg_replace('/\s*\|\s*/', $separator, $template);
+
+        // Separators go in directly, since the cleanup below is about them. A
+        // value that is empty goes in as nothing, so the separator it leaves
+        // doubled or trailing is still tidied. Every other value is a marker.
+        $substitutions = [];
+        $values        = [];
+        foreach ($placeholders as $key => $value) {
+            $value = (string) $value;
+
+            if ('%separator%' === $key || '%sep%' === $key) {
+                $substitutions[$key] = $value;
+                continue;
+            }
+
+            if ('' === trim($value)) {
+                $substitutions[$key] = '';
+                continue;
+            }
+
+            $marker              = "\x1A" . count($values) . "\x1A";
+            $substitutions[$key] = $marker;
+            $values[$marker]     = $value;
+        }
+
+        $title = strtr($template, $substitutions);
+
+        // Clean up multiple separators and extra spaces
         $title = preg_replace('/\s*' . preg_quote(trim($separator), '/') . '\s*' . preg_quote(trim($separator), '/') . '\s*/', $separator, $title);
         $title = preg_replace('/\s+/', ' ', $title);
         $title = trim($title);
@@ -3108,7 +3161,9 @@ class SEO_Manager {
             $title = trim(substr($title, 0, -strlen($separator_trimmed)));
         }
 
-        return $title;
+        // The values go in last, untouched apart from the whitespace collapse
+        // the whole title has always had.
+        return trim((string) preg_replace('/\s+/', ' ', strtr($title, $values)));
     }
 
     /**
@@ -3184,7 +3239,7 @@ class SEO_Manager {
         // homepage_description, #897), in the same vocabulary as its title. A
         // static front page is a page, and its description is set on it.
         if (is_front_page() && is_home() && $this->site_identity_data && $this->site_identity_data['enabled']) {
-            $identity = $this->site_identity_manager->get_settings('site');
+            $identity = $this->site_identity_settings();
             $template = trim((string) ($identity['homepage_description'] ?? ''));
             if ($template !== '') {
                 $homepage_description = trim($this->process_title_template($template, $this->get_title_placeholders()));
@@ -3196,7 +3251,7 @@ class SEO_Manager {
 
         // Third priority: Site Identity default meta description
         if ($this->site_identity_data && $this->site_identity_data['enabled']) {
-            $settings = $this->site_identity_manager->get_settings('site');
+            $settings = $this->site_identity_settings();
             $default_description = $settings['default_meta_description'] ?? '';
 
             if (!empty($default_description)) {
@@ -3309,7 +3364,7 @@ class SEO_Manager {
         }
 
         $template = $global_seo_settings['description'];
-        $placeholders = $this->get_global_seo_placeholders();
+        $placeholders = $this->get_global_seo_placeholders($template);
 
         return $this->process_global_seo_description_template($template, $placeholders);
     }
@@ -3469,7 +3524,7 @@ class SEO_Manager {
             return;
         }
 
-        $settings = $this->site_identity_manager->get_settings('site');
+        $settings = $this->site_identity_settings();
 
         // Only output on homepage or if organization schema is enabled
         if (!is_home() && !is_front_page() && empty($settings['organization_schema'])) {
@@ -3543,7 +3598,7 @@ class SEO_Manager {
      * @return array WebSite schema
      */
     private function generate_website_schema(): array {
-        $settings = $this->site_identity_manager ? $this->site_identity_manager->get_settings('site') : [];
+        $settings = $this->site_identity_settings();
 
         $schema = [
             '@context' => 'https://schema.org',
@@ -3808,7 +3863,7 @@ class SEO_Manager {
             return;
         }
 
-        $settings = $this->site_identity_manager->get_settings('site');
+        $settings = $this->site_identity_settings();
 
         // Only output if breadcrumbs are enabled
         if (empty($settings['breadcrumbs_enabled'])) {
@@ -3893,7 +3948,7 @@ class SEO_Manager {
             return;
         }
 
-        $settings = $this->site_identity_manager->get_settings('site');
+        $settings = $this->site_identity_settings();
 
         // Only display if breadcrumbs are enabled
         if (empty($settings['breadcrumbs_enabled'])) {
@@ -3937,7 +3992,7 @@ class SEO_Manager {
             return;
         }
 
-        $settings = $this->site_identity_manager->get_settings('site');
+        $settings = $this->site_identity_settings();
         $html = $this->generate_hero_html($settings);
 
         if ($html !== '') {
@@ -3970,7 +4025,7 @@ class SEO_Manager {
             return null;
         }
 
-        $settings = $this->site_identity_manager->get_settings('site');
+        $settings = $this->site_identity_settings();
 
         $hero = [
             'title'            => (string) ($settings['hero_title'] ?? ''),
@@ -4231,7 +4286,7 @@ class SEO_Manager {
             return $this->advertise_own_sitemaps($output, $is_public);
         }
 
-        $settings = $this->site_identity_manager->get_settings('site');
+        $settings = $this->site_identity_settings();
         if (empty($settings['robots_txt_enabled'])) {
             return $this->advertise_own_sitemaps($output, $is_public);
         }
@@ -4514,7 +4569,7 @@ class SEO_Manager {
         // setting alone (same as sync_robots_txt_file() and the save endpoint),
         // and a stale physical file is served by the web server regardless of the
         // master toggle.
-        $settings = $this->site_identity_manager->get_settings('site');
+        $settings = $this->site_identity_settings();
         if (empty($settings['robots_txt_enabled'])) {
             return;
         }
@@ -4538,7 +4593,7 @@ class SEO_Manager {
      * @return string Icon URL
      */
     public function filter_site_icon_url($url, $size = 512): string {
-        $settings = $this->site_identity_manager->get_settings('site');
+        $settings = $this->site_identity_settings();
 
         if (empty($settings['enabled'])) {
             return (string) $url;
@@ -4734,6 +4789,44 @@ class SEO_Manager {
      * @param array $settings Breadcrumb settings
      * @return array Breadcrumb items
      */
+    /**
+     * Site Identity settings as the front end should render them.
+     *
+     * The one place the front end reads these, so the free-text keys can be
+     * translated per language without every caller knowing about it. Site
+     * Identity lives in `{prefix}thinkrank_seo_settings` rather than in
+     * `wp_options`, so WPML's `<admin-texts>` cannot reach it and the breadcrumb
+     * Home Text was identical in every language (#846).
+     *
+     * Front-end only, deliberately. The admin screens and the REST routes keep
+     * reading the manager directly, so the Site Identity form always shows and
+     * saves the original strings — a form populated with translated values would
+     * overwrite the originals the first time it was saved in a non-default admin
+     * language.
+     *
+     * Nothing here is cached. The settings cache key carries no language, so a
+     * translated array written back into it would leak one language's strings
+     * into every other.
+     *
+     * @since 2.19.0
+     *
+     * @return array<string,mixed> Settings, with free-text values translated.
+     */
+    private function site_identity_settings(): array {
+        $settings = $this->site_identity_manager
+            ? $this->site_identity_manager->get_settings('site')
+            : [];
+
+        /**
+         * Site Identity settings on their way to the front end.
+         *
+         * @since 2.19.0
+         *
+         * @param array<string,mixed> $settings Resolved Site Identity settings.
+         */
+        return (array) apply_filters('thinkrank_site_identity_settings', $settings);
+    }
+
     private function get_breadcrumb_items(array $settings): array {
         $items = [];
 

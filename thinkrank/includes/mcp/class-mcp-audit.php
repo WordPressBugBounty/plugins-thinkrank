@@ -234,7 +234,8 @@ final class Mcp_Audit {
 				&& null !== $before_json
 				&& null !== $after_json
 				&& ! Mcp_Audit_Snapshot::contains_secret( $before )
-				&& ! Mcp_Audit_Snapshot::same( $before, $after ) ) ? 1 : 0;
+				&& ! Mcp_Audit_Snapshot::same( $before, $after )
+				&& ( 'counterpart' !== $plan['strategy'] || null !== Mcp_Audit_Snapshot::pad_merged( $tool, (array) $before, (array) $after ) ) ) ? 1 : 0;
 
 			self::insert( $row );
 		} catch ( \Throwable $e ) {
@@ -1213,13 +1214,33 @@ final class Mcp_Audit {
 			);
 		}
 
-		$input  = Mcp_Audit_Snapshot::revert_input( $plan, $before, $current );
+		// What the revert must leave behind: `before`, plus an explicit value
+		// for each subkey the write added to a key its ability merges.
+		$target = Mcp_Audit_Snapshot::pad_merged( (string) $row['tool'], $before, $after );
+		if ( null === $target ) {
+			return new \WP_Error( 'thinkrank_mcp_revert_unsupported', __( 'This change cannot be reverted.', 'thinkrank' ), [ 'status' => 400 ] );
+		}
+
+		$input  = Mcp_Audit_Snapshot::revert_input( $plan, $target, $current );
 		$result = self::run( (string) $row['tool'], $input );
 		if ( is_wp_error( $result ) ) {
 			return new \WP_Error( $result->get_error_code(), $result->get_error_message(), [ 'status' => 400 ] );
 		}
 
+		// An ability can answer success and still keep part of the value, so
+		// the revert counts only when the value read back is the one sent.
 		$now = Mcp_Audit_Snapshot::project( self::run( (string) $plan['get'], (array) $plan['get_args'] ), $plan );
+		if ( null === $now || ! Mcp_Audit_Snapshot::same( $now, $target ) ) {
+			return new \WP_Error(
+				'thinkrank_mcp_revert_incomplete',
+				__( 'The earlier value could not be fully restored, so this change is still marked as not reverted. Check the setting before trying again.', 'thinkrank' ),
+				[
+					'status'   => 500,
+					'current'  => null === $now ? null : Mcp_Audit_Snapshot::redact( $now ),
+					'expected' => $target,
+				]
+			);
+		}
 
 		return self::record_revert( $row, $plan, $input, $current, $now, '', $started );
 	}

@@ -435,7 +435,7 @@ class FAQ_Content {
     public static function builder(int $post_id): string {
         self::load_builder_content();
 
-        if ('builder' === (string) get_post_meta($post_id, '_elementor_edit_mode', true)) {
+        if (Builder_Content::elementor_renders_post($post_id)) {
             return self::SOURCE_ELEMENTOR;
         }
 
@@ -443,7 +443,7 @@ class FAQ_Content {
             return self::SOURCE_BRICKS;
         }
 
-        if (!empty(get_post_meta($post_id, '_fl_builder_enabled', true))) {
+        if (Builder_Content::beaver_renders_post($post_id)) {
             return self::SOURCE_BEAVER;
         }
 

@@ -311,6 +311,35 @@ class Manager {
             ],
         ]);
 
+        // Custom field values for a %customfield(key)% the author types in an
+        // editor preview; the editor page itself carries only the keys its
+        // saved fields name (#1277 review). Its own prefix, so the Role
+        // Manager asks only for ThinkRank access: the post editor and the
+        // term screen both use it, and the handler checks the object.
+        register_rest_route(self::NAMESPACE, '/custom-fields', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_custom_field_values'],
+            'permission_callback' => [$this, 'check_custom_field_permissions'],
+            'args' => [
+                'object_type' => [
+                    'type' => 'string',
+                    'enum' => ['post', 'term'],
+                    'required' => true,
+                ],
+                'object_id' => [
+                    'type' => 'integer',
+                    'minimum' => 1,
+                    'required' => true,
+                ],
+                'keys' => [
+                    'type' => 'array',
+                    'items' => ['type' => 'string'],
+                    'maxItems' => \ThinkRank\SEO\Pattern_Resolver::CUSTOM_FIELD_LIMIT,
+                    'required' => true,
+                ],
+            ],
+        ]);
+
         // AI endpoints
         register_rest_route(self::NAMESPACE, '/ai/generate-metadata', [
             'methods' => 'POST',
@@ -1312,6 +1341,61 @@ class Manager {
         if ($api_key_saved && get_option('thinkrank_show_welcome')) {
             delete_option('thinkrank_show_welcome');
         }
+    }
+
+    /**
+     * Whether the user may read custom fields of this post or term.
+     *
+     * Object-scoped only: a signed-in user who can edit this post or term.
+     * The generic edit_posts gate would refuse a role that edits terms but
+     * not posts, which can open the term SEO screen, and a role whose post
+     * rights come from capability mapping (#1277 review).
+     *
+     * @since 2.19.0
+     *
+     * @param \WP_REST_Request $request Request object.
+     * @return true|\WP_Error
+     */
+    public function check_custom_field_permissions(\WP_REST_Request $request) {
+        if (!is_user_logged_in()) {
+            return new \WP_Error(
+                'rest_forbidden',
+                __('You must be logged in to access this endpoint.', 'thinkrank'),
+                ['status' => 401]
+            );
+        }
+
+        $id      = (int) $request->get_param('object_id');
+        $allowed = 'term' === $request->get_param('object_type')
+            ? current_user_can('edit_term', $id)
+            : current_user_can('edit_post', $id);
+
+        return $allowed
+            ? true
+            : new \WP_Error('rest_forbidden', __('You cannot edit this item.', 'thinkrank'), ['status' => 403]);
+    }
+
+    /**
+     * Values of the custom fields a preview names, bounded like the map the
+     * editor page carries (Pattern_Resolver::custom_field_values()).
+     *
+     * @since 2.19.0
+     *
+     * @param \WP_REST_Request $request Request object.
+     * @return \WP_REST_Response
+     */
+    public function get_custom_field_values(\WP_REST_Request $request): \WP_REST_Response {
+        $values = \ThinkRank\SEO\Pattern_Resolver::custom_field_values(
+            'term' === $request->get_param('object_type') ? 'term' : 'post',
+            (int) $request->get_param('object_id'),
+            (array) $request->get_param('keys')
+        );
+
+        return new \WP_REST_Response([
+            'success' => true,
+            // An object even when empty, so the client can merge it.
+            'values' => (object) $values,
+        ], 200);
     }
 
     /**

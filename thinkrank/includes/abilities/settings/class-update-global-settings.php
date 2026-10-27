@@ -34,7 +34,8 @@ class Update_Global_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-global-settings';
 		$this->label       = __( 'Update ThinkRank Global Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank global SEO settings for a specific post type. ThinkRank stores global SEO as per-post-type templates, so a post type is required. Read the current values with get-global-settings first; only the keys you pass are changed.', 'thinkrank' );
+		// phpcs:ignore WordPress.WP.I18n.MissingTranslatorsComment,WordPress.WP.I18n.UnorderedPlaceholdersText -- %title%, %price% and the rest are template variable names, not printf placeholders.
+		$this->description = __( 'Update ThinkRank global SEO settings for a specific post type. ThinkRank stores global SEO as per-post-type templates, so a post type is required. Read the current values with get-global-settings first; only the keys you pass are changed. The title and description templates take %title%, %sitename%, %sep%, %excerpt%, %date%, %modified%, %author%, %category%, the WooCommerce tokens %price%, %sale_price%, %sku%, %stock_status%, %short_description% and %brand% (empty off a product), and %customfield(key)% for an item\'s own value of a public custom field (empty when it has none).', 'thinkrank' );
 	}
 
 	/**

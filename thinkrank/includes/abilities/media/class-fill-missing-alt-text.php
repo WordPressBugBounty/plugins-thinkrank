@@ -179,6 +179,14 @@ class Fill_Missing_Alt_Text extends Image_Alt_Ability_Base {
 						],
 					],
 				],
+				'ai_failed'   => [
+					'type'        => 'integer',
+					'description' => __( 'When the alt text source is AI: images the AI could not describe in this batch. Those kept their alt text, or got the template when they had none. Tell the user, with ai_error.', 'thinkrank' ),
+				],
+				'ai_error'    => [
+					'type'        => 'string',
+					'description' => __( 'The first AI failure in this batch, such as an API error or refusal, or an empty string.', 'thinkrank' ),
+				],
 			],
 		];
 	}

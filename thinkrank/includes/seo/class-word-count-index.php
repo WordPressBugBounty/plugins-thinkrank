@@ -177,7 +177,8 @@ class Word_Count_Index {
      * Read from {@see Builder_Content::builder_meta_keys()} rather than listed
      * here, so a builder added to the resolver is invalidated by the same
      * commit that teaches the resolver to read it. Bricks stores its tree
-     * outside that list, so it is named explicitly.
+     * outside that list, so it is named explicitly, as are the Elementor and
+     * Beaver flags that decide whether their stored layout is read at all.
      *
      * Memoised because {@see on_meta_change()} is the callback on three hooks
      * that fire for every post meta write anywhere in WordPress — an import
@@ -191,7 +192,10 @@ class Word_Count_Index {
         if (null === self::$watched_meta) {
             self::$watched_meta = array_values(array_unique(array_merge(
                 Builder_Content::builder_meta_keys(),
-                ['_bricks_page_content_2', '_bricks_editor_mode']
+                ['_bricks_page_content_2', '_bricks_editor_mode'],
+                // The flags that decide whether Elementor's or Beaver's stored
+                // layout is read at all (#910).
+                ['_elementor_edit_mode', '_fl_builder_enabled']
             )));
         }
 

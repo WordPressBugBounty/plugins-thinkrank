@@ -1481,9 +1481,10 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * Rank Math stores `opening_hours` as a group of ['day' => 'Monday',
      * 'time' => '09:00-17:00'] rows (24h H:i). ThinkRank stores hours keyed by
      * lowercase day: ['monday' => ['open' => 'HH:MM', 'close' => 'HH:MM',
-     * 'closed' => bool]]. ThinkRank supports a single range per day, so the
-     * first parseable row for each day wins (Rank Math's optional mid-day-break
-     * second row is dropped). Days with no configured row are omitted.
+     * 'closed' => bool, 'slots' => [...]]]. Every parseable row for a day is
+     * kept as one of its ranges, so Rank Math's mid-day-break second row
+     * survives the import (#1119); `open`/`close` mirror the first range. Days
+     * with no configured row are omitted.
      *
      * @param array $titles Rank Math titles option
      * @return array
@@ -1503,7 +1504,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             }
 
             $day = strtolower((string) $entry['day']);
-            if (!in_array($day, $valid_days, true) || isset($result[$day])) {
+            if (!in_array($day, $valid_days, true)) {
                 continue;
             }
 
@@ -1512,14 +1513,13 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                 continue;
             }
 
-            $result[$day] = [
-                'open'   => $this->pad_time_hh_mm($m[1]),
-                'close'  => $this->pad_time_hh_mm($m[2]),
-                'closed' => false,
+            $result[$day]['slots'][] = [
+                'open'  => $this->pad_time_hh_mm($m[1]),
+                'close' => $this->pad_time_hh_mm($m[2]),
             ];
         }
 
-        return $result;
+        return array_map([\ThinkRank\SEO\Business_Hours::class, 'sanitize_day'], $result);
     }
 
     /**

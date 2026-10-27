@@ -29,7 +29,7 @@ class Submit_Urls_To_Index extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/submit-urls-to-index';
 		$this->label       = __( 'Submit URLs to Instant Indexing', 'thinkrank' );
-		$this->description = __( 'Submit one or more URLs to search engines via the IndexNow protocol. Requires Instant Indexing to be switched on (it returns a thinkrank_instant_indexing_disabled error while it is off) and configured (an API key must exist) or it returns "API Key missing". Calls the external IndexNow API. get-instant-indexing-settings reports whether a key is configured, and get-instant-indexing-history lists past submissions.', 'thinkrank' );
+		$this->description = __( 'Submit one or more URLs to search engines via the IndexNow protocol. Requires Instant Indexing to be switched on (it returns a thinkrank_instant_indexing_disabled error while it is off) and configured (an API key must exist) or it returns "API Key missing". Nothing is sent while submissions are paused (the site is not marked as production, or search engines are discouraged): success is false and message says why. Calls the external IndexNow API. get-instant-indexing-settings reports whether a key is configured, and get-instant-indexing-history lists past submissions.', 'thinkrank' );
 	}
 
 	/**

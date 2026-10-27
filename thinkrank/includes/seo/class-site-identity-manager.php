@@ -216,6 +216,26 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * The site's name: the Site Identity Site Name, else the WordPress title.
+     *
+     * The Site Name field promises it is used wherever %sitename% appears, but
+     * only the Site Identity title formats and the WebSite node read it. The
+     * Content Types templates, the author templates, og:site_name and the
+     * schema publisher and seller kept get_bloginfo('name'), so setting a
+     * brand name split the site in two (#1331). Every one of those reads this.
+     *
+     * @since 2.19.0
+     *
+     * @return string Site name, never empty while WordPress has a title.
+     */
+    public static function site_name(): string {
+        $settings = (new self())->get_settings('site');
+        $name     = trim((string) ($settings['site_name'] ?? ''));
+
+        return '' !== $name ? $name : (string) get_bloginfo('name');
+    }
+
+    /**
      * Breadcrumb types and their configurations
      *
      * @since 1.0.0
@@ -409,6 +429,18 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
     public const SITEMAP_RESYNC_OPTION = 'thinkrank_sitemap_contributors_changed';
 
     /**
+     * ThinkRank Pro's News / Video sitemap settings.
+     *
+     * Turning either on adds a `Sitemap:` line through
+     * `thinkrank_additional_sitemaps`, so a save of it is a change to what
+     * robots.txt should list.
+     *
+     * @since 2.19.0
+     * @var string
+     */
+    public const PRO_PUBLISHER_SITEMAPS_OPTION = 'thinkrank_pro_publisher_sitemaps';
+
+    /**
      * Setting keys whose change alters the robots.txt ThinkRank serves.
      *
      * A physical robots.txt is served by the web server as it stands, so a
@@ -462,6 +494,14 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             add_action('activated_plugin', [self::class, 'flag_sitemap_resync']);
             add_action('deactivated_plugin', [self::class, 'flag_sitemap_resync']);
             add_action('init', [self::class, 'maybe_resync_sitemap'], 99);
+
+            // ThinkRank Pro's News and Video sitemaps are switched on in Pro's
+            // own option, which no ThinkRank save or sitemap rebuild hears, so
+            // the physical file went on without their Sitemap: lines (#994).
+            // The rebuild path is covered by
+            // Sitemap_Generator::mark_regeneration_complete().
+            add_action('update_option_' . self::PRO_PUBLISHER_SITEMAPS_OPTION, [self::class, 'refresh_robots_txt_file'], 20, 0);
+            add_action('add_option_' . self::PRO_PUBLISHER_SITEMAPS_OPTION, [self::class, 'refresh_robots_txt_file'], 20, 0);
         }
     }
 
@@ -510,6 +550,60 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         }
 
         (new self())->sync_robots_txt_file();
+    }
+
+    /**
+     * Rewrite the physical robots.txt when it no longer matches what ThinkRank
+     * would write today.
+     *
+     * The web server hands a physical robots.txt out without running PHP, so
+     * its `Sitemap:` lines are whatever they were at the last robots save. A
+     * sitemap settings save, a first build of a sitemap, or Pro's News sitemap
+     * being switched on changes what render_robots_txt() lists, and the file
+     * kept the old list until robots settings were saved again (#994).
+     *
+     * Only touches a file ThinkRank wrote (its generated header on the first
+     * line) while robots.txt management is on, and only when the body differs,
+     * so a hand-written file is never replaced and an unchanged one is not
+     * rewritten with a fresh timestamp on every sitemap rebuild.
+     *
+     * @since 2.19.0
+     * @return bool True when the file was rewritten.
+     */
+    public static function refresh_robots_txt_file(): bool {
+        return (new self())->refresh_stale_robots_txt_file();
+    }
+
+    /**
+     * The work behind refresh_robots_txt_file(), on this instance's settings.
+     *
+     * @since 2.19.0
+     * @return bool True when the file was rewritten.
+     */
+    public function refresh_stale_robots_txt_file(): bool {
+        $robots_file = ABSPATH . 'robots.txt';
+
+        if (!file_exists($robots_file) || !is_readable($robots_file)) {
+            return false;
+        }
+
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local web-root file; WP_Filesystem would need credentials on some hosts.
+        $current = (string) file_get_contents($robots_file);
+        if (strpos($current, THINKRANK_ROBOTS_HEADER) !== 0) {
+            return false;
+        }
+
+        $settings = $this->get_settings('site');
+        if (empty($settings['robots_txt_enabled'])) {
+            return false;
+        }
+
+        $expected = $this->render_robots_txt_file();
+        if ($expected === '' || $this->strip_robots_header($expected) === $this->strip_robots_header($current)) {
+            return false;
+        }
+
+        return $this->sync_robots_txt_file();
     }
 
     /**
@@ -1743,8 +1837,11 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         // Content analysis
         $custom_content = $settings['robots_txt_content'] ?? '';
         if (!empty($custom_content)) {
-            // Check for dangerous patterns
-            if (preg_match('/User-agent:\s*\*\s*\n\s*Disallow:\s*\/\s*$/m', $custom_content)) {
+            // Check for dangerous patterns. Parsed the way the SEO analyzer
+            // reads robots.txt, so every full-block form (`/`, `*`, `/*`,
+            // `*$`, `/*$`) in any `User-agent: *` group counts, not only a
+            // literal `Disallow: /` on the line after the agent (#999).
+            if (!empty(SEO_Analyzer::parse_robots_disallow_all((string) $custom_content)['*'])) {
                 $optimization['warnings'][] = 'Blocking all content for all crawlers - this will prevent search engine indexing';
                 $optimization['score'] -= 30;
             }
@@ -2045,6 +2142,13 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
                         $validation['warnings'][] = "Invalid time format for {$day} (use HH:MM format)";
                         $validation['penalty'] += 2;
                     }
+                }
+
+                // Overlapping ranges and a range that closes before it
+                // opens are warned about, not refused, so an existing save
+                // keeps working; the penalty is unchanged (#1119).
+                foreach (Business_Hours::problems($day_data, ucfirst($day)) as $problem) {
+                    $validation['warnings'][] = $problem;
                 }
             }
         }
@@ -3379,6 +3483,13 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         // have get-site-identity-settings report a type the site cannot
         // actually publish. An empty value keeps meaning "not set"; anything
         // else unrecognised falls back to the general-purpose root (#623).
+        // One normaliser for every writer of the opening hours: open/close
+        // mirror the first range, so a reader that predates `slots` still
+        // gets a valid day (#1119).
+        if (array_key_exists('business_hours', $sanitized)) {
+            $sanitized['business_hours'] = Business_Hours::sanitize_hours($sanitized['business_hours']);
+        }
+
         if (array_key_exists('business_type', $sanitized)) {
             $type = (string) $sanitized['business_type'];
 

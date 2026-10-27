@@ -117,6 +117,29 @@ const VIEW_OPTIONS = [
  * @param {Object} entity Entity row.
  * @return {Array} Options for the No-index select.
  */
+/**
+ * Whether a row matches what the user typed into the search box.
+ *
+ * The key as well as the label. This is the screen a developer opens to answer
+ * "what is set for product_tag", and typing that found nothing because the row is
+ * labelled "Product tags" (#839). The whole key is searched, prefix included, so
+ * `taxonomy:product_tag`, `product_tag` and `Product tags` all reach the same row
+ * without the component having to know the prefix vocabulary.
+ *
+ * @param {Object} entity Entity row.
+ * @param {string} term   Search term, already lowercased and trimmed.
+ * @return {boolean} Whether the row should be shown.
+ */
+export const matchesQuery = (entity, term) => {
+	if (!term) {
+		return true;
+	}
+
+	return `${entity?.label || ''} ${entity?.key || ''}`
+		.toLowerCase()
+		.includes(term);
+};
+
 export const noindexOptions = (entity) => [
 	{
 		label: entity.default_noindex
@@ -379,7 +402,7 @@ const ContentTypeMatrix = () => {
 		const term = query.trim().toLowerCase();
 
 		return entities.filter((entity) => {
-			if (term && !entity.label?.toLowerCase().includes(term)) {
+			if (term && !matchesQuery(entity, term)) {
 				return false;
 			}
 			if (view === 'pinned') {
@@ -511,7 +534,16 @@ const ContentTypeMatrix = () => {
 					<table className="tr-w-full tr-border-collapse tr-text-sm">
 						<thead className="tr-sticky tr-top-0 tr-z-10 tr-bg-white">
 							<tr className="tr-border-b tr-border-slate-200">
-								<th className="tr-text-left tr-px-4 tr-py-3 tr-font-semibold tr-text-slate-500">
+								{/* Pinned on both axes. The header is already sticky
+								    vertically; this cell also has to outrank the
+								    pinned body cells it crosses, hence z-20
+								    against their z-10 (#839). An opaque
+								    background is required on every sticky cell or
+								    the scrolled columns show through. */}
+								<th
+									scope="col"
+									className="tr-sticky tr-left-0 tr-top-0 tr-z-20 tr-bg-white tr-text-left tr-px-4 tr-py-3 tr-font-semibold tr-text-slate-500"
+								>
 									{__('Content type', 'thinkrank')}
 								</th>
 								{featureColumns.map((column) => (
@@ -543,12 +575,30 @@ const ContentTypeMatrix = () => {
 							{rowsByGroup.map(({ group, rows }) => (
 								<Fragment key={group}>
 									<tr className="tr-bg-slate-50">
+										{/* Opaque, so the pinned column never has
+										    scrolled cells showing through where it
+										    crosses this row. The row's own grey
+										    rather than white, matching its
+										    unpinned appearance.
+
+										    The sticky offset goes on the inner
+										    span, not on the cell: this cell spans
+										    every column, so its left edge is
+										    already the row's left edge and
+										    position:sticky on it has no room to
+										    act — measured, the group label still
+										    scrolled from x=253 to x=-447. A span
+										    inside a full-width cell does have
+										    room, so the label stays readable at
+										    any scroll position (#839). */}
 										<th
 											scope="colgroup"
 											colSpan={columnCount}
-											className="tr-text-left tr-px-4 tr-py-2 tr-text-xs tr-uppercase tr-tracking-wide tr-font-semibold tr-text-slate-500"
+											className="tr-bg-slate-50 tr-text-left tr-px-4 tr-py-2 tr-text-xs tr-uppercase tr-tracking-wide tr-font-semibold tr-text-slate-500"
 										>
-											{GROUP_LABELS[group] || group}
+											<span className="tr-sticky tr-left-4 tr-inline-block">
+												{GROUP_LABELS[group] || group}
+											</span>
 										</th>
 									</tr>
 									{rows.map((entity) => {
@@ -565,7 +615,7 @@ const ContentTypeMatrix = () => {
 														: ''
 												}`}
 											>
-												<td className="tr-px-4 tr-py-2.5 tr-text-slate-700">
+												<td className="tr-sticky tr-left-0 tr-z-10 tr-bg-white tr-px-4 tr-py-2.5 tr-text-slate-700">
 													<div className="tr-flex tr-items-center tr-gap-2">
 														<span className="tr-font-medium">
 															{entity.label}
@@ -646,32 +696,47 @@ const ContentTypeMatrix = () => {
 													)
 												)}
 												<td className="tr-px-2 tr-py-2.5">
-													<Select
-														id={`noindex-${entity.key}`}
-														label={sprintf(
-															/* translators: %s: content type label. */
-															__(
-																'%s, No-index',
-																'thinkrank'
-															),
-															entity.label
-														)}
-														hideLabelFromVision
-														value={noindexState(
-															entity
-														)}
-														options={noindexOptions(
-															entity
-														)}
-														disabled={isSaving}
-														onChange={(event) =>
-															setNoindex(
-																entity,
-																event.target
-																	.value
-															)
-														}
-													/>
+													{/* Honours supports_robots the
+													    way the Sitemap cell
+													    honours supports_sitemap.
+													    Defensive today — every
+													    entity reports true — but
+													    it removes the asymmetry,
+													    so an entity that cannot
+													    carry robots directives
+													    degrades instead of
+													    offering a control that
+													    writes nothing (#839). */}
+													{entity.supports_robots ? (
+														<Select
+															id={`noindex-${entity.key}`}
+															label={sprintf(
+																/* translators: %s: content type label. */
+																__(
+																	'%s, No-index',
+																	'thinkrank'
+																),
+																entity.label
+															)}
+															hideLabelFromVision
+															value={noindexState(
+																entity
+															)}
+															options={noindexOptions(
+																entity
+															)}
+															disabled={isSaving}
+															onChange={(event) =>
+																setNoindex(
+																	entity,
+																	event.target
+																		.value
+																)
+															}
+														/>
+													) : (
+														<NotApplicable />
+													)}
 												</td>
 												<td className="tr-px-2 tr-py-2.5">
 													{entity.supports_sitemap ? (

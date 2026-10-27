@@ -1003,9 +1003,10 @@ class Squirrly_Exporter extends Abstract_Plugin_Exporter {
 
     /**
      * sq_jsonld_local.openingHoursSpecification ({dayOfWeek, opens, closes}
-     * rows) onto ThinkRank's lowercase-day map. Days without both times are
-     * skipped rather than written as closed: Squirrly leaves them blank by
-     * default, which says nothing about the business.
+     * rows) onto ThinkRank's lowercase-day map. Every row for a day is kept as
+     * one of its ranges, so a split day survives the import (#1119). Days
+     * without both times are skipped rather than written as closed: Squirrly
+     * leaves them blank by default, which says nothing about the business.
      *
      * @param array $local sq_jsonld_local
      * @return array Map of day => {open, close, closed}
@@ -1026,17 +1027,16 @@ class Squirrly_Exporter extends Abstract_Plugin_Exporter {
             $day = strtolower((string) ($entry['dayOfWeek'] ?? ''));
             $opens = trim((string) ($entry['opens'] ?? ''));
             $closes = trim((string) ($entry['closes'] ?? ''));
-            if (!in_array($day, $valid_days, true) || isset($result[$day]) || $opens === '' || $closes === '') {
+            if (!in_array($day, $valid_days, true) || $opens === '' || $closes === '') {
                 continue;
             }
-            $result[$day] = [
-                'open'   => $opens,
-                'close'  => $closes,
-                'closed' => false,
+            $result[$day]['slots'][] = [
+                'open'  => $opens,
+                'close' => $closes,
             ];
         }
 
-        return $result;
+        return array_map([\ThinkRank\SEO\Business_Hours::class, 'sanitize_day'], $result);
     }
 
     /**

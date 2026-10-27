@@ -177,7 +177,10 @@ class Update_Image_Alt_Text extends Image_Alt_Ability_Base {
 
 			// A call that asked for AI gets no template fallback, so its
 			// failure is the provider's, not the template's (#1185 review).
-			if ( ! $filled && 'ai' === $source && '' !== $this->manager()->last_ai_alt_error() ) {
+			// With the saved AI source, a failed call leaves existing alt text
+			// alone rather than replacing it with the template, so the reason
+			// is the AI's there too (#1039).
+			if ( ! $filled && '' !== $this->manager()->last_ai_alt_error() ) {
 				return new \WP_Error(
 					'thinkrank_ai_alt_failed',
 					sprintf(

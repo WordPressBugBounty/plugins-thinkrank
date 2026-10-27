@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 2.18.1
+ * Version: 2.19.0
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Requires PHP: 7.4
  * 
  * @package ThinkRank
- * @version 2.18.1
+ * @version 2.19.0
  * @since 1.0.0
  */
 
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '2.18.1');
+define('THINKRANK_VERSION', '2.19.0');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -403,6 +403,10 @@ final class ThinkRank {
             'email_report' => new ThinkRank\SEO\Email_Report_Manager(),
             'google_oauth' => new ThinkRank\Integrations\Google_OAuth_Proxy(),
             'multilingual' => new ThinkRank\Integrations\Multilingual_Manager(),
+            // SureCart publishes its own title, Open Graph block and Product
+            // JSON-LD; this stands them down so exactly one plugin describes a
+            // product page, and reads its data into ThinkRank's graph (#256).
+            'surecart' => new ThinkRank\Integrations\Surecart(),
             'ai_traffic' => new ThinkRank\SEO\Ai_Traffic_Tracker(),
             'analytics' => new ThinkRank\SEO\Analytics_Manager(),
             'schema_conflict_health_check' => new ThinkRank\Diagnostics\Schema_Conflict_Health_Check(),

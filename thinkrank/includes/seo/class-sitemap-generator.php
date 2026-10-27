@@ -467,6 +467,16 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             self::listener()->schedule_regeneration();
         }, 20, 0);
 
+        // A noindex (or canonical) saved through the abilities, the SEO quick
+        // edit or the Elementor panel is a meta write with no save_post or
+        // edited_term behind it, so it was never heard (#1285).
+        add_action('thinkrank_post_indexability_changed', static function (int $post_id): void {
+            self::listener()->handle_content_change_by_id($post_id);
+        }, 20, 1);
+        add_action('thinkrank_term_indexability_changed', static function (int $term_id, string $taxonomy): void {
+            self::listener()->handle_taxonomy_change($term_id, 0, $taxonomy);
+        }, 20, 2);
+
         // A redirect rule added, edited or deleted in Pro's Redirections
         // changes which URLs the sitemap leaves out, exactly like a per-post
         // redirect does. Only per-post redirects were heard, so a redirected
@@ -1300,9 +1310,8 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
         }
 
-        // product_cat may legitimately have empty terms (products added later);
-        // every other taxonomy hides empties, matching fetch_taxonomies_optimized().
-        $hide_empty = $taxonomy !== 'product_cat';
+        // Same empty-term rule as fetch_taxonomies_optimized() (#1358).
+        $hide_empty = !self::keeps_empty_terms($taxonomy);
         $priority   = $taxonomy === 'category' ? 0.6 : 0.4;
 
         // Resolve the ordered term IDs in one query, then hydrate in chunks via
@@ -1695,15 +1704,16 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
         }
 
-        // product_cat keeps its empty terms (products may be added later);
-        // every other taxonomy hides them, the same per-taxonomy rule as
+        // A taxonomy hides its empty terms unless keeps_empty_terms() says
+        // otherwise, the same per-taxonomy rule as
         // collect_taxonomy_entries_iter(). hide_empty is one flag for a whole
         // get_terms() call, so the two groups are queried separately: one
-        // combined query with hide_empty off for product_cat listed every
-        // empty category and tag on a WooCommerce site (#979).
+        // combined query with hide_empty off listed every empty category and
+        // tag on a WooCommerce site (#979).
+        $keep = array_values(array_filter($taxonomies, [self::class, 'keeps_empty_terms']));
         $query_groups = [
-            'hide' => array_values(array_diff($taxonomies, ['product_cat'])),
-            'keep' => array_values(array_intersect($taxonomies, ['product_cat'])),
+            'hide' => array_values(array_diff($taxonomies, $keep)),
+            'keep' => $keep,
         ];
 
         $all_terms = [];
@@ -2368,6 +2378,15 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // The write succeeded, so whatever failure was on record is history.
         if (get_option(self::REGENERATION_ERROR_OPTION, null) !== null) {
             delete_option(self::REGENERATION_ERROR_OPTION);
+        }
+
+        // Every finished rebuild passes here: a settings save, a content
+        // change, a switch of delivery mode, a manual generate. A physical
+        // robots.txt lists the sitemaps as they were at the last robots save,
+        // so bring it in step with what was just published (#994). A no-op
+        // unless the file is ThinkRank's, management is on and it differs.
+        if (class_exists('ThinkRank\\SEO\\Site_Identity_Manager')) {
+            Site_Identity_Manager::refresh_robots_txt_file();
         }
 
         $pending = get_option(self::REGENERATION_PENDING_OPTION, null);
@@ -3975,7 +3994,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
 
         foreach ($this->get_enabled_taxonomies($settings) as $taxonomy) {
             // Same per-taxonomy empty-term rule as the term walks.
-            $count = wp_count_terms(['taxonomy' => $taxonomy, 'hide_empty' => $taxonomy !== 'product_cat']);
+            $count = wp_count_terms(['taxonomy' => $taxonomy, 'hide_empty' => !self::keeps_empty_terms($taxonomy)]);
             if (!is_wp_error($count)) {
                 $total += (int) $count;
             }
@@ -5282,5 +5301,33 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         }
 
         return $filename;
+    }
+
+    /**
+     * Whether a taxonomy's empty terms are listed in the sitemap.
+     *
+     * None are, WooCommerce product categories included. An empty category
+     * archive is a thin page that answers 200 with `index, follow` and no
+     * products ("Uncategorized" on every store), and keeping product
+     * categories (#979) also stopped an otherwise empty product-category
+     * sitemap from being reported as having nothing to publish (#1240).
+     * The filter keeps them for a store that wants its empty categories
+     * listed (#1358).
+     *
+     * @since 2.19.0
+     *
+     * @param string $taxonomy Taxonomy slug.
+     * @return bool
+     */
+    public static function keeps_empty_terms(string $taxonomy): bool {
+        /**
+         * Filter whether the sitemap lists a taxonomy's empty terms.
+         *
+         * @since 2.19.0
+         *
+         * @param bool   $keep     False by default.
+         * @param string $taxonomy Taxonomy slug.
+         */
+        return (bool) apply_filters('thinkrank_sitemap_keep_empty_terms', false, $taxonomy);
     }
 }

@@ -222,7 +222,7 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             $og_tags['og:description'] = $this->optimize_description_for_platform($data['description'], $platform);
         }
 
-        $og_tags['og:site_name'] = $data['site_name'] ?? get_bloginfo('name');
+        $og_tags['og:site_name'] = $data['site_name'] ?? self::default_og_site_name('');
         $og_tags['og:locale'] = $data['locale'] ?? $this->get_og_locale();
 
         // Context-specific OG tags
@@ -1592,12 +1592,31 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             'author' => [],
             'published_time' => '',
             'modified_time' => '',
-            'site_name' => $settings['og_site_name'] ?? get_bloginfo('name')
+            'site_name' => self::default_og_site_name((string) ($settings['og_site_name'] ?? ''))
         ];
 
         // Explicit type choices, resolved once for whichever context this is.
         $data['type']              = $this->configured_og_type($settings);
         $data['twitter_card_type'] = $this->configured_twitter_card_type($settings);
+        $data['post_id']           = (int) $context_id;
+
+        // A product page is not an article. get_default_settings() keys off the
+        // context, which SEO_Manager reports as 'post' for anything is_single(),
+        // so every WooCommerce and SureCart product inherited og_type=article —
+        // and because 'article' is a legitimate choice elsewhere,
+        // configured_og_type() could not tell the inherited value from a real
+        // one and determine_og_type() never ran (#256).
+        //
+        // Distinguished by asking what is actually STORED: an inherited value
+        // is not in the row, so it is safe to replace, and a type the user
+        // chose on this very post is left exactly as they set it.
+        if ('article' === $data['type'] && $this->post_is_a_product((int) $context_id)) {
+            $stored = $this->get_stored_settings($context_type, $context_id ? (int) $context_id : null);
+
+            if ('' === trim((string) ($stored['og_type'] ?? ''))) {
+                $data['type'] = 'product';
+            }
+        }
 
         if ($context_type === 'site') {
             // Site-wide data with Social Media tab settings priority.
@@ -1971,6 +1990,30 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * The og:site_name a context publishes.
+     *
+     * An OG Site Name the site chose wins. A blank one, or one equal to the
+     * WordPress title, is the shipped default (it is seeded from the title and
+     * persisted by any save of the Social tab), the same rule the homepage
+     * og:title applies to it, so it gives way to the Site Identity Site Name
+     * instead of keeping the WordPress title once a brand name is set (#1331).
+     *
+     * @since 2.19.0
+     *
+     * @param string $og_site_name Stored OG Site Name.
+     * @return string
+     */
+    private static function default_og_site_name(string $og_site_name): string {
+        $og_site_name = trim($og_site_name);
+
+        if ('' !== $og_site_name && $og_site_name !== (string) get_bloginfo('name')) {
+            return $og_site_name;
+        }
+
+        return Site_Identity_Manager::site_name();
+    }
+
+    /**
      * The page a static front page is rendered from.
      *
      * Null on a latest-posts front page and on the posts page, which both
@@ -2185,6 +2228,19 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
      * @return string OG type
      */
     private function determine_og_type(string $context, array $data): string {
+        // The context is the kind of view, not the post type: SEO_Manager's
+        // detect_current_context() answers 'post' for anything is_single(), so
+        // the 'product' case below never fires on the front end and every
+        // WooCommerce product page published og:type=article. Asking the post
+        // what it is fixes that for WooCommerce and brings SureCart with it
+        // (#256).
+        $post_id = (int) ($data['post_id'] ?? 0);
+        if ($post_id > 0
+            && \ThinkRank\Integrations\Commerce::is_product_post_type((string) get_post_type($post_id))
+        ) {
+            return 'product';
+        }
+
         switch ($context) {
             case 'post':
                 return 'article';
@@ -2289,6 +2345,22 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
      * @param array $settings Social meta settings.
      * @return string The chosen type, or '' for "derive it".
      */
+    /**
+     * Whether a post is a product in whichever shop the site runs.
+     *
+     * @since 2.19.0
+     *
+     * @param int $post_id Post id.
+     * @return bool
+     */
+    private function post_is_a_product(int $post_id): bool {
+        if ($post_id <= 0) {
+            return false;
+        }
+
+        return \ThinkRank\Integrations\Commerce::is_product_post_type((string) get_post_type($post_id));
+    }
+
     private function configured_og_type(array $settings): string {
         $type = trim((string) ($settings['og_type'] ?? ''));
 
@@ -2625,8 +2697,17 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 }
                 break;
             case 'product':
-                // Product-specific tags would be added here
-                // This could be extended with price, availability, etc.
+                // REQUIRED_TAGS['product'] has listed product:price:amount and
+                // product:price:currency since 1.0, and nothing emitted them:
+                // every WooCommerce store shipped an og:type=product page that
+                // failed ThinkRank's own completeness check. Now filled from
+                // whichever shop owns the post, WooCommerce or SureCart (#256).
+                if (!empty($data['post_id'])) {
+                    $og_tags = array_merge(
+                        $og_tags,
+                        \ThinkRank\Integrations\Commerce::open_graph_tags((int) $data['post_id'])
+                    );
+                }
                 break;
         }
 
@@ -2764,12 +2845,16 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
 
         foreach ($day_names as $day => $display_name) {
             if (isset($business_hours[$day]) && !empty($business_hours[$day])) {
-                $day_data = $business_hours[$day];
+                // Every range of the day, joined with a comma (#1119).
+                $ranges = Business_Hours::get_ranges($business_hours[$day]);
 
-                if (!empty($day_data['closed']) || empty($day_data['open']) || empty($day_data['close'])) {
+                if ([] === $ranges) {
                     $formatted_days[] = $display_name . ': Closed';
                 } else {
-                    $formatted_days[] = $display_name . ': ' . $day_data['open'] . ' - ' . $day_data['close'];
+                    $formatted_days[] = $display_name . ': ' . implode(', ', array_map(
+                        static fn(array $range): string => $range['open'] . ' - ' . $range['close'],
+                        $ranges
+                    ));
                 }
             }
         }
