@@ -441,6 +441,35 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
     public const PRO_PUBLISHER_SITEMAPS_OPTION = 'thinkrank_pro_publisher_sitemaps';
 
     /**
+     * Option recording every sitemap path ThinkRank has advertised in
+     * robots.txt on this site.
+     *
+     * The generated Sitemap lines are stored unfenced at the end of the body,
+     * so the strip needs provenance to tell them from a line the owner typed
+     * there. A path on this host is ours only once ThinkRank has written it
+     * here, not because it is a conventional sitemap name: an owner line for
+     * another provider at `/wp-sitemap.xml` or `/sitemap.xml` stays (#1324).
+     * Read only when robots.txt is rendered, so it is not autoloaded.
+     *
+     * @since 2.19.0
+     * @var string
+     */
+    public const ROBOTS_SITEMAP_PATHS_OPTION = 'thinkrank_robots_sitemap_paths';
+
+    /**
+     * Sitemap paths ThinkRank advertised before it recorded what it wrote.
+     *
+     * Used only while ROBOTS_SITEMAP_PATHS_OPTION has never been stored, so a
+     * body saved by an older version still has its generated block, stale Pro
+     * lines included (#835), recognised once. Whatever that first render
+     * removes is recorded, and from then on only the record decides.
+     *
+     * @since 2.19.0
+     * @var string[]
+     */
+    private const LEGACY_SITEMAP_PATHS = ['/sitemap.xml', '/sitemap_index.xml', '/wp-sitemap.xml', '/local-sitemap.xml', '/news-sitemap.xml', '/video-sitemap.xml'];
+
+    /**
      * Setting keys whose change alters the robots.txt ThinkRank serves.
      *
      * A physical robots.txt is served by the web server as it stands, so a
@@ -494,6 +523,14 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             add_action('activated_plugin', [self::class, 'flag_sitemap_resync']);
             add_action('deactivated_plugin', [self::class, 'flag_sitemap_resync']);
             add_action('init', [self::class, 'maybe_resync_sitemap'], 99);
+
+            // llms.txt is the third document carrying contributor output:
+            // Pro's "Full content" and AI usage policy sections are baked
+            // into the published copy, so after Pro was deactivated it kept
+            // advertising a /llms-full.txt that 404s (#1325).
+            add_action('activated_plugin', [LLMs_Txt_Manager::class, 'flag_resync']);
+            add_action('deactivated_plugin', [LLMs_Txt_Manager::class, 'flag_resync']);
+            add_action('init', [LLMs_Txt_Manager::class, 'maybe_resync'], 99);
 
             // ThinkRank Pro's News and Video sitemaps are switched on in Pro's
             // own option, which no ThinkRank save or sitemap rebuild hears, so
@@ -1169,8 +1206,19 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      * @return string
      */
     private function apply_sitemap_block(string $body): string {
-        $stripped = $this->strip_generated_sitemap_block($body);
         $urls     = $this->get_sitemap_urls_for_robots();
+        $recorded = $this->recorded_sitemap_paths();
+        $removed  = [];
+        $stripped = $this->strip_generated_sitemap_block($body, $urls, $recorded, $removed);
+
+        $this->record_sitemap_paths($urls, $recorded, $removed);
+
+        // A URL the owner kept in the trailing run is not written twice.
+        $kept = array_map('strtolower', $this->trailing_sitemap_urls($stripped));
+        $urls = array_values(array_filter(
+            $urls,
+            static fn($url): bool => !in_array(strtolower((string) $url), $kept, true)
+        ));
 
         if (empty($urls)) {
             return $stripped;
@@ -1188,30 +1236,48 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
         // The grammar build_robots_txt_content() writes: one blank line before
         // the block, none inside it. A blank line terminates a record in the
         // robots.txt grammar, so a line between every directive is invalid.
-        return rtrim($stripped) . "\n\n" . trim($block);
+        // When the owner's own Sitemap lines end the body, ours continue that
+        // run rather than start a second one.
+        $separator = [] !== $kept ? "\n" : "\n\n";
+
+        return rtrim($stripped) . $separator . trim($block);
     }
 
     /**
-     * Remove the plugin-written Sitemap block from a stored body.
+     * Remove the plugin-written Sitemap lines from a stored body.
      *
-     * Only the trailing run of `Sitemap:` lines is removed, which is the exact
-     * shape `build_robots_txt_content()` writes: a blank line, then nothing but
-     * `Sitemap:` lines to the end of the body. A `Sitemap:` line anywhere else
-     * was typed by the site owner and is left exactly where they put it, which
-     * is why this cannot simply strip every matching line.
+     * Only the trailing run of `Sitemap:` lines is looked at, which is the
+     * exact shape `build_robots_txt_content()` writes: a blank line, then
+     * nothing but `Sitemap:` lines to the end of the body. A `Sitemap:` line
+     * anywhere else was typed by the site owner and is left exactly where they
+     * put it, which is why this cannot simply strip every matching line.
+     *
+     * Inside that run, only lines ThinkRank could have written are removed
+     * ({@see is_generated_sitemap_url()}). Every trailing Sitemap line used to
+     * go, so one the owner typed at the end of the body for another host or
+     * another sitemap provider was dropped from the served robots.txt and the
+     * physical file (#1324). Those now stay, in their order, at the end of the
+     * body.
      *
      * @since 2.14.0
-     * @param string $body Robots.txt body.
+     * @since 2.18.0 Keeps owner-written lines in the trailing run.
+     * @param string        $body       Robots.txt body.
+     * @param string[]      $advertised URLs this install advertises now.
+     * @param string[]|null $recorded   Paths ThinkRank has written here, null
+     *                                  when it has never recorded any.
+     * @param string[]      $removed    Receives the paths of the lines removed.
      * @return string
      */
-    private function strip_generated_sitemap_block(string $body): string {
+    private function strip_generated_sitemap_block(string $body, array $advertised = [], ?array $recorded = null, array &$removed = []): string {
         $lines = preg_split('/\R/', $body);
 
         if (!is_array($lines)) {
             return $body;
         }
 
-        $cut = count($lines);
+        $cut   = count($lines);
+        $kept  = [];
+        $known = null;
 
         // Walk back over the trailing block: sitemap lines, and the blank lines
         // that separate or pad it. Anything else ends the block.
@@ -1225,6 +1291,15 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
 
             if (0 === stripos($line, 'sitemap:')) {
                 $cut = $i;
+
+                $known = $known ?? $this->generated_sitemap_paths($advertised, $recorded);
+                $url   = trim(substr($line, strlen('sitemap:')));
+
+                if ($this->is_generated_sitemap_url($url, $known)) {
+                    $removed[] = self::path_below_home((string) wp_parse_url($url, PHP_URL_PATH));
+                } else {
+                    array_unshift($kept, $line);
+                }
                 continue;
             }
 
@@ -1235,9 +1310,181 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
             return $body;
         }
 
-        // Nothing but sitemap lines in the whole body means there is no owner
-        // content to keep.
-        return rtrim(implode("\n", array_slice($lines, 0, $cut)));
+        $head = rtrim(implode("\n", array_slice($lines, 0, $cut)));
+
+        if ([] === $kept) {
+            // Nothing but sitemap lines in the whole body means there is no
+            // owner content to keep.
+            return $head;
+        }
+
+        return ('' === $head ? '' : $head . "\n\n") . implode("\n", $kept);
+    }
+
+    /**
+     * The URLs of the `Sitemap:` lines that end a body.
+     *
+     * @param string $body Robots.txt body.
+     * @return string[]
+     */
+    private function trailing_sitemap_urls(string $body): array {
+        $lines = preg_split('/\R/', rtrim($body));
+        $urls  = [];
+
+        for ($i = count((array) $lines) - 1; $i >= 0; $i--) {
+            $line = trim($lines[$i]);
+
+            if (0 !== stripos($line, 'sitemap:')) {
+                break;
+            }
+
+            array_unshift($urls, trim(substr($line, strlen('sitemap:'))));
+        }
+
+        return $urls;
+    }
+
+    /**
+     * Whether a Sitemap URL is one ThinkRank writes, rather than the owner's.
+     *
+     * Ours means this site's host and a path from
+     * {@see generated_sitemap_paths()}. Anything on another host, or at a path
+     * none of those name, was typed by a person.
+     *
+     * @since 2.18.0
+     * @param string   $url   URL from a `Sitemap:` line.
+     * @param string[] $known Paths ThinkRank writes, below the install's home.
+     * @return bool
+     */
+    private function is_generated_sitemap_url(string $url, array $known): bool {
+        $parts = wp_parse_url($url);
+        $home  = wp_parse_url(home_url('/'));
+
+        if (!is_array($parts) || empty($parts['host']) || !is_array($home) || empty($home['host'])) {
+            return false;
+        }
+
+        if (strtolower((string) $parts['host']) !== strtolower((string) $home['host'])) {
+            return false;
+        }
+
+        return in_array(self::path_below_home((string) ($parts['path'] ?? '/')), $known, true);
+    }
+
+    /**
+     * Every path ThinkRank writes a Sitemap line for.
+     *
+     * A URL this install advertises now, a configured child or index, a
+     * contributed sitemap, and every path ThinkRank has advertised here
+     * before ({@see ROBOTS_SITEMAP_PATHS_OPTION}). The record is what lets a
+     * stale line be recognised after its provider is gone (#835) without
+     * claiming a conventional name ThinkRank never wrote on this site. Before
+     * anything is recorded, the names older versions advertised stand in for
+     * it ({@see LEGACY_SITEMAP_PATHS}).
+     *
+     * @since 2.18.0
+     * @param string[]      $advertised URLs this install advertises now.
+     * @param string[]|null $recorded   Paths ThinkRank has written here, null
+     *                                  when it has never recorded any.
+     * @return string[] Lower-case paths below the install's home.
+     */
+    private function generated_sitemap_paths(array $advertised, ?array $recorded = null): array {
+        $paths = $recorded ?? self::LEGACY_SITEMAP_PATHS;
+
+        foreach ($advertised as $url) {
+            $paths[] = self::path_below_home((string) wp_parse_url((string) $url, PHP_URL_PATH));
+        }
+
+        try {
+            if (class_exists('ThinkRank\\SEO\\Sitemap_Generator')) {
+                foreach (\ThinkRank\SEO\Sitemap_Generator::additional_sitemaps() as $contributed) {
+                    $paths[] = (string) $contributed;
+                }
+
+                $settings = (new \ThinkRank\SEO\Sitemap_Generator(false))->get_settings('site');
+                foreach ((is_array($settings['sitemap_urls'] ?? null) ? $settings['sitemap_urls'] : []) as $child) {
+                    if (is_array($child) && !empty($child['url'])) {
+                        $paths[] = (string) $child['url'];
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            // Unreadable sitemap settings: the fixed names and the advertised
+            // set still decide, which errs toward keeping an owner's line.
+        }
+
+        return array_values(array_unique(array_map(
+            static fn(string $path): string => '/' . ltrim(strtolower($path), '/'),
+            $paths
+        )));
+    }
+
+    /**
+     * The sitemap paths ThinkRank has advertised in robots.txt on this site.
+     *
+     * @since 2.19.0
+     * @return string[]|null Lower-case paths below the install's home, or null
+     *                       when nothing has been recorded yet.
+     */
+    private function recorded_sitemap_paths(): ?array {
+        $recorded = get_option(self::ROBOTS_SITEMAP_PATHS_OPTION, null);
+
+        if (!is_array($recorded)) {
+            return null;
+        }
+
+        return array_values(array_filter(array_map('strval', $recorded), static fn(string $path): bool => '' !== $path));
+    }
+
+    /**
+     * Add what this render advertises, and the generated lines it removed, to
+     * the record of paths ThinkRank has written.
+     *
+     * Written only when the set grows, so an ordinary robots.txt request
+     * reads the option and writes nothing.
+     *
+     * @since 2.19.0
+     * @param string[]      $advertised URLs advertised by this render.
+     * @param string[]|null $recorded   The record as read, null when absent.
+     * @param string[]      $removed    Paths of the generated lines removed.
+     * @return void
+     */
+    private function record_sitemap_paths(array $advertised, ?array $recorded, array $removed): void {
+        $paths = $recorded ?? [];
+
+        foreach ($advertised as $url) {
+            $paths[] = self::path_below_home((string) wp_parse_url((string) $url, PHP_URL_PATH));
+        }
+
+        $paths = array_values(array_unique(array_merge($paths, $removed)));
+        sort($paths);
+
+        $before = $recorded ?? [];
+        sort($before);
+
+        if (null !== $recorded && $paths === $before) {
+            return;
+        }
+
+        update_option(self::ROBOTS_SITEMAP_PATHS_OPTION, $paths, false);
+    }
+
+    /**
+     * A URL path relative to the install's home, lower-cased, so a
+     * subdirectory install compares `/blog/sitemap.xml` as `/sitemap.xml`.
+     *
+     * @param string $path URL path.
+     * @return string
+     */
+    private static function path_below_home(string $path): string {
+        $path      = '/' . ltrim(strtolower($path), '/');
+        $home_path = rtrim(strtolower((string) wp_parse_url(home_url('/'), PHP_URL_PATH)), '/');
+
+        if ('' !== $home_path && 0 === strpos($path, $home_path . '/')) {
+            $path = substr($path, strlen($home_path));
+        }
+
+        return $path;
     }
 
     /**
@@ -2243,55 +2490,17 @@ class Site_Identity_Manager extends Abstract_SEO_Manager {
      */
     private function generate_sample_title(array $settings, string $context_key = 'post_title'): string {
         $template = isset($settings[$context_key]) ? trim((string) $settings[$context_key]) : '';
-        if ($template === '') {
+        if ($template === '' || !class_exists('\\ThinkRank\\Frontend\\SEO_Manager')) {
             return '';
         }
 
-        $separator = $settings['title_separator'] ?? 'pipe';
-        $separator_symbol = self::$title_separators[$separator]['symbol'] ?? '|';
+        // Rendered by the front end's own title code for this context, so the
+        // length scored here is the length the page prints: context-specific
+        // %title%, %term% and %date%, tokens from other contexts dropped, and
+        // the same separator cleanup (#1330).
+        $context = (string) preg_replace('/_title$/', '', $context_key);
 
-        $site_name = $settings['site_name'] ?? '';
-        if ($site_name === '') {
-            $site_name = get_bloginfo('name') ?: 'Your Site Name';
-        }
-        $site_description = $settings['site_description'] ?? '';
-        if ($site_description === '') {
-            $site_description = get_bloginfo('description') ?: 'Your Site Description';
-        }
-        $tagline = $settings['tagline'] ?? '';
-        if ($tagline === '') {
-            $tagline = $site_description;
-        }
-
-        // Representative sample values for the variable tokens the front end
-        // substitutes per request. Keys mirror get_title_placeholders().
-        $sample_data = [
-            '%site_title%'       => $site_name,
-            '%site_name%'        => $site_name,
-            '%site_description%' => $site_description,
-            '%tagline%'          => $tagline,
-            '%sep%'              => ' ' . $separator_symbol . ' ',
-            '%separator%'        => ' ' . $separator_symbol . ' ',
-            '%post_title%'       => 'How to Optimize Your Website for Better SEO Results',
-            '%page_title%'       => 'About Our Company',
-            '%category_title%'   => 'SEO Tips',
-            '%category%'         => 'SEO Tips',
-            '%tag_title%'        => 'On-Page SEO',
-            '%tag%'              => 'On-Page SEO',
-            '%author_name%'      => 'Jane Doe',
-            '%author%'           => 'Jane Doe',
-            '%search_term%'      => 'keyword research',
-            '%search_phrase%'    => 'keyword research',
-            '%archive_title%'    => 'July 2026',
-            '%date%'             => gmdate('F Y'),
-        ];
-
-        $title = str_replace(array_keys($sample_data), array_values($sample_data), $template);
-
-        // Collapse whitespace left by any empty/unresolved tokens, then trim.
-        $title = preg_replace('/\s+/', ' ', $title);
-
-        return trim($title);
+        return \ThinkRank\Frontend\SEO_Manager::sample_title($template, $context, $settings);
     }
 
     /**

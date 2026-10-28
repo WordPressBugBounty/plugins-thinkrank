@@ -138,10 +138,9 @@ class Global_SEO_Schema_Output {
             // structured data at all — strictly worse than the duplicate this
             // method exists to prevent, and the opposite of what the docblock
             // above promises for "ThinkRank's product schema disabled".
-            if (!\ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
-                \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
-                true
-            )) {
+            // The master switch included: with it off and this type left on
+            // Inherit, nothing reaches the page either (#1335).
+            if (!Schema_Graph::output_allowed()) {
                 return $markup;
             }
 
@@ -200,12 +199,10 @@ class Global_SEO_Schema_Output {
      * @return void
      */
     public function output_global_seo_schema(): void {
-        // Per-content-type schema switch. 'inherit' (the default) keeps schema
-        // on, exactly as before the matrix existed (#660).
-        if (!\ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
-            \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
-            true
-        )) {
+        // Per-content-type schema switch. 'inherit' (the default) follows the
+        // master switch, exactly as before the matrix existed (#660), and On
+        // or Off for this type wins over it (#1335).
+        if (!Schema_Graph::output_allowed()) {
             return;
         }
 
@@ -480,7 +477,7 @@ class Global_SEO_Schema_Output {
         if (!\ThinkRank\SEO\Content_Type_Settings::is_enabled(
             \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
             $post_type,
-            true
+            Schema_Graph::master_switch_on()
         )) {
             return false;
         }

@@ -598,6 +598,70 @@ class Word_Count_Index {
     }
 
     /**
+     * Ideographic and kana characters, written without spaces between words.
+     * The prolonged sound mark is listed on its own: Unicode files it under no
+     * script, but it only ever sits inside a katakana word.
+     *
+     * @since 2.18.0
+     */
+    private const CJK_CHARACTERS = '[\p{Han}\p{Hiragana}\p{Katakana}\x{30FC}]';
+
+    /**
+     * Southeast Asian scripts written without spaces between words.
+     *
+     * @since 2.18.0
+     */
+    private const SEA_CHARACTERS = '[\p{Thai}\p{Lao}\p{Khmer}\p{Myanmar}]';
+
+    /**
+     * Characters of each that make one English-equivalent word. Translated
+     * text runs at about two Chinese or Japanese characters per English word;
+     * a Thai word averages about five characters, its vowel and tone marks
+     * included.
+     *
+     * @since 2.18.0
+     */
+    private const CJK_CHARACTERS_PER_WORD = 2.0;
+    private const SEA_CHARACTERS_PER_WORD = 5.0;
+
+    /**
+     * The length of a line of reading text in English-equivalent words.
+     *
+     * For a score whose thresholds are in words (the per-post SEO score's
+     * content depth, paragraph length and keyword density). Whitespace-split
+     * words are counted as {@see self::count_words()} does. A run of a script
+     * written without spaces (Chinese, Japanese, Thai and their neighbours) is
+     * not one word: its characters are counted and converted at the rates
+     * above, so a Japanese article scores as long as an English article of
+     * the same length rather than as a handful of "words" (#1291). Text with
+     * none of those scripts gets exactly count_words().
+     *
+     * Not the locale's unit ({@see self::count_text()}): that is the site's,
+     * while a post can be in any language and mix scripts.
+     *
+     * contentAnalysis.js calculateWordCount() applies the same rules in the
+     * editor.
+     *
+     * @since 2.18.0
+     *
+     * @param string $text Text as returned by {@see self::reading_text()}.
+     * @return int
+     */
+    public static function count_word_equivalents(string $text): int {
+        $cjk = (int) preg_match_all('/' . self::CJK_CHARACTERS . '/u', $text);
+        $sea = (int) preg_match_all('/' . self::SEA_CHARACTERS . '/u', $text);
+
+        if (0 === $cjk && 0 === $sea) {
+            return self::count_words($text);
+        }
+
+        $rest = (string) preg_replace('/(?:' . self::CJK_CHARACTERS . '|' . self::SEA_CHARACTERS . ')+/u', ' ', $text);
+
+        return self::count_words($rest)
+            + (int) round($cjk / self::CJK_CHARACTERS_PER_WORD + $sea / self::SEA_CHARACTERS_PER_WORD);
+    }
+
+    /**
      * The text a reader reads in a piece of stored content, as one line.
      *
      * Everything that is markup rather than reading matter is removed:

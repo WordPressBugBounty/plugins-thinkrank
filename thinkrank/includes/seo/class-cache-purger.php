@@ -84,6 +84,17 @@ class Cache_Purger {
     public const PURGE_NONE = 'none';
 
     /**
+     * FlyingPress's documented list purge, as [class, method].
+     *
+     * Shared by the call in `purge_urls()` and the registry entry that decides
+     * whether FlyingPress counts as purged, so the two cannot drift apart.
+     *
+     * @since 2.18.0
+     * @var string[]
+     */
+    private const FLYINGPRESS_API = ['FlyingPress\\Purge', 'purge_urls'];
+
+    /**
      * Elementor's per-document rendered-element cache.
      *
      * Mirrors `Elementor\Core\Base\Document::CACHE_META_KEY`. The literal is
@@ -123,8 +134,13 @@ class Cache_Purger {
      * named, not from its documentation. Five of them were marked unpurgeable
      * on the strength of the documentation alone and were wrong (#883).
      *
+     * An entry may also name, in `api`, the [class, method] public static its
+     * purge depends on. It counts as purged only while that method exists as
+     * a public static; otherwise it is reported like a PURGE_NONE cache. Use
+     * it for any integration whose API could not be read from source.
+     *
      * @since 2.12.0
-     * @return array<string, array{detect: callable, purge: string}>
+     * @return array<string, array{detect: callable, purge: string, api?: string[]}>
      */
     private static function known_caches(): array {
         return [
@@ -164,6 +180,70 @@ class Cache_Purger {
                 'detect' => static fn(): bool => class_exists('SiteGround_Optimizer\\Supercacher\\Supercacher'),
                 'purge'  => self::PURGE_URL,
             ],
+            // xSpeed Cache 1.4.2: \XSpeed\Cache::purge_urls($urls, $cause)
+            // is public static, drops each URL's local copy (both trailing-
+            // slash spellings) and fires one `xspeed_after_purge_url` event,
+            // which its Cloudflare module and edge integrations listen on. It
+            // listens to none of the hooks below, so it is called directly
+            // (#1308).
+            'xSpeed'               => [
+                'detect' => static fn(): bool => defined('XSPEED_VERSION'),
+                'purge'  => self::PURGE_URL,
+            ],
+            // WP-Optimize 4.7.0: WPO_Page_Cache::delete_cache_by_url($url) is
+            // public static and deletes that URL's cached files.
+            'WP-Optimize'          => [
+                'detect' => static fn(): bool => defined('WPO_VERSION'),
+                'purge'  => self::PURGE_URL,
+            ],
+            // SpeedyCache 1.4.3: \SpeedyCache\Delete::url($urls) is public
+            // static and takes a URL or a list.
+            'SpeedyCache'          => [
+                'detect' => static fn(): bool => defined('SPEEDYCACHE_VERSION'),
+                'purge'  => self::PURGE_URL,
+            ],
+            // Swift Performance Lite 2.3.7.4:
+            // Swift_Performance_Cache::clear_permalink_cache($permalink) is
+            // public static.
+            'Swift Performance'    => [
+                'detect' => static fn(): bool => defined('SWIFT_PERFORMANCE_VER'),
+                'purge'  => self::PURGE_URL,
+            ],
+            // Comet Cache 170220 aliases its ApiBase as the global
+            // `comet_cache` class (on plugins_loaded); clearUrl($url) is public
+            // static.
+            'Comet Cache'          => [
+                'detect' => static fn(): bool => class_exists('WebSharks\\CometCache\\Classes\\Plugin') || class_exists('comet_cache'),
+                'purge'  => self::PURGE_URL,
+            ],
+            // Proxy Cache Purge (varnish-http-purge) 5.12.3:
+            // VarnishPurger::purge_url($url) is public static and sends the
+            // PURGE request to the configured Varnish/Nginx proxy.
+            'Proxy Cache Purge'    => [
+                'detect' => static fn(): bool => class_exists('VarnishPurger'),
+                'purge'  => self::PURGE_URL,
+            ],
+            // Pantheon Advanced Page Cache 2.1.2 already purges a post's
+            // surrogate keys on `clean_post_cache`, which purge_posts() runs,
+            // and publishes pantheon_wp_clear_edge_paths($paths) for paths.
+            'Pantheon'             => [
+                'detect' => static fn(): bool => function_exists('pantheon_wp_clear_edge_paths'),
+                'purge'  => self::PURGE_URL,
+            ],
+            // FlyingPress is not distributed through wordpress.org, so this
+            // entry follows its developer documentation, not its source:
+            // FlyingPress\Purge::purge_urls($urls). Because that could not be
+            // checked against the code, the entry names the method it relies
+            // on in `api`: when the installed version has no public static by
+            // that name, the purge is skipped AND the cache is reported as
+            // unpurgeable, rather than counted as purged by a call that never
+            // ran. Detection also takes the plugin's version constant, so a
+            // renamed class still warns instead of disappearing.
+            'FlyingPress'          => [
+                'detect' => static fn(): bool => defined('FLYING_PRESS_VERSION') || class_exists('FlyingPress\\Purge'),
+                'purge'  => self::PURGE_URL,
+                'api'    => self::FLYINGPRESS_API,
+            ],
             // The three below purge a post, not a URL. See PURGE_POST.
             //
             // WP Fastest Cache 1.5.2 listens on `wpfc_clear_post_cache_by_id`
@@ -196,6 +276,26 @@ class Cache_Purger {
             // is not reaching into its internals.
             'Cloudflare'           => [
                 'detect' => static fn(): bool => class_exists('CF\\WordPress\\Hooks'),
+                'purge'  => self::PURGE_NONE,
+            ],
+            // Host caches with no purge API a plugin can call: they are
+            // detected only so the caller is told to clear them (#1308).
+            // Kinsta's mu-plugin and WP Engine's WpeCommon purge on their own
+            // post events; neither is distributed for its source to be read,
+            // so nothing of theirs is called from here.
+            'Kinsta'               => [
+                'detect' => static fn(): bool => defined('KINSTAMU_VERSION'),
+                'purge'  => self::PURGE_NONE,
+            ],
+            'WP Engine'            => [
+                'detect' => static fn(): bool => class_exists('WpeCommon'),
+                'purge'  => self::PURGE_NONE,
+            ],
+            // On Pantheon without Advanced Page Cache, the edge cache has no
+            // path purge reachable from a plugin.
+            'Pantheon edge cache'  => [
+                'detect' => static fn(): bool => !function_exists('pantheon_wp_clear_edge_paths')
+                    && (!empty($_ENV['PANTHEON_ENVIRONMENT']) || defined('PANTHEON_ENVIRONMENT')),
                 'purge'  => self::PURGE_NONE,
             ],
         ];
@@ -251,6 +351,28 @@ class Cache_Purger {
             if (is_callable(['SiteGround_Optimizer\\Supercacher\\Supercacher', 'purge_cache_request'])) {
                 \SiteGround_Optimizer\Supercacher\Supercacher::purge_cache_request($url);
             }
+
+            // Per-URL statics of the caches that publish no hook (#1308).
+            self::call_static('WPO_Page_Cache', 'delete_cache_by_url', $url);
+            self::call_static('Swift_Performance_Cache', 'clear_permalink_cache', $url);
+            self::call_static('comet_cache', 'clearUrl', $url);
+            self::call_static('VarnishPurger', 'purge_url', $url);
+        }
+
+        // The caches below take the whole list at once.
+        self::call_static('XSpeed\\Cache', 'purge_urls', $urls, 'thinkrank');
+        self::call_static('SpeedyCache\\Delete', 'url', $urls);
+        self::call_static(self::FLYINGPRESS_API[0], self::FLYINGPRESS_API[1], $urls);
+
+        // Pantheon purges paths, not URLs.
+        if (function_exists('pantheon_wp_clear_edge_paths')) {
+            $paths = array_values(array_unique(array_filter(array_map(
+                static fn(string $url): string => (string) wp_parse_url($url, PHP_URL_PATH),
+                $urls
+            ))));
+            if ([] !== $paths) {
+                pantheon_wp_clear_edge_paths($paths);
+            }
         }
 
         // Nginx Helper only exposes a purge-everything hook, and WP Rocket
@@ -260,6 +382,55 @@ class Cache_Purger {
         if (function_exists('rocket_clean_files')) {
             rocket_clean_files($urls);
         }
+    }
+
+    /**
+     * Call another plugin's public static purge method, when it has one.
+     *
+     * The class and method are checked first so an absent plugin costs a
+     * class lookup and nothing else, and a version where the method is not a
+     * public static (an older instance method, say) is skipped rather than
+     * called wrongly. A third-party purge that throws must not fail the
+     * ThinkRank write that asked for it: the change is saved either way.
+     *
+     * @since 2.18.0
+     * @param string $class_name Fully qualified class name.
+     * @param string $method     Method name.
+     * @param mixed  ...$args    Arguments, in the order the plugin reads them.
+     * @return void
+     */
+    private static function call_static(string $class_name, string $method, ...$args): void {
+        if (!self::is_public_static($class_name, $method)) {
+            return;
+        }
+
+        try {
+            ( new \ReflectionMethod($class_name, $method) )->invoke(null, ...$args);
+        } catch (\Throwable $e) {
+            return;
+        }
+    }
+
+    /**
+     * Whether a class has a public static method by that name.
+     *
+     * @since 2.18.0
+     * @param string $class_name Fully qualified class name.
+     * @param string $method     Method name.
+     * @return bool
+     */
+    private static function is_public_static(string $class_name, string $method): bool {
+        if (!class_exists($class_name) || !method_exists($class_name, $method)) {
+            return false;
+        }
+
+        try {
+            $reflection = new \ReflectionMethod($class_name, $method);
+        } catch (\ReflectionException $e) {
+            return false;
+        }
+
+        return $reflection->isPublic() && $reflection->isStatic();
     }
 
     /**
@@ -331,7 +502,7 @@ class Cache_Purger {
         $names = [];
 
         foreach (self::known_caches() as $name => $cache) {
-            $purge = $cache['purge'];
+            $purge = self::effective_purge($cache);
 
             if (self::PURGE_URL === $purge) {
                 continue;
@@ -349,6 +520,26 @@ class Cache_Purger {
         }
 
         return $names;
+    }
+
+    /**
+     * How a registry entry can actually be purged on this install.
+     *
+     * An entry that names the API its purge depends on is purgeable only
+     * while that API is a public static: otherwise the call in `purge_urls()`
+     * was skipped, and counting the cache as purged would hide that from the
+     * caller.
+     *
+     * @since 2.18.0
+     * @param array{detect: callable, purge: string, api?: string[]} $cache A known_caches() entry.
+     * @return string One of the PURGE_* constants.
+     */
+    private static function effective_purge(array $cache): string {
+        if (isset($cache['api']) && !self::is_public_static($cache['api'][0], $cache['api'][1])) {
+            return self::PURGE_NONE;
+        }
+
+        return $cache['purge'];
     }
 
     /**

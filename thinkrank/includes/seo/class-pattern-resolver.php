@@ -972,13 +972,17 @@ class Pattern_Resolver {
      * A bare percent is left alone: "50% off" is ordinary copy, and a guard
      * that ate it would be a worse bug than the one it prevents.
      *
+     * Public since 2.18.0 so the Site Identity title formats and the author
+     * archive templates, which build their own placeholder maps, apply the
+     * same rule (#1330).
+     *
      * @since 2.10.1
      *
      * @param string                $template     Raw template.
      * @param array<string, string> $placeholders Tokens this resolver can resolve.
      * @return string
      */
-    private static function strip_unresolved_tokens(string $template, array $placeholders): string {
+    public static function strip_unresolved_tokens(string $template, array $placeholders): string {
         if (false === strpos($template, '%')) {
             return $template;
         }

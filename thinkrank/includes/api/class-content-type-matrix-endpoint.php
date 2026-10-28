@@ -315,7 +315,10 @@ class Content_Type_Matrix_Endpoint extends WP_REST_Controller {
 
         $defaults = [
             Content_Type_Settings::FEATURE_META       => true,
-            Content_Type_Settings::FEATURE_SCHEMA     => true,
+            // The Schema Manager master switch, read the way the front end
+            // reads it. A hard-coded true told the matrix header that Schema
+            // inherits as on while the switch was off (#1335).
+            Content_Type_Settings::FEATURE_SCHEMA     => \ThinkRank\Frontend\Schema_Graph::master_switch_on(),
             Content_Type_Settings::FEATURE_OPEN_GRAPH => !empty($social['enable_open_graph'] ?? $social['og_enabled'] ?? false),
             Content_Type_Settings::FEATURE_TWITTER    => !empty($social['enable_twitter_cards'] ?? $social['twitter_enabled'] ?? false),
             // The GA4 tag this switch gates is installed by ThinkRank Pro,

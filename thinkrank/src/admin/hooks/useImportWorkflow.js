@@ -10,6 +10,10 @@
 
 import { useState, useCallback, useRef } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
+import {
+	addSchemaResult,
+	EMPTY_SCHEMA_TOTALS,
+} from '../components/import-export/schemaReport';
 
 /**
  * Workflow states
@@ -238,6 +242,7 @@ const useImportWorkflow = (plugin, initialSnapshot = null) => {
 				let totalMissing = 0;
 				let totalFailed = 0;
 				let totalKeywordsTruncated = 0;
+				let schemaTotals = EMPTY_SCHEMA_TOTALS;
 				const unrestoredTypes = [];
 
 				for (
@@ -289,6 +294,8 @@ const useImportWorkflow = (plugin, initialSnapshot = null) => {
 						totalFailed += result.failed || 0;
 						totalKeywordsTruncated +=
 							result.keywords_truncated || 0;
+						// Schema left behind or staged in the editor (#1286).
+						schemaTotals = addSchemaResult(schemaTotals, result);
 
 						const percentage = Math.min(
 							Math.round(
@@ -312,6 +319,7 @@ const useImportWorkflow = (plugin, initialSnapshot = null) => {
 							missing: totalMissing,
 							failed: totalFailed,
 							keywordsTruncated: totalKeywordsTruncated,
+							schema: schemaTotals,
 							percentage,
 						});
 					}

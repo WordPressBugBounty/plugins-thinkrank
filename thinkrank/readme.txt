@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.19.0
+Stable tag: 2.20.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -349,6 +349,20 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.20.0 =
+Release Date: 2026-10-28
+
+- New: Connect Gemini, Gemini CLI, Grok, Codex, Windsurf and Le Chat from the MCP screen
+- New: ThinkRank's breadcrumb trail shows in the Kadence theme
+- Improved: SEO changes now clear xSpeed and seven more page caches, and warn about host caches
+- Fixed: Chinese, Japanese and Thai posts get a fair word count, keyword density and SEO score
+- Fixed: Content Type Matrix "On" now outputs schema and social tags that are off site-wide
+- Fixed: A site that represents a person publishes a Person instead of an Organization
+- Fixed: Rank Math import keeps Product and Event schema fields and lists the schema it left behind
+- Fixed: Image sitemaps list the images on Oxygen, Breakdance, Bricks and Divi pages
+- Fixed: Title formats and author archive templates drop variables they cannot fill
+- Fixed: Minor robots.txt, llms.txt, SEO score and MCP issues
+
 = 2.19.0 =
 Release Date: 2026-10-27
 
@@ -405,26 +419,13 @@ Release Date: 2026-10-19
 - Fixed: With no token, the MCP screen shows its setup steps and a Create connection token button
 - Fixed: Minor robots.txt sitemap, SEO score and page builder issues
 
-= 2.17.0 =
-Release Date: 2026-10-18
-
-- New: Choose whether Media Library alt text comes from your format or from AI on the Image SEO tab
-- New: AI assistants can preview, draft, apply and restore image alt text over MCP
-- Improved: Alt text fills skip filler such as "1", "image", camera and screenshot file names
-- Improved: The SEO Analyzer finds every search engine block and offers Fix only where it works
-- Improved: The sitemap screen names custom types by their label and greys out empty sitemaps
-- Improved: The dashboard, top bar and wide tables fit on phones and narrow screens
-- Improved: With reduced motion on, the dashboard and setup wizard show a still image
-- Fixed: Canonical and social image URLs are saved and printed as full URLs
-- Fixed: ThinkRank no longer overwrites or deletes a robots.txt it did not write
-- Fixed: Minor Image SEO, term preview, import preview and ThinkRank Hub issues
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.20.0 =
+Adds Gemini, Grok, Codex, Windsurf and Le Chat to the MCP guide and Kadence breadcrumbs. Chinese, Japanese and Thai posts get fair word counts, and title formats drop unknown variables. Recommended for all sites.
+
 = 2.19.0 =
 Bulk SEO templates take price and custom field variables with a live preview, business hours allow split ranges, and SureCart products are supported. IndexNow pauses on staging. Recommended for all sites.
 
-= 2.18.1 =
-The SEO Analyzer stops scoring llms.txt while it is off, search charts mark preliminary days, and sitemaps skip a noindexed homepage. Recommended for all sites.

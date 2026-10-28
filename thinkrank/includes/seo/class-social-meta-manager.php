@@ -1030,6 +1030,24 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         // Check if individual social features are enabled
         $og_enabled = !empty($settings['enable_open_graph'] ?? $settings['og_enabled'] ?? false);
         $twitter_enabled = !empty($settings['enable_twitter_cards'] ?? $settings['twitter_enabled'] ?? false);
+
+        // The Content Type Matrix: the site-wide switches above are what an
+        // Inherit cell resolves to, and an explicit On or Off for the content
+        // type of this request wins over them. SEO_Manager used to resolve
+        // the matrix against a hard-coded true and then let these switches
+        // decide, so On behaved exactly like Inherit and never turned Open
+        // Graph or Twitter cards on for one type of a site that has them off
+        // (#1335). The cell comes from the object this call names, so the
+        // REST route, which runs outside that object's front-end query, agrees
+        // with the page itself. A context that names no single object (the
+        // homepage as `site`, archives) maps through the main query, and a
+        // request that maps to nothing keeps the site-wide value.
+        if (class_exists(Content_Type_Settings::class)) {
+            $entity_key      = Content_Type_Settings::entity_key_for_context($context_type, $context_id);
+            $og_enabled      = Content_Type_Settings::is_enabled(Content_Type_Settings::FEATURE_OPEN_GRAPH, $entity_key, $og_enabled);
+            $twitter_enabled = Content_Type_Settings::is_enabled(Content_Type_Settings::FEATURE_TWITTER, $entity_key, $twitter_enabled);
+        }
+
         $output['og_enabled'] = $og_enabled;
         $output['twitter_enabled'] = $twitter_enabled;
 

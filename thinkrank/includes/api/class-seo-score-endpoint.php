@@ -133,7 +133,17 @@ class SEOScoreEndpoint {
                     // permalink field is blank (every draft), so this fired on
                     // ordinary use. Sanitized with a single-argument
                     // sanitize_title() where it is consumed instead.
-                    'sanitize_callback' => 'sanitize_text_field',
+                    //
+                    // Decoded first: the editor sends post_name as stored,
+                    // and a non-Latin slug is stored percent-encoded
+                    // (%e3%83%a9…). sanitize_text_field() strips %XX octets,
+                    // so the slug arrived as "-", never matched the saved
+                    // post and every Analyze on such a post scored the saved
+                    // post a second time. sanitize_title() re-encodes the
+                    // decoded slug to the stored form.
+                    'sanitize_callback' => static function ($value): string {
+                        return sanitize_text_field(rawurldecode((string) $value));
+                    },
                 ],
                 'readability_score' => [
                     'required' => false,
@@ -255,15 +265,7 @@ class SEOScoreEndpoint {
             $raw_description = $live_description !== null
                 ? (string) $live_description
                 : get_post_meta($post_id, '_thinkrank_meta_description', true);
-            $metadata = [
-                'title' => \ThinkRank\SEO\Pattern_Resolver::effective_value($raw_title, $post_id, 'title'),
-                'description' => \ThinkRank\SEO\Pattern_Resolver::effective_value($raw_description, $post_id, 'description'),
-                // Fallback source for the scorer when the request carries no
-                // keyword (e.g. a plain "score this post" call). An explicit
-                // request keyword still wins, so the editor keeps scoring
-                // unsaved keyword edits live.
-                'focus_keywords' => \ThinkRank\SEO\Focus_Keywords::get($post_id),
-            ];
+            $metadata = $this->score_metadata((int) $post_id, $raw_title, $raw_description);
 
             // Calculate score. Prefer the multi-keyword list when provided; the
             // calculator scores each keyword and returns the highest as final.
@@ -315,12 +317,46 @@ class SEOScoreEndpoint {
             // the editor text (#829).
             $score_data['word_count'] = (int) ($content_data['word_count'] ?? 0);
 
-            // Save score if requested
+            // Save score if requested.
+            //
+            // A request carrying the editor's unsaved state is scored on that
+            // state, which is what the editor shows, but that score must not be
+            // stored: the posts list and the dashboard read the stored row as
+            // the post's current score whenever it is newer than
+            // post_modified, which a row written a moment ago always is. An
+            // author who pressed Analyze and left without saving had the list
+            // show the score of content that was never saved (#1310). So the
+            // row stored is the score of the saved post; when nothing was
+            // edited the two are the same score.
+            //
+            // Scoring the saved post is a second full analysis (render,
+            // headings, readability, links, schema), so it runs only when it
+            // has to: not when the editor state is the saved post, and not
+            // when the stored row already scores the saved post.
             if ($save_score) {
                 $user_id = get_current_user_id();
-                $score_id = $this->calculator->save_score($post_id, $user_id, $score_data);
+                $carries_live_state = !$this->editor_state_is_saved(
+                    (int) $post_id,
+                    (string) $live_content,
+                    $live_title,
+                    $live_description,
+                    $live_slug,
+                    $request
+                );
 
-                if ($score_id) {
+                if (!$carries_live_state) {
+                    $to_store = $score_data;
+                } elseif ($this->stored_score_is_current((int) $post_id)) {
+                    $to_store = null;
+                } else {
+                    $to_store = $this->score_saved_post((int) $post_id);
+                }
+
+                $score_id = $to_store ? $this->calculator->save_score($post_id, $user_id, $to_store) : false;
+
+                // score_id names the stored row, so only when that row holds
+                // the score this response carries.
+                if ($score_id && !$carries_live_state) {
                     $score_data['score_id'] = $score_id;
                 }
             }
@@ -337,6 +373,184 @@ class SEOScoreEndpoint {
                 ['status' => 500]
             );
         }
+    }
+
+    /**
+     * The title, description and focus keywords a post is scored against.
+     *
+     * Scores against the final rendered SEO title/description: variable tags
+     * in a custom value are resolved, and an empty field falls back to the
+     * rendered Global/Bulk pattern, so the length-based checks match what the
+     * frontend outputs.
+     *
+     * @since 2.18.0
+     *
+     * @param int   $post_id         Post ID.
+     * @param mixed $raw_title       SEO title as typed or stored.
+     * @param mixed $raw_description Meta description as typed or stored.
+     * @return array{title: string, description: string, focus_keywords: string[]}
+     */
+    private function score_metadata(int $post_id, $raw_title, $raw_description): array {
+        return [
+            'title' => \ThinkRank\SEO\Pattern_Resolver::effective_value($raw_title, $post_id, 'title'),
+            'description' => \ThinkRank\SEO\Pattern_Resolver::effective_value($raw_description, $post_id, 'description'),
+            // Fallback source for the scorer when the request carries no
+            // keyword (e.g. a plain "score this post" call). An explicit
+            // request keyword still wins, so the editor keeps scoring
+            // unsaved keyword edits live.
+            'focus_keywords' => \ThinkRank\SEO\Focus_Keywords::get($post_id),
+        ];
+    }
+
+    /**
+     * Whether the state this request scored is the saved post.
+     *
+     * The editor always sends its body, title, description, slug and keywords,
+     * edited or not, so the presence of a live field says nothing. When every
+     * field it sent matches what is stored, the score it just calculated is
+     * the saved post's score and can be stored as it is.
+     *
+     * Comparisons are exact: a field that differs only in formatting counts
+     * as edited, which costs a second analysis but never stores a score of
+     * content that was not saved. A Bricks page is always treated as edited,
+     * because its saved body is resolved from Bricks storage, not from
+     * post_content.
+     *
+     * @since 2.18.0
+     *
+     * @param int             $post_id          Post ID.
+     * @param string          $live_content     Editor body, '' when none was sent.
+     * @param mixed           $live_title       Editor SEO title, null when not sent.
+     * @param mixed           $live_description Editor meta description, null when not sent.
+     * @param mixed           $live_slug        Editor slug, null when not sent.
+     * @param WP_REST_Request $request          The request, for its keyword params.
+     * @return bool True when the request scored the saved post.
+     */
+    private function editor_state_is_saved(
+        int $post_id,
+        string $live_content,
+        $live_title,
+        $live_description,
+        $live_slug,
+        WP_REST_Request $request
+    ): bool {
+        $post = get_post($post_id);
+        if (!$post instanceof \WP_Post) {
+            return false;
+        }
+
+        if ($live_content !== '') {
+            if ($live_content !== (string) $post->post_content
+                || \ThinkRank\SEO\Builder_Content::bricks_supersedes_post_content($post_id)) {
+                return false;
+            }
+        }
+
+        if ($live_title !== null
+            && (string) $live_title !== (string) get_post_meta($post_id, '_thinkrank_seo_title', true)) {
+            return false;
+        }
+
+        if ($live_description !== null
+            && (string) $live_description !== (string) get_post_meta($post_id, '_thinkrank_meta_description', true)) {
+            return false;
+        }
+
+        if ($live_slug !== null && sanitize_title((string) $live_slug) !== (string) $post->post_name) {
+            return false;
+        }
+
+        // Keywords, resolved the way the calculator resolves them: a non-empty
+        // list wins, then a non-empty single keyword, then an explicit clear.
+        // A request that names no keyword scored the stored ones.
+        $target_keywords = $request->get_param('target_keywords');
+        $target_keyword  = $request->get_param('target_keyword');
+        if (is_array($target_keywords) && !empty($target_keywords)) {
+            $requested = $target_keywords;
+        } elseif ($target_keyword !== null && (string) $target_keyword !== '') {
+            $requested = [$target_keyword];
+        } elseif ($target_keywords !== null || $target_keyword !== null) {
+            $requested = [];
+        } else {
+            return true;
+        }
+
+        return self::keyword_set($requested) === self::keyword_set(\ThinkRank\SEO\Focus_Keywords::get($post_id));
+    }
+
+    /**
+     * Keywords normalized for comparison: trimmed, lowercased, deduplicated, in order.
+     *
+     * @param array $keywords Keywords.
+     * @return string[]
+     */
+    private static function keyword_set(array $keywords): array {
+        $set = [];
+        foreach ($keywords as $keyword) {
+            $keyword = trim((string) $keyword);
+            if ($keyword !== '') {
+                $set[function_exists('mb_strtolower') ? mb_strtolower($keyword) : strtolower($keyword)] = true;
+            }
+        }
+
+        return array_keys($set);
+    }
+
+    /**
+     * Whether the latest stored row already scores the saved post.
+     *
+     * The same rule the posts list applies: a row written at or after the
+     * post's last modification is current. Rows are only ever stored from the
+     * saved post, so a current row needs no rescoring.
+     *
+     * @since 2.18.0
+     *
+     * @param int $post_id Post ID.
+     * @return bool
+     */
+    private function stored_score_is_current(int $post_id): bool {
+        $post = get_post($post_id);
+        if (!$post instanceof \WP_Post || empty($post->post_modified)) {
+            return false;
+        }
+
+        $latest = $this->calculator->get_latest_score($post_id);
+        if (empty($latest['created_at'])) {
+            return false;
+        }
+
+        return (string) $latest['created_at'] >= (string) $post->post_modified;
+    }
+
+    /**
+     * Score the post as it is saved: its stored content, SEO title, meta
+     * description, slug and focus keywords, ignoring anything the editor sent.
+     *
+     * This is the score worth storing when a request scored unsaved editor
+     * state (#1310).
+     *
+     * @since 2.18.0
+     *
+     * @param int $post_id Post ID.
+     * @return array|null Score data, or null when the saved post has nothing to analyze.
+     */
+    private function score_saved_post(int $post_id): ?array {
+        $content_data = $this->calculator->analyze_post_content($post_id);
+        if (empty($content_data)) {
+            return null;
+        }
+
+        $score_data = $this->calculator->calculate_score(
+            $content_data,
+            $this->score_metadata(
+                $post_id,
+                get_post_meta($post_id, '_thinkrank_seo_title', true),
+                get_post_meta($post_id, '_thinkrank_meta_description', true)
+            )
+        );
+        $score_data['word_count'] = (int) ($content_data['word_count'] ?? 0);
+
+        return $score_data;
     }
 
     /**

@@ -75,6 +75,18 @@ class SEOScoreCalculator {
     public const DESCRIPTION_OPTIMAL_MAX = 160;
 
     /**
+     * Version of the scoring rules, stored with every score.
+     *
+     * Bump it when a change moves existing posts' scores, so a list that reads
+     * stored scores knows to recalculate the ones written by the old rules.
+     * 2025.3: Chinese, Japanese and Thai content counted in English-equivalent
+     * words (#1291).
+     *
+     * @since 2.18.0
+     */
+    public const ALGORITHM_VERSION = '2025.3';
+
+    /**
      * 2025 SEO scoring factors (Q1 2025 Google Algorithm)
      * Based on First Page Sage research and Google's latest updates
      *
@@ -950,7 +962,7 @@ class SEOScoreCalculator {
                 'readability_score' => $this->format_readability_label($content_data),
                 'content_quality' => $this->derive_content_quality($content_data),
                 'calculated_at' => current_time('mysql'),
-                'algorithm_version' => '2025.2',
+                'algorithm_version' => self::ALGORITHM_VERSION,
                 'algorithm_source' => 'First Page Sage Q1 2025 Research',
                 'factors_count' => count($scores),
             ];
@@ -1507,7 +1519,9 @@ class SEOScoreCalculator {
 
         // Calculate keyword and semantic term frequency
         $keyword_count = substr_count($content_lower, $keyword_lower);
-        $word_count = \ThinkRank\SEO\Word_Count_Index::count_words($content_lower);
+        // English-equivalent words, so a Japanese body is not a near-zero
+        // denominator that reads every keyword as stuffing (#1291).
+        $word_count = \ThinkRank\SEO\Word_Count_Index::count_word_equivalents($content_lower);
 
         if ($word_count === 0) {
             return 0.0;
@@ -1592,7 +1606,7 @@ class SEOScoreCalculator {
         // keyword in wp_strip_all_tags() output found it inside shortcode
         // attributes the word count no longer includes.
         $plain = self::lower(self::reading_text_of($content));
-        $word_count = \ThinkRank\SEO\Word_Count_Index::count_words($plain);
+        $word_count = \ThinkRank\SEO\Word_Count_Index::count_word_equivalents($plain);
         if ($word_count === 0) {
             return 0.0;
         }
@@ -2773,7 +2787,11 @@ class SEOScoreCalculator {
      *
      * Always words, whatever the locale's unit, because every threshold that
      * reads this value (content length, long paragraphs, headings per 300
-     * words, readability, keyword density) is in words.
+     * words, readability, keyword density) is in words. Text in a script
+     * written without spaces is converted to English-equivalent words
+     * ({@see \ThinkRank\SEO\Word_Count_Index::count_word_equivalents()}):
+     * split on whitespace, a whole Japanese article counted as a handful of
+     * words and scored as thin (#1291).
      *
      * contentAnalysis.js calculateWordCount() applies the same two rules in
      * the editor.
@@ -2786,7 +2804,7 @@ class SEOScoreCalculator {
             return 0;
         }
 
-        return \ThinkRank\SEO\Word_Count_Index::count_words(self::reading_text_of($text));
+        return \ThinkRank\SEO\Word_Count_Index::count_word_equivalents(self::reading_text_of($text));
     }
 
     /**

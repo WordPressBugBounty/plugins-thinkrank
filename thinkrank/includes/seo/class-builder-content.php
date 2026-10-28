@@ -616,7 +616,10 @@ class Builder_Content {
     }
 
     /**
-     * Discard the resolved-tree memo. Test seam.
+     * Discard the resolved-tree memo.
+     *
+     * Used by the test suite, and by the sitemap walk after each chunk so a
+     * build over thousands of posts does not keep every tree it resolved.
      *
      * @since 2.3.1
      * @return void

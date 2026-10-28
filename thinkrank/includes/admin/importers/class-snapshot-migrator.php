@@ -141,6 +141,25 @@ class Snapshot_Migrator {
     ];
 
     /**
+     * Extended settings buckets that name schema an import left behind.
+     *
+     * Reported after a settings migration (schema_not_imported()). The
+     * Rank Math ones were added by #1286; the rest are the SEOPress, Slim SEO
+     * and SureRank buckets #925 / #1051 already preserve.
+     *
+     * @since 2.18.0
+     * @var string[]
+     */
+    private const SCHEMA_REPORT_BUCKETS = [
+        'unsupported_post_schemas',
+        'secondary_post_schemas',
+        'schema_templates',
+        'post_type_default_schema',
+        'custom_schemas',
+        'object_schemas',
+    ];
+
+    /**
      * Conflict strategies for a chunk that targets data ThinkRank already holds.
      *
      * SKIP is right for an import: another plugin's value must never clobber
@@ -246,6 +265,10 @@ class Snapshot_Migrator {
         $sitemap_excluded = [];
         // Focus keyword overflow: posts whose source had more than MAX keywords.
         $truncations = [];
+        // Posts given a schema type (and possibly its fields) in the editor,
+        // and posts whose source schema had no ThinkRank equivalent (#1286).
+        $schema_staged = 0;
+        $schema_unsupported = [];
 
         foreach ($chunk as $record) {
             $object_id = (int) ($record['object_id'] ?? 0);
@@ -394,6 +417,22 @@ class Snapshot_Migrator {
                 $record_had_writes = true;
             }
 
+            // Product and Event schema form data (post meta only, #1286).
+            if ($object_type === 'post' && $this->migrate_schema_form_fields($object_id, $data, $record)) {
+                $record_had_writes = true;
+            }
+
+            if ($object_type === 'post') {
+                if (!empty($data['schema_type'])) {
+                    $schema_staged++;
+                }
+                foreach ((array) ($record['extended']['unsupported_schema_types'] ?? []) as $unsupported_type) {
+                    if (is_string($unsupported_type) && $unsupported_type !== '') {
+                        $schema_unsupported[$unsupported_type] = ($schema_unsupported[$unsupported_type] ?? 0) + 1;
+                    }
+                }
+            }
+
             // The post's own schemas as ThinkRank Pro Custom Schema entries
             // scoped to it (extended.custom_schemas, #886).
             if ($object_type === 'post' && !empty($record['extended']['custom_schemas']) && is_array($record['extended']['custom_schemas'])
@@ -485,6 +524,11 @@ class Snapshot_Migrator {
             // excess was capped but preserved in the overflow meta.
             'keywords_truncated' => count($truncations),
             'keywords_truncated_sample' => array_slice($truncations, 0, 10),
+            // Per-post schema lands in the editor's schema form, which renders
+            // only once deployed from that post (#1286). Counted so the import
+            // can say so, alongside the types it could not take at all.
+            'schema_staged'      => $schema_staged,
+            'schema_unsupported' => $schema_unsupported,
         ];
     }
 
@@ -1838,6 +1882,50 @@ class Snapshot_Migrator {
     }
 
     /**
+     * Seed the metabox Product or Event schema form for an imported post.
+     *
+     * Rank Math's Product and Event blocks carry prices, dates, offers,
+     * locations and organizers. The exporter has always captured them into
+     * `extended.schema_details`, but nothing read that, so only the type
+     * survived the import (#1286). A snapshot taken since carries them mapped
+     * as `extended.schema_form`; an older one is mapped here from the raw
+     * blocks, with unresolved tokens dropped. Never overwrites existing
+     * ThinkRank schema form data.
+     *
+     * @since 2.18.0
+     * @param int   $post_id Target post ID
+     * @param array $data    Canonical record data
+     * @param array $record  Full snapshot record (for the extended payload)
+     * @return bool True when form data was written
+     */
+    private function migrate_schema_form_fields(int $post_id, array $data, array $record): bool {
+        $schema_type = (string) ($data['schema_type'] ?? '');
+        if ($schema_type !== 'Product' && $schema_type !== 'Event') {
+            return false;
+        }
+
+        $extended = is_array($record['extended'] ?? null) ? $record['extended'] : [];
+        $form     = is_array($extended['schema_form'] ?? null) ? $extended['schema_form'] : null;
+
+        if ($form === null && ($record['source_plugin'] ?? '') === 'rankmath' && is_array($extended['schema_details'] ?? null)) {
+            $form = Rankmath_Exporter::schema_form_from_blocks($schema_type, $extended['schema_details']);
+        }
+
+        if (empty($form)) {
+            return false;
+        }
+
+        $existing = get_post_meta($post_id, '_thinkrank_schema_form_data', true);
+        if (is_string($existing) && $existing !== '') {
+            return false;
+        }
+
+        update_post_meta($post_id, '_thinkrank_schema_form_data', wp_slash(wp_json_encode($form)));
+
+        return true;
+    }
+
+    /**
      * Compose and persist the per-post robots payload.
      *
      * Folds the canonical robots flags into JSON-encoded
@@ -2143,7 +2231,64 @@ class Snapshot_Migrator {
             'has_more'  => false,
             'processed' => $processed,
             'skipped'   => 0,
+            // Schema the source holds and ThinkRank did not import, so the
+            // import can name it instead of reporting a clean finish (#1286).
+            'schema_not_imported' => $this->schema_not_imported($extended),
         ];
+    }
+
+    /**
+     * Extended settings buckets that hold schema ThinkRank did not import.
+     *
+     * Read by the import screen after a migration, and the same buckets gate
+     * /import/cleanup through get_unmigrated_extended_buckets().
+     *
+     * @since 2.18.0
+     * @param array $extended Settings record `extended` payload.
+     * @return array<int, array{key: string, label: string, count: int}>
+     */
+    private function schema_not_imported(array $extended): array {
+        $report = [];
+
+        foreach (self::SCHEMA_REPORT_BUCKETS as $key) {
+            $value = $extended[$key] ?? null;
+            if (empty($value) || !is_array($value)) {
+                continue;
+            }
+            // Custom schemas have a home when ThinkRank Pro is active.
+            if ($key === 'custom_schemas' && $this->create_custom_schema_repository() !== null) {
+                continue;
+            }
+
+            $report[] = [
+                'key'   => $key,
+                'label' => (string) self::extended_bucket_label($key),
+                'count' => self::schema_bucket_count($key, $value),
+            ];
+        }
+
+        return $report;
+    }
+
+    /**
+     * How many items a schema bucket stands for.
+     *
+     * @since 2.18.0
+     * @param string $key   Bucket key.
+     * @param array  $value Bucket contents.
+     * @return int
+     */
+    private static function schema_bucket_count(string $key, array $value): int {
+        switch ($key) {
+            case 'unsupported_post_schemas':
+            case 'secondary_post_schemas':
+            case 'object_schemas':
+                return max(1, (int) array_sum(array_map('intval', $value)));
+            case 'custom_schemas':
+                return max(1, count(is_array($value['entries'] ?? null) ? $value['entries'] : []) + (int) ($value['post_count'] ?? 0));
+            default:
+                return max(1, count($value));
+        }
     }
 
     /**
@@ -3448,6 +3593,14 @@ class Snapshot_Migrator {
                     ];
                     continue;
                 }
+                if (in_array($key, ['unsupported_post_schemas', 'secondary_post_schemas', 'post_type_default_schema'], true) && is_array($value)) {
+                    $buckets[] = [
+                        'key'   => 'settings.' . $key,
+                        'label' => (string) self::extended_bucket_label($key),
+                        'count' => self::schema_bucket_count($key, $value),
+                    ];
+                    continue;
+                }
                 if ($key === 'schema_templates' && is_array($value)) {
                     $buckets[] = [
                         'key'   => 'settings.schema_templates',
@@ -3574,6 +3727,10 @@ class Snapshot_Migrator {
             'og_frontpage_image'           => __('Homepage social image', 'thinkrank'),
             'custom_schemas'               => __('Custom schemas (need ThinkRank Pro)', 'thinkrank'),
             'schema_templates'             => __('Schema templates with no ThinkRank equivalent', 'thinkrank'),
+            // Rank Math (#1286).
+            'unsupported_post_schemas'     => __('Post schema types with no ThinkRank equivalent', 'thinkrank'),
+            'secondary_post_schemas'       => __('Extra schemas on a post (ThinkRank keeps one per post)', 'thinkrank'),
+            'post_type_default_schema'     => __('Default schema types per post type', 'thinkrank'),
             // SureRank (#1051).
             'taxonomy_robots'              => __('Nofollow and noarchive rules for taxonomies', 'thinkrank'),
             'archive_description_template' => __('Description template for term and author archives', 'thinkrank'),

@@ -22,6 +22,7 @@ import { describeCounts } from './importTypes';
 import useImportWorkflow, { STATES } from '../../hooks/useImportWorkflow';
 import ExportProgress from './ExportProgress';
 import MigrateProgress from './MigrateProgress';
+import { schemaNotImportedLines, schemaStagedNote } from './schemaReport';
 import SnapshotInfo, { getExtendedDataDescriptions } from './SnapshotInfo';
 import ConfirmationDialog, {
 	getExportDialog,
@@ -121,6 +122,8 @@ const PluginImportCard = ({ plugin, snapshot, onRefresh }) => {
 		)
 	);
 	const [dialog, setDialog] = useState(null);
+	const schemaLines = schemaNotImportedLines(progress.schema);
+	const schemaNote = schemaStagedNote(progress.schema);
 
 	// Toast the export/migration outcome once, on the actual state transition —
 	// tracked via a ref so an initial SNAPSHOT_READY (from a pre-existing
@@ -388,6 +391,40 @@ const PluginImportCard = ({ plugin, snapshot, onRefresh }) => {
 							)}
 						</Alert>
 					)}
+					{!error &&
+						state === STATES.MIGRATION_COMPLETE &&
+						(schemaLines.length > 0 || schemaNote) && (
+							<div className="tr-mt-3">
+								<Alert
+									variant="warning"
+									title={__(
+										'Some schema was not imported',
+										'thinkrank'
+									)}
+								>
+									{schemaLines.length > 0 && (
+										<>
+											<p className="tr-m-0 tr-mb-1">
+												{__(
+													'Not imported, and still only in the source plugin:',
+													'thinkrank'
+												)}
+											</p>
+											<ul className="tr-m-0 tr-pl-5 tr-flex tr-flex-col tr-gap-0.5">
+												{schemaLines.map((line) => (
+													<li key={line}>{line}</li>
+												))}
+											</ul>
+										</>
+									)}
+									{schemaNote && (
+										<p className="tr-m-0 tr-mt-1">
+											{schemaNote}
+										</p>
+									)}
+								</Alert>
+							</div>
+						)}
 				</div>
 			)}
 

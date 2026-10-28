@@ -156,6 +156,26 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
     private const CONTENT_OPTION = 'thinkrank_llms_txt_content';
 
     /**
+     * Option flagging that the set of llms.txt section contributors may have
+     * changed since the document was published.
+     *
+     * Pro's sections ("Full content" linking /llms-full.txt, the AI usage
+     * policy) are baked into the stored document when it is generated, and
+     * the serve path answers from that copy. After Pro was deactivated the
+     * document kept advertising a /llms-full.txt that now 404s and a policy
+     * nothing manages (#1325). robots.txt and the sitemap index already
+     * resync on a plugin change; this is the same arrangement for llms.txt.
+     *
+     * It is read on every request at `init`, so it is kept autoloaded and is
+     * lowered to 0 rather than deleted: an absent or non-autoloaded option
+     * costs its own query on each request without a persistent object cache.
+     *
+     * @since 2.18.0
+     * @var string
+     */
+    public const RESYNC_OPTION = 'thinkrank_llms_txt_contributors_changed';
+
+    /**
      * Option holding the Unix timestamp of the last publish.
      *
      * @since 2.1.0
@@ -788,6 +808,77 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
         $content = get_option(self::CONTENT_OPTION, '');
 
         return is_string($content) ? $content : '';
+    }
+
+    /**
+     * Note that a plugin was activated or deactivated.
+     *
+     * The republish is not done here: `deactivated_plugin` fires inside the
+     * request that deactivates the plugin, while its
+     * `thinkrank_llms_txt_sections` callback is still attached, so generating
+     * now would write the outgoing plugin's sections straight back. The next
+     * request has the real plugin set loaded.
+     *
+     * @since 2.18.0
+     * @return void
+     */
+    public static function flag_resync(): void {
+        update_option(self::RESYNC_OPTION, 1, true);
+    }
+
+    /**
+     * Regenerate and republish llms.txt once, on the request after a plugin
+     * change, when a document is published.
+     *
+     * Generates from the saved settings, the same path the SEO analyzer's
+     * one-click fix uses, so the sections reflect the contributors loaded
+     * now. Never publishes a site that has not published, never publishes a
+     * disabled feature (write_llms_txt_to_file() enforces that), and leaves
+     * the document alone when the saved settings no longer validate or the
+     * result is unchanged, so an unrelated plugin change does not touch it.
+     *
+     * @since 2.18.0
+     * @return void
+     */
+    public static function maybe_resync(): void {
+        $flag = get_option(self::RESYNC_OPTION, false);
+
+        if (false === $flag) {
+            // Never stored yet: seed it lowered and autoloaded, so every
+            // later request reads it from the autoloaded options instead of
+            // querying for a missing row.
+            update_option(self::RESYNC_OPTION, 0, true);
+
+            return;
+        }
+
+        if (!$flag) {
+            return;
+        }
+
+        // Lowered first, so a generation that fatals cannot be retried on
+        // every request for the rest of the site's life.
+        update_option(self::RESYNC_OPTION, 0, true);
+
+        $manager = new self();
+        $settings = $manager->get_settings('site');
+
+        if (empty($settings['enabled']) || !$manager->is_published()) {
+            return;
+        }
+
+        $generated = $manager->generate_llms_txt([]);
+        $content   = (string) ($generated['content'] ?? '');
+
+        if (empty($generated['validation']['valid']) || '' === trim($content)) {
+            return;
+        }
+
+        if ($content === $manager->get_published_content()) {
+            return;
+        }
+
+        $manager->write_llms_txt_to_file($content);
     }
 
     /**

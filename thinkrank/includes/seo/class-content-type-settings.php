@@ -185,6 +185,45 @@ class Content_Type_Settings {
     }
 
     /**
+     * Contexts that name no single object, and so only the main query can
+     * map to an entity: the homepage reaches the social layer as `site` (a
+     * static front page and a blog index resolve to different cells), and the
+     * archive contexts carry no object ID of their own.
+     *
+     * @since 2.18.0
+     * @var string[]
+     */
+    private const QUERY_CONTEXTS = ['site', 'homepage', 'category', 'tag', 'author', 'search', 'archive', '404'];
+
+    /**
+     * Map an explicit context and object ID to an entity key.
+     *
+     * A caller that names the object it is building output for (the REST
+     * routes, which run outside that object's front-end query) must resolve
+     * the matrix from that object: the main query maps to nothing there, or to
+     * an unrelated entity. A singular context with a post resolves to the
+     * post's type, the same key current_entity_key() gives on that post's own
+     * page. Contexts that name no single object keep the main-query mapping.
+     *
+     * @since 2.18.0
+     *
+     * @param string   $context_type Context, e.g. 'post', 'page', 'product', 'site'.
+     * @param int|null $context_id   Object ID, when the context names one.
+     * @return string|null Entity key, or null when nothing applies.
+     */
+    public static function entity_key_for_context(string $context_type, ?int $context_id): ?string {
+        if (!in_array($context_type, self::QUERY_CONTEXTS, true) && null !== $context_id && $context_id > 0) {
+            $post_type = get_post_type($context_id);
+
+            if (is_string($post_type) && '' !== $post_type) {
+                return $post_type;
+            }
+        }
+
+        return self::current_entity_key();
+    }
+
+    /**
      * Map the current main query to an entity key.
      *
      * Mirrors SEO_Manager::detect_current_context() but resolves to the entity

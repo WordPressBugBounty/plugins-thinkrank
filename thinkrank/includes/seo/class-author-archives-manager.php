@@ -277,17 +277,58 @@ class Author_Archives_Manager {
             '%author_name%'      => $author_name,
             '%author%'           => $author_name,
             '%archive_title%'    => $author_name,
+            // The Content Types vocabulary (%title%, %sitename%) and Rank
+            // Math's author token (%name%) name the same values here (#1330).
+            '%title%'            => $author_name,
+            '%name%'             => $author_name,
             '%site_title%'       => $site_title,
             '%site_name%'        => $site_title,
+            '%sitename%'         => $site_title,
             '%site_description%' => $tagline,
             '%tagline%'          => $tagline,
             '%separator%'        => $separator,
             '%sep%'              => $separator,
-            '%date%'             => gmdate('F Y'),
+            // An author archive has no date of its own. This used to be the
+            // current month, which no author page is about (#1330).
+            '%date%'             => '',
             '%page%'             => '',
         ];
 
-        return self::tidy_whitespace(str_replace(array_keys($replacements), array_values($replacements), $template));
+        // Anything else (%currentyear%, %term%, a Yoast %%token%%) is dropped
+        // before substitution, the rule the Content Types templates follow,
+        // rather than reaching the <title> as literal text (#1330).
+        $template = Pattern_Resolver::strip_unresolved_tokens($template, $replacements);
+
+        $rendered = self::tidy_whitespace(str_replace(array_keys($replacements), array_values($replacements), $template));
+
+        return self::collapse_separators($rendered, [$separator, '|']);
+    }
+
+    /**
+     * Collapse and trim the separators that tokens resolving to nothing leave.
+     *
+     * Author templates carry the active separator through %separator% and,
+     * often, a literal pipe typed by hand, so both are tidied: "admin | |
+     * Media Wipe |" becomes "admin | Media Wipe".
+     *
+     * @since 2.18.0
+     * @param string   $value      Rendered template, whitespace already tidied.
+     * @param string[] $separators Separator symbols to collapse.
+     * @return string
+     */
+    private static function collapse_separators(string $value, array $separators): string {
+        foreach (array_unique(array_filter(array_map('trim', $separators), 'strlen')) as $symbol) {
+            $quoted  = preg_quote($symbol, '/');
+            $doubled = '/\s*' . $quoted . '\s*' . $quoted . '\s*/u';
+            do {
+                $before = $value;
+                $value  = (string) preg_replace($doubled, ' ' . $symbol . ' ', $value);
+            } while ($value !== $before);
+
+            $value = \ThinkRank\Core\Seo_Text::trim_separator($value, $symbol);
+        }
+
+        return self::tidy_whitespace($value);
     }
 
     /**

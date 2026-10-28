@@ -72,6 +72,27 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         'product'             => 'Product',
         'woocommerceproduct'  => 'Product',
         'event'               => 'Event',
+        // Rank Math's Event form stores the chosen subtype as the block's
+        // @type, so every Event subtype it offers lands here. ThinkRank keeps
+        // the subtype in the Event form's `event_type` (#1286).
+        'businessevent'       => 'Event',
+        'childrensevent'      => 'Event',
+        'comedyevent'         => 'Event',
+        'danceevent'          => 'Event',
+        'deliveryevent'       => 'Event',
+        'educationevent'      => 'Event',
+        'exhibitionevent'     => 'Event',
+        'festival'            => 'Event',
+        'foodevent'           => 'Event',
+        'literaryevent'       => 'Event',
+        'musicevent'          => 'Event',
+        'publicationevent'    => 'Event',
+        'saleevent'           => 'Event',
+        'screeningevent'      => 'Event',
+        'socialevent'         => 'Event',
+        'sportsevent'         => 'Event',
+        'theaterevent'        => 'Event',
+        'visualartsevent'     => 'Event',
         'howto'               => 'HowTo',
         'faqpage'             => 'FAQPage',
         'person'              => 'Person',
@@ -302,6 +323,23 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                     'schema_details'            => $this->extract_schema_details($meta),
                     'review_schema'             => $this->extract_review_schema($meta),
                     'video_schema'              => $this->extract_video_schema($meta, $post_id),
+                    // Product and Event field values in ThinkRank's schema-form
+                    // vocabulary (#1286). They used to stop at schema_details,
+                    // which nothing reads.
+                    'schema_form'               => self::schema_form_from_blocks(
+                        $this->resolve_schema_type($meta),
+                        $this->extract_schema_details($meta),
+                        function (string $value) use ($post_id): string {
+                            return $this->convert_template_variables($value, $post_id);
+                        }
+                    ),
+                    // Rank Math schema types on this post with no ThinkRank
+                    // equivalent, so the import can say what it left behind.
+                    'unsupported_schema_types'  => $this->unsupported_schema_types($meta),
+                    // Supported blocks beyond the one the post's schema type
+                    // came from. ThinkRank keeps one schema per post, so these
+                    // are left behind too and the import has to say so.
+                    'secondary_schema_types'    => $this->secondary_schema_types($meta),
                     'facebook_image_id'         => $meta['rank_math_facebook_image_id'] ?? '',
                     'twitter_image_id'          => $meta['rank_math_twitter_image_id'] ?? '',
                     'twitter_card_type'         => $meta['rank_math_twitter_card_type'] ?? '',
@@ -429,6 +467,8 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         $titles = is_array($titles) ? $titles : [];
         $sitemap = get_option('rank-math-options-sitemap', []);
         $sitemap = is_array($sitemap) ? $sitemap : [];
+        // Post schema ThinkRank leaves behind, counted site-wide (#1286).
+        $schemas_left_behind = $this->count_post_schemas_left_behind();
 
         return [
             [
@@ -579,6 +619,13 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                     // The migrator ignores unknown extended keys, so this is
                     // inert until a mapping consumes it.
                     'raw_options' => $this->capture_raw_options(),
+                    // Schema ThinkRank cannot take over, counted so the import
+                    // reports it and cleanup warns before deleting the only
+                    // copy (#1286).
+                    'unsupported_post_schemas' => $schemas_left_behind['unsupported'],
+                    'secondary_post_schemas'   => $schemas_left_behind['secondary'],
+                    'schema_templates'         => $this->extract_schema_templates(),
+                    'post_type_default_schema' => $this->extract_post_type_default_schema($titles),
                 ],
             ],
         ];
@@ -945,11 +992,32 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * @return string ThinkRank schema type, or ''
      */
     private function detect_modern_schema_type(array $meta): string {
+        foreach ($this->ordered_schema_types($meta) as $type_name) {
+            $mapped = $this->map_modern_schema_type($type_name);
+            if ($mapped !== '') {
+                return $mapped;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * The @type of each modern `rank_math_schema_*` block on a post, the
+     * primary block first and the rest in storage order.
+     *
+     * This is the order detect_modern_schema_type() picks the post's schema
+     * type in, so secondary_schema_types() can tell exactly which block won.
+     *
+     * @param array $meta All Rank Math meta for a post
+     * @return string[] Rank Math type names, one per block
+     */
+    private function ordered_schema_types(array $meta): array {
         $primary = [];
         $others = [];
 
         foreach ($meta as $key => $value) {
-            if (strpos($key, 'rank_math_schema_') !== 0) {
+            if (strpos((string) $key, 'rank_math_schema_') !== 0) {
                 continue;
             }
 
@@ -960,7 +1028,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
 
             // The @type is stored at the block root for most types; older Article
             // blocks omit it and carry the type only in the meta key suffix.
-            $type_name = (string) ($schema['@type'] ?? substr($key, strlen('rank_math_schema_')));
+            $type_name = (string) ($schema['@type'] ?? substr((string) $key, strlen('rank_math_schema_')));
 
             // metadata.isPrimary is '1'/true for the primary block, '0'/false (or
             // absent) otherwise. empty() treats '0', '', false and 0 as not-primary.
@@ -971,14 +1039,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             }
         }
 
-        foreach (array_merge($primary, $others) as $type_name) {
-            $mapped = $this->map_modern_schema_type($type_name);
-            if ($mapped !== '') {
-                return $mapped;
-            }
-        }
-
-        return '';
+        return array_merge($primary, $others);
     }
 
     /**
@@ -1865,5 +1926,409 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         }
 
         return $settings;
+    }
+
+    /**
+     * Schema.org availability values Rank Math's Offer form stores, mapped to
+     * the ThinkRank Product form's options. Rank Math calls out-of-stock
+     * "SoldOut", which schema.org spells OutOfStock for products.
+     */
+    private const AVAILABILITY_MAP = [
+        'instock'      => 'InStock',
+        'soldout'      => 'OutOfStock',
+        'outofstock'   => 'OutOfStock',
+        'preorder'     => 'PreOrder',
+        'backorder'    => 'BackOrder',
+        'discontinued' => 'Discontinued',
+    ];
+
+    /**
+     * Map a post's Rank Math schema blocks onto ThinkRank's Product or Event
+     * schema-form fields (#1286).
+     *
+     * Picks the primary block of the post's resolved type (or the first of
+     * that type). Text goes through `$resolve` when given; any value still
+     * carrying a `%token%` is dropped so ThinkRank's own fallback (the post
+     * title, excerpt, featured image) applies, the same rule the video
+     * mapping uses. Static so the migrator can apply it to snapshots taken
+     * before this mapping existed, which hold only `schema_details`.
+     *
+     * @since 2.18.0
+     * @param string        $schema_type ThinkRank schema type of the post.
+     * @param array         $blocks      Rank Math blocks keyed by meta suffix.
+     * @param callable|null $resolve     Template-variable resolver, or null.
+     * @return array Form field => value; [] when nothing maps.
+     */
+    public static function schema_form_from_blocks(string $schema_type, array $blocks, ?callable $resolve = null): array {
+        if ($schema_type !== 'Product' && $schema_type !== 'Event') {
+            return [];
+        }
+
+        $block = null;
+        foreach ($blocks as $suffix => $candidate) {
+            if (!is_array($candidate)) {
+                continue;
+            }
+            $type = (string) ($candidate['@type'] ?? $suffix);
+            if ((self::MODERN_SCHEMA_TYPE_MAP[strtolower($type)] ?? '') !== $schema_type) {
+                continue;
+            }
+            if (!empty($candidate['metadata']['isPrimary'])) {
+                $block = $candidate;
+                break;
+            }
+            $block = $block ?? $candidate;
+        }
+
+        if (!is_array($block)) {
+            return [];
+        }
+
+        $text = static function ($value) use ($resolve): string {
+            if (is_array($value)) {
+                $value = $value['name'] ?? ($value['url'] ?? ($value['@id'] ?? ''));
+            }
+            if (!is_scalar($value)) {
+                return '';
+            }
+            $value = trim((string) $value);
+            if ($value !== '' && $resolve !== null && strpos($value, '%') !== false) {
+                $value = trim((string) $resolve($value));
+            }
+
+            return ($value === '' || strpos($value, '%') !== false) ? '' : $value;
+        };
+
+        $offers = isset($block['offers']) && is_array($block['offers']) ? $block['offers'] : [];
+        // A list of offers: the first one is the price Rank Math showed.
+        if (isset($offers[0]) && is_array($offers[0])) {
+            $offers = $offers[0];
+        }
+
+        $form = [];
+
+        if ($schema_type === 'Product') {
+            $gtin = '';
+            foreach (['gtin', 'gtin14', 'gtin13', 'gtin12', 'gtin8'] as $gtin_key) {
+                $gtin = $text($block[$gtin_key] ?? '');
+                if ($gtin !== '') {
+                    break;
+                }
+            }
+            $availability = strtolower(preg_replace('#^https?://schema\.org/#i', '', $text($offers['availability'] ?? '')));
+
+            $form = [
+                'product_name'         => $text($block['name'] ?? ''),
+                'product_description'  => $text($block['description'] ?? ''),
+                'product_sku'          => $text($block['sku'] ?? ''),
+                'product_brand'        => $text($block['brand'] ?? ''),
+                'product_gtin'         => $gtin,
+                'product_url'          => $text($block['url'] ?? ''),
+                'product_image'        => $text($block['image'] ?? ''),
+                'product_price'        => $text($offers['price'] ?? ''),
+                'product_currency'     => $text($offers['priceCurrency'] ?? ''),
+                'product_availability' => self::AVAILABILITY_MAP[$availability] ?? '',
+                'product_rating_value' => $text($block['review']['reviewRating']['ratingValue'] ?? ''),
+            ];
+        } else {
+            $location = isset($block['location']) && is_array($block['location']) ? $block['location'] : [];
+            $address  = $location['address'] ?? '';
+            if (is_array($address)) {
+                $address = implode(', ', array_filter(array_map(
+                    static fn($part): string => is_scalar($part) ? trim((string) $part) : '',
+                    array_intersect_key($address, array_flip(['streetAddress', 'addressLocality', 'addressRegion', 'postalCode', 'addressCountry']))
+                )));
+            }
+            $subtype = (string) ($block['@type'] ?? '');
+
+            $form = [
+                'event_name'            => $text($block['name'] ?? ''),
+                'event_description'     => $text($block['description'] ?? ''),
+                'event_type'            => (self::MODERN_SCHEMA_TYPE_MAP[strtolower($subtype)] ?? '') === 'Event' ? $subtype : '',
+                'event_status'          => preg_replace('#^https?://schema\.org/#i', '', $text($block['eventStatus'] ?? '')),
+                'event_attendance_mode' => preg_replace('#^https?://schema\.org/#i', '', $text($block['eventAttendanceMode'] ?? '')),
+                'event_start_date'      => self::schema_date($block['startDate'] ?? ''),
+                'event_end_date'        => self::schema_date($block['endDate'] ?? ''),
+                'event_location'        => $text($location['name'] ?? ''),
+                'event_address'         => $text($address),
+                'event_organizer'       => $text($block['organizer'] ?? ''),
+                'event_performer'       => $text($block['performer'] ?? ''),
+                'event_image'           => $text($block['image'] ?? ''),
+                'event_price'           => $text($offers['price'] ?? ''),
+                'event_currency'        => $text($offers['priceCurrency'] ?? ''),
+            ];
+        }
+
+        return array_filter($form, static fn($value): bool => $value !== '' && $value !== null);
+    }
+
+    /**
+     * A Rank Math date as the ThinkRank date-time field stores it.
+     *
+     * The modern schema form saves a date string; older Rank Math builds
+     * saved a Unix timestamp. Either becomes `Y-m-d\TH:i` in the site's
+     * timezone, which is what the Event form's datetime-local input holds.
+     *
+     * @param mixed $value Stored date.
+     * @return string
+     */
+    private static function schema_date($value): string {
+        if (!is_scalar($value)) {
+            return '';
+        }
+        $value = trim((string) $value);
+        if ($value === '' || strpos($value, '%') !== false) {
+            return '';
+        }
+        if (ctype_digit($value)) {
+            return wp_date('Y-m-d\TH:i', (int) $value);
+        }
+
+        return $value;
+    }
+
+    /**
+     * Rank Math schema types on a post that ThinkRank has no equivalent for.
+     *
+     * Covers both storages: the legacy `rank_math_rich_snippet` slug and the
+     * modern `rank_math_schema_*` blocks. A block of a supported type is not
+     * listed here even when another block won the post's single schema type;
+     * secondary_schema_types() lists those.
+     *
+     * @since 2.18.0
+     * @param array $meta All Rank Math meta for a post.
+     * @return string[] Rank Math type names, unique.
+     */
+    private function unsupported_schema_types(array $meta): array {
+        $types = [];
+
+        $legacy = strtolower(trim((string) ($meta['rank_math_rich_snippet'] ?? '')));
+        if ($legacy !== '' && $legacy !== 'off' && $legacy !== 'none' && !isset(self::SCHEMA_TYPE_MAP[$legacy])) {
+            $types[] = ucfirst($legacy);
+        }
+
+        foreach ($meta as $key => $value) {
+            if (strpos((string) $key, 'rank_math_schema_') !== 0) {
+                continue;
+            }
+            $schema = Safe_Unserializer::unserialize($value);
+            if (!is_array($schema)) {
+                continue;
+            }
+            $type = (string) ($schema['@type'] ?? substr((string) $key, strlen('rank_math_schema_')));
+            if ($type !== '' && $this->map_modern_schema_type($type) === '') {
+                $types[] = $type;
+            }
+        }
+
+        return array_values(array_unique($types));
+    }
+
+    /**
+     * Supported Rank Math schema blocks on a post that the import leaves out.
+     *
+     * ThinkRank keeps one schema type per post. The block that type came
+     * from is the first one, primary first, that maps to it (the same pick
+     * detect_modern_schema_type() makes); every other supported block, a
+     * second block of the same type included, is not imported. Types with no
+     * ThinkRank equivalent are listed by unsupported_schema_types() instead.
+     *
+     * @since 2.18.0
+     * @param array $meta All Rank Math meta for a post.
+     * @return string[] Rank Math type names, unique.
+     */
+    private function secondary_schema_types(array $meta): array {
+        $selected_type = $this->resolve_schema_type($meta);
+        $selected      = false;
+        $types         = [];
+
+        foreach ($this->ordered_schema_types($meta) as $type_name) {
+            $mapped = $this->map_modern_schema_type($type_name);
+            if ($mapped === '') {
+                continue;
+            }
+            if (!$selected && $mapped === $selected_type) {
+                $selected = true;
+                continue;
+            }
+            $types[] = $type_name;
+        }
+
+        return array_values(array_unique($types));
+    }
+
+    /**
+     * Posts read per batch by count_post_schemas_left_behind().
+     */
+    private const SCHEMA_SCAN_BATCH = 200;
+
+    /**
+     * How many posts carry each Rank Math schema type the import leaves behind.
+     *
+     * Read site-wide for the settings record, so the import report and the
+     * cleanup gate can name what is left behind without walking every chunk.
+     * Pages by post ID (keyset) and reads the schema meta of one bounded batch
+     * of posts at a time, so a site with many large schema blocks never holds
+     * more than one batch in memory, and every post's blocks arrive together.
+     *
+     * @since 2.18.0
+     * @return array{unsupported: array<string, int>, secondary: array<string, int>}
+     *         Rank Math type => number of posts, for types with no ThinkRank
+     *         equivalent and for supported blocks beyond the imported one.
+     */
+    private function count_post_schemas_left_behind(): array {
+        global $wpdb;
+
+        $counts = ['unsupported' => [], 'secondary' => []];
+        $after  = 0;
+
+        do {
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one paged read per export.
+            $ids = $wpdb->get_col(
+                $wpdb->prepare(
+                    "SELECT DISTINCT pm.post_id FROM {$wpdb->postmeta} pm
+                     INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                     WHERE (pm.meta_key LIKE %s OR pm.meta_key = %s) AND p.post_type <> %s AND pm.post_id > %d
+                     ORDER BY pm.post_id ASC
+                     LIMIT %d",
+                    $wpdb->esc_like('rank_math_schema_') . '%',
+                    'rank_math_rich_snippet',
+                    'rank_math_schema',
+                    $after,
+                    self::SCHEMA_SCAN_BATCH
+                )
+            );
+            $ids = array_values(array_filter(array_map('intval', (array) $ids)));
+            if (empty($ids)) {
+                break;
+            }
+
+            $placeholders = implode(', ', array_fill(0, count($ids), '%d'));
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- the IN list is one %d placeholder per ID, every value passed as a replacement.
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one paged read per export.
+            $rows = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta}
+                     WHERE post_id IN ({$placeholders}) AND (meta_key LIKE %s OR meta_key = %s)",
+                    array_merge(
+                        $ids,
+                        [$wpdb->esc_like('rank_math_schema_') . '%', 'rank_math_rich_snippet']
+                    )
+                ),
+                ARRAY_A
+            );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+
+            $by_post = [];
+            foreach ((array) $rows as $row) {
+                $by_post[(int) $row['post_id']][(string) $row['meta_key']] = $row['meta_value'];
+            }
+            unset($rows);
+
+            foreach ($by_post as $meta) {
+                foreach ($this->unsupported_schema_types($meta) as $type) {
+                    $counts['unsupported'][$type] = ($counts['unsupported'][$type] ?? 0) + 1;
+                }
+                foreach ($this->secondary_schema_types($meta) as $type) {
+                    $counts['secondary'][$type] = ($counts['secondary'][$type] ?? 0) + 1;
+                }
+            }
+            unset($by_post);
+
+            $after   = end($ids);
+            $fetched = count($ids);
+        } while ($fetched === self::SCHEMA_SCAN_BATCH);
+
+        ksort($counts['unsupported']);
+        ksort($counts['secondary']);
+
+        return $counts;
+    }
+
+    /**
+     * Rank Math Pro Schema Templates (`rank_math_schema` posts).
+     *
+     * Not imported: they carry display conditions with no free ThinkRank
+     * equivalent. Listed so the import names them instead of dropping them
+     * without a word (#1286), and kept whole: /import/cleanup deletes every
+     * `rank_math_*` meta row, so the snapshot holds each template's schema
+     * blocks (display conditions live in their `metadata`) and any other
+     * Rank Math meta on it, enough to restore or migrate it later.
+     *
+     * @since 2.18.0
+     * @return array<int, array{id: int, title: string, status: string, type: string, schemas: array, meta: array}>
+     */
+    private function extract_schema_templates(): array {
+        global $wpdb;
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one read per export.
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT ID, post_title, post_status FROM {$wpdb->posts}
+                 WHERE post_type = %s AND post_status NOT IN ('trash', 'auto-draft')
+                 ORDER BY ID ASC",
+                'rank_math_schema'
+            ),
+            ARRAY_A
+        );
+
+        $templates = [];
+        foreach ((array) $rows as $row) {
+            $id      = (int) ($row['ID'] ?? 0);
+            $meta    = $id > 0 ? $this->get_all_plugin_meta($id) : [];
+            $schemas = $this->extract_schema_details($meta);
+
+            $type = '';
+            foreach ($schemas as $suffix => $schema) {
+                $type = (string) ($schema['@type'] ?? $suffix);
+                if ($type !== '') {
+                    break;
+                }
+            }
+
+            $templates[] = [
+                'id'      => $id,
+                'title'   => (string) ($row['post_title'] ?? ''),
+                'status'  => (string) ($row['post_status'] ?? ''),
+                'type'    => $type,
+                'schemas' => $schemas,
+                // Anything else Rank Math keeps on the template, verbatim.
+                'meta'    => array_filter(
+                    $meta,
+                    static fn($key): bool => strpos((string) $key, 'rank_math_schema_') !== 0,
+                    ARRAY_FILTER_USE_KEY
+                ),
+            ];
+        }
+
+        return $templates;
+    }
+
+    /**
+     * Per-post-type default schema (`pt_{type}_default_rich_snippet`).
+     *
+     * ThinkRank has no per-post-type default schema type, so these are
+     * reported rather than applied. "off" is not listed: it means no schema,
+     * which is nothing to lose.
+     *
+     * @since 2.18.0
+     * @param array $titles rank-math-options-titles.
+     * @return array<string, string> Post type => Rank Math schema slug.
+     */
+    private function extract_post_type_default_schema(array $titles): array {
+        $defaults = [];
+
+        foreach ($titles as $key => $value) {
+            if (!is_string($key) || !preg_match('/^pt_(.+)_default_rich_snippet$/', $key, $match)) {
+                continue;
+            }
+            $value = strtolower(trim(is_scalar($value) ? (string) $value : ''));
+            if ($value === '' || $value === 'off' || $value === 'none') {
+                continue;
+            }
+            $defaults[$match[1]] = $value;
+        }
+
+        return $defaults;
     }
 }

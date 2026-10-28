@@ -282,7 +282,9 @@ class Post_List_Columns {
     private function get_seo_metrics(int $post_id, string $title, string $description, array $keywords): array {
         $stored = $this->get_seo_metrics_from_database($post_id);
 
-        if ($stored['seo_score'] !== null && !$this->is_score_stale($post_id, $stored['calculated_at'] ?? null)) {
+        if ($stored['seo_score'] !== null
+            && !$this->is_score_stale($post_id, $stored['calculated_at'] ?? null, $stored['algorithm_version'] ?? null)
+        ) {
             return $stored;
         }
 
@@ -290,7 +292,8 @@ class Post_List_Columns {
     }
 
     /**
-     * Whether a stored score predates the post's last modification.
+     * Whether a stored score predates the post's last modification, or the
+     * scoring rules it was calculated by.
      *
      * Both timestamps are site-local `Y-m-d H:i:s` — `post_modified` from
      * WordPress and `created_at` written with `current_time('mysql')` — so they
@@ -298,14 +301,24 @@ class Post_List_Columns {
      * calculating is cheap and cached, and a score we cannot date is one we
      * cannot vouch for.
      *
+     * A score written by an older version of the rules is stale too: #1291
+     * changed how Chinese, Japanese and Thai content is counted, and a score
+     * stored before it would otherwise keep showing until the post is edited.
+     * The recalculation is the cached one below.
+     *
      * @since 1.28.0
      *
-     * @param int         $post_id      Post ID.
-     * @param string|null $calculated_at When the stored score was written.
+     * @param int         $post_id           Post ID.
+     * @param string|null $calculated_at     When the stored score was written.
+     * @param string|null $algorithm_version Rules version stored with it.
      * @return bool True when the post changed after the score was calculated.
      */
-    private function is_score_stale(int $post_id, ?string $calculated_at): bool {
+    private function is_score_stale(int $post_id, ?string $calculated_at, ?string $algorithm_version = null): bool {
         if (empty($calculated_at)) {
+            return true;
+        }
+
+        if (null !== $algorithm_version && \ThinkRank\AI\SEOScoreCalculator::ALGORITHM_VERSION !== $algorithm_version) {
             return true;
         }
 
@@ -324,9 +337,10 @@ class Post_List_Columns {
      * The scoring engine is pure PHP — no AI provider and no HTTP calls — so the
      * list table can run it directly. The cache is keyed on a fingerprint of
      * everything the score depends on (last modification, effective title and
-     * description, focus keywords, plugin version), which means a Global SEO
-     * pattern change or an inline focus-keyword edit invalidates it on its own,
-     * with nothing to hook and no cache to sweep.
+     * description, focus keywords, plugin version, scoring rules version),
+     * which means a Global SEO pattern change, an inline focus-keyword edit or
+     * a scoring rules change invalidates it on its own, with nothing to hook
+     * and no cache to sweep.
      *
      * @since 1.28.0
      *
@@ -355,6 +369,10 @@ class Post_List_Columns {
             $description,
             implode(',', $keywords),
             THINKRANK_VERSION,
+            // The scoring rules can change without the plugin version moving
+            // (a dev or QA checkout), and a result from older rules must not
+            // be served (#1291).
+            \ThinkRank\AI\SEOScoreCalculator::ALGORITHM_VERSION,
         ]));
 
         $cached = get_post_meta($post_id, self::METRICS_CACHE_META, true);
@@ -447,7 +465,7 @@ class Post_List_Columns {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- SEO score retrieval requires direct database access
         $result = $wpdb->get_row($wpdb->prepare(
             // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Table name is properly escaped
-            "SELECT overall_score, grade, content_quality, readability_score, created_at FROM `{$table_name}` WHERE post_id = %d ORDER BY created_at DESC LIMIT 1",
+            "SELECT overall_score, grade, content_quality, readability_score, algorithm_version, created_at FROM `{$table_name}` WHERE post_id = %d ORDER BY created_at DESC LIMIT 1",
             $post_id
         ), ARRAY_A);
 
@@ -461,6 +479,7 @@ class Post_List_Columns {
             'content_quality' => $result['content_quality'],
             'readability_score' => $result['readability_score'],
             'calculated_at' => $result['created_at'],
+            'algorithm_version' => $result['algorithm_version'] ?? null,
         ];
     }
 

@@ -6,11 +6,14 @@
  * "create a token" step — this component just presents the ready-to-use
  * client recipes, split across two tabs:
  *   - "OAuth" for the connector clients (Claude web/mobile/desktop, ChatGPT,
- *     opencode) that just need the server URL and sign in with a one-time
- *     approval, and for any other client that does the same (#1287).
+ *     Gemini, Grok, Le Chat, opencode) that just need the server URL and sign
+ *     in with a one-time approval, and for any other client that does the
+ *     same (#1287).
  *   - "Editors & CLI" for deep-link installs (Cursor, VS Code),
- *     copy-a-payload clients (Claude Code), and any other client that takes
- *     the connection token as a header.
+ *     copy-a-payload clients (Claude Code, Codex, Gemini CLI, Windsurf), and
+ *     any other client that takes the connection token as a header. Codex and
+ *     Gemini CLI sign in with OAuth, so their cards stay when there is no
+ *     token to show.
  *
  * @package
  * @since 1.0.0
@@ -59,6 +62,12 @@ const IconCheck = ({ color = 'currentColor', ...props }) => (
 	</Svg>
 );
 
+const IconChevron = (props) => (
+	<Svg {...props}>
+		<polyline points="9 6 15 12 9 18" />
+	</Svg>
+);
+
 // Per-client glyphs (semantic line icons, not brand logos — recognizable and
 // consistent without risking an inaccurate trademark).
 const IconCursor = (props) => (
@@ -101,6 +110,62 @@ const IconChatGPT = ({ size = 16, ...props }) => (
 		{...props}
 	>
 		<path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.1419.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997z" />
+	</svg>
+);
+// Gemini's four-point spark, the same mark Connected Apps uses. Filled, like
+// the ChatGPT mark, so it skips the stroke-based Svg frame.
+const IconGemini = ({ size = 16, ...props }) => (
+	<svg
+		width={size}
+		height={size}
+		viewBox="0 0 24 24"
+		fill="currentColor"
+		aria-hidden="true"
+		{...props}
+	>
+		<path d="M12 2c.34 4.9 4.8 9.36 9.7 9.7.3.02.3.58 0 .6C16.8 12.64 12.34 17.1 12 22c-.02.3-.58.3-.6 0C11.06 17.1 6.6 12.64 1.7 12.3c-.3-.02-.3-.58 0-.6C6.6 11.36 11.06 6.9 11.4 2c.02-.3.58-.3.6 0Z" />
+	</svg>
+);
+// Grok's logomark (the slashed ring). Filled, like the ChatGPT mark.
+const IconGrok = ({ size = 16, ...props }) => (
+	<svg
+		width={size}
+		height={size}
+		viewBox="0 0 24 24"
+		fill="currentColor"
+		fillRule="evenodd"
+		aria-hidden="true"
+		{...props}
+	>
+		<path d="M9.27 15.29l7.978-5.897c.391-.29.95-.177 1.137.272.98 2.369.542 5.215-1.41 7.169-1.951 1.954-4.667 2.382-7.149 1.406l-2.711 1.257c3.889 2.661 8.611 2.003 11.562-.953 2.341-2.344 3.066-5.539 2.388-8.42l.006.007c-.983-4.232.242-5.924 2.75-9.383.06-.082.12-.164.179-.248l-3.301 3.305v-.01L9.267 15.292M7.623 16.723c-2.792-2.67-2.31-6.801.071-9.184 1.761-1.763 4.647-2.483 7.166-1.425l2.705-1.25a7.808 7.808 0 00-1.829-1A8.975 8.975 0 005.984 5.83c-2.533 2.536-3.33 6.436-1.962 9.764 1.022 2.487-.653 4.246-2.34 6.022-.599.63-1.199 1.259-1.682 1.925l7.62-6.815" />
+	</svg>
+);
+// Mistral's pixel "M", for Le Chat.
+const IconMistral = ({ size = 16, ...props }) => (
+	<svg
+		width={size}
+		height={size}
+		viewBox="0 0 24 24"
+		fill="currentColor"
+		fillRule="evenodd"
+		aria-hidden="true"
+		{...props}
+	>
+		<path d="M3.428 3.4h3.429v3.428h3.429v3.429h-.002 3.431V6.828h3.427V3.4h3.43v13.714H24v3.429H13.714v-3.428h-3.428v-3.429h-3.43v3.428h3.43v3.429H0v-3.429h3.428V3.4zm10.286 13.715h3.428v-3.429h-3.427v3.429z" />
+	</svg>
+);
+// Windsurf's wave mark.
+const IconWindsurf = ({ size = 16, ...props }) => (
+	<svg
+		width={size}
+		height={size}
+		viewBox="0 0 24 24"
+		fill="currentColor"
+		fillRule="evenodd"
+		aria-hidden="true"
+		{...props}
+	>
+		<path d="M23.78 5.004h-.228a2.187 2.187 0 00-2.18 2.196v4.912c0 .98-.804 1.775-1.76 1.775a1.818 1.818 0 01-1.472-.773L13.168 5.95a2.197 2.197 0 00-1.81-.95c-1.134 0-2.154.972-2.154 2.173v4.94c0 .98-.797 1.775-1.76 1.775-.57 0-1.136-.289-1.472-.773L.408 5.098C.282 4.918 0 5.007 0 5.228v4.284c0 .216.066.426.188.604l5.475 7.889c.324.466.8.812 1.351.938 1.377.316 2.645-.754 2.645-2.117V11.89c0-.98.787-1.775 1.76-1.775h.002c.586 0 1.135.288 1.472.773l4.972 7.163a2.15 2.15 0 001.81.95c1.158 0 2.151-.973 2.151-2.173v-4.939c0-.98.787-1.775 1.76-1.775h.194c.122 0 .22-.1.22-.222V5.225a.221.221 0 00-.22-.222z" />
 	</svg>
 );
 // Claude's radiating "sunburst" mark, approximated as an 11-spoke burst.
@@ -244,7 +309,8 @@ const MCPConnectionConfig = () => {
 
 	// Rotate the shared connection token. This is the leaked-secret escape
 	// hatch: it cuts off every header-based client (Claude Code, Cursor, VS
-	// Code, Claude Desktop) at once without disturbing OAuth-connected apps.
+	// Code, Windsurf, Claude Desktop) at once without disturbing OAuth-connected
+	// apps.
 	const resetToken = async () => {
 		setResetting(true);
 		setError('');
@@ -360,6 +426,94 @@ const MCPConnectionConfig = () => {
 			],
 		},
 		{
+			// Gemini lists custom connectors under Connected Apps, but only on
+			// personal Google accounts: a Workspace account shows Google's own
+			// connectors and no way to add one (#1438).
+			id: 'gemini',
+			name: 'Gemini',
+			Icon: IconGemini,
+			accent: '#1a73e8',
+			steps: [
+				__(
+					'In Gemini on the web, open Customize → Connectors and add a custom app.',
+					'thinkrank'
+				),
+				__(
+					'Paste the connector URL above and give it a name (e.g. ThinkRank).',
+					'thinkrank'
+				),
+				__(
+					'Approve access when Gemini asks you to sign in.',
+					'thinkrank'
+				),
+			],
+			note: __(
+				'Custom apps are available on personal Google accounts only. A work or school account has no option to add one, so use Gemini CLI under Editors & CLI instead.',
+				'thinkrank'
+			),
+		},
+		{
+			// Grok adds a remote server as a custom connector and signs in
+			// with OAuth (docs.x.ai/grok/connectors).
+			id: 'grok',
+			name: 'Grok',
+			Icon: IconGrok,
+			accent: '#111111',
+			steps: [
+				__(
+					'In Grok, open Connectors (grok.com/connectors) → New Connector → Custom.',
+					'thinkrank'
+				),
+				__('Paste the connector URL above.', 'thinkrank'),
+				__(
+					'Approve access when Grok asks you to sign in.',
+					'thinkrank'
+				),
+			],
+		},
+		{
+			// Le Chat adds a remote server as a custom MCP connector and finds
+			// OAuth by itself (docs.mistral.ai, MCP Connectors).
+			id: 'le-chat',
+			name: 'Le Chat (Mistral)',
+			Icon: IconMistral,
+			accent: '#fa520f',
+			steps: [
+				__(
+					'In Le Chat, open Intelligence → Connectors → Add Connector → Custom MCP Connector.',
+					'thinkrank'
+				),
+				__(
+					'Name it ThinkRank and paste the connector URL above.',
+					'thinkrank'
+				),
+				__(
+					'Click Connect, then approve access when Le Chat asks you to sign in.',
+					'thinkrank'
+				),
+			],
+		},
+		{
+			id: 'other',
+			name: __('Other MCP client', 'thinkrank'),
+			Icon: IconPlug,
+			accent: '#475467',
+			steps: [
+				__(
+					'In your client, add a remote MCP server over HTTP with the connector URL above.',
+					'thinkrank'
+				),
+				__(
+					'If it asks how to sign in, choose OAuth. It opens this site for you to approve access.',
+					'thinkrank'
+				),
+				__(
+					'Approve access, and the client connects. A client that only takes a fixed header can use the connection token under Editors & CLI.',
+					'thinkrank'
+				),
+			],
+		},
+		{
 			// opencode reads remote servers from its config file and signs in
 			// with OAuth by itself (opencode.ai/docs/mcp-servers).
 			id: 'opencode',
@@ -392,26 +546,6 @@ const MCPConnectionConfig = () => {
 				__('Approve access when this site asks.', 'thinkrank'),
 			],
 		},
-		{
-			id: 'other',
-			name: __('Other MCP client', 'thinkrank'),
-			Icon: IconPlug,
-			accent: '#475467',
-			steps: [
-				__(
-					'In your client, add a remote MCP server over HTTP with the connector URL above.',
-					'thinkrank'
-				),
-				__(
-					'If it asks how to sign in, choose OAuth. It opens this site for you to approve access.',
-					'thinkrank'
-				),
-				__(
-					'Approve access, and the client connects. A client that only takes a fixed header can use the connection token under Editors & CLI.',
-					'thinkrank'
-				),
-			],
-		},
 	];
 
 	// Editors & CLI clients — same card design as the OAuth connectors, but
@@ -432,6 +566,51 @@ const MCPConnectionConfig = () => {
 					'Run it in your terminal from your project directory.',
 					'thinkrank'
 				),
+			],
+		},
+		{
+			// Codex finds OAuth by itself when the server is added, and the
+			// CLI, IDE extension and desktop app share its config, so one
+			// command covers all three (`oauth`: no token in it).
+			id: 'codex',
+			name: 'Codex',
+			Icon: IconChatGPT,
+			accent: '#000000',
+			badge: __('CLI', 'thinkrank'),
+			oauth: true,
+			action: 'copy',
+			fieldLabel: __('Command', 'thinkrank'),
+			payload: `codex mcp add thinkrank --url ${endpoint}`,
+			steps: [
+				__(
+					'Copy the command above and run it in your terminal.',
+					'thinkrank'
+				),
+				__(
+					'Approve access when this site opens. If it does not, run codex mcp login thinkrank.',
+					'thinkrank'
+				),
+			],
+		},
+		{
+			// Gemini CLI signs in with OAuth by itself, so its command carries
+			// no token and the card stays when there is none (`oauth`).
+			id: 'gemini-cli',
+			name: 'Gemini CLI',
+			Icon: IconGemini,
+			accent: '#1a73e8',
+			badge: __('CLI', 'thinkrank'),
+			oauth: true,
+			action: 'copy',
+			fieldLabel: __('Command', 'thinkrank'),
+			payload: `gemini mcp add --scope user --transport http thinkrank ${endpoint}`,
+			steps: [
+				__(
+					'Copy the command above and run it in your terminal.',
+					'thinkrank'
+				),
+				__('Start gemini and run /mcp auth thinkrank.', 'thinkrank'),
+				__('Approve access when this site asks.', 'thinkrank'),
 			],
 		},
 		{
@@ -469,6 +648,41 @@ const MCPConnectionConfig = () => {
 			],
 		},
 		{
+			// Windsurf reads remote servers from mcp_config.json, keyed
+			// serverUrl rather than url; the token header connects without
+			// relying on its OAuth support.
+			id: 'windsurf',
+			name: 'Windsurf',
+			Icon: IconWindsurf,
+			accent: '#0b100f',
+			badge: __('Editor', 'thinkrank'),
+			action: 'copy',
+			fieldLabel: 'mcp_config.json',
+			payload: JSON.stringify(
+				{
+					mcpServers: {
+						thinkrank: {
+							serverUrl: endpoint,
+							headers: { Authorization: `Bearer ${token}` },
+						},
+					},
+				},
+				null,
+				2
+			),
+			steps: [
+				__(
+					'In Windsurf, open Cascade → MCP servers → View raw config.',
+					'thinkrank'
+				),
+				__(
+					'Add the thinkrank entry above under mcpServers, keeping your other servers.',
+					'thinkrank'
+				),
+				__('Save, then refresh the MCP servers list.', 'thinkrank'),
+			],
+		},
+		{
 			// Any client that takes a fixed header rather than OAuth (#1287).
 			id: 'other-token',
 			name: __('Other MCP client', 'thinkrank'),
@@ -491,6 +705,13 @@ const MCPConnectionConfig = () => {
 			],
 		},
 	];
+
+	// Header-based cards need a token this site can show; a client that signs
+	// in with OAuth works without one (#1438).
+	const shownClients =
+		connected && !tokenSealed
+			? otherClients
+			: otherClients.filter((client) => client.oauth);
 
 	const TABS = [
 		{ id: 'auth', label: __('OAuth', 'thinkrank') },
@@ -561,7 +782,7 @@ const MCPConnectionConfig = () => {
 					<div className="tr-flex tr-flex-wrap tr-items-center tr-justify-between tr-gap-3">
 						<p className="tr-m-0 tr-text-sm tr-text-secondary tr-max-w-lg">
 							{__(
-								'There is no connection token. Claude Code, Cursor, VS Code, and Claude Desktop need one to connect. OAuth apps don’t.',
+								'There is no connection token. Claude Code, Cursor, VS Code, Windsurf, and Claude Desktop need one to connect. OAuth apps, Codex and Gemini CLI don’t.',
 								'thinkrank'
 							)}
 						</p>
@@ -585,9 +806,9 @@ const MCPConnectionConfig = () => {
 					</Alert>
 				)}
 
-				{connected && !tokenSealed && (
+				{shownClients.length > 0 && (
 					<div className="tr-grid tr-grid-cols-1 lg:tr-grid-cols-2 tr-gap-3">
-						{otherClients.map((client) => (
+						{shownClients.map((client) => (
 							<ClientCard
 								key={client.id}
 								client={client}
@@ -606,7 +827,7 @@ const MCPConnectionConfig = () => {
 					<div className="tr-flex tr-flex-wrap tr-items-center tr-justify-between tr-gap-3 tr-mt-4 tr-pt-4 tr-border-t tr-border-secondary">
 						<p className="tr-m-0 tr-text-xs tr-text-tertiary tr-max-w-lg">
 							{__(
-								'Reset the connection token if it may have leaked. This disconnects Claude Code, Cursor, VS Code, and Claude Desktop they’ll need the new command to reconnect. OAuth-connected apps are unaffected.',
+								'Reset the connection token if it may have leaked. This disconnects Claude Code, Cursor, VS Code, Windsurf, and Claude Desktop. They’ll need the new token to reconnect. OAuth-connected apps, Codex and Gemini CLI are unaffected.',
 								'thinkrank'
 							)}
 						</p>
@@ -647,7 +868,7 @@ const MCPConnectionConfig = () => {
 			>
 				<p className="tr-m-0 tr-text-sm tr-text-secondary">
 					{__(
-						'A new token is generated immediately. Every header-based client (Claude Code, Cursor, VS Code, Claude Desktop) is disconnected and must reconnect with the new command. OAuth-connected apps like Claude on the web keep working.',
+						'A new token is generated immediately. Every header-based client (Claude Code, Cursor, VS Code, Windsurf, Claude Desktop) is disconnected and must reconnect with the new token. OAuth-connected apps like Claude on the web, Codex and Gemini CLI keep working.',
 						'thinkrank'
 					)}
 				</p>
@@ -668,8 +889,17 @@ const AuthConnectorCard = ({
 	snippetCopied,
 	onCopySnippet,
 }) => {
-	const { name, Icon, accent, steps, learnMore, snippet, snippetLabel } =
-		connector;
+	const {
+		name,
+		Icon,
+		accent,
+		steps,
+		learnMore,
+		snippet,
+		snippetLabel,
+		note,
+	} = connector;
+	const [snippetOpen, setSnippetOpen] = useState(false);
 
 	return (
 		<div className="tr-rounded-lg tr-border tr-border-secondary tr-bg-white tr-p-4 tr-flex tr-flex-col tr-gap-4">
@@ -727,16 +957,28 @@ const AuthConnectorCard = ({
 				</div>
 			</div>
 
-			{/* A client that reads its servers from a file: the entry to copy. */}
+			{/* A client that reads its servers from a file: the entry to copy.
+			    Collapsed by default, so the steps stay in view; Copy works
+			    either way. */}
 			{snippet && (
 				<div className="tr-flex tr-flex-col tr-gap-1.5">
-					<span className="tr-text-xs tr-font-medium tr-text-secondary">
-						{snippetLabel}
-					</span>
-					<div className="tr-flex tr-items-start tr-gap-2 tr-rounded-lg tr-border-[1.5px] tr-border-secondary tr-bg-transparent tr-pl-3 tr-pr-1.5 tr-py-1.5 focus-within:tr-border-brand tr-transition-colors">
-						<pre className="tr-flex-1 tr-min-w-0 tr-m-0 tr-text-xs tr-font-mono tr-text-secondary tr-whitespace-pre tr-overflow-x-auto tr-bg-transparent tr-p-0">
-							{snippet}
-						</pre>
+					<div className="tr-flex tr-items-center tr-justify-between tr-gap-2">
+						<button
+							type="button"
+							onClick={() => setSnippetOpen((open) => !open)}
+							aria-expanded={snippetOpen}
+							className="tr-inline-flex tr-items-center tr-gap-1 tr-p-0 tr-bg-transparent tr-border-0 tr-cursor-pointer tr-text-xs tr-font-medium tr-text-secondary hover:tr-text-brand"
+						>
+							<IconChevron
+								size={12}
+								style={{
+									transform: snippetOpen
+										? 'rotate(90deg)'
+										: 'none',
+								}}
+							/>
+							{snippetLabel}
+						</button>
 						<button
 							type="button"
 							onClick={onCopySnippet}
@@ -756,6 +998,13 @@ const AuthConnectorCard = ({
 							)}
 						</button>
 					</div>
+					{snippetOpen && (
+						<div className="tr-rounded-lg tr-border-[1.5px] tr-border-secondary tr-bg-transparent tr-px-3 tr-py-1.5">
+							<pre className="tr-m-0 tr-text-xs tr-font-mono tr-text-secondary tr-whitespace-pre tr-overflow-x-auto tr-bg-transparent tr-p-0">
+								{snippet}
+							</pre>
+						</div>
+					)}
 				</div>
 			)}
 
@@ -773,6 +1022,11 @@ const AuthConnectorCard = ({
 					</li>
 				))}
 			</ol>
+
+			{/* A limit of the client itself, such as which accounts get it. */}
+			{note && (
+				<p className="tr-m-0 tr-text-xs tr-text-tertiary">{note}</p>
+			)}
 
 			{learnMore && (
 				<a

@@ -1478,8 +1478,8 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
         }
 
-        // Extract images from content
-        $content_images = $this->extract_content_images($post->post_content);
+        // Extract images from the content the visitor actually sees
+        $content_images = $this->extract_content_images($this->image_source_content($post));
         $images = array_merge($images, $content_images);
 
         // Remove duplicates based on URL
@@ -1493,6 +1493,111 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         }
 
         return $unique_images;
+    }
+
+    /**
+     * The markup a post's body images are read from.
+     *
+     * Raw `post_content` was the only source, which is wrong for every page
+     * builder that keeps the page somewhere else (#1283):
+     * - Oxygen, Breakdance and Elementor without a fallback copy leave
+     *   `post_content` empty, so only the featured image was listed;
+     * - a Gutenberg page rebuilt in Bricks keeps its abandoned blocks, so the
+     *   sitemap listed those old, invisible images and none of the live ones;
+     * - an Etch page holds its images in block attributes.
+     * Those posts go through the same resolver the meta description, schema
+     * and SEO score use, which rebuilds `<img>` tags from the builder's
+     * stored tree. Anything else keeps reading `post_content` as it is, so an
+     * ordinary post costs nothing more, and images a shortcode builder such
+     * as Divi 4 keeps in its attributes are added to it.
+     *
+     * @since 2.18.0
+     *
+     * @param \WP_Post $post Post.
+     * @return string HTML to read <img> tags from.
+     */
+    private function image_source_content(\WP_Post $post): string {
+        $raw = (string) $post->post_content;
+
+        if (
+            '' === trim($raw)
+            || Builder_Content::is_etch_markup($raw)
+            || Builder_Content::bricks_supersedes_post_content((int) $post->ID)
+        ) {
+            try {
+                return Builder_Content::resolve($post);
+            } catch (\Throwable $e) {
+                // A builder tree that cannot be read lists no body images,
+                // rather than taking the whole sitemap build down.
+                return '';
+            }
+        }
+
+        return $raw . $this->shortcode_image_tags($raw);
+    }
+
+    /**
+     * Shortcode attributes that hold an image URL in shortcode builders.
+     *
+     * Divi 4 keeps an Image module as `[et_pb_image src="…" alt="…"]`, a blurb
+     * or slide image as `image="…"`, a team member as `image_url="…"`, a
+     * testimonial portrait as `portrait_url="…"`.
+     *
+     * @var string[]
+     */
+    private const SHORTCODE_IMAGE_ATTRIBUTES = ['src', 'image', 'image_url', 'portrait_url', 'logo'];
+
+    /**
+     * `<img>` tags for the images shortcode attributes carry.
+     *
+     * Read from the attributes rather than by rendering the shortcodes: the
+     * builder is often not loaded where the sitemap is built (WP-Cron, CLI),
+     * and rendering every post's shortcodes would make a large sitemap build
+     * far slower. Only values that look like an image file are taken, so a
+     * `src` pointing at a video or a script is not listed as an image.
+     *
+     * @since 2.18.0
+     *
+     * @param string $content Raw post content.
+     * @return string
+     */
+    private function shortcode_image_tags(string $content): string {
+        if (strpos($content, '[') === false || !function_exists('shortcode_parse_atts')) {
+            return '';
+        }
+
+        if (!preg_match_all('/\[[a-zA-Z_][a-zA-Z0-9_-]*\s((?:[^\]"\']|"[^"]*"|\'[^\']*\')*)\]/', $content, $matches)) {
+            return '';
+        }
+
+        $tags = '';
+
+        foreach ($matches[1] as $attribute_text) {
+            $attributes = shortcode_parse_atts($attribute_text);
+            if (!is_array($attributes)) {
+                continue;
+            }
+
+            foreach (self::SHORTCODE_IMAGE_ATTRIBUTES as $name) {
+                $url = trim((string) ($attributes[$name] ?? ''));
+
+                if ($url === '' || !preg_match('/\.(?:jpe?g|png|gif|webp|avif|svg)(?:[?#].*)?$/i', $url)) {
+                    continue;
+                }
+
+                $alt   = (string) ($attributes['alt'] ?? '');
+                $title = (string) ($attributes['title_text'] ?? '');
+
+                $tags .= sprintf(
+                    "\n" . '<img src="%s" alt="%s" title="%s" />',
+                    esc_url($url),
+                    esc_attr($alt),
+                    esc_attr($title)
+                );
+            }
+        }
+
+        return $tags;
     }
 
     /**
@@ -2724,6 +2829,13 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // needs. Measured in the same real allocated size assert_memory_headroom()
         // compares against the limit, so the two are the same unit.
         $this->walk_chunk_cost = max($this->walk_chunk_cost, memory_get_usage(true) - $chunk_start);
+
+        // Reading a post's images asks Builder_Content whether Bricks owns it,
+        // which memoises the resolved tree (or an empty entry) per post for
+        // the rest of the request. Nothing in a later chunk reads this chunk's
+        // trees back, so keeping them would make the walk grow with the size
+        // of the site again (review on #1407).
+        Builder_Content::flush_bricks_cache();
 
         if (wp_using_ext_object_cache()) {
             if (

@@ -11,11 +11,8 @@
 import { __ } from '@wordpress/i18n';
 
 /**
- * Calculate real word count from text
- *
- * Applies the same two rules as the server's count
- * (Word_Count_Index::reading_text() and count_words()), so the Word Count
- * tile does not jump when a fresh score replaces the live figure:
+ * Count whitespace-separated words, as the server's
+ * Word_Count_Index::count_words() does:
  *
  * - Shortcode syntax is not reading matter. `[vc_column width="1/2"]` is not
  *   three words, and a WPBakery or Divi classic page is mostly made of it.
@@ -23,13 +20,60 @@ import { __ } from '@wordpress/i18n';
  * - A word holds at least one letter or digit, in any script, so a dash or a
  *   full stop standing on its own is not one.
  *
+ * The readability formulas read this, as on the server.
+ *
+ * @since 2.18.0
+ *
  * @param {string} text - Text content to analyze
  * @return {number} Word count
  */
-export const calculateWordCount = (text) =>
+export const countWords = (text) =>
 	toReadingText(text)
-		.split(' ')
+		.split(/\s+/)
 		.filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
+
+// Scripts written without spaces between words, and how many of their
+// characters make one English-equivalent word. Mirrors
+// Word_Count_Index::count_word_equivalents() (#1291).
+const CJK_CHARACTER =
+	/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u30FC]/gu;
+const SEA_CHARACTER =
+	/[\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/gu;
+const UNSPACED_RUN =
+	/(?:[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u30FC]|[\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}])+/gu;
+const CJK_CHARACTERS_PER_WORD = 2;
+const SEA_CHARACTERS_PER_WORD = 5;
+
+/**
+ * Calculate real word count from text
+ *
+ * The length the SEO score reads, as the server's
+ * calculate_word_count_js_style() measures it
+ * (Word_Count_Index::reading_text() and count_word_equivalents()), so the
+ * Word Count tile does not jump when a fresh score replaces the live figure.
+ * Words are counted as countWords() does; a run of Chinese, Japanese, Thai
+ * or another script written without spaces is converted from characters to
+ * English-equivalent words, so a Japanese article is not a handful of words.
+ *
+ * @param {string} text - Text content to analyze
+ * @return {number} Word count
+ */
+export const calculateWordCount = (text) => {
+	const readingText = toReadingText(text);
+	const cjk = (readingText.match(CJK_CHARACTER) || []).length;
+	const sea = (readingText.match(SEA_CHARACTER) || []).length;
+
+	if (cjk === 0 && sea === 0) {
+		return countWords(readingText);
+	}
+
+	return (
+		countWords(readingText.replace(UNSPACED_RUN, ' ')) +
+		Math.round(
+			cjk / CJK_CHARACTERS_PER_WORD + sea / SEA_CHARACTERS_PER_WORD
+		)
+	);
+};
 
 /**
  * The text a reader reads, as every count in this file sees it.
@@ -197,7 +241,7 @@ export const calculateReadabilityScore = (text, locale = detectLocale()) => {
 
 	// Words, sentences and syllables from one reading text, as on the server.
 	const readingText = toReadingText(text);
-	const words = calculateWordCount(readingText);
+	const words = countWords(readingText);
 	const sentences = countSentences(readingText);
 	const syllables = estimateSyllables(readingText, locale);
 

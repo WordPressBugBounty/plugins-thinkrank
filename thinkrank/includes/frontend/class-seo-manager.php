@@ -251,6 +251,11 @@ class SEO_Manager {
         // Breadcrumb shortcode for use inside post/page content
         add_shortcode('thinkrank_breadcrumbs', [$this, 'breadcrumbs_shortcode']);
 
+        // Kadence's own breadcrumb engine offers Rank Math, Yoast and SEOPress
+        // but not ThinkRank, so its trail disagreed with our BreadcrumbList.
+        // The filter only fires inside the Kadence theme (#1439).
+        add_filter('kadence_breadcrumb_html', [$this, 'kadence_breadcrumb_html']);
+
         // Hero section (Site Identity → Hero & Branding): theme action hook +
         // shortcode so the configured hero title/subtitle/CTA/background render.
         add_action('thinkrank_hero', [$this, 'display_hero']);
@@ -1872,8 +1877,10 @@ class SEO_Manager {
      * @return void
      */
     public function output_open_graph_tags(): void {
-        // Per-content-type Open Graph switch. 'inherit' (the default) keeps the
-        // site-wide Social Media setting, which the emitters below read (#660).
+        // Per-content-type Open Graph switch. Off stops here; Inherit and On
+        // are resolved against the site-wide Social Media setting by the
+        // social manager, where On wins over a switch that is off (#660,
+        // #1335).
         if (!\ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
             \ThinkRank\SEO\Content_Type_Settings::FEATURE_OPEN_GRAPH,
             true
@@ -2884,6 +2891,8 @@ class SEO_Manager {
                 if ($this->current_post_id) {
                     $placeholders['%post_title%'] = get_the_title($this->current_post_id);
                     $placeholders['%page_title%'] = get_the_title($this->current_post_id);
+                    $placeholders['%title%']      = get_the_title($this->current_post_id);
+                    $placeholders['%date%']       = (string) get_the_date('', $this->current_post_id);
                     $post_author = get_post_field('post_author', $this->current_post_id);
                     $placeholders['%author%'] = get_the_author_meta('display_name', $post_author);
                     $placeholders['%author_name%'] = get_the_author_meta('display_name', $post_author);
@@ -2913,11 +2922,13 @@ class SEO_Manager {
                 if ($author) {
                     $placeholders['%author_name%'] = $author->display_name;
                     $placeholders['%author%'] = $author->display_name;
+                    $placeholders['%title%'] = $author->display_name;
                 }
                 break;
 
             case 'search':
                 $placeholders['%search_term%'] = get_search_query();
+                $placeholders['%title%'] = get_search_query();
                 break;
 
             case 'archive':
@@ -2926,6 +2937,19 @@ class SEO_Manager {
                 // well as og:title and twitter:title — a date archive rendered
                 // as "Month: <span>August 2026</span> | Site".
                 $placeholders['%archive_title%'] = self::archive_subject();
+                $placeholders['%title%'] = $placeholders['%archive_title%'];
+
+                // A custom taxonomy archive lands here too, and %term% is the
+                // name the Content Types templates give its subject.
+                $queried = get_queried_object();
+                if ($queried instanceof \WP_Term) {
+                    $placeholders['%term%'] = (string) $queried->name;
+                }
+
+                // A date archive is the one archive whose subject IS a date.
+                if (is_date()) {
+                    $placeholders['%date%'] = $placeholders['%archive_title%'];
+                }
                 break;
 
             case 'homepage':
@@ -2942,6 +2966,94 @@ class SEO_Manager {
         }
 
         return $placeholders;
+    }
+
+    /**
+     * A Site Identity title format rendered for one context with sample
+     * values, the way that context's page would print it.
+     *
+     * The Site Identity optimizer scores title length on this. It used to
+     * resolve every format against one universal map, so %title% was always a
+     * post title, %date% the current month and a token from another context
+     * was kept, and the score measured titles no page prints. The context map
+     * here mirrors get_title_placeholders() with sample subjects, and the
+     * result goes through process_title_template(), so the unresolved-token
+     * strip and the separator cleanup are the front end's own.
+     *
+     * @since 2.19.0
+     *
+     * @param string $template Title format.
+     * @param string $context  Context: homepage, post, page, category, tag,
+     *                         author, search or archive.
+     * @param array  $settings Site Identity settings.
+     * @return string Sample title.
+     */
+    public static function sample_title(string $template, string $context, array $settings): string {
+        $placeholders = array_merge(
+            self::base_title_placeholders($settings),
+            self::sample_title_placeholders($context)
+        );
+
+        return self::process_title_template($template, $placeholders);
+    }
+
+    /**
+     * Sample values for the tokens a context resolves, keyed as in
+     * get_title_placeholders(). A token that context does not set is left
+     * out, so the sample drops it as the page does.
+     *
+     * @since 2.19.0
+     *
+     * @param string $context Context key.
+     * @return array<string, string>
+     */
+    private static function sample_title_placeholders(string $context): array {
+        $author = 'Jane Doe';
+
+        switch ($context) {
+            case 'post':
+            case 'page':
+                $title = 'post' === $context
+                    ? 'How to Optimize Your Website for Better SEO Results'
+                    : 'About Our Company';
+
+                $placeholders = [
+                    '%post_title%'  => $title,
+                    '%page_title%'  => $title,
+                    '%title%'       => $title,
+                    '%date%'        => gmdate('F j, Y'),
+                    '%author%'      => $author,
+                    '%author_name%' => $author,
+                ];
+
+                // Only a post has categories.
+                if ('post' === $context) {
+                    $placeholders['%category%'] = 'SEO Tips';
+                }
+
+                return $placeholders;
+
+            case 'category':
+                return self::term_name_placeholders('category', 'SEO Tips');
+
+            case 'tag':
+                return self::term_name_placeholders('tag', 'On-Page SEO');
+
+            case 'author':
+                return ['%author_name%' => $author, '%author%' => $author, '%title%' => $author];
+
+            case 'search':
+                return ['%search_term%' => 'keyword research', '%title%' => 'keyword research'];
+
+            case 'archive':
+                // A date archive, the commonest kind: its subject is the date.
+                $period = gmdate('F Y');
+
+                return ['%archive_title%' => $period, '%title%' => $period, '%date%' => $period];
+
+            default:
+                return [];
+        }
     }
 
     /**
@@ -2966,9 +3078,17 @@ class SEO_Manager {
             '%site_name%' => self::first_non_empty($settings['site_name'] ?? '', get_bloginfo('name')),
             '%site_description%' => self::first_non_empty($settings['site_description'] ?? '', get_bloginfo('description')),
             '%tagline%' => self::first_non_empty($settings['tagline'] ?? '', get_bloginfo('description')),
+            // The Content Types templates and the Site Name help text spell
+            // it %sitename%, so a Site Identity format typed the same way
+            // used to print the token literally (#1330).
+            '%sitename%' => self::first_non_empty($settings['site_name'] ?? '', get_bloginfo('name')),
             '%separator%' => ' ' . $separator . ' ',
             '%sep%' => ' ' . $separator . ' ',
-            '%date%' => gmdate('F Y'),
+            // Page-relative, filled in by the contexts that have a date: a post
+            // or page has its publish date, a date archive its own period. It
+            // used to be the current month on every page, which put "October
+            // 2026" into the title of a category archive (#1330).
+            '%date%' => '',
         ];
     }
 
@@ -2982,15 +3102,20 @@ class SEO_Manager {
      * @return array<string, string> Placeholder values.
      */
     private static function term_name_placeholders(string $context, string $name): array {
+        // %title% and %term% are the Content Types names for the same value
+        // (Pattern_Resolver resolves both on a term), so a Site Identity
+        // format written in that vocabulary resolves too (#1330).
+        $aliases = ['%title%' => $name, '%term%' => $name];
+
         if ('category' === $context) {
-            return ['%category_title%' => $name, '%category%' => $name];
+            return ['%category_title%' => $name, '%category%' => $name] + $aliases;
         }
 
         if ('tag' === $context) {
-            return ['%tag_title%' => $name, '%tag%' => $name];
+            return ['%tag_title%' => $name, '%tag%' => $name] + $aliases;
         }
 
-        return ['%archive_title%' => $name];
+        return ['%archive_title%' => $name] + $aliases;
     }
 
     /**
@@ -3119,6 +3244,13 @@ class SEO_Manager {
      * @return string Processed title
      */
     private static function process_title_template(string $template, array $placeholders): string {
+        // A token this context cannot resolve (%page%, %currentyear%, a
+        // Yoast %%title%%, a post token on an archive) goes before
+        // substitution, decided against the placeholder map exactly as the
+        // Content Types templates do. Left in, it reached <title>, og:title
+        // and twitter:title as literal text (#1330, the #715 residual).
+        $template = \ThinkRank\SEO\Pattern_Resolver::strip_unresolved_tokens($template, $placeholders);
+
         $separator = $placeholders['%separator%'] ?? ' | ';
 
         // Legacy templates stored a literal pipe as separator — apply the active
@@ -3150,16 +3282,22 @@ class SEO_Manager {
 
         $title = strtr($template, $substitutions);
 
-        // Clean up multiple separators and extra spaces
-        $title = preg_replace('/\s*' . preg_quote(trim($separator), '/') . '\s*' . preg_quote(trim($separator), '/') . '\s*/', $separator, $title);
-        $title = preg_replace('/\s+/', ' ', $title);
-        $title = trim($title);
-
-        // Remove trailing separator
+        // Collapse runs of separators left by tokens that resolved to nothing.
+        // Repeated until stable: one pass merges pairs only, so three empty
+        // tokens in a row ("a - - - - b") used to keep a doubled separator.
         $separator_trimmed = trim($separator);
-        if (substr($title, -strlen($separator_trimmed)) === $separator_trimmed) {
-            $title = trim(substr($title, 0, -strlen($separator_trimmed)));
+        if ('' !== $separator_trimmed) {
+            $doubled = '/\s*' . preg_quote($separator_trimmed, '/') . '\s*' . preg_quote($separator_trimmed, '/') . '\s*/u';
+            do {
+                $before = $title;
+                $title  = (string) preg_replace($doubled, $separator, $title);
+            } while ($title !== $before);
         }
+
+        $title = (string) preg_replace('/\s+/u', ' ', $title);
+
+        // Leading and trailing separators, as a whole string (#972).
+        $title = \ThinkRank\Core\Seo_Text::trim_separator(trim($title), $separator_trimmed);
 
         // The values go in last, untouched apart from the whitespace collapse
         // the whole title has always had.
@@ -3405,15 +3543,14 @@ class SEO_Manager {
         $has_site_entity_output = false;
         $has_website_schema = false;
 
-        // The master switch on Essential SEO -> Schema Manager. Until #461 this
-        // was never read here, so turning schema off left every deployed entity
-        // on the page. Read it once and bail before touching the graph.
-        if ($this->schema_manager) {
-            $schema_settings = $this->schema_manager->get_settings('site', null);
-
-            if (isset($schema_settings['enabled']) && !$schema_settings['enabled']) {
-                return;
-            }
+        // The master switch on Essential SEO -> Schema Manager, resolved with
+        // the Content Type Matrix the way render() resolves it. Until #461 the
+        // switch was never read here, so turning schema off left every deployed
+        // entity on the page. Reading it on its own afterwards meant a type
+        // set to On still lost its site-wide entities while the switch was off
+        // (#1335). Bail before touching the graph.
+        if (!Schema_Graph::output_allowed()) {
+            return;
         }
 
         // PRIORITY 1: Always output site-wide schemas (Organization, Website, LocalBusiness, Person)
@@ -3531,11 +3668,123 @@ class SEO_Manager {
             return;
         }
 
+        // The setup wizard asks whether the site represents a person or an
+        // organization, and the importers carry the same answer over, but
+        // nothing read it: a person's site published an Organization (#1332).
+        // Only a saved "person" switches the entity. There is no default for
+        // the key, so a site that never answered keeps its Organization.
+        if (self::represents_person($settings)) {
+            $schema = $this->generate_site_person_schema($settings);
+
+            if ($schema) {
+                Schema_Graph::instance()->add_site_person($schema);
+            }
+
+            return;
+        }
+
         $schema = $this->generate_organization_schema($settings);
 
         if ($schema) {
             Schema_Graph::instance()->add_supporting($schema, 'Organization');
         }
+    }
+
+    /**
+     * Whether the Site Identity settings say the site represents a person.
+     *
+     * True only for a stored "person". The key has no default, so an install
+     * that never ran the wizard or an importer has no value and keeps the
+     * Organization it has always published.
+     *
+     * @since 2.18.0
+     *
+     * @param array $settings Site Identity settings.
+     * @return bool
+     */
+    private static function represents_person(array $settings): bool {
+        return isset($settings['represents'])
+            && 'person' === strtolower(trim((string) $settings['represents']));
+    }
+
+    /**
+     * The site entity as a Person, for a site that represents one.
+     *
+     * Reads the Schema Manager's site-wide Person fields first, then the Site
+     * Identity values, the way the Organization fallback reads its own. The
+     * node carries no @id: Schema_Graph gives a site-level Person the stable
+     * home_url('/#person') and merges it with a deployed Person of the same
+     * name rather than doubling it.
+     *
+     * @since 2.18.0
+     *
+     * @param array $settings Site identity settings (used as fallback).
+     * @return array|null Schema data, or null without a name to publish.
+     */
+    private function generate_site_person_schema(array $settings): ?array {
+        $schema_settings = $this->schema_manager ? $this->schema_manager->get_settings('site', null) : [];
+
+        $name = \ThinkRank\Core\Seo_Text::normalize_schema_name((string) $this->first_non_empty(
+            $schema_settings['person_name'] ?? null,
+            $settings['site_name'] ?? null,
+            get_bloginfo('name')
+        ));
+
+        if ('' === $name) {
+            return null;
+        }
+
+        $schema = [
+            '@context' => 'https://schema.org',
+            '@type'    => 'Person',
+            'name'     => $name,
+            'url'      => $this->first_non_empty(
+                $schema_settings['person_url'] ?? null,
+                $settings['site_url'] ?? null,
+                home_url('/')
+            ),
+        ];
+
+        $description = \ThinkRank\Core\Seo_Text::normalize_schema_text((string) $this->first_non_empty(
+            $schema_settings['person_description'] ?? null,
+            $settings['site_description'] ?? null,
+            get_bloginfo('description')
+        ));
+        if ('' !== $description) {
+            $schema['description'] = $description;
+        }
+
+        $job_title = trim((string) ($schema_settings['person_job_title'] ?? ''));
+        if ('' !== $job_title) {
+            $schema['jobTitle'] = $job_title;
+        }
+
+        // A person has a photo rather than a logo; the Site Identity logo is
+        // the only other image this site has said stands for it.
+        $image = $this->first_non_empty(
+            $schema_settings['person_image'] ?? null,
+            $settings['logo_url'] ?? null
+        );
+        if (!empty($image)) {
+            $schema['image'] = [
+                '@type'      => 'ImageObject',
+                'url'        => $image,
+                'contentUrl' => $image,
+            ];
+        }
+
+        $same_as = array_values(array_filter(
+            array_map('trim', array_map('strval', (array) ($schema_settings['person_same_as'] ?? []))),
+            static fn(string $url): bool => '' !== $url
+        ));
+        if (empty($same_as)) {
+            $same_as = $this->site_identity_social_urls();
+        }
+        if (!empty($same_as)) {
+            $schema['sameAs'] = $same_as;
+        }
+
+        return $schema;
     }
 
     /**
@@ -3771,25 +4020,8 @@ class SEO_Manager {
         }
 
         // Fallback to Site Identity social profiles if no Schema Manager profiles
-        if (empty($social_urls) && !empty($this->site_identity_data['social'])) {
-            $social_data = $this->site_identity_data['social'];
-
-            if (!empty($social_data['facebook_url'])) {
-                $social_urls[] = $social_data['facebook_url'];
-            }
-            if (!empty($social_data['twitter_username'])) {
-                $twitter_url = 'https://twitter.com/' . ltrim($social_data['twitter_username'], '@');
-                $social_urls[] = $twitter_url;
-            }
-            if (!empty($social_data['linkedin_url'])) {
-                $social_urls[] = $social_data['linkedin_url'];
-            }
-            if (!empty($social_data['instagram_url'])) {
-                $social_urls[] = $social_data['instagram_url'];
-            }
-            if (!empty($social_data['youtube_url'])) {
-                $social_urls[] = $social_data['youtube_url'];
-            }
+        if (empty($social_urls)) {
+            $social_urls = $this->site_identity_social_urls();
         }
 
         if (!empty($social_urls)) {
@@ -3823,6 +4055,43 @@ class SEO_Manager {
         }
 
         return $schema;
+    }
+
+    /**
+     * The social profile URLs set in Site Identity, for the site entity's sameAs.
+     *
+     * Shared by the Organization and Person fallbacks.
+     *
+     * @since 2.18.0
+     * @return string[]
+     */
+    private function site_identity_social_urls(): array {
+        $social_urls = [];
+
+        if (empty($this->site_identity_data['social'])) {
+            return $social_urls;
+        }
+
+        $social_data = $this->site_identity_data['social'];
+
+        if (!empty($social_data['facebook_url'])) {
+            $social_urls[] = $social_data['facebook_url'];
+        }
+        if (!empty($social_data['twitter_username'])) {
+            $twitter_url = 'https://twitter.com/' . ltrim($social_data['twitter_username'], '@');
+            $social_urls[] = $twitter_url;
+        }
+        if (!empty($social_data['linkedin_url'])) {
+            $social_urls[] = $social_data['linkedin_url'];
+        }
+        if (!empty($social_data['instagram_url'])) {
+            $social_urls[] = $social_data['instagram_url'];
+        }
+        if (!empty($social_data['youtube_url'])) {
+            $social_urls[] = $social_data['youtube_url'];
+        }
+
+        return $social_urls;
     }
 
     /**
@@ -3975,6 +4244,36 @@ class SEO_Manager {
         ob_start();
         $this->display_breadcrumbs();
         return (string) ob_get_clean();
+    }
+
+    /**
+     * Serve ThinkRank's trail where the Kadence theme prints its own
+     *
+     * Hooked to Kadence's `kadence_breadcrumb_html`, which carries the trail
+     * its default engine built. Sites that picked Rank Math, Yoast or SEOPress
+     * in Kadence never reach it. The visible trail then matches the
+     * BreadcrumbList in the schema graph, primary category and SEO titles
+     * included. Kadence's own trail stays when ThinkRank breadcrumbs are off,
+     * and nothing is added where Kadence prints none (the front page).
+     *
+     * @since 2.19.1
+     *
+     * @param mixed $html Kadence's breadcrumb HTML.
+     * @return mixed ThinkRank's breadcrumb HTML in Kadence's wrapper, or $html.
+     */
+    public function kadence_breadcrumb_html($html) {
+        if (!is_string($html) || $html === '') {
+            return $html;
+        }
+
+        $ours = $this->breadcrumbs_shortcode();
+        if ($ours === '') {
+            return $html;
+        }
+
+        // Same wrapper Kadence gives the Yoast and SEOPress trails, so the
+        // theme's breadcrumb styles and placement still apply.
+        return '<div class="kadence-breadcrumbs thinkrank-bc-wrap">' . $ours . '</div>';
     }
 
     /**

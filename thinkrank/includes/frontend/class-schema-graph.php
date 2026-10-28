@@ -181,6 +181,18 @@ class Schema_Graph {
     private array $supporting = [];
 
     /**
+     * Index in $supporting of the Person the site says it represents.
+     *
+     * Set by add_site_person(). The page's publisher references this node,
+     * because on a site that represents a person the person is the publisher
+     * (#1332).
+     *
+     * @since 2.19.0
+     * @var int|null
+     */
+    private ?int $site_person_index = null;
+
+    /**
      * Merged FAQ questions, keyed by normalized question text.
      *
      * @var array<string,array>
@@ -415,6 +427,29 @@ class Schema_Graph {
     }
 
     /**
+     * Register the Person the site represents, which also publishes its pages.
+     *
+     * The node joins the supporting set like any site-level Person, taking the
+     * stable `#person` @id and merging with a deployed Person of the same
+     * name. On top of that, the page entity's inline `publisher` (built from
+     * the blog name as an Organization) is replaced with a reference to it,
+     * so a person's site does not also describe itself as an Organization in
+     * every Article (#1332).
+     *
+     * @since 2.19.0
+     * @param array $schema Person schema.
+     * @return void
+     */
+    public function add_site_person(array $schema): void {
+        if (empty($schema)) {
+            return;
+        }
+
+        $this->supporting[]      = $schema;
+        $this->site_person_index = count($this->supporting) - 1;
+    }
+
+    /**
      * Whether a supporting node of the given type has already been collected.
      *
      * @since 1.16.0
@@ -640,24 +675,15 @@ class Schema_Graph {
      * @return bool
      */
     private static function schema_allowed_for_post(\WP_Post $post): bool {
-        if (null === self::$master_switch_on) {
-            // Resolve the site-wide half through the existing reader.
-            self::output_allowed();
-        }
-
-        if (!self::$master_switch_on) {
-            return false;
-        }
-
         if (class_exists('ThinkRank\\SEO\\Content_Type_Settings')) {
             return \ThinkRank\SEO\Content_Type_Settings::is_enabled(
                 \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
                 (string) $post->post_type,
-                true
+                self::master_switch_on()
             );
         }
 
-        return true;
+        return self::master_switch_on();
     }
 
     /**
@@ -779,12 +805,39 @@ class Schema_Graph {
      * @return bool True when structured data may be emitted.
      */
     public static function output_allowed(): bool {
-        // Memoised because inject_block_schema() asks once per matching block,
-        // and Schema_Management_System's constructor builds a schema builder and
-        // a cache manager and registers listeners — it is not something to spin
-        // up per block. The switch is site-wide, so it cannot change within a
-        // request; the per-content-type check below is query-dependent and stays
-        // live.
+        // The master switch is the site-wide value an Inherit cell resolves
+        // to, and an explicit On or Off for this content type wins over it.
+        // The matrix offered On, but this used to check the master switch
+        // first and pass a hard-coded true, so On behaved exactly like Inherit
+        // and could never turn schema on for one type of a site that has it
+        // off (#1335). The per-content-type answer is query-dependent and
+        // stays live.
+        if (class_exists('ThinkRank\\SEO\\Content_Type_Settings')) {
+            return \ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
+                \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
+                self::master_switch_on()
+            );
+        }
+
+        return self::master_switch_on();
+    }
+
+    /**
+     * The site-wide schema master switch (Essential SEO -> Schema Manager).
+     *
+     * Memoised because inject_block_schema() asks once per matching block,
+     * and Schema_Management_System's constructor builds a schema builder and a
+     * cache manager and registers listeners: it is not something to spin up
+     * per block. The switch is site-wide, so it cannot change within a
+     * request.
+     *
+     * Public so every reader of the switch, the Content Type Matrix header
+     * included, resolves it the same way (#1335).
+     *
+     * @since 2.18.0
+     * @return bool
+     */
+    public static function master_switch_on(): bool {
         if (null === self::$master_switch_on) {
             self::$master_switch_on = true;
 
@@ -797,18 +850,7 @@ class Schema_Graph {
             }
         }
 
-        if (!self::$master_switch_on) {
-            return false;
-        }
-
-        if (class_exists('ThinkRank\\SEO\\Content_Type_Settings')) {
-            return \ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
-                \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
-                true
-            );
-        }
-
-        return true;
+        return self::$master_switch_on;
     }
 
     /**
@@ -1192,6 +1234,7 @@ class Schema_Graph {
         $breadcrumb_id      = '';
         $organization_nodes = [];
         $person_nodes       = [];
+        $site_person_id     = '';
 
         foreach ($this->supporting as $index => $node) {
             $type = $node['@type'] ?? '';
@@ -1222,6 +1265,10 @@ class Schema_Graph {
 
                 if (null !== $duplicate_key) {
                     $nodes[$duplicate_key] = $this->merge_entity($nodes[$duplicate_key], $node);
+
+                    if ($index === $this->site_person_index) {
+                        $site_person_id = (string) ($nodes[$duplicate_key]['@id'] ?? '');
+                    }
                     continue;
                 }
 
@@ -1229,6 +1276,10 @@ class Schema_Graph {
 
                 if ('Person' === $slot) {
                     $person_nodes[] = $node;
+                }
+
+                if ($index === $this->site_person_index) {
+                    $site_person_id = $node['@id'];
                 }
             } elseif (is_string($type) && $type !== '') {
                 $node = $this->assign_id($node, $base . '#' . strtolower($type), $used_ids);
@@ -1264,6 +1315,12 @@ class Schema_Graph {
                 $linked = $this->link_to_node($nodes['primary']['publisher'], $organization_nodes);
                 if (null !== $linked) {
                     $nodes['primary']['publisher'] = $linked;
+                } elseif ('' !== $site_person_id && empty($organization_nodes)) {
+                    // A site that represents a person is published by that
+                    // person. The inline publisher is an Organization named
+                    // after the blog, so leaving it would describe the site
+                    // as both a Person and an Organization (#1332).
+                    $nodes['primary']['publisher'] = ['@id' => $site_person_id];
                 }
             }
 

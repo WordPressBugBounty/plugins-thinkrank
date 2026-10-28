@@ -2,14 +2,14 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 2.19.0\n"
+"Project-Id-Version: ThinkRank 2.20.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-27T09:49:19+00:00\n"
+"POT-Creation-Date: 2026-10-28T07:32:39+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
@@ -2876,10 +2876,10 @@ msgid "Focus keyword updated successfully."
 msgstr ""
 
 #: includes/admin/class-focus-keyword-ajax.php:133
-#: includes/admin/class-post-list-columns.php:536
-#: includes/admin/class-post-list-columns.php:576
-#: includes/admin/class-post-list-columns.php:588
-#: includes/admin/class-post-list-columns.php:777
+#: includes/admin/class-post-list-columns.php:555
+#: includes/admin/class-post-list-columns.php:595
+#: includes/admin/class-post-list-columns.php:607
+#: includes/admin/class-post-list-columns.php:796
 msgid "Not Set"
 msgstr ""
 
@@ -2927,7 +2927,7 @@ msgstr ""
 #: src/admin/components/import-export/ExportProgress.js:20
 #: src/admin/components/import-export/MigrateProgress.js:17
 #: src/admin/components/import-export/NativeExportCard.js:29
-#: src/admin/components/import-export/PluginImportCard.js:41
+#: src/admin/components/import-export/PluginImportCard.js:42
 #: src/admin/components/import-export/SnapshotInfo.js:23
 #: src/admin/components/layout/TopNav.js:588
 #: src/admin/components/pages/Settings.js:131
@@ -3037,14 +3037,14 @@ msgid "Are you sure?"
 msgstr ""
 
 #: includes/admin/class-manager.php:921
-#: includes/admin/class-post-list-columns.php:759
+#: includes/admin/class-post-list-columns.php:778
 #: includes/core/class-plugin-usage-tracker.php:1159
 #: src/admin/components/import-export/ConfirmationDialog.js:45
 #: src/admin/components/pages/MCPActivity.js:787
 #: src/admin/components/pages/MCPConnectedApps.js:869
 #: src/admin/components/pages/MCPConnectedApps.js:980
 #: src/admin/components/pages/MCPConnectedApps.js:1017
-#: src/admin/components/pages/MCPConnectionConfig.js:636
+#: src/admin/components/pages/MCPConnectionConfig.js:857
 #: src/admin/components/pages/MCPHubConnect.js:434
 #: src/admin/components/seo/SEOScoreCalculator.js:1027
 #: src/metabox/components/metabox-schema-tab/ImportSection.js:510
@@ -3052,7 +3052,7 @@ msgid "Cancel"
 msgstr ""
 
 #: includes/admin/class-manager.php:922
-#: includes/admin/class-post-list-columns.php:757
+#: includes/admin/class-post-list-columns.php:776
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1514
 #: src/admin/components/essential-seo/IntegrationsTab.js:377
 #: src/metabox/components/MetaboxDrawer.js:250
@@ -3155,92 +3155,92 @@ msgstr ""
 msgid "ThinkRank SEO Overview"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:480
-#: includes/admin/class-post-list-columns.php:484
+#: includes/admin/class-post-list-columns.php:499
+#: includes/admin/class-post-list-columns.php:503
 #: src/admin/components/seo/SEOScoreSummary.js:367
 msgid "SEO Score"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:485
+#: includes/admin/class-post-list-columns.php:504
 msgid "N/A"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:492
+#: includes/admin/class-post-list-columns.php:511
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsTxtValidation.js:226
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsTxtValidation.js:245
 #: src/admin/components/seo/SEOScoreSummary.js:385
 msgid "Content Quality"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:498
+#: includes/admin/class-post-list-columns.php:517
 #: includes/admin/class-post-list-filters.php:150
 msgid "Pillar Content"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:521
-#: includes/admin/class-post-list-columns.php:522
-#: includes/admin/class-post-list-columns.php:749
+#: includes/admin/class-post-list-columns.php:540
+#: includes/admin/class-post-list-columns.php:541
+#: includes/admin/class-post-list-columns.php:768
 msgid "Quick Edit SEO"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:535
+#: includes/admin/class-post-list-columns.php:554
 msgid "Focus Keyword - Click to edit"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:552
+#: includes/admin/class-post-list-columns.php:571
 #: src/admin/components/seo/ImprovementSuggestions.js:366
 #: src/admin/components/seo/SEOScoreSummary.js:393
 msgid "Readability"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:568
+#: includes/admin/class-post-list-columns.php:587
 msgid "Meta Title"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:576
-#: includes/admin/class-post-list-columns.php:588
+#: includes/admin/class-post-list-columns.php:595
+#: includes/admin/class-post-list-columns.php:607
 msgid "Set"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:581
-#: includes/admin/class-post-list-columns.php:752
+#: includes/admin/class-post-list-columns.php:600
+#: includes/admin/class-post-list-columns.php:771
 #: src/admin/components/ai/MetadataGenerator.js:554
 #: src/metabox/components/panels/GeneralPanel.js:165
 #: src/term-seo/components/TermSeoPanel.js:394
 msgid "Meta Description"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:750
+#: includes/admin/class-post-list-columns.php:769
 #: src/admin/components/ai/MetadataGenerator.js:533
 #: src/metabox/components/panels/GeneralPanel.js:128
 #: src/term-seo/components/TermSeoPanel.js:361
 msgid "SEO Title"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:751
+#: includes/admin/class-post-list-columns.php:770
 #: src/metabox/components/panels/GeneralPanel.js:133
 #: src/term-seo/components/TermSeoPanel.js:369
 msgid "Keep it under 60 characters for best results."
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:753
+#: includes/admin/class-post-list-columns.php:772
 msgid "Keep it under 160 characters for best results."
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:754
+#: includes/admin/class-post-list-columns.php:773
 #: src/metabox/components/FocusKeywordsInput.js:101
 msgid "Focus Keywords"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:755
+#: includes/admin/class-post-list-columns.php:774
 msgid "Separate keywords with commas. The first keyword is primary."
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:756
+#: includes/admin/class-post-list-columns.php:775
 msgid "Leave empty to inherit from your Global SEO pattern."
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:758
+#: includes/admin/class-post-list-columns.php:777
 #: src/admin/components/common/SettingsCard.js:59
 #: src/admin/components/essential-seo/analytics/AnalyticsTab.js:750
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:292
@@ -3267,42 +3267,42 @@ msgstr ""
 msgid "Saving…"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:760
+#: includes/admin/class-post-list-columns.php:779
 #: src/admin/components/content-brief/ContentBriefGenerator.js:1171
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:912
 #: src/metabox/components/MetaboxDrawer.js:262
 msgid "Close"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:761
+#: includes/admin/class-post-list-columns.php:780
 msgid "Open full editor"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:762
+#: includes/admin/class-post-list-columns.php:781
 msgid "Could not load SEO fields. Please try again."
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:763
+#: includes/admin/class-post-list-columns.php:782
 msgid "Could not save. Please try again."
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:778
+#: includes/admin/class-post-list-columns.php:797
 msgid "Click to edit"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:779
+#: includes/admin/class-post-list-columns.php:798
 msgid "Press Enter to save, Esc to cancel"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:780
+#: includes/admin/class-post-list-columns.php:799
 msgid "Saving..."
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:781
+#: includes/admin/class-post-list-columns.php:800
 msgid "Saved!"
 msgstr ""
 
-#: includes/admin/class-post-list-columns.php:782
+#: includes/admin/class-post-list-columns.php:801
 msgid "Error updating focus keyword. Please try again."
 msgstr ""
 
@@ -3536,112 +3536,124 @@ msgstr ""
 msgid "The snapshot still holds data ThinkRank has not applied yet: %s. It stays preserved in the snapshot (cleanup never deletes the snapshot), but the source plugin's copy will be removed. Pass force=true to proceed."
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3392
+#: includes/admin/importers/class-snapshot-migrator.php:3537
 #: includes/core/class-capability-manager.php:122
 #: src/admin/components/essential-seo/SidebarNavigation.js:322
 #: src/admin/components/import-export/ExportProgress.js:17
 #: src/admin/components/import-export/importTypes.js:27
-#: src/admin/components/import-export/PluginImportCard.js:38
+#: src/admin/components/import-export/PluginImportCard.js:39
 #: src/admin/components/import-export/SnapshotInfo.js:20
 msgid "Redirections"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3401
+#: includes/admin/importers/class-snapshot-migrator.php:3546
 #: src/admin/components/import-export/ExportProgress.js:18
-#: src/admin/components/import-export/PluginImportCard.js:39
+#: src/admin/components/import-export/PluginImportCard.js:40
 #: src/admin/components/import-export/SnapshotInfo.js:21
 msgid "404 Logs"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3565
+#: includes/admin/importers/class-snapshot-migrator.php:3718
 msgid "Header, body and footer code"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3566
+#: includes/admin/importers/class-snapshot-migrator.php:3719
 msgid "Redirect behaviour settings"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3567
+#: includes/admin/importers/class-snapshot-migrator.php:3720
 msgid "Taxonomy templates and images"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3568
+#: includes/admin/importers/class-snapshot-migrator.php:3721
 msgid "Post type archive templates and images"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3569
+#: includes/admin/importers/class-snapshot-migrator.php:3722
 msgid "Removing /category/ from category URLs"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3570
+#: includes/admin/importers/class-snapshot-migrator.php:3723
 msgid "Webmaster tools verification codes"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3571
+#: includes/admin/importers/class-snapshot-migrator.php:3724
 msgid "Role access settings"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3572
+#: includes/admin/importers/class-snapshot-migrator.php:3725
 msgid "Homepage social title"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3573
+#: includes/admin/importers/class-snapshot-migrator.php:3726
 msgid "Homepage social description"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3574
+#: includes/admin/importers/class-snapshot-migrator.php:3727
 msgid "Homepage social image"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3575
+#: includes/admin/importers/class-snapshot-migrator.php:3728
 msgid "Custom schemas (need ThinkRank Pro)"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3576
+#: includes/admin/importers/class-snapshot-migrator.php:3729
 msgid "Schema templates with no ThinkRank equivalent"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3578
+#: includes/admin/importers/class-snapshot-migrator.php:3731
+msgid "Post schema types with no ThinkRank equivalent"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3732
+msgid "Extra schemas on a post (ThinkRank keeps one per post)"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3733
+msgid "Default schema types per post type"
+msgstr ""
+
+#: includes/admin/importers/class-snapshot-migrator.php:3735
 msgid "Nofollow and noarchive rules for taxonomies"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3579
+#: includes/admin/importers/class-snapshot-migrator.php:3736
 msgid "Description template for term and author archives"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3580
+#: includes/admin/importers/class-snapshot-migrator.php:3737
 msgid "Date archives redirected to the homepage"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3581
+#: includes/admin/importers/class-snapshot-migrator.php:3738
 msgid "Homepage social titles, descriptions and images"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3582
+#: includes/admin/importers/class-snapshot-migrator.php:3739
 msgid "Noindex rules for paginated pages"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3583
+#: includes/admin/importers/class-snapshot-migrator.php:3740
 msgid "Removed RSS feeds"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3584
+#: includes/admin/importers/class-snapshot-migrator.php:3741
 msgid "Social tags switched off"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3585
+#: includes/admin/importers/class-snapshot-migrator.php:3742
 msgid "Attachment pages redirected to their parent post"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3586
+#: includes/admin/importers/class-snapshot-migrator.php:3743
 msgid "Other settings with no ThinkRank equivalent"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3587
+#: includes/admin/importers/class-snapshot-migrator.php:3744
 msgid "Schema changes on individual pages"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3588
+#: includes/admin/importers/class-snapshot-migrator.php:3745
 msgid "Robots, canonical and social settings of individual authors"
 msgstr ""
 
@@ -3777,226 +3789,226 @@ msgstr ""
 msgid "Unexpected non-array response from %s"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:228
+#: includes/ai/class-seo-score-calculator.php:240
 msgid "Consider expanding content to 1500+ words for more comprehensive coverage"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:230
+#: includes/ai/class-seo-score-calculator.php:242
 msgid "Content is adequate - aim for 1000+ words for stronger topic depth"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:232
+#: includes/ai/class-seo-score-calculator.php:244
 msgid "Content is thin - aim for 600+ words minimum"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:234
+#: includes/ai/class-seo-score-calculator.php:246
 msgid "Content too shallow - Google prioritizes comprehensive, satisfying content"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:236
+#: includes/ai/class-seo-score-calculator.php:248
 msgid "Set a focus keyword so content relevance can be measured"
 msgstr ""
 
 #. translators: %s: focus keyword.
-#: includes/ai/class-seo-score-calculator.php:239
+#: includes/ai/class-seo-score-calculator.php:251
 #, php-format
 msgid "Use the focus keyword '%s' in the body content"
 msgstr ""
 
 #. translators: %s: focus keyword.
-#: includes/ai/class-seo-score-calculator.php:242
+#: includes/ai/class-seo-score-calculator.php:254
 #, php-format
 msgid "Mention '%s' near the start of the content (first paragraph)"
 msgstr ""
 
 #. translators: %s: focus keyword.
-#: includes/ai/class-seo-score-calculator.php:245
+#: includes/ai/class-seo-score-calculator.php:257
 #, php-format
 msgid "Include the focus keyword '%s' in the meta description"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:247
+#: includes/ai/class-seo-score-calculator.php:259
 msgid "Improve content structure - break up long paragraphs and add subheadings"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:249
+#: includes/ai/class-seo-score-calculator.php:261
 msgid "Add a compelling, click-worthy title that matches search intent"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:251
+#: includes/ai/class-seo-score-calculator.php:263
 msgid "Optimize title length to 35-60 characters for better SERP visibility"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:253
+#: includes/ai/class-seo-score-calculator.php:265
 msgid "Title too short - aim for 35-60 characters"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:255
+#: includes/ai/class-seo-score-calculator.php:267
 msgid "Title too long - risk truncation in search results"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:257
+#: includes/ai/class-seo-score-calculator.php:269
 msgid "Good semantic keyword usage - Google now recognizes keyword variations"
 msgstr ""
 
 #. translators: %s: focus keyword.
-#: includes/ai/class-seo-score-calculator.php:260
+#: includes/ai/class-seo-score-calculator.php:272
 #, php-format
 msgid "Include more parts of target keyword '%s' in title"
 msgstr ""
 
 #. translators: %s: focus keyword.
-#: includes/ai/class-seo-score-calculator.php:263
+#: includes/ai/class-seo-score-calculator.php:275
 #, php-format
 msgid "Include target keyword '%s' or related terms in title"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:265
+#: includes/ai/class-seo-score-calculator.php:277
 msgid "Set a target keyword to optimize title effectiveness"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:267
+#: includes/ai/class-seo-score-calculator.php:279
 msgid "Add a number or a power word to the title to boost click-through rate"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:269
+#: includes/ai/class-seo-score-calculator.php:281
 msgid "Use an emotional/sentiment word in the title to make it more compelling"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:271
+#: includes/ai/class-seo-score-calculator.php:283
 msgid "Set a focus keyword and use it in subheadings and the URL for stronger topical signals"
 msgstr ""
 
 #. translators: %s: focus keyword.
-#: includes/ai/class-seo-score-calculator.php:274
+#: includes/ai/class-seo-score-calculator.php:286
 #, php-format
 msgid "Include '%s' in at least one subheading (H2-H6)"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:276
+#: includes/ai/class-seo-score-calculator.php:288
 msgid "Keyword density is high - reduce repetition to avoid over-optimization"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:278
+#: includes/ai/class-seo-score-calculator.php:290
 msgid "Keyword density is low - use the focus keyword a little more often"
 msgstr ""
 
 #. translators: %s: focus keyword.
-#: includes/ai/class-seo-score-calculator.php:281
+#: includes/ai/class-seo-score-calculator.php:293
 #, php-format
 msgid "Use the focus keyword '%s' in the content"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:283
+#: includes/ai/class-seo-score-calculator.php:295
 msgid "Include the focus keyword in the URL slug"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:285
+#: includes/ai/class-seo-score-calculator.php:297
 msgid "Shorten the URL slug - long URLs are harder to read and share"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:287
+#: includes/ai/class-seo-score-calculator.php:299
 msgid "Add a relevant image with the focus keyword in its alt text"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:289
+#: includes/ai/class-seo-score-calculator.php:301
 msgid "Include the focus keyword in at least one image alt attribute"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:291
+#: includes/ai/class-seo-score-calculator.php:303
 msgid "Improve readability and structure (shorter sentences, subheadings, shorter paragraphs)"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:293
+#: includes/ai/class-seo-score-calculator.php:305
 msgid "Add at least one dofollow link to an authoritative external source"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:295
+#: includes/ai/class-seo-score-calculator.php:307
 msgid "Cite authoritative external sources, and build quality backlinks to this page"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:297
+#: includes/ai/class-seo-score-calculator.php:309
 msgid "Add author credentials, citations, and contact information to reinforce trustworthiness"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:299
+#: includes/ai/class-seo-score-calculator.php:311
 msgid "Serve the site over HTTPS (install an SSL certificate)"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:301
+#: includes/ai/class-seo-score-calculator.php:313
 msgid "Content is 6-12 months old - review and refresh it for better freshness signals"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:303
+#: includes/ai/class-seo-score-calculator.php:315
 msgid "Content is over a year old - update it to maintain freshness signals"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:305
+#: includes/ai/class-seo-score-calculator.php:317
 msgid "Ensure mobile-first design and fast loading on mobile devices"
 msgstr ""
 
 #. translators: %s: PageSpeed mobile performance score, out of 100.
-#: includes/ai/class-seo-score-calculator.php:308
+#: includes/ai/class-seo-score-calculator.php:320
 #, php-format
 msgid "Improve mobile page speed: the last PageSpeed run scored %s/100 on mobile"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:310
+#: includes/ai/class-seo-score-calculator.php:322
 msgid "Optimize Core Web Vitals: LCP, INP, and CLS for better user experience"
 msgstr ""
 
 #. translators: %s: comma-separated Core Web Vitals metric names, e.g. "LCP, CLS".
-#: includes/ai/class-seo-score-calculator.php:313
+#: includes/ai/class-seo-score-calculator.php:325
 #, php-format
 msgid "Optimize Core Web Vitals: %s below target on mobile"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:315
+#: includes/ai/class-seo-score-calculator.php:327
 msgid "Add relevant internal links to other pages on your site"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:317
+#: includes/ai/class-seo-score-calculator.php:329
 msgid "Add a compelling meta description (120-160 characters)"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:319
+#: includes/ai/class-seo-score-calculator.php:331
 msgid "Consider adding structured data (schema markup)"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:1949
-#: src/admin/components/seo/utils/contentAnalysis.js:221
+#: includes/ai/class-seo-score-calculator.php:1963
+#: src/admin/components/seo/utils/contentAnalysis.js:265
 msgid "Very Easy"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:1951
-#: src/admin/components/seo/utils/contentAnalysis.js:222
+#: includes/ai/class-seo-score-calculator.php:1965
+#: src/admin/components/seo/utils/contentAnalysis.js:266
 msgid "Easy"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:1953
-#: src/admin/components/seo/utils/contentAnalysis.js:223
+#: includes/ai/class-seo-score-calculator.php:1967
+#: src/admin/components/seo/utils/contentAnalysis.js:267
 msgid "Fairly Easy"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:1955
+#: includes/ai/class-seo-score-calculator.php:1969
 #: src/admin/components/essential-seo/GlobalSEOTab.js:777
-#: src/admin/components/seo/utils/contentAnalysis.js:224
+#: src/admin/components/seo/utils/contentAnalysis.js:268
 #: src/metabox/components/MetaboxRobotsTab.js:209
 msgid "Standard"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:1957
-#: src/admin/components/seo/utils/contentAnalysis.js:225
+#: includes/ai/class-seo-score-calculator.php:1971
+#: src/admin/components/seo/utils/contentAnalysis.js:269
 msgid "Fairly Difficult"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:1959
-#: src/admin/components/seo/utils/contentAnalysis.js:226
+#: includes/ai/class-seo-score-calculator.php:1973
+#: src/admin/components/seo/utils/contentAnalysis.js:270
 msgid "Difficult"
 msgstr ""
 
-#: includes/ai/class-seo-score-calculator.php:1961
-#: src/admin/components/seo/utils/contentAnalysis.js:227
+#: includes/ai/class-seo-score-calculator.php:1975
+#: src/admin/components/seo/utils/contentAnalysis.js:271
 msgid "Very Difficult"
 msgstr ""
 
@@ -4471,11 +4483,11 @@ msgstr ""
 msgid "You do not have permission to run the site SEO analyzer."
 msgstr ""
 
-#: includes/api/class-seo-score-endpoint.php:361
+#: includes/api/class-seo-score-endpoint.php:575
 msgid "Existing SEO score retrieved successfully"
 msgstr ""
 
-#: includes/api/class-seo-score-endpoint.php:367
+#: includes/api/class-seo-score-endpoint.php:581
 msgid "No existing SEO analysis found"
 msgstr ""
 
@@ -5371,7 +5383,7 @@ msgstr ""
 msgid "Guide"
 msgstr ""
 
-#: includes/frontend/class-global-seo-schema-output.php:294
+#: includes/frontend/class-global-seo-schema-output.php:291
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:51
 #: src/admin/components/essential-seo/SocialMediaTab.js:1220
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:31
@@ -5379,13 +5391,13 @@ msgid "Blog"
 msgstr ""
 
 #. translators: %d: page number.
-#: includes/frontend/class-seo-manager.php:889
+#: includes/frontend/class-seo-manager.php:894
 #, php-format
 msgid "Page %d"
 msgstr ""
 
 #. translators: %s: search query.
-#: includes/frontend/class-seo-manager.php:5079
+#: includes/frontend/class-seo-manager.php:5378
 #, php-format
 msgid "Search results for \"%s\""
 msgstr ""
@@ -6074,7 +6086,7 @@ msgid "Overlapping hours on %s."
 msgstr ""
 
 #. translators: %s: comma-separated list of caching plugin names.
-#: includes/seo/class-cache-purger.php:375
+#: includes/seo/class-cache-purger.php:566
 #, php-format
 msgid "%s is active and offers no way to clear a single page from here. Clear its cache to see the change on the front end."
 msgid_plural "%s are active and offer no way to clear a single page from here. Clear their caches to see the change on the front end."
@@ -6130,25 +6142,25 @@ msgstr ""
 msgid "The database did not confirm rollback. Read the current row before any further change."
 msgstr ""
 
-#: includes/seo/class-content-type-settings.php:308
+#: includes/seo/class-content-type-settings.php:347
 msgid "Blog posts index"
 msgstr ""
 
-#: includes/seo/class-content-type-settings.php:320
+#: includes/seo/class-content-type-settings.php:359
 #: src/admin/components/pages/MCP.js:33
 msgid "Author archives"
 msgstr ""
 
-#: includes/seo/class-content-type-settings.php:330
+#: includes/seo/class-content-type-settings.php:369
 msgid "Date archives"
 msgstr ""
 
-#: includes/seo/class-content-type-settings.php:344
+#: includes/seo/class-content-type-settings.php:383
 #: src/admin/components/layout/NavSearch.js:273
 msgid "Search results"
 msgstr ""
 
-#: includes/seo/class-content-type-settings.php:354
+#: includes/seo/class-content-type-settings.php:393
 msgid "404 page"
 msgstr ""
 
@@ -7541,56 +7553,56 @@ msgstr ""
 msgid "Review your most important pages, update what has changed, and save them so their modified date reflects the revision."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:2374
+#: includes/seo/class-site-identity-manager.php:2583
 msgid "Invalid title separator specified."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:3545
+#: includes/seo/class-site-identity-manager.php:3754
 msgid "Select a business type so your local schema describes the right kind of business."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:3554
+#: includes/seo/class-site-identity-manager.php:3763
 msgid "Business type is set to Local Business. A more specific type sharpens your schema, if one fits."
 msgstr ""
 
-#: includes/seo/class-site-identity-manager.php:3560
+#: includes/seo/class-site-identity-manager.php:3769
 msgid "Business type is selected for proper schema markup."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:2452
+#: includes/seo/class-sitemap-generator.php:2557
 msgid "The previous automatic sitemap rebuild stopped before it finished, most likely because PHP ran out of memory or time. It is retried with a growing delay. If this keeps happening, raise the PHP memory_limit or max_execution_time, or run WP-Cron from a system cron."
 msgstr ""
 
 #. translators: 1: memory in use, 2: PHP memory limit.
-#: includes/seo/class-sitemap-generator.php:2822
+#: includes/seo/class-sitemap-generator.php:2934
 #, php-format
 msgid "The sitemap rebuild was stopped at %1$s of the %2$s PHP memory limit, before PHP would have run out of memory. It will be retried by a process with more memory (WP-CLI or a system cron). To let it finish in the admin, raise the PHP memory_limit."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3351
+#: includes/seo/class-sitemap-generator.php:3463
 #, php-format
 msgid "The sitemap is disabled, but these files are still in the site root and your web server is still serving them: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3359
+#: includes/seo/class-sitemap-generator.php:3471
 #, php-format
 msgid "The sitemap is being served from WordPress, but these files are still in the site root and your web server will keep serving them instead: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: %s: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3381
+#: includes/seo/class-sitemap-generator.php:3493
 #, php-format
 msgid "The sitemap could not be written because the folder %s is not writable by PHP. Ask your host to make the WordPress root writable, or set Sitemap Delivery to Dynamic to serve the sitemap without writing files."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:3386
+#: includes/seo/class-sitemap-generator.php:3498
 msgid "The sitemap files could not be written to the site root."
 msgstr ""
 
 #. translators: %s: search query.
-#: includes/seo/class-social-meta-manager.php:2296
+#: includes/seo/class-social-meta-manager.php:2314
 #, php-format
 msgid "Search Results for \"%s\""
 msgstr ""
@@ -8037,11 +8049,11 @@ msgstr ""
 #: src/admin/components/content-brief/ContentStructure.js:510
 #: src/admin/components/content-brief/ContentStructure.js:1411
 #: src/admin/components/essential-seo/schema/SchemaPreview.js:141
-#: src/admin/components/pages/MCPConnectionConfig.js:723
-#: src/admin/components/pages/MCPConnectionConfig.js:744
-#: src/admin/components/pages/MCPConnectionConfig.js:754
-#: src/admin/components/pages/MCPConnectionConfig.js:843
-#: src/admin/components/pages/MCPConnectionConfig.js:853
+#: src/admin/components/pages/MCPConnectionConfig.js:953
+#: src/admin/components/pages/MCPConnectionConfig.js:986
+#: src/admin/components/pages/MCPConnectionConfig.js:996
+#: src/admin/components/pages/MCPConnectionConfig.js:1097
+#: src/admin/components/pages/MCPConnectionConfig.js:1107
 #: src/admin/setup-wizard/steps/StepMcpServer.js:381
 msgid "Copy"
 msgstr ""
@@ -8086,7 +8098,7 @@ msgstr ""
 #: src/admin/components/common/TitlePreview.js:96
 #: src/admin/components/essential-seo/site-identity/SiteInformation.js:59
 #: src/admin/components/essential-seo/SocialMediaTab.js:1098
-#: src/admin/components/seo/utils/contentAnalysis.js:204
+#: src/admin/components/seo/utils/contentAnalysis.js:248
 msgid "Too short"
 msgstr ""
 
@@ -8789,9 +8801,9 @@ msgstr ""
 
 #: src/admin/components/content-brief/ContentBriefGenerator.js:1113
 #: src/admin/components/content-brief/ContentBriefGenerator.js:1150
-#: src/admin/components/pages/MCPConnectionConfig.js:718
-#: src/admin/components/pages/MCPConnectionConfig.js:749
-#: src/admin/components/pages/MCPConnectionConfig.js:848
+#: src/admin/components/pages/MCPConnectionConfig.js:948
+#: src/admin/components/pages/MCPConnectionConfig.js:991
+#: src/admin/components/pages/MCPConnectionConfig.js:1102
 #: src/metabox/components/PillarContentSuggestions.js:297
 msgid "Copied!"
 msgstr ""
@@ -12085,7 +12097,7 @@ msgid "Not Found"
 msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:272
-#: src/admin/components/import-export/PluginImportCard.js:53
+#: src/admin/components/import-export/PluginImportCard.js:54
 msgid "Error"
 msgstr ""
 
@@ -13670,7 +13682,7 @@ msgid "Failed to submit URLs. Please check your API key and try again."
 msgstr ""
 
 #: src/admin/components/essential-seo/instant-indexing/SubmitURLs.js:348
-#: src/admin/components/pages/MCPConnectionConfig.js:294
+#: src/admin/components/pages/MCPConnectionConfig.js:360
 msgid "Loading…"
 msgstr ""
 
@@ -14176,7 +14188,7 @@ msgstr ""
 #: src/admin/components/essential-seo/performance/HistoricalSection.js:171
 #: src/admin/components/essential-seo/performance/OpportunitiesSection.js:262
 #: src/admin/components/essential-seo/performance/PerformanceErrorNotice.js:89
-#: src/admin/components/import-export/PluginImportCard.js:375
+#: src/admin/components/import-export/PluginImportCard.js:378
 #: src/admin/components/ui/SettingsLoadError.js:48
 msgid "Retry"
 msgstr ""
@@ -18418,27 +18430,27 @@ msgstr ""
 
 #: src/admin/components/import-export/ExportProgress.js:14
 #: src/admin/components/import-export/MigrateProgress.js:14
-#: src/admin/components/import-export/PluginImportCard.js:35
+#: src/admin/components/import-export/PluginImportCard.js:36
 #: src/admin/components/import-export/SnapshotInfo.js:17
 msgid "Post Meta"
 msgstr ""
 
 #: src/admin/components/import-export/ExportProgress.js:15
 #: src/admin/components/import-export/MigrateProgress.js:15
-#: src/admin/components/import-export/PluginImportCard.js:36
+#: src/admin/components/import-export/PluginImportCard.js:37
 #: src/admin/components/import-export/SnapshotInfo.js:18
 msgid "Term Meta"
 msgstr ""
 
 #: src/admin/components/import-export/ExportProgress.js:16
-#: src/admin/components/import-export/PluginImportCard.js:37
+#: src/admin/components/import-export/PluginImportCard.js:38
 #: src/admin/components/import-export/SnapshotInfo.js:19
 msgid "User Meta"
 msgstr ""
 
 #: src/admin/components/import-export/ExportProgress.js:19
 #: src/admin/components/import-export/MigrateProgress.js:16
-#: src/admin/components/import-export/PluginImportCard.js:40
+#: src/admin/components/import-export/PluginImportCard.js:41
 #: src/admin/components/import-export/SnapshotInfo.js:22
 msgid "FAQ & HowTo Blocks"
 msgstr ""
@@ -18782,117 +18794,145 @@ msgstr ""
 msgid "Only fills in fields that are currently empty."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:55
+#: src/admin/components/import-export/PluginImportCard.js:56
 #: src/admin/components/import-export/SnapshotInfo.js:37
 msgid "Migrated"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:59
+#: src/admin/components/import-export/PluginImportCard.js:60
 msgid "Snapshot ready"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:64
+#: src/admin/components/import-export/PluginImportCard.js:65
 #: src/admin/components/import-export/SnapshotInfo.js:41
 msgid "Exporting…"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:69
+#: src/admin/components/import-export/PluginImportCard.js:70
 msgid "Restoring…"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:72
+#: src/admin/components/import-export/PluginImportCard.js:73
 msgid "Detected"
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:142
+#: src/admin/components/import-export/PluginImportCard.js:145
 #, js-format
 msgid "%s snapshot exported."
 msgstr ""
 
 #. translators: %d: number of posts left unchanged.
-#: src/admin/components/import-export/PluginImportCard.js:157
+#: src/admin/components/import-export/PluginImportCard.js:160
 #, js-format
 msgid "Migration complete, but the FAQ & HowTo blocks in %d post have broken markup and were left unchanged. Fix that post in the editor."
 msgid_plural "Migration complete, but the FAQ & HowTo blocks in %d posts have broken markup and were left unchanged. Fix those posts in the editor."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/admin/components/import-export/PluginImportCard.js:171
+#: src/admin/components/import-export/PluginImportCard.js:174
 msgid "Migration complete. ThinkRank is now using the imported data."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:181
+#: src/admin/components/import-export/PluginImportCard.js:184
 msgid "The import operation failed."
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:227
+#: src/admin/components/import-export/PluginImportCard.js:230
 #, js-format
 msgid "%s data removed from the database."
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:235
+#: src/admin/components/import-export/PluginImportCard.js:238
 #, js-format
 msgid "Couldn’t remove %s data."
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:293
+#: src/admin/components/import-export/PluginImportCard.js:296
 #, js-format
 msgid "%s snapshot deleted."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:299
+#: src/admin/components/import-export/PluginImportCard.js:302
 msgid "Couldn’t delete the snapshot."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:323
+#: src/admin/components/import-export/PluginImportCard.js:326
 msgid "Snapshot available"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:366
+#: src/admin/components/import-export/PluginImportCard.js:369
 msgid "Import failed"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:383
+#: src/admin/components/import-export/PluginImportCard.js:386
 msgid "Migration complete"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:385
+#: src/admin/components/import-export/PluginImportCard.js:388
 msgid "ThinkRank is now using the imported SEO data."
 msgstr ""
 
 #: src/admin/components/import-export/PluginImportCard.js:400
+msgid "Some schema was not imported"
+msgstr ""
+
+#: src/admin/components/import-export/PluginImportCard.js:408
+msgid "Not imported, and still only in the source plugin:"
+msgstr ""
+
+#: src/admin/components/import-export/PluginImportCard.js:437
 msgid "Export snapshot"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:428
+#: src/admin/components/import-export/PluginImportCard.js:465
 msgid "Export selected data"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:444
+#: src/admin/components/import-export/PluginImportCard.js:481
 msgid "Restore to ThinkRank"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:457
+#: src/admin/components/import-export/PluginImportCard.js:494
 msgid "Complete step 1 first to enable restore."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:471
+#: src/admin/components/import-export/PluginImportCard.js:508
 msgid "Start migration"
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:490
+#: src/admin/components/import-export/PluginImportCard.js:527
 #, js-format
 msgid "Clean up %s data"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:500
+#: src/admin/components/import-export/PluginImportCard.js:537
 msgid "Delete snapshot"
 msgstr ""
+
+#. translators: 1: what was not imported, 2: how many.
+#: src/admin/components/import-export/schemaReport.js:66
+#, js-format
+msgid "%1$s: %2$d"
+msgstr ""
+
+#. translators: %s: comma-separated schema types, each with a post count.
+#: src/admin/components/import-export/schemaReport.js:80
+#, js-format
+msgid "Post schema types with no ThinkRank equivalent: %s"
+msgstr ""
+
+#. translators: %d: number of posts.
+#: src/admin/components/import-export/schemaReport.js:108
+#, js-format
+msgid "%d post got its schema type and fields in the editor. Open the Schema tab on that post and deploy it to publish the schema."
+msgid_plural "%d posts got their schema type and fields in the editor. Open the Schema tab on each post and deploy it to publish the schema."
+msgstr[0] ""
+msgstr[1] ""
 
 #: src/admin/components/import-export/SnapshotInfo.js:39
 msgid "Partial"
@@ -19554,222 +19594,290 @@ msgstr ""
 msgid "Every OAuth app loses access now and has to be approved again, and the connection token is replaced, which disconnects Claude Code, Cursor and VS Code until you paste the new command. Use this if you think a credential has leaked. MCP stays on."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:211
+#: src/admin/components/pages/MCPConnectionConfig.js:276
 msgid "Couldn’t load the MCP connection status."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:237
+#: src/admin/components/pages/MCPConnectionConfig.js:302
 msgid "Couldn’t copy to the clipboard. Please select the text and copy it manually."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:258
+#: src/admin/components/pages/MCPConnectionConfig.js:324
 msgid "Connection token reset."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:262
+#: src/admin/components/pages/MCPConnectionConfig.js:328
 msgid "Couldn’t reset the connection token."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:281
+#: src/admin/components/pages/MCPConnectionConfig.js:347
 msgid "Connection token created."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:285
+#: src/admin/components/pages/MCPConnectionConfig.js:351
 msgid "Couldn’t create a connection token."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:325
+#: src/admin/components/pages/MCPConnectionConfig.js:391
 msgid "Claude (web, mobile & desktop)"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:329
+#: src/admin/components/pages/MCPConnectionConfig.js:395
 msgid "In Claude, open Settings → Connectors → Add Connector → Add custom connector."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:333
+#: src/admin/components/pages/MCPConnectionConfig.js:399
+#: src/admin/components/pages/MCPConnectionConfig.js:441
 #: src/admin/setup-wizard/steps/StepMcpServer.js:152
 msgid "Paste the connector URL above and give it a name (e.g. ThinkRank)."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:337
+#: src/admin/components/pages/MCPConnectionConfig.js:403
 #: src/admin/setup-wizard/steps/StepMcpServer.js:156
 msgid "Click Add, then approve access when Claude asks you to sign in."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:350
+#: src/admin/components/pages/MCPConnectionConfig.js:416
 msgid "In ChatGPT, open Settings → Plugins → Add New."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:354
+#: src/admin/components/pages/MCPConnectionConfig.js:420
 msgid "Enter a name (e.g. ThinkRank)."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:355
+#: src/admin/components/pages/MCPConnectionConfig.js:421
 msgid "Paste the Connection URL above."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:356
+#: src/admin/components/pages/MCPConnectionConfig.js:422
 #: src/admin/setup-wizard/steps/StepMcpServer.js:177
 msgid "Save, then approve access when ChatGPT asks you to sign in."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:384
-msgid "Add the entry above to opencode.json in your project, or to ~/.config/opencode/opencode.json, keeping your other servers."
-msgstr ""
-
-#: src/admin/components/pages/MCPConnectionConfig.js:388
-msgid "Start opencode. It asks you to sign in, or run opencode mcp auth thinkrank."
-msgstr ""
-
-#: src/admin/components/pages/MCPConnectionConfig.js:392
-msgid "Approve access when this site asks."
-msgstr ""
-
-#: src/admin/components/pages/MCPConnectionConfig.js:397
-#: src/admin/components/pages/MCPConnectionConfig.js:474
-msgid "Other MCP client"
-msgstr ""
-
-#: src/admin/components/pages/MCPConnectionConfig.js:401
-msgid "In your client, add a remote MCP server over HTTP with the connector URL above."
-msgstr ""
-
-#: src/admin/components/pages/MCPConnectionConfig.js:405
-msgid "If it asks how to sign in, choose OAuth. It opens this site for you to approve access."
-msgstr ""
-
-#: src/admin/components/pages/MCPConnectionConfig.js:409
-msgid "Approve access, and the client connects. A client that only takes a fixed header can use the connection token under Editors & CLI."
-msgstr ""
-
-#: src/admin/components/pages/MCPConnectionConfig.js:425
-msgid "CLI"
-msgstr ""
-
-#: src/admin/components/pages/MCPConnectionConfig.js:427
-msgid "Command"
-msgstr ""
-
-#: src/admin/components/pages/MCPConnectionConfig.js:430
-msgid "Copy the command above."
-msgstr ""
-
-#: src/admin/components/pages/MCPConnectionConfig.js:431
-msgid "Run it in your terminal from your project directory."
-msgstr ""
-
-#: src/admin/components/pages/MCPConnectionConfig.js:442
-#: src/admin/components/pages/MCPConnectionConfig.js:459
-msgid "Editor"
+#: src/admin/components/pages/MCPConnectionConfig.js:437
+msgid "In Gemini on the web, open Customize → Connectors and add a custom app."
 msgstr ""
 
 #: src/admin/components/pages/MCPConnectionConfig.js:445
-msgid "Add to Cursor"
+msgid "Approve access when Gemini asks you to sign in."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:447
-msgid "Click \"Add to Cursor\". It opens Cursor with ThinkRank prefilled."
+#: src/admin/components/pages/MCPConnectionConfig.js:450
+msgid "Custom apps are available on personal Google accounts only. A work or school account has no option to add one, so use Gemini CLI under Editors & CLI instead."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:451
-msgid "Confirm the install when Cursor asks."
+#: src/admin/components/pages/MCPConnectionConfig.js:463
+msgid "In Grok, open Connectors (grok.com/connectors) → New Connector → Custom."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:462
-msgid "Add to VS Code"
-msgstr ""
-
-#: src/admin/components/pages/MCPConnectionConfig.js:464
-msgid "Click \"Add to VS Code\". It opens VS Code with ThinkRank prefilled."
+#: src/admin/components/pages/MCPConnectionConfig.js:467
+msgid "Paste the connector URL above."
 msgstr ""
 
 #: src/admin/components/pages/MCPConnectionConfig.js:468
+msgid "Approve access when Grok asks you to sign in."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:482
+msgid "In Le Chat, open Intelligence → Connectors → Add Connector → Custom MCP Connector."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:486
+msgid "Name it ThinkRank and paste the connector URL above."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:490
+msgid "Click Connect, then approve access when Le Chat asks you to sign in."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:498
+#: src/admin/components/pages/MCPConnectionConfig.js:688
+msgid "Other MCP client"
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:502
+msgid "In your client, add a remote MCP server over HTTP with the connector URL above."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:506
+msgid "If it asks how to sign in, choose OAuth. It opens this site for you to approve access."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:510
+msgid "Approve access, and the client connects. A client that only takes a fixed header can use the connection token under Editors & CLI."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:538
+msgid "Add the entry above to opencode.json in your project, or to ~/.config/opencode/opencode.json, keeping your other servers."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:542
+msgid "Start opencode. It asks you to sign in, or run opencode mcp auth thinkrank."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:546
+#: src/admin/components/pages/MCPConnectionConfig.js:613
+msgid "Approve access when this site asks."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:559
+#: src/admin/components/pages/MCPConnectionConfig.js:579
+#: src/admin/components/pages/MCPConnectionConfig.js:602
+msgid "CLI"
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:561
+#: src/admin/components/pages/MCPConnectionConfig.js:582
+#: src/admin/components/pages/MCPConnectionConfig.js:605
+msgid "Command"
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:564
+msgid "Copy the command above."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:565
+msgid "Run it in your terminal from your project directory."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:585
+#: src/admin/components/pages/MCPConnectionConfig.js:608
+msgid "Copy the command above and run it in your terminal."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:589
+msgid "Approve access when this site opens. If it does not, run codex mcp login thinkrank."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:612
+msgid "Start gemini and run /mcp auth thinkrank."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:621
+#: src/admin/components/pages/MCPConnectionConfig.js:638
+#: src/admin/components/pages/MCPConnectionConfig.js:658
+msgid "Editor"
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:624
+msgid "Add to Cursor"
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:626
+msgid "Click \"Add to Cursor\". It opens Cursor with ThinkRank prefilled."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:630
+msgid "Confirm the install when Cursor asks."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:641
+msgid "Add to VS Code"
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:643
+msgid "Click \"Add to VS Code\". It opens VS Code with ThinkRank prefilled."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:647
 msgid "Confirm the install when VS Code asks."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:477
+#: src/admin/components/pages/MCPConnectionConfig.js:674
+msgid "In Windsurf, open Cascade → MCP servers → View raw config."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:678
+msgid "Add the thinkrank entry above under mcpServers, keeping your other servers."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:682
+msgid "Save, then refresh the MCP servers list."
+msgstr ""
+
+#: src/admin/components/pages/MCPConnectionConfig.js:691
 msgid "Token"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:479
+#: src/admin/components/pages/MCPConnectionConfig.js:693
 msgid "Header"
 msgstr ""
 
 #. translators: %s: this site's MCP server URL.
-#: src/admin/components/pages/MCPConnectionConfig.js:484
+#: src/admin/components/pages/MCPConnectionConfig.js:698
 #, js-format
 msgid "In your client, add a remote MCP server over HTTP with the URL %s."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:490
+#: src/admin/components/pages/MCPConnectionConfig.js:704
 msgid "Add the header above to it, then connect."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:496
-#: src/admin/components/pages/MCPConnectionConfig.js:689
+#: src/admin/components/pages/MCPConnectionConfig.js:717
+#: src/admin/components/pages/MCPConnectionConfig.js:919
 msgid "OAuth"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:497
+#: src/admin/components/pages/MCPConnectionConfig.js:718
 msgid "Editors & CLI"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:504
+#: src/admin/components/pages/MCPConnectionConfig.js:725
 msgid "Add ThinkRank to your client"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:507
+#: src/admin/components/pages/MCPConnectionConfig.js:728
 msgid "Pick your assistant below it opens or copies fully configured."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:517
+#: src/admin/components/pages/MCPConnectionConfig.js:738
 msgid "How it works"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:563
-msgid "There is no connection token. Claude Code, Cursor, VS Code, and Claude Desktop need one to connect. OAuth apps don’t."
+#: src/admin/components/pages/MCPConnectionConfig.js:784
+msgid "There is no connection token. Claude Code, Cursor, VS Code, Windsurf, and Claude Desktop need one to connect. OAuth apps, Codex and Gemini CLI don’t."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:574
+#: src/admin/components/pages/MCPConnectionConfig.js:795
 msgid "Create connection token"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:581
+#: src/admin/components/pages/MCPConnectionConfig.js:802
 msgid "This site can no longer display the connection token: the security keys in wp-config.php changed after it was minted. Clients you’ve already set up keep working. Reset the token below to get one you can copy again; that disconnects those clients until you paste the new command."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:608
-msgid "Reset the connection token if it may have leaked. This disconnects Claude Code, Cursor, VS Code, and Claude Desktop they’ll need the new command to reconnect. OAuth-connected apps are unaffected."
+#: src/admin/components/pages/MCPConnectionConfig.js:829
+msgid "Reset the connection token if it may have leaked. This disconnects Claude Code, Cursor, VS Code, Windsurf, and Claude Desktop. They’ll need the new token to reconnect. OAuth-connected apps, Codex and Gemini CLI are unaffected."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:618
-#: src/admin/components/pages/MCPConnectionConfig.js:643
+#: src/admin/components/pages/MCPConnectionConfig.js:839
+#: src/admin/components/pages/MCPConnectionConfig.js:864
 msgid "Reset token"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:627
+#: src/admin/components/pages/MCPConnectionConfig.js:848
 msgid "Reset connection token?"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:649
-msgid "A new token is generated immediately. Every header-based client (Claude Code, Cursor, VS Code, Claude Desktop) is disconnected and must reconnect with the new command. OAuth-connected apps like Claude on the web keep working."
+#: src/admin/components/pages/MCPConnectionConfig.js:870
+msgid "A new token is generated immediately. Every header-based client (Claude Code, Cursor, VS Code, Windsurf, Claude Desktop) is disconnected and must reconnect with the new token. OAuth-connected apps like Claude on the web, Codex and Gemini CLI keep working."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:692
+#: src/admin/components/pages/MCPConnectionConfig.js:922
 msgid "Signs in with a one-time approval. No token to paste."
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:703
+#: src/admin/components/pages/MCPConnectionConfig.js:933
 #: src/admin/setup-wizard/steps/StepMcpServer.js:360
 msgid "Connector URL"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:713
+#: src/admin/components/pages/MCPConnectionConfig.js:943
 #: src/admin/setup-wizard/steps/StepMcpServer.js:368
 msgid "Copy connector URL"
 msgstr ""
 
-#: src/admin/components/pages/MCPConnectionConfig.js:784
+#: src/admin/components/pages/MCPConnectionConfig.js:1038
 msgid "How to add a connector"
 msgstr ""
 
@@ -21377,7 +21485,7 @@ msgstr ""
 msgid "Best"
 msgstr ""
 
-#: src/admin/components/seo/utils/contentAnalysis.js:196
+#: src/admin/components/seo/utils/contentAnalysis.js:240
 msgid "No content"
 msgstr ""
 
