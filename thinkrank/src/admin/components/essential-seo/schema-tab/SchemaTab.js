@@ -71,7 +71,14 @@ const SchemaTab = ({ activeSubSection = 'schema-settings', onNavigate }) => {
 	});
 
 	const [settings, setSettings] = useState({});
+	// The settings as last loaded or saved. Generate and Deploy read this,
+	// not the form, so both work from the snapshot the server holds (#1007).
+	const [savedSettings, setSavedSettings] = useState(null);
 	const [hasChanges, setHasChanges] = useState(false);
+	// Counts edits to the form. A save clears hasChanges only while this is
+	// still what it was when the request left, so an edit made during the
+	// save stays unsaved (and keeps Generate and Deploy held).
+	const settingsRevisionRef = useRef(0);
 	const [notice, setNotice] = useState(null);
 
 	// MEMORY OPTIMIZATION: Consolidated schema data states
@@ -137,12 +144,27 @@ const SchemaTab = ({ activeSubSection = 'schema-settings', onNavigate }) => {
 	} = schemaData;
 
 	/**
+	 * Mark the form as edited since the last load or save.
+	 *
+	 * @param {boolean} changed True for an edit, false once saved.
+	 */
+	const markChanged = (changed) => {
+		if (changed) {
+			settingsRevisionRef.current += 1;
+		}
+		safeSetState(setHasChanges, changed);
+	};
+
+	/**
 	 * Build the API context object passed to all api.js functions
 	 */
 	const getApiContext = () => ({
 		settings,
+		savedSettings,
 		setSettings,
-		setHasChanges,
+		setSavedSettings,
+		setHasChanges: markChanged,
+		settingsRevisionRef,
 		setNotice,
 		updateLoadingState,
 		safeSetState,
@@ -161,7 +183,7 @@ const SchemaTab = ({ activeSubSection = 'schema-settings', onNavigate }) => {
 	 */
 	const handleSettingChange = (key, value) => {
 		safeSetState(setSettings, (prev) => ({ ...prev, [key]: value }));
-		safeSetState(setHasChanges, true);
+		markChanged(true);
 	};
 
 	/**
@@ -467,6 +489,11 @@ const SchemaTab = ({ activeSubSection = 'schema-settings', onNavigate }) => {
 										isGenerating={isGenerating}
 										settings={settings}
 										onSettingChange={handleSettingChange}
+										hasUnsavedChanges={hasChanges}
+										onSaveSettings={() =>
+											saveSettings(getApiContext())
+										}
+										isSaving={isSaving}
 									/>
 									{/* Belongs to Deployment only. It used to
 									    render outside this switch, so the whole

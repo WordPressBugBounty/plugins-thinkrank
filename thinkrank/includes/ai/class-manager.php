@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ThinkRank\AI;
 
 use ThinkRank\Core\Settings;
+use ThinkRank\Core\Shared_State;
 
 
 // Prevent direct access
@@ -1563,15 +1564,9 @@ class Manager {
         // Counter is keyed to the current wall-clock minute; the transient TTL
         // lets the window roll over on its own.
         $minute_key = "thinkrank_ai_rate_{$context}_{$user_id}_" . floor(time() / MINUTE_IN_SECONDS);
-        $attempts = (int) get_transient($minute_key);
-
-        if ($attempts >= $max_requests) {
-            return false;
-        }
-
-        set_transient($minute_key, $attempts + 1, MINUTE_IN_SECONDS);
-
-        return true;
+        // Read, compared and counted in one locked step, so a burst of
+        // parallel requests cannot all read the same count and all get through.
+        return Shared_State::take($minute_key, $max_requests, MINUTE_IN_SECONDS);
     }
 
 

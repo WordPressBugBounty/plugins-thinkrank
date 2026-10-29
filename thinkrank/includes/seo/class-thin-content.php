@@ -106,6 +106,15 @@ class Thin_Content {
         // `pending` tells the caller whether the answer is complete yet.
         $pending = Word_Count_Index::refresh(array_keys($thresholds), self::STATUSES);
 
+        // Then judge a bounded batch of the thin posts. Noindexing a thin page
+        // is the usual fix for it, and a redirected page is not read at all,
+        // so neither is reported as thin (#1013). The verdict is stored on the
+        // post, so the counts and the list below come from SQL rather than
+        // from judging every thin post in this request.
+        $pending += Indexability::refresh_verdicts([
+            Word_Count_Index::thin_sql($thresholds, self::STATUSES),
+        ]);
+
         // What the answer depends on. The revision covers a recount, the
         // thresholds cover the user changing what thin means, and the unit
         // covers a locale switch, which changes every number at once.
@@ -113,6 +122,9 @@ class Thin_Content {
             'revision'   => Word_Count_Index::revision(),
             'thresholds' => $thresholds,
             'unit'       => Word_Count_Index::unit(),
+            // A post noindexed or redirected since the last build leaves the
+            // report without its word count changing (#1013).
+            'indexability' => Indexability::revision(),
         ];
 
         $cached = get_option(self::CACHE_OPTION, null);
@@ -124,7 +136,7 @@ class Thin_Content {
             return self::present($cached, 0);
         }
 
-        $totals = Word_Count_Index::totals($thresholds, self::STATUSES);
+        $totals = Word_Count_Index::totals($thresholds, self::STATUSES, true);
 
         $types = [];
         foreach ($thresholds as $post_type => $threshold) {
@@ -149,7 +161,8 @@ class Thin_Content {
                         $post_type,
                         $threshold,
                         self::STATUSES,
-                        self::MAX_LISTED
+                        self::MAX_LISTED,
+                        true
                     ))
                     : [],
             ];

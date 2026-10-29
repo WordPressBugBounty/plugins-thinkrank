@@ -51,6 +51,47 @@ class Sitemap_Stylesheet {
     public const QUERY_VAR = 'thinkrank_sitemap_xsl';
 
     /**
+     * Query variable naming the sitemap document whose HTML view to serve.
+     *
+     * Browsers are removing XSLT (Chrome 158 stops running it on Stable), so
+     * the styled table can no longer be left to the browser. This view renders
+     * the same stylesheet on the server and answers with plain HTML, at its own
+     * URL so the sitemap URLs, their bytes for crawlers and their Content-Type
+     * stay exactly as they were. Static delivery serves those files without
+     * PHP, which is the other reason the view cannot live at the sitemap URL.
+     *
+     * @since 2.18.0
+     * @var string
+     */
+    public const VIEW_QUERY_VAR = 'thinkrank_sitemap_view';
+
+    /**
+     * Transient prefix for a rendered view, one entry per document.
+     *
+     * @since 2.18.0
+     * @var string
+     */
+    private const VIEW_CACHE_PREFIX = 'thinkrank_sitemap_view_';
+
+    /**
+     * How long a rendered view is kept. The fingerprint already retires it
+     * as soon as the sitemap or its branding changes; this only bounds how
+     * long the entry of a document nobody asks for any more stays stored.
+     *
+     * @since 2.18.0
+     * @var int
+     */
+    private const VIEW_CACHE_TTL = DAY_IN_SECONDS;
+
+    /**
+     * Sitemap XML namespace.
+     *
+     * @since 2.18.0
+     * @var string
+     */
+    private const SITEMAP_NS = 'http://www.sitemaps.org/schemas/sitemap/0.9';
+
+    /**
      * Stylesheet variants, mapped to their template basename.
      *
      * @since 2.7.0
@@ -105,6 +146,7 @@ class Sitemap_Stylesheet {
     public function init(): void {
         add_filter('query_vars', [$this, 'register_query_var']);
         add_action('parse_request', [$this, 'maybe_serve']);
+        add_action('parse_request', [$this, 'maybe_serve_view']);
     }
 
     /**
@@ -116,6 +158,7 @@ class Sitemap_Stylesheet {
      */
     public function register_query_var(array $vars): array {
         $vars[] = self::QUERY_VAR;
+        $vars[] = self::VIEW_QUERY_VAR;
 
         return $vars;
     }
@@ -136,6 +179,543 @@ class Sitemap_Stylesheet {
         }
 
         return add_query_arg(self::QUERY_VAR, $variant, home_url('/'));
+    }
+
+    /**
+     * The URL of a sitemap document's server-rendered HTML view.
+     *
+     * @since 2.18.0
+     * @param string $document Published file name, e.g. `sitemap_index.xml`.
+     * @return string Absolute view URL, or '' for a name that is not a sitemap file.
+     */
+    public static function view_url(string $document): string {
+        $document = self::document_name($document);
+
+        return $document === '' ? '' : self::view_prefix() . $document;
+    }
+
+    /**
+     * The XML comment that points a sitemap's reader at its HTML view.
+     *
+     * A browser that no longer runs the stylesheet shows the raw XML tree, and
+     * that tree shows comments. Returned empty when the URL cannot sit in a
+     * comment at all: `--` is forbidden there, and an IDN host carries it.
+     *
+     * @since 2.18.0
+     * @param string $document Published file name the comment should point at.
+     * @return string Comment line, newline-terminated, or ''.
+     */
+    public static function view_comment(string $document): string {
+        $url = self::view_url($document);
+
+        if ($url === '' || strpos($url, '--') !== false || substr($url, -1) === '-') {
+            return '';
+        }
+
+        return '<!-- Browse this sitemap: ' . esc_url_raw($url) . ' -->' . "\n";
+    }
+
+    /**
+     * Add the view comment to a sitemap document about to be published.
+     *
+     * The comment names the document it sits in, so it is added where the
+     * document's file name is known, at the write, rather than in the shared
+     * prolog. It goes right after the `<?xml-stylesheet?>` instruction, which
+     * is only there when styling is on, so a site with styling off gets no
+     * comment, and a document that already carries one is left as it is.
+     *
+     * @since 2.18.0
+     * @param string $xml      Sitemap XML.
+     * @param string $document Published file name of that XML.
+     * @return string
+     */
+    public static function with_view_comment(string $xml, string $document): string {
+        if (strpos($xml, '<!-- Browse this sitemap: ') !== false) {
+            return $xml;
+        }
+
+        $comment = self::view_comment($document);
+
+        if ($comment === '') {
+            return $xml;
+        }
+
+        return (string) preg_replace_callback(
+            '/^<\?xml-stylesheet\b[^>]*\?>\R/m',
+            static function (array $m) use ($comment): string {
+                return $m[0] . $comment;
+            },
+            $xml,
+            1
+        );
+    }
+
+    /**
+     * Everything of a view URL but the document name.
+     *
+     * @since 2.18.0
+     * @return string
+     */
+    private static function view_prefix(): string {
+        $base = home_url('/');
+
+        return $base . (strpos($base, '?') === false ? '?' : '&') . self::VIEW_QUERY_VAR . '=';
+    }
+
+    /**
+     * A requested document name, or '' when it is not one of ours to look up.
+     *
+     * Only a bare `*.xml` file name passes, so the value can never walk out of
+     * the web root.
+     *
+     * @since 2.18.0
+     * @param string $name Requested name.
+     * @return string
+     */
+    private static function document_name(string $name): string {
+        $name = trim($name);
+
+        return preg_match('/^[A-Za-z0-9_-]+\.xml$/', $name) ? $name : '';
+    }
+
+    /**
+     * Answer a request for a sitemap's HTML view.
+     *
+     * Gated exactly like the stylesheet: the view is the styled sitemap, so a
+     * site that turned styling off gets neither.
+     *
+     * @since 2.18.0
+     * @param \WP $wp Current WordPress environment instance.
+     * @return void
+     */
+    public function maybe_serve_view($wp): void {
+        if (is_admin() || !isset($wp->query_vars[self::VIEW_QUERY_VAR])) {
+            return;
+        }
+
+        $requested = $wp->query_vars[self::VIEW_QUERY_VAR];
+        $name      = is_string($requested) ? self::document_name($requested) : '';
+
+        if ($name === '') {
+            return;
+        }
+
+        $known = isset($_SERVER['HTTP_IF_NONE_MATCH'])
+            ? trim(sanitize_text_field(wp_unslash($_SERVER['HTTP_IF_NONE_MATCH'])))
+            : '';
+
+        $response = $this->view_response($name, $this->settings(), $known);
+
+        header('X-Robots-Tag: noindex, follow');
+
+        if ($response['status'] === 404) {
+            nocache_headers();
+            status_header(404);
+            exit;
+        }
+
+        // Validated rather than timed, like the stylesheet: the ETag changes
+        // with the sitemap and with the branding, so a revisit costs a 304.
+        header('Content-Type: text/html; charset=UTF-8');
+        header('Cache-Control: public, max-age=0, must-revalidate');
+        header('ETag: ' . $response['etag']);
+        status_header($response['status']);
+
+        if ($response['status'] === 304) {
+            exit;
+        }
+
+        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML produced by render_view(); every value in it is escaped there or by the XSLT processor.
+        echo $response['html'];
+        exit;
+    }
+
+    /**
+     * The view of a sitemap document, from the cache when nothing changed.
+     *
+     * A sitemap page holds up to 50,000 URLs, and rendering it is a full parse
+     * and an XSLT run (or a PHP-built table), on a public URL. So the rendered
+     * page is kept, one entry per document, keyed by a fingerprint of all it
+     * depends on: the document's XML, both branded stylesheets (palette, logo
+     * and credit), which renderer runs, the home URL the index links against
+     * and the plugin version. Anything changing misses the cache and replaces
+     * the entry. The same fingerprint is the ETag, so a client holding the
+     * current page gets a 304 without anything being rendered.
+     *
+     * @since 2.18.0
+     * @param string $name          Document file name, already validated.
+     * @param array  $settings      Sitemap settings.
+     * @param string $if_none_match The request's If-None-Match, if any.
+     * @return array{status: int, etag: string, html: string}
+     */
+    public function view_response(string $name, array $settings, string $if_none_match = ''): array {
+        $missing = ['status' => 404, 'etag' => '', 'html' => ''];
+
+        if (empty($settings['enabled']) || empty($settings['enable_styling'])) {
+            return $missing;
+        }
+
+        $xml = $this->view_document($name, $settings);
+
+        if ($xml === null || $xml === '') {
+            return $missing;
+        }
+
+        $etag = '"' . md5(implode("\n", [
+            md5($xml),
+            md5($this->render($settings, 'sitemap')),
+            md5($this->render($settings, 'index')),
+            $this->xslt_available() ? 'xslt' : 'php',
+            home_url('/'),
+            defined('THINKRANK_VERSION') ? (string) THINKRANK_VERSION : '',
+        ])) . '"';
+
+        if ($if_none_match !== '' && $if_none_match === $etag) {
+            return ['status' => 304, 'etag' => $etag, 'html' => ''];
+        }
+
+        $key    = self::VIEW_CACHE_PREFIX . md5($name);
+        $cached = get_transient($key);
+
+        if (is_array($cached) && ($cached['etag'] ?? '') === $etag && is_string($cached['html'] ?? null) && $cached['html'] !== '') {
+            return ['status' => 200, 'etag' => $etag, 'html' => $cached['html']];
+        }
+
+        $html = $this->render_view($xml, $settings);
+
+        if ($html === '') {
+            return $missing;
+        }
+
+        set_transient($key, ['etag' => $etag, 'html' => $html], self::VIEW_CACHE_TTL);
+
+        return ['status' => 200, 'etag' => $etag, 'html' => $html];
+    }
+
+    /**
+     * The XML of a published sitemap document, read the way crawlers get it.
+     *
+     * Dynamic delivery renders (or reads the cached render of) the document;
+     * static delivery reads the file in the web root. Either way only a name
+     * the site publishes is looked up. `thinkrank_sitemap_view_document` lets
+     * another plugin answer for sitemaps it serves itself, such as Pro's news
+     * and video sitemaps.
+     *
+     * @since 2.18.0
+     * @param string $name     Document file name.
+     * @param array  $settings Sitemap settings.
+     * @return string|null
+     */
+    protected function view_document(string $name, array $settings): ?string {
+        /**
+         * Supply the XML for a sitemap document ThinkRank itself does not publish.
+         *
+         * @since 2.18.0
+         * @param string|null $xml      XML to render, or null to let ThinkRank look it up.
+         * @param string      $name     Requested document file name.
+         * @param array       $settings Sitemap settings.
+         */
+        $xml = apply_filters('thinkrank_sitemap_view_document', null, $name, $settings);
+
+        if (is_string($xml) && $xml !== '') {
+            return $xml;
+        }
+
+        $generator = new Sitemap_Generator(false);
+
+        if (!$generator->publishes_document_name($name, $settings)) {
+            return null;
+        }
+
+        if ('dynamic' === $generator->resolve_delivery_mode($settings)) {
+            return $generator->render_document($name, $settings);
+        }
+
+        $path = ABSPATH . $name;
+
+        if (!is_readable($path)) {
+            return null;
+        }
+
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local read of a sitemap file this plugin wrote to the web root.
+        $xml = (string) file_get_contents($path);
+
+        return $xml === '' ? null : $xml;
+    }
+
+    /**
+     * Turn a sitemap document into the branded HTML page.
+     *
+     * The shipped stylesheet is run by PHP's XSLT processor when the `xsl`
+     * extension is loaded, which keeps the page identical to the one browsers
+     * used to draw. Without the extension, common on shared hosting, a PHP-built
+     * page carries the same CSS, logo and credit.
+     *
+     * @since 2.18.0
+     * @param string $xml      Sitemap XML.
+     * @param array  $settings Sitemap settings.
+     * @return string HTML, or '' when the XML is not a sitemap.
+     */
+    public function render_view(string $xml, array $settings): string {
+        $doc = self::load_xml($xml);
+
+        // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOMDocument's own property name.
+        $root = $doc === null ? null : $doc->documentElement;
+
+        if (self::is_sitemap_element($root, 'sitemapindex')) {
+            $variant = 'index';
+        } elseif (self::is_sitemap_element($root, 'urlset')) {
+            $variant = 'sitemap';
+        } else {
+            return '';
+        }
+
+        if ($this->xslt_available()) {
+            $html = $this->transform($doc, $settings, $variant);
+
+            if ($html !== '') {
+                return $html;
+            }
+        }
+
+        return $this->fallback_view($doc, $settings, $variant);
+    }
+
+    /**
+     * Whether PHP can run the stylesheet itself. A seam for tests.
+     *
+     * @since 2.18.0
+     * @return bool
+     */
+    protected function xslt_available(): bool {
+        return class_exists('XSLTProcessor');
+    }
+
+    /**
+     * Parse XML without touching the network or expanding entities.
+     *
+     * @since 2.18.0
+     * @param string $xml XML source.
+     * @return \DOMDocument|null
+     */
+    private static function load_xml(string $xml): ?\DOMDocument {
+        if (trim($xml) === '' || !class_exists('DOMDocument')) {
+            return null;
+        }
+
+        $doc      = new \DOMDocument();
+        $previous = libxml_use_internal_errors(true);
+        $loaded   = $doc->loadXML($xml, LIBXML_NONET);
+
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        return $loaded ? $doc : null;
+    }
+
+    /**
+     * Run the branded stylesheet over the document on the server.
+     *
+     * @since 2.18.0
+     * @param \DOMDocument $doc      Sitemap document.
+     * @param array        $settings Sitemap settings.
+     * @param string       $variant  `sitemap` or `index`.
+     * @return string HTML, or '' on any failure, so the caller can fall back.
+     */
+    private function transform(\DOMDocument $doc, array $settings, string $variant): string {
+        $sheet = self::load_xml($this->render($settings, $variant));
+
+        if ($sheet === null) {
+            return '';
+        }
+
+        $previous = libxml_use_internal_errors(true);
+
+        try {
+            $processor = new \XSLTProcessor();
+            $processor->importStylesheet($sheet);
+
+            if ($variant === 'index') {
+                $processor->setParameter('', 'thinkrank_home', home_url('/'));
+                $processor->setParameter('', 'thinkrank_view', self::view_prefix());
+            }
+
+            $html = $processor->transformToXml($doc);
+        } catch (\Throwable $e) {
+            $html = false;
+        }
+
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        if (!is_string($html) || trim($html) === '') {
+            return '';
+        }
+
+        // libxslt's html output opens with an HTML 4.0 doctype; the page is
+        // written for standards mode.
+        return "<!DOCTYPE html>\n" . ltrim((string) preg_replace('/^\s*<!DOCTYPE[^>]*>/i', '', $html, 1));
+    }
+
+    /**
+     * The HTML view built in PHP, for hosts without the `xsl` extension.
+     *
+     * Reuses the template's own `<style>` block, so the branding and the layout
+     * classes are the stylesheet's, not a second copy of them.
+     *
+     * @since 2.18.0
+     * @param \DOMDocument $doc      Sitemap document.
+     * @param array        $settings Sitemap settings.
+     * @param string       $variant  `sitemap` or `index`.
+     * @return string HTML.
+     */
+    private function fallback_view(\DOMDocument $doc, array $settings, string $variant): string {
+        $template = $this->render($settings, $variant);
+        $style    = preg_match('#<style type="text/css">.*?</style>#s', $template, $m) ? $m[0] : '';
+        $credit   = (bool) apply_filters('thinkrank_show_credit', true, 'sitemap', $variant);
+        $is_index = $variant === 'index';
+        $title    = $is_index ? 'XML Sitemap Index' : 'XML Sitemap';
+        $rows     = $is_index ? $this->index_rows($doc) : $this->url_rows($doc);
+
+        $html  = "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\"/>\n";
+        $html .= '<meta name="robots" content="noindex, follow"/>' . "\n";
+        $html .= '<title>' . esc_html($title) . ' - ThinkRank SEO</title>' . "\n" . $style . "\n</head>\n<body>\n";
+        $html .= '<div class="header">' . $this->logo_markup($settings);
+        $html .= '<h1>' . esc_html($title) . '</h1>';
+        $html .= $credit ? '<p>Generated by ThinkRank SEO Plugin</p>' : '';
+        $html .= '<div class="stats"><div class="stat-item"><span class="stat-number">' . count($rows['rows']) . '</span>';
+        $html .= '<span class="stat-label">' . ($is_index ? 'Total Sitemaps' : 'Total URLs') . '</span></div></div></div>' . "\n";
+        $html .= '<div class="container"><div class="table-header"><h2>' . ($is_index ? 'Individual Sitemaps' : 'Sitemap URLs') . '</h2></div>';
+        $html .= '<table><thead><tr>';
+
+        foreach ($rows['head'] as $heading) {
+            $html .= '<th>' . esc_html($heading) . '</th>';
+        }
+
+        $html .= '</tr></thead><tbody>' . "\n" . implode("\n", $rows['rows']) . "\n</tbody></table></div>\n";
+        $html .= '<div class="footer"><p>This XML sitemap is used by search engines to better understand your website structure.</p>';
+        $html .= $credit ? '<p>Generated by <a href="https://wordpress.org/plugins/thinkrank/" target="_blank">ThinkRank SEO</a></p>' : '';
+        $html .= "</div>\n</body>\n</html>\n";
+
+        return $html;
+    }
+
+    /**
+     * Table rows for a `<urlset>`, highest priority first as the stylesheet sorts.
+     *
+     * @since 2.18.0
+     * @param \DOMDocument $doc Sitemap document.
+     * @return array{head: string[], rows: string[]}
+     */
+    private function url_rows(\DOMDocument $doc): array {
+        $entries = [];
+
+        // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOMDocument's own property names.
+        foreach ($doc->documentElement->childNodes as $node) {
+            if (!self::is_sitemap_element($node, 'url')) {
+                continue;
+            }
+
+            $entries[] = [
+                'loc'        => self::child_text($node, 'loc'),
+                'lastmod'    => substr(self::child_text($node, 'lastmod'), 0, 10),
+                'priority'   => self::child_text($node, 'priority'),
+                'changefreq' => self::child_text($node, 'changefreq'),
+            ];
+        }
+
+        usort($entries, static function (array $a, array $b): int {
+            return (float) $b['priority'] <=> (float) $a['priority'];
+        });
+
+        $rows = [];
+
+        foreach ($entries as $entry) {
+            $priority = (float) $entry['priority'];
+            $class    = $priority >= 0.8 ? 'priority-high' : ($priority >= 0.5 ? 'priority-medium' : 'priority-low');
+
+            $rows[] = '<tr><td class="url-cell"><a href="' . esc_url($entry['loc']) . '" target="_blank">' . esc_html($entry['loc']) . '</a></td>'
+                . '<td class="lastmod">' . esc_html($entry['lastmod']) . '</td>'
+                . '<td class="' . $class . '">' . esc_html($entry['priority']) . '</td>'
+                . '<td><span class="changefreq">' . esc_html($entry['changefreq']) . '</span></td></tr>';
+        }
+
+        return [
+            'head' => ['URL', 'Last Modified', 'Priority', 'Change Frequency'],
+            'rows' => $rows,
+        ];
+    }
+
+    /**
+     * Table rows for a `<sitemapindex>`, each child linked to its own view.
+     *
+     * @since 2.18.0
+     * @param \DOMDocument $doc Sitemap index document.
+     * @return array{head: string[], rows: string[]}
+     */
+    private function index_rows(\DOMDocument $doc): array {
+        $home = home_url('/');
+        $rows = [];
+
+        // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOMDocument's own property names.
+        foreach ($doc->documentElement->childNodes as $node) {
+            if (!self::is_sitemap_element($node, 'sitemap')) {
+                continue;
+            }
+
+            $loc     = self::child_text($node, 'loc');
+            $lastmod = substr(self::child_text($node, 'lastmod'), 0, 10);
+            $href    = $loc;
+
+            if (strpos($loc, $home) === 0) {
+                $view = self::view_url(substr($loc, strlen($home)));
+                $href = $view !== '' ? $view : $loc;
+            }
+
+            $rows[] = '<tr><td class="sitemap-cell"><a href="' . esc_url($href) . '" target="_blank">' . esc_html($loc) . '</a></td>'
+                . '<td class="lastmod">' . esc_html($lastmod !== '' ? $lastmod : '-') . '</td></tr>';
+        }
+
+        return [
+            'head' => ['Sitemap URL', 'Last Modified'],
+            'rows' => $rows,
+        ];
+    }
+
+    /**
+     * Text of an element's first direct child in the sitemap namespace.
+     *
+     * @since 2.18.0
+     * @param \DOMElement $element Parent element.
+     * @param string      $name    Local name.
+     * @return string
+     */
+    private static function child_text(\DOMElement $element, string $name): string {
+        // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOMNode's own property name.
+        foreach ($element->childNodes as $node) {
+            if (self::is_sitemap_element($node, $name)) {
+                // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOMNode's own property name.
+                return trim((string) $node->textContent);
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Whether a node is the named element in the sitemap namespace.
+     *
+     * @since 2.18.0
+     * @param \DOMNode|null $node Node to test.
+     * @param string        $name Local name.
+     * @return bool
+     */
+    private static function is_sitemap_element(?\DOMNode $node, string $name): bool {
+        // phpcs:disable WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOMNode's own property names.
+        return $node instanceof \DOMElement
+            && $node->namespaceURI === self::SITEMAP_NS
+            && $node->localName === $name;
+        // phpcs:enable
     }
 
     /**

@@ -112,6 +112,21 @@ class Duplicate_Snippets {
         // `pending` tells the caller whether the answer is complete yet.
         $pending = Snippet_Index::refresh_sitewide($post_types, self::STATUSES);
 
+        // Then judge a bounded batch of the duplicate-group members. A
+        // noindexed, redirected or password-protected page does not compete
+        // for a result, so it is not a duplicate of anything (#1013). The
+        // verdict is stored on the post, so the groups below are counted in
+        // SQL rather than by judging every member in this request.
+        $members = [];
+        foreach (Snippet_Issues::grouped() as $issue) {
+            $members[] = Snippet_Index::duplicate_member_sql(
+                $post_types,
+                self::STATUSES,
+                Snippet_Issues::DUPLICATE_TITLE === $issue ? 'title' : 'description'
+            );
+        }
+        $pending += Indexability::refresh_verdicts($members);
+
         // What the answer depends on. The generation alone is not enough: it
         // only moves when a *global* input changes, and one post's title
         // edited to match another's changes this report without touching it.
@@ -121,6 +136,9 @@ class Duplicate_Snippets {
             'generation' => Snippet_Index::generation(),
             'revision'   => Snippet_Index::revision(),
             'scanned'    => Snippet_Index::current_count($post_types, self::STATUSES),
+            // A post noindexed or redirected since the last build leaves the
+            // report without its own entry changing (#1013).
+            'indexability' => Indexability::revision(),
         ];
 
         $cached = get_option(self::CACHE_OPTION, null);
@@ -147,7 +165,7 @@ class Duplicate_Snippets {
             // Totals come from their own count rather than from the listed
             // groups, which are capped — otherwise a site with 200 duplicated
             // titles would report 25 groups' worth and call it the total.
-            $totals = Snippet_Index::duplicate_totals($post_types, self::STATUSES, $which);
+            $totals = Snippet_Index::duplicate_totals($post_types, self::STATUSES, $which, true);
 
             $report['counts'][$issue] = $totals['posts'];
             $report['group_counts'][$issue] = $totals['groups'];
@@ -158,7 +176,8 @@ class Duplicate_Snippets {
                     self::STATUSES,
                     $which,
                     self::MAX_MEMBERS,
-                    self::MAX_GROUPS
+                    self::MAX_GROUPS,
+                    true
                 ),
                 $which
             );

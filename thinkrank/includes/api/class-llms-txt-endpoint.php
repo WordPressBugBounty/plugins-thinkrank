@@ -17,6 +17,7 @@ declare(strict_types=1);
 namespace ThinkRank\API;
 
 use ThinkRank\SEO\LLMs_Txt_Manager;
+use ThinkRank\Core\Shared_State;
 use ThinkRank\AI\Manager as AI_Manager;
 use ThinkRank\API\Traits\CSRF_Protection;
 use ThinkRank\API\Traits\Context_Authorization;
@@ -1012,14 +1013,8 @@ class LLMs_Txt_Endpoint extends WP_REST_Controller {
         $user_id = get_current_user_id();
         $rate_key = "thinkrank_llms_rate_{$user_id}";
 
-        $requests = get_transient($rate_key) ?: 0;
-
-        if ($requests >= 3) { // Max 3 requests per 5 minutes
-            return false;
-        }
-
-        set_transient($rate_key, $requests + 1, 5 * MINUTE_IN_SECONDS);
-        return true;
+        // Max 3 requests per 5 minutes, counted in one locked step.
+        return Shared_State::take($rate_key, 3, 5 * MINUTE_IN_SECONDS);
     }
 
     /**
@@ -1032,13 +1027,7 @@ class LLMs_Txt_Endpoint extends WP_REST_Controller {
         $user_id = get_current_user_id();
         $rate_key = "thinkrank_ai_rate_{$user_id}";
 
-        $requests = get_transient($rate_key) ?: 0;
-
-        if ($requests >= 2) { // Max 2 AI requests per 10 minutes (more restrictive)
-            return false;
-        }
-
-        set_transient($rate_key, $requests + 1, 10 * MINUTE_IN_SECONDS);
-        return true;
+        // Max 2 AI requests per 10 minutes (more restrictive), counted in one locked step.
+        return Shared_State::take($rate_key, 2, 10 * MINUTE_IN_SECONDS);
     }
 }

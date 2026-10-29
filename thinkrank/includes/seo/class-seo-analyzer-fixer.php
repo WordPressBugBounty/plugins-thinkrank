@@ -106,7 +106,7 @@ class SEO_Analyzer_Fixer {
                 // Only the answer engines are unblocked. Saying so matters:
                 // people block the training crawlers on purpose, and a fix
                 // that quietly reversed that decision would be a betrayal.
-                'warning' => __('Sets the answer-engine crawlers (ChatGPT, Claude, Perplexity, Google-Extended) to Allow. Crawlers that only collect training data keep whatever setting you gave them.', 'thinkrank'),
+                'warning' => __('Sets the answer-engine crawlers (ChatGPT, Claude, Perplexity, Le Chat) to Allow. Crawlers that only collect training data, Google-Extended included, keep whatever setting you gave them. Googlebot rules are never changed.', 'thinkrank'),
                 'undo'    => true,
             ],
             'llms_txt' => [
@@ -655,9 +655,12 @@ class SEO_Analyzer_Fixer {
      * Set every AI answer-engine crawler to `allow`.
      *
      * Deliberately narrow: only the crawlers that decide whether the site can
-     * be CITED are touched. GPTBot, ClaudeBot, CCBot and the other
-     * training-only agents keep whatever the user chose for them — blocking
-     * those is an editorial position, not a misconfiguration.
+     * be CITED are touched. GPTBot, ClaudeBot, CCBot, Google-Extended and the
+     * other training-only agents keep whatever the user chose for them —
+     * blocking those is an editorial position, not a misconfiguration.
+     * Googlebot is on the check's list but not in the AI_Crawlers registry,
+     * so the exists() guard below skips it: a Googlebot block is the site
+     * owner's to lift, and the re-check after saving reports it (#914).
      *
      * @since 2.5.0
      * @return array

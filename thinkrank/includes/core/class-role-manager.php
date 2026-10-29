@@ -166,6 +166,14 @@ class Role_Manager {
             return $result;
         }
 
+        // The AI referral beacon is posted by anonymous visitors from cached
+        // front-end pages (#966). It writes only an aggregate counter, after
+        // classifying and rate-limiting inside its handler. See
+        // ThinkRank\SEO\Ai_Referral_Beacon.
+        if ('/thinkrank/v1/ai-referral' === $route) {
+            return $result;
+        }
+
         if (!Capability_Manager::current_user_can(Capability_Manager::ACCESS)) {
             return new WP_Error(
                 'thinkrank_forbidden',

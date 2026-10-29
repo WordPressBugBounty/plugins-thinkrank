@@ -503,18 +503,33 @@ final class Email_Report_Generator {
             ];
         }
 
-        $attempts++;
-        $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        // The claim is one conditional UPDATE: it only matches the row while it
+        // is still the failure this run read. Two overlapping cron runs both
+        // read the same failed row; the first flips it to pending and the
+        // second matches nothing, so only one of them sends. Without the
+        // condition both claimed it and the report went out twice.
+        $claimed = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
             $table,
             [
                 'status'        => 'pending',
-                'attempts'      => $attempts,
+                'attempts'      => $attempts + 1,
                 'error_message' => null,
             ],
-            ['id' => (int) $existing['id']],
+            [
+                'id'       => (int) $existing['id'],
+                'status'   => 'failed',
+                'attempts' => $attempts,
+            ],
             ['%s','%d','%s'],
-            ['%d']
+            ['%d','%s','%d']
         );
+
+        if (1 !== (int) $claimed) {
+            // Another run claimed it between our read and our write.
+            return ['inserted' => false, 'log_id' => (int) $existing['id'], 'attempts' => $attempts];
+        }
+
+        $attempts++;
 
         return [
             'inserted' => true,

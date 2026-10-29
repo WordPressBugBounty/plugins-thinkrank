@@ -35,6 +35,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\Mcp;
 
+use ThinkRank\Core\Shared_State;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
@@ -261,24 +263,33 @@ final class Mcp_Rate_Limiter {
 	 * @return int
 	 */
 	private static function bump( string $key, int $window ): int {
-		$entry = get_transient( $key );
+		// Read, count and write under one lock, re-reading the entry there:
+		// this request may already have read it (is_locked() does), and a
+		// burst of requests that all wrote back their own count + 1 recorded
+		// one hit where there were many, so the limit tripped late.
+		return (int) Shared_State::locked(
+			'mcp_rate_limit|' . $key,
+			static function ( bool $locked ) use ( $key, $window ): int {
+				$entry = Shared_State::read_transient( $key, $locked );
 
-		if ( is_array( $entry ) && isset( $entry['count'], $entry['until'] ) ) {
-			$entry['count']++;
-			// Preserve the ORIGINAL window end: TTL = remaining time only.
-			$remaining = max( 1, (int) $entry['until'] - time() );
-			set_transient( $key, $entry, $remaining );
-			return (int) $entry['count'];
-		}
+				if ( is_array( $entry ) && isset( $entry['count'], $entry['until'] ) ) {
+					$entry['count']++;
+					// Preserve the ORIGINAL window end: TTL = remaining time only.
+					$remaining = max( 1, (int) $entry['until'] - time() );
+					set_transient( $key, $entry, $remaining );
+					return (int) $entry['count'];
+				}
 
-		// First hit in a window (also migrates any legacy integer entry —
-		// a stale int simply restarts as a fresh window of 1).
-		$entry = [
-			'count' => 1,
-			'until' => time() + $window,
-		];
-		set_transient( $key, $entry, $window );
-		return 1;
+				// First hit in a window (also migrates any legacy integer entry:
+				// a stale int simply restarts as a fresh window of 1).
+				$entry = [
+					'count' => 1,
+					'until' => time() + $window,
+				];
+				set_transient( $key, $entry, $window );
+				return 1;
+			}
+		);
 	}
 
 	/**

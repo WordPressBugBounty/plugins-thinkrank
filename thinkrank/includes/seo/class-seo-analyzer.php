@@ -365,7 +365,8 @@ class SEO_Analyzer {
             // check with a Fix button reads as "did this even work?". A check
             // can also withhold its fix by returning can_auto_fix false, when
             // what it found is something the registered fix cannot change
-            // (#1204). It can only withhold one, never offer one that has no
+            // (#1204, and a Googlebot block the AI crawler fix must not touch,
+            // #914). It can only withhold one, never offer one that has no
             // fixer.
             $fixable = self::PASSED !== $status
                 && self::NOT_APPLICABLE !== $status
@@ -1423,15 +1424,24 @@ class SEO_Analyzer {
      * The crawlers that decide whether a site can be CITED by an AI answer
      * engine, as opposed to the ones that only collect training data.
      *
-     * Blocking a training crawler (GPTBot, ClaudeBot, CCBot…) is a legitimate
-     * editorial choice and is deliberately not marked down here: it costs the
-     * site nothing in ChatGPT, Claude, Perplexity or AI Overviews. Blocking
-     * the agents below is what makes a site invisible to those answers, so
-     * they are the only ones this check reports on.
+     * Blocking a training crawler (GPTBot, ClaudeBot, CCBot, Google-Extended…)
+     * is a legitimate editorial choice and is deliberately not marked down
+     * here: it costs the site nothing in ChatGPT, Claude, Perplexity or AI
+     * Overviews. Blocking the agents below is what makes a site invisible to
+     * those answers, so they are the only ones this check reports on.
      *
-     * Public because the one-click fix writes exactly this set to `allow`;
-     * a second copy in the fixer is how the check and its remedy drift into
-     * disagreeing about which crawlers matter.
+     * Google-Extended is not one of them (#914). Google documents it as the
+     * control for Gemini training and for grounding in Google's other AI
+     * products, and says it does not affect Google Search. AI Overviews and AI
+     * Mode are part of Search and are governed by Googlebot, so Googlebot is
+     * the agent asked about here.
+     *
+     * Public because the one-click fix writes this set to `allow`; a second
+     * copy in the fixer is how the check and its remedy drift into
+     * disagreeing about which crawlers matter. The fixer only writes slugs the
+     * AI_Crawlers registry knows, and Googlebot is deliberately not in it (it
+     * is not an AI crawler and has no rule there), so the fix can never touch
+     * a Googlebot rule. A Googlebot block is the site owner's to lift.
      *
      * @since 2.5.0
      * @var string[]
@@ -1443,8 +1453,27 @@ class SEO_Analyzer {
         'perplexity-user',
         'claude-searchbot',
         'claude-user',
-        'google-extended',
+        'googlebot',
         'mistral-user',
+    ];
+
+    /**
+     * Answer agents that are not in the AI_Crawlers registry, with the token
+     * and label the check reads them by.
+     *
+     * Googlebot is the crawler behind Google Search, AI Overviews and AI Mode.
+     * It stays out of the registry because the registry drives the AI crawler
+     * rules in robots.txt and the AI traffic tracker, and Googlebot is
+     * neither.
+     *
+     * @since 2.15.0
+     * @var array<string, array{token: string, label: string}>
+     */
+    private const SEARCH_ANSWER_AGENTS = [
+        'googlebot' => [
+            'token' => 'Googlebot',
+            'label' => 'Googlebot',
+        ],
     ];
 
     /**
@@ -1872,30 +1901,88 @@ class SEO_Analyzer {
      * @return array
      */
     public function check_ai_crawler_access(): array {
-        $label   = __('AI answer engines can crawl your site', 'thinkrank');
-        $blocked = $this->blocked_answer_agents();
+        return $this->ai_crawler_access_outcome($this->blocked_answer_agent_map());
+    }
+
+    /**
+     * The AI crawler finding for a set of blocked answer agents.
+     *
+     * @since 2.15.0
+     * @param array<string,string> $blocked Slug => label of the blocked agents.
+     * @param string|null           $source  Where a block outside the crawler
+     *                                       rules comes from, as
+     *                                       answer_agent_block_outside_rules()
+     *                                       reports it. Null reads it.
+     * @param bool|null             $googlebot_outlives_fix Whether a Googlebot
+     *                                       block is still served after the
+     *                                       fix, as
+     *                                       googlebot_block_outlives_fix()
+     *                                       reports it. Null reads it.
+     * @return array
+     */
+    private function ai_crawler_access_outcome(array $blocked, ?string $source = null, ?bool $googlebot_outlives_fix = null): array {
+        $label = __('AI answer engines can crawl your site', 'thinkrank');
 
         if (empty($blocked)) {
             return [
                 'label'   => $label,
                 'status'  => self::PASSED,
-                'message' => __('ChatGPT, Claude, Perplexity and Google AI Overviews can all reach your content and cite it.', 'thinkrank'),
+                'message' => __('ChatGPT, Claude, Perplexity, Le Chat and Google Search with its AI Overviews can all reach your content and cite it.', 'thinkrank'),
             ];
         }
 
         $names = implode(', ', $blocked);
-        // Every one of them blocked is a different situation from one stray
-        // rule: the site cannot appear in AI answers at all. Counted against
-        // the agents the registry actually knows, not the slug list: a slug
-        // leaving AI_Crawlers can never be collected as blocked, so comparing
-        // with the list would make this branch quietly unreachable.
-        $known = count($this->known_answer_agents());
-        $all   = $known > 0 && count($blocked) >= $known;
 
         // The fix only sets the answer engines to Allow in ThinkRank's crawler
         // rules. A block from anywhere else outlives it, so Fix is offered
         // only when the rules are the whole cause (#1248).
-        $source = $this->answer_agent_block_outside_rules();
+        if (null === $source) {
+            $source = $this->answer_agent_block_outside_rules();
+        }
+
+        // A Googlebot block is the bigger problem by far: it takes the site
+        // out of Google Search itself, and AI Overviews with it. It is
+        // usually a staging block left in place, so the remedy is the site
+        // owner's: the one-click fix never writes a Googlebot rule.
+        if (isset($blocked['googlebot'])) {
+            $others = array_diff_key($blocked, ['googlebot' => true]);
+
+            if (null === $googlebot_outlives_fix) {
+                $googlebot_outlives_fix = $this->googlebot_block_outlives_fix();
+            }
+
+            return [
+                'label'      => $label,
+                'status'     => self::FAILED,
+                'message'    => empty($others)
+                    ? __('Your robots.txt blocks Googlebot, which removes your site from Google Search and from Google AI Overviews and AI Mode.', 'thinkrank')
+                    : sprintf(
+                        /* translators: %s: comma-separated crawler names. */
+                        __('Your robots.txt blocks Googlebot, which removes your site from Google Search and from Google AI Overviews and AI Mode. It also blocks these AI answer engines: %s.', 'thinkrank'),
+                        implode(', ', $others)
+                    ),
+                'how_to_fix' => __('Remove the "Disallow: /" rule that applies to Googlebot (or to every crawler, under "User-agent: *") from your robots.txt. Check the robots.txt content and the "Allow Search Engines" switch under Essential SEO → Crawling & AI Indexing → Robots.txt, "Search engine visibility" under Settings → Reading, and any robots.txt file in your site root. If this is a staging site, the block is intended.', 'thinkrank')
+                    . (empty($others) ? '' : ' ' . $this->answer_agent_block_advice($source)),
+                'value'      => $names,
+                // Fix is offered only when it leaves every answer engine
+                // allowed (#1248), Googlebot included. It never writes a
+                // Googlebot rule, so that is only when the Googlebot block
+                // sits in a ThinkRank robots.txt file its sync rewrites, a
+                // stale "User-agent: *" block, say. Offering it whenever
+                // the other engines were rule-blocked saved their rules and
+                // then failed on Googlebot.
+                'can_auto_fix' => !empty($others) && '' === $source && !$googlebot_outlives_fix,
+            ];
+        }
+
+        // Every one of them blocked is a different situation from one stray
+        // rule: the site cannot appear in AI answers at all. Counted against
+        // the agents the check actually knows, not the slug list: a slug
+        // leaving AI_Crawlers can never be collected as blocked, so comparing
+        // with the list would make this branch quietly unreachable. Googlebot
+        // is not blocked here, so it is left out of the count.
+        $known = count(array_diff_key($this->known_answer_agents(), ['googlebot' => true]));
+        $all   = $known > 0 && count($blocked) >= $known;
 
         return [
             'label'        => $label,
@@ -1915,21 +2002,73 @@ class SEO_Analyzer {
      * Where an answer-engine block comes from, when the crawler rules are not
      * the whole cause.
      *
-     * Mirrors what the fix does: it saves the answer engines as Allow and
-     * syncs the physical file, which rewrites a file ThinkRank wrote under
-     * robots management and removes one it wrote outside it. Whatever is
-     * still served after that is what this reads, with the crawler rules
-     * region taken out because the fix leaves no answer engine in it.
+     * Reads what is still served after the fix
+     * (answer_agent_state_after_fix()), with the crawler rules region taken
+     * out because the fix leaves no answer engine in it. Googlebot is not
+     * counted here; googlebot_block_outlives_fix() answers for it.
      *
      * @since 2.17.0
-     * @return string Empty when the fix lifts every answer-engine block.
+     * @return string Empty when the fix lifts every answer-engine block
+     *                other than Googlebot's.
      *                Otherwise `file` (a robots.txt ThinkRank did not write),
      *                `blog_public`, `allow_search_engines` or `custom` (the
      *                robots.txt content, or a rule another plugin adds).
      */
     private function answer_agent_block_outside_rules(): string {
+        [$source, $still] = $this->answer_agent_state_after_fix();
+
+        if ('' !== $source) {
+            return $source;
+        }
+
+        // Googlebot is left out: the check reports a Googlebot block on its
+        // own (#914), and googlebot_block_outlives_fix() answers for it.
+        unset($still['googlebot']);
+
+        return empty($still) ? '' : 'custom';
+    }
+
+    /**
+     * Whether a Googlebot block in the served robots.txt is still served
+     * after the AI crawler fix.
+     *
+     * The fix never writes a Googlebot rule. It lifts a Googlebot block only
+     * when the block sits in a robots.txt file ThinkRank wrote that its sync
+     * rewrites or removes. Anywhere else the fix could only save the other
+     * rules and then fail on Googlebot, so Fix is not offered (review on
+     * #943).
+     *
+     * @since 2.20.1
+     * @return bool False when Googlebot is not blocked now.
+     */
+    private function googlebot_block_outlives_fix(): bool {
+        if (!isset($this->blocked_answer_agent_map()['googlebot'])) {
+            return false;
+        }
+
+        [$source, $still] = $this->answer_agent_state_after_fix();
+
+        // Every other source (a file ThinkRank did not write, the Reading
+        // setting, the Allow Search Engines switch) blocks every crawler.
+        return '' !== $source || isset($still['googlebot']);
+    }
+
+    /**
+     * What the fix leaves served: a site-wide source it cannot lift, or the
+     * answer agents the robots.txt still disallows after it.
+     *
+     * Mirrors what the fix does: it saves the answer engines as Allow and
+     * syncs the physical file, which rewrites a file ThinkRank wrote under
+     * robots management and removes one it wrote outside it.
+     *
+     * @since 2.20.1
+     * @return array{0: string, 1: array<string,string>} `file`, `blog_public`,
+     *         `allow_search_engines` or '' first; then slug => label of the
+     *         agents still blocked, empty when the first is not ''.
+     */
+    private function answer_agent_state_after_fix(): array {
         if (!class_exists('ThinkRank\\SEO\\Site_Identity_Manager')) {
-            return '';
+            return ['', []];
         }
 
         $manager  = new Site_Identity_Manager();
@@ -1937,29 +2076,29 @@ class SEO_Analyzer {
 
         if (file_exists(ABSPATH . 'robots.txt')) {
             if (!$manager->robots_file_written_by_thinkrank()) {
-                return 'file';
+                return ['file', []];
             }
 
             if (empty($settings['robots_txt_enabled'])) {
                 // The sync removes a file ThinkRank wrote once it no longer
                 // manages robots.txt, and WordPress serves its default.
-                return '';
+                return ['', []];
             }
         }
 
         // A site-wide block renders `Disallow: /` for everyone and leaves the
         // crawler rules out of the file entirely.
         if (!get_option('blog_public')) {
-            return 'blog_public';
+            return ['blog_public', []];
         }
 
         if (empty($settings['allow_search_engines'] ?? true)) {
-            return 'allow_search_engines';
+            return ['allow_search_engines', []];
         }
 
         $after_fix = $manager->strip_ai_crawler_block($manager->render_robots_txt_file());
 
-        return empty($this->answer_agents_blocked_in($after_fix)) ? '' : 'custom';
+        return ['', $this->answer_agents_blocked_in($after_fix)];
     }
 
     /**
@@ -1984,7 +2123,7 @@ class SEO_Analyzer {
                 return __('Your robots.txt content blocks them outside the AI crawler rules, for example with a "User-agent: *" group that disallows "/". Remove that rule under Essential SEO → Crawling and AI Indexing → Robots.txt.', 'thinkrank');
 
             default:
-                return __('Under Essential SEO → Crawling & AI Indexing → Robots.txt, set the answer-engine crawlers to Allow. Blocking the training-only crawlers (GPTBot, ClaudeBot, CCBot) is a separate choice and does not cost you citations.', 'thinkrank');
+                return __('Under Essential SEO → Crawling & AI Indexing → Robots.txt, set the answer-engine crawlers to Allow. Blocking the training-only crawlers (GPTBot, ClaudeBot, CCBot, Google-Extended) is a separate choice and does not cost you citations.', 'thinkrank');
         }
     }
 
@@ -1998,6 +2137,17 @@ class SEO_Analyzer {
      * @return string[] Crawler labels, empty when all are allowed.
      */
     public function blocked_answer_agents(): array {
+        return array_values($this->blocked_answer_agent_map());
+    }
+
+    /**
+     * The answer-engine crawlers the served robots.txt disallows entirely,
+     * keyed by slug so a caller can tell Googlebot from the rest.
+     *
+     * @since 2.15.0
+     * @return array<string,string> Slug => crawler label.
+     */
+    private function blocked_answer_agent_map(): array {
         if (!class_exists('ThinkRank\\SEO\\Site_Identity_Manager') || !class_exists('ThinkRank\\SEO\\AI_Crawlers')) {
             return [];
         }
@@ -2012,7 +2162,7 @@ class SEO_Analyzer {
      *
      * @since 2.17.0
      * @param string $body Robots.txt content.
-     * @return string[] Crawler labels, empty when all are allowed.
+     * @return array<string,string> Slug => crawler label, empty when all are allowed.
      */
     private function answer_agents_blocked_in(string $body): array {
         if (!class_exists('ThinkRank\\SEO\\AI_Crawlers')) {
@@ -2027,7 +2177,7 @@ class SEO_Analyzer {
 
         $blocked = [];
 
-        foreach ($this->known_answer_agents() as $agent) {
+        foreach ($this->known_answer_agents() as $slug => $agent) {
             $token = strtolower((string) $agent['token']);
             // A group naming the agent wins over the wildcard group, which is
             // how robots.txt precedence works: the most specific matching
@@ -2035,7 +2185,7 @@ class SEO_Analyzer {
             $denied = array_key_exists($token, $groups) ? $groups[$token] : ($groups['*'] ?? false);
 
             if ($denied) {
-                $blocked[] = $agent['label'];
+                $blocked[$slug] = $agent['label'];
             }
         }
 
@@ -2043,7 +2193,8 @@ class SEO_Analyzer {
     }
 
     /**
-     * The answer-engine crawlers the AI_Crawlers registry actually knows.
+     * The answer-engine crawlers the AI_Crawlers registry actually knows,
+     * plus Googlebot from SEARCH_ANSWER_AGENTS.
      *
      * The slug list is ThinkRank's editorial position on which crawlers decide
      * whether a site can be cited; the registry is what carries their tokens
@@ -2059,7 +2210,7 @@ class SEO_Analyzer {
             return [];
         }
 
-        $agents = AI_Crawlers::all();
+        $agents = AI_Crawlers::all() + self::SEARCH_ANSWER_AGENTS;
         $known  = [];
 
         foreach (self::GEO_ANSWER_AGENTS as $slug) {

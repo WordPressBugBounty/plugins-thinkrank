@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 2.20.0
+ * Version: 2.20.1
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Requires PHP: 7.4
  * 
  * @package ThinkRank
- * @version 2.20.0
+ * @version 2.20.1
  * @since 1.0.0
  */
 
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '2.20.0');
+define('THINKRANK_VERSION', '2.20.1');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -347,7 +347,8 @@ final class ThinkRank {
     private function maybe_update_database(): void {
         $schema = new ThinkRank\Database\Database_Schema();
         if ($schema->needs_update()) {
-            $schema->create_tables();
+            // One request at a time: the rest skip while it runs (#1133).
+            $schema->create_tables_locked();
         }
     }
 
@@ -400,6 +401,9 @@ final class ThinkRank {
             // separate index because a word count and a snippet verdict go
             // stale for different reasons (#565).
             'word_count_index' => new ThinkRank\SEO\Word_Count_Index(),
+            // Counts changes to robots settings and redirects, so the two
+            // reports above refresh when a post stops being indexable (#1013).
+            'indexability' => new ThinkRank\SEO\Indexability(),
             'email_report' => new ThinkRank\SEO\Email_Report_Manager(),
             'google_oauth' => new ThinkRank\Integrations\Google_OAuth_Proxy(),
             'multilingual' => new ThinkRank\Integrations\Multilingual_Manager(),

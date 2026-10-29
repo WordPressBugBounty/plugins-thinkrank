@@ -21,6 +21,8 @@ if (!defined('ABSPATH')) {
 }
 
 use ThinkRank\SEO\Sitemap_Generator;
+use ThinkRank\SEO\Sitemap_Stylesheet;
+use ThinkRank\Core\Shared_State;
 use ThinkRank\API\Traits\CSRF_Protection;
 use ThinkRank\API\Traits\Context_Authorization;
 use WP_REST_Controller;
@@ -57,6 +59,13 @@ class Sitemap_Endpoint extends WP_REST_Controller {
      * @var Sitemap_Generator
      */
     private Sitemap_Generator $sitemap_generator;
+
+    /**
+     * Owner token of the generation lock this request holds, '' when none.
+     *
+     * @var string
+     */
+    private string $generation_owner = '';
 
     /**
      * API namespace
@@ -833,6 +842,9 @@ class Sitemap_Endpoint extends WP_REST_Controller {
 
         $sitemap_file_path = ABSPATH . $filename;
 
+        // As the generator's own writer does: point at this document's view.
+        $sitemap_xml = Sitemap_Stylesheet::with_view_comment($sitemap_xml, $filename);
+
         // Use WordPress filesystem API
         global $wp_filesystem;
         if (empty($wp_filesystem)) {
@@ -1436,14 +1448,8 @@ class Sitemap_Endpoint extends WP_REST_Controller {
         $user_id = get_current_user_id();
         $rate_key = "thinkrank_sitemap_rate_{$user_id}";
 
-        $requests = get_transient($rate_key) ?: 0;
-
-        if ($requests >= 3) { // Max 3 requests per 5 minutes
-            return false;
-        }
-
-        set_transient($rate_key, $requests + 1, 5 * MINUTE_IN_SECONDS);
-        return true;
+        // Max 3 requests per 5 minutes, counted in one locked step.
+        return Shared_State::take($rate_key, 3, 5 * MINUTE_IN_SECONDS);
     }
 
     /**
@@ -1453,14 +1459,11 @@ class Sitemap_Endpoint extends WP_REST_Controller {
      * @return bool True if lock acquired
      */
     private function acquire_generation_lock(): bool {
-        $lock_key = Sitemap_Generator::GENERATION_LOCK_TRANSIENT;
+        // The same claim Sitemap_Generator takes, checked and set in one
+        // locked step so two requests cannot both start a generation.
+        $this->generation_owner = Sitemap_Generator::claim_generation_lock();
 
-        if (get_transient($lock_key)) {
-            return false; // Generation already in progress
-        }
-
-        set_transient($lock_key, time(), 5 * MINUTE_IN_SECONDS);
-        return true;
+        return '' !== $this->generation_owner;
     }
 
     /**
@@ -1470,6 +1473,10 @@ class Sitemap_Endpoint extends WP_REST_Controller {
      * @return void
      */
     private function release_generation_lock(): void {
-        delete_transient(Sitemap_Generator::GENERATION_LOCK_TRANSIENT);
+        // Only the lock this request took. The rate-limit and "already in
+        // progress" answers leave through the same finally, and used to delete
+        // the lock of the generation that was running (review on #965).
+        Sitemap_Generator::release_generation_lock_as($this->generation_owner);
+        $this->generation_owner = '';
     }
 }

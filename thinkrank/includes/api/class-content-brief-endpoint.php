@@ -12,6 +12,7 @@
 namespace ThinkRank\API;
 
 use ThinkRank\AI\Content_Brief_Generator;
+use ThinkRank\Core\Shared_State;
 use ThinkRank\AI\Manager as AI_Manager;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -459,13 +460,7 @@ class Content_Brief_Endpoint {
         $user_id = get_current_user_id();
         $rate_key = "thinkrank_ai_rate_content_brief_{$user_id}";
 
-        $requests = (int) get_transient($rate_key);
-
-        if ($requests >= 5) { // Max 5 content briefs per 10 minutes.
-            return false;
-        }
-
-        set_transient($rate_key, $requests + 1, 10 * MINUTE_IN_SECONDS);
-        return true;
+        // Max 5 content briefs per 10 minutes, counted in one locked step.
+        return Shared_State::take($rate_key, 5, 10 * MINUTE_IN_SECONDS);
     }
 }

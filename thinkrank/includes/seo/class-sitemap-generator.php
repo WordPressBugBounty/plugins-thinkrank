@@ -16,6 +16,7 @@ declare(strict_types=1);
 namespace ThinkRank\SEO;
 
 use InvalidArgumentException;
+use ThinkRank\Core\Shared_State;
 
 // Prevent direct access.
 if ( ! defined( 'ABSPATH' ) ) {
@@ -45,6 +46,13 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @var int[]|null
      */
     private ?array $woocommerce_excluded_page_ids = null;
+
+    /**
+     * Owner token of the generation lock this instance holds, '' when none.
+     *
+     * @var string
+     */
+    private string $generation_owner = '';
 
     /**
      * Inclusion flag -> the child sitemap it controls.
@@ -98,9 +106,10 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @var array
      */
     /**
-     * How many post IDs to hydrate at a time while walking the sitemap set.
+     * How many posts each page of the sitemap walk reads.
      *
      * @since 2.0.1
+     * @since 2.15.0 Pages the post query itself rather than an ID list.
      * @var int
      */
     private const ID_WALK_CHUNK = 500;
@@ -1158,9 +1167,9 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     /**
      * Stream <url> entries for the given post types, yielding one at a time.
      *
-     * Same chunked query, filtering, and ordering as before, but yields each
-     * entry instead of accumulating the whole set — so the paginated index
-     * generator never holds every URL of a large post type in memory at once.
+     * Yields each entry instead of accumulating the whole set, and reads the
+     * posts a page at a time, so neither the paginated index generator nor the
+     * walk itself holds every post (or every post ID) of a large site at once.
      *
      * @param array $post_types Post types to include.
      * @param array $settings   Sitemap settings.
@@ -1190,91 +1199,185 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             $exclude_ids[] = $front_id;
         }
 
-        // Resolve the ordered ID list in one indexed query, then hydrate in
-        // chunks via post__in. This avoids large OFFSET windows (which MySQL
-        // must scan-and-discard, making a full walk O(n^2)) while still loading
-        // only one chunk of full post objects into memory at a time. The
-        // original order is preserved (the id query and post__in hydration both
-        // use it).
-        $all_ids = get_posts($this->filter_query_args([
-            'post_type'   => $post_types,
-            'post_status' => 'publish',
-            'numberposts' => -1,
-            'exclude'     => $exclude_ids,
-            'orderby'     => 'post_type post_date',
-            'order'       => 'ASC DESC',
-            'fields'      => 'ids',
-        ]));
+        // Walk each post type newest first in keyset pages of ID_WALK_CHUNK
+        // posts. The walk used to start with one `numberposts => -1` query for
+        // every published ID, so its memory grew with the site no matter how
+        // small the chunks after it were. Each page now continues from the
+        // (post_date, ID) of the last post it saw, so no page is an OFFSET
+        // scan and the cursor is two values however many posts share a date.
+        // Post types run in descending name order, the order the single query
+        // used to return them in.
+        $types = array_values(array_unique(array_map('strval', $post_types)));
+        rsort($types, SORT_STRING);
 
-        if (empty($all_ids)) {
-            return;
-        }
+        // Applied to each page's IDs rather than as post__not_in: WP_Query
+        // ignores post__not_in whenever post__in is set.
+        $excluded = array_flip(array_map('intval', $exclude_ids));
 
-        // Walk the ID list with a moving window rather than array_chunk().
-        // array_chunk() builds a second array holding every element again, so
-        // peak memory was twice the ID list — on a 100k-post site that is ~16MB
-        // where ~8MB is needed, and this walk is the one part of an otherwise
-        // well-bounded routine with no ceiling (#402).
-        $total = count($all_ids);
+        foreach ($types as $type) {
+            // The query filter still decides what a page hydrates (the
+            // multilingual manager widens it to every language), and its
+            // type and status decide what the keyset walks.
+            $query_args = $this->filter_query_args([
+                'post_type'     => $type,
+                'post_status'   => 'publish',
+                'no_found_rows' => true,
+            ]);
 
-        for ($offset = 0; $offset < $total; $offset += self::ID_WALK_CHUNK) {
-            $this->assert_memory_headroom();
-            $chunk_start = memory_get_usage(true);
+            $cursor = null;
 
-            $chunk = array_slice($all_ids, $offset, self::ID_WALK_CHUNK);
+            while (true) {
+                $this->assert_memory_headroom();
+                $chunk_start = memory_get_usage(true);
 
-            $posts = get_posts($this->filter_query_args([
-                'post_type'   => $post_types,
-                'post_status' => 'publish',
-                'numberposts' => count($chunk),
-                'post__in'    => $chunk,
-                'orderby'     => 'post__in', // preserve the resolved order
-            ]));
+                $page = $this->next_post_page(
+                    (array) ($query_args['post_type'] ?? $type),
+                    (array) ($query_args['post_status'] ?? 'publish'),
+                    $cursor
+                );
 
-            // get_featured_image() hydrates each featured image under the
-            // attachment's own ID, which the chunk's post IDs do not reach.
-            $attachment_ids = [];
+                if (empty($page)) {
+                    break;
+                }
 
-            foreach ($posts as $post) {
-                if ($this->should_include_in_sitemap($post, $settings)) {
-                    /**
-                     * Filter a sitemap entry's permalink.
-                     *
-                     * The multilingual manager uses this to generate each
-                     * translation's URL in its OWN language: the sitemap query
-                     * deliberately runs with suppress_filters, and the cron
-                     * rebuild runs with no language context at all, so a bare
-                     * get_permalink() resolved every translation to the
-                     * default-language URL — N entries sharing one <loc> (#409).
-                     *
-                     * @since 2.0.1
-                     * @param string   $url  Permalink as WordPress resolved it.
-                     * @param \WP_Post $post Post the entry describes.
-                     */
-                    $url = apply_filters('thinkrank_sitemap_post_permalink', get_permalink($post), $post);
-                    $lastmod = gmdate('c', strtotime($post->post_modified_gmt));
-                    $priority = $this->calculate_intelligent_priority($post, $post->post_type);
-                    $changefreq = $this->calculate_change_frequency($post, $post->post_type);
-                    $images = $this->extract_post_images($post, $settings);
+                $last = end($page);
+                $next = ['date' => (string) $last['post_date'], 'id' => (int) $last['ID']];
+                $full = count($page) >= self::ID_WALK_CHUNK;
+                $ids  = array_values(array_filter(
+                    array_map('intval', array_column($page, 'ID')),
+                    static fn(int $id): bool => !isset($excluded[$id])
+                ));
+                unset($page, $last);
 
-                    $thumbnail_id = (int) get_post_thumbnail_id($post);
-                    if ($thumbnail_id > 0) {
-                        $attachment_ids[] = $thumbnail_id;
+                // An empty post__in means no restriction at all to WP_Query, so
+                // a page that was entirely excluded hydrates nothing.
+                $posts = empty($ids) ? [] : get_posts(array_merge($query_args, [
+                    'post__in'    => $ids,
+                    'orderby'     => 'post__in',
+                    'numberposts' => count($ids),
+                ]));
+
+                // Emit in keyset order whatever order the hydration came back
+                // in, so a filter that re-sorts cannot shuffle the sitemap.
+                $rank = array_flip($ids);
+                usort($posts, static function ($a, $b) use ($rank): int {
+                    return ($rank[(int) $a->ID] ?? PHP_INT_MAX) <=> ($rank[(int) $b->ID] ?? PHP_INT_MAX);
+                });
+
+                $chunk = [];
+
+                // get_featured_image() hydrates each featured image under the
+                // attachment's own ID, which the chunk's post IDs do not reach.
+                $attachment_ids = [];
+
+                foreach ($posts as $post) {
+                    $chunk[] = (int) $post->ID;
+
+                    if ($this->should_include_in_sitemap($post, $settings)) {
+                        /**
+                         * Filter a sitemap entry's permalink.
+                         *
+                         * The multilingual manager uses this to generate each
+                         * translation's URL in its OWN language: the sitemap query
+                         * deliberately runs with suppress_filters, and the cron
+                         * rebuild runs with no language context at all, so a bare
+                         * get_permalink() resolved every translation to the
+                         * default-language URL — N entries sharing one <loc> (#409).
+                         *
+                         * @since 2.0.1
+                         * @param string   $url  Permalink as WordPress resolved it.
+                         * @param \WP_Post $post Post the entry describes.
+                         */
+                        $url = apply_filters('thinkrank_sitemap_post_permalink', get_permalink($post), $post);
+                        $lastmod = gmdate('c', strtotime($post->post_modified_gmt));
+                        $priority = $this->calculate_intelligent_priority($post, $post->post_type);
+                        $changefreq = $this->calculate_change_frequency($post, $post->post_type);
+                        $images = $this->extract_post_images($post, $settings);
+
+                        $thumbnail_id = (int) get_post_thumbnail_id($post);
+                        if ($thumbnail_id > 0) {
+                            $attachment_ids[] = $thumbnail_id;
+                        }
+
+                        yield $this->generate_url_entry($url, $lastmod, $priority, $changefreq, $images);
                     }
+                }
 
-                    yield $this->generate_url_entry($url, $lastmod, $priority, $changefreq, $images);
+                // The keyset only moves forward: a page whose last row is not
+                // strictly before the cursor would repeat forever, so it ends
+                // the walk instead.
+                $advanced = null === $cursor || [$next['date'], $next['id']] < [$cursor['date'], $cursor['id']];
+                $cursor   = $next;
+
+                // Free the hydrated chunk before loading the next one, including
+                // the copies get_posts() left in the runtime object cache.
+                unset($posts);
+                $this->release_walk_memory(
+                    $chunk_start,
+                    $this->chunk_post_cache_groups($post_types),
+                    array_merge($chunk, $attachment_ids)
+                );
+
+                if (!$full || !$advanced) {
+                    break;
                 }
             }
+        }
+    }
 
-            // Free the hydrated chunk before loading the next one — including
-            // the copies get_posts() left in the runtime object cache.
-            unset($posts);
-            $this->release_walk_memory(
-                $chunk_start,
-                $this->chunk_post_cache_groups($post_types),
-                array_merge($chunk, $attachment_ids)
+    /**
+     * One keyset page of the post walk: IDs and dates, newest first.
+     *
+     * The cursor is the (post_date, ID) of the last row of the previous page,
+     * and the page continues strictly after it in (post_date DESC, ID DESC)
+     * order. A tie on post_date is broken by ID in SQL, so a bulk import that
+     * stamped thousands of posts with one second costs nothing extra: the
+     * walk used to carry every ID already emitted at the current date and
+     * hand them back as `post__not_in`, a list and a NOT IN clause that grew
+     * with the tie (review on #965). WP_Query cannot express the composite
+     * comparison, so the page is read here and hydrated by get_posts().
+     *
+     * @since 2.19.0
+     *
+     * @param string[]                        $types    Post types.
+     * @param string[]                        $statuses Post statuses.
+     * @param array{date:string, id:int}|null $cursor   Last row of the previous page.
+     * @return array<int, array{ID:string, post_date:string}>
+     */
+    private function next_post_page(array $types, array $statuses, ?array $cursor): array {
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- both IN lists are runs of %s built from the argument counts and every value is a placeholder; the sitemap is itself cached, and this runs only while it is rebuilt.
+        global $wpdb;
+
+        $types    = array_values(array_filter(array_map('strval', $types), 'strlen'));
+        $statuses = array_values(array_filter(array_map('strval', $statuses), 'strlen'));
+        if (empty($types) || empty($statuses)) {
+            return [];
+        }
+
+        $sql = $wpdb->prepare(
+            'post_type IN (' . implode(',', array_fill(0, count($types), '%s')) . ')
+             AND post_status IN (' . implode(',', array_fill(0, count($statuses), '%s')) . ')',
+            array_merge($types, $statuses)
+        );
+
+        if (null !== $cursor) {
+            $sql .= $wpdb->prepare(
+                ' AND (post_date < %s OR (post_date = %s AND ID < %d))',
+                $cursor['date'],
+                $cursor['date'],
+                $cursor['id']
             );
         }
+
+        $rows = $wpdb->get_results(
+            "SELECT ID, post_date FROM {$wpdb->posts}
+             WHERE {$sql}
+             ORDER BY post_date DESC, ID DESC" . $wpdb->prepare(' LIMIT %d', self::ID_WALK_CHUNK),
+            ARRAY_A
+        );
+
+        return is_array($rows) ? $rows : [];
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
     }
 
     /**
@@ -1389,6 +1492,15 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * logo and colours (#639). It is a fixed URL: the palette is applied per
      * request, so changing a brand colour needs no regeneration and shows up on
      * sitemaps published long before.
+     *
+     * Browsers are dropping XSLT (Chrome 158 stops running it on Stable), so
+     * the instruction alone no longer guarantees a readable page. A comment
+     * naming the server-rendered view follows it, because a browser that shows
+     * the raw XML tree instead still shows comments, and that is where a person
+     * who opened the sitemap will look (#1156). The comment names the document
+     * it is in, so it is added by save_sitemap_to_file(), which knows that
+     * name, not here. The instruction is kept: it is ignored by crawlers and
+     * still styles the file in browsers that run it.
      *
      * @param array  $settings Sitemap settings (read for `enable_styling`).
      * @param string $variant  Stylesheet variant, `sitemap` or `index`.
@@ -2431,29 +2543,37 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // only way a dynamic site stays as fresh as a static one (#752).
         $this->flush_dynamic_cache();
 
-        $pending = get_option(self::REGENERATION_PENDING_OPTION, []);
-        $pending = is_array($pending) ? $pending : [];
-
-        $since   = !empty($pending['since']) ? (int) $pending['since'] : time();
-        $current = isset($pending['source']) ? (string) $pending['source'] : '';
-        $source  = ($current === 'settings' || $source === 'settings') ? 'settings' : 'content';
-
-        // Merged so the bookkeeping a rebuild keeps on the marker (`started`,
-        // `memory_limit`) survives an edit made while it is outstanding.
-        update_option(
+        // Read and written under one lock: a rebuild claiming its attempt or
+        // clearing the marker reads it too, and whichever wrote second used to
+        // put back the copy it read, dropping this edit's revision bump. The
+        // rebuild then matched its own revision and cleared a change its files
+        // did not include.
+        Shared_State::update_option(
             self::REGENERATION_PENDING_OPTION,
-            array_merge($pending, [
-                'since'        => $since,
-                'source'       => $source,
-                'attempts'     => !empty($pending['attempts']) ? (int) $pending['attempts'] : 0,
-                'next_attempt' => !empty($pending['next_attempt'])
-                    ? (int) $pending['next_attempt']
-                    : time() + self::REGENERATION_TAKEOVER_GRACE,
-                // Bumped on every change so a rebuild can tell whether the edit
-                // it started for is still the newest one outstanding.
-                'revision'     => (!empty($pending['revision']) ? (int) $pending['revision'] : 0) + 1,
-            ]),
-            true
+            static function ($pending) use ($source): array {
+                $pending = is_array($pending) ? $pending : [];
+
+                $since   = !empty($pending['since']) ? (int) $pending['since'] : time();
+                $current = isset($pending['source']) ? (string) $pending['source'] : '';
+                $source  = ($current === 'settings' || $source === 'settings') ? 'settings' : 'content';
+
+                // Merged so the bookkeeping a rebuild keeps on the marker
+                // (`started`, `memory_limit`) survives an edit made while it is
+                // outstanding.
+                return array_merge($pending, [
+                    'since'        => $since,
+                    'source'       => $source,
+                    'attempts'     => !empty($pending['attempts']) ? (int) $pending['attempts'] : 0,
+                    'next_attempt' => !empty($pending['next_attempt'])
+                        ? (int) $pending['next_attempt']
+                        : time() + self::REGENERATION_TAKEOVER_GRACE,
+                    // Bumped on every change so a rebuild can tell whether the
+                    // edit it started for is still the newest one outstanding.
+                    'revision'     => (!empty($pending['revision']) ? (int) $pending['revision'] : 0) + 1,
+                ]);
+            },
+            true,
+            []
         );
     }
 
@@ -2494,35 +2614,44 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             Site_Identity_Manager::refresh_robots_txt_file();
         }
 
-        $pending = get_option(self::REGENERATION_PENDING_OPTION, null);
+        // Under the marker's lock, so an edit landing now either bumps the
+        // revision before this comparison or writes a fresh marker after the
+        // delete; never between the read and the delete, where it was lost.
+        Shared_State::update_option(
+            self::REGENERATION_PENDING_OPTION,
+            static function ($pending) use ($revision) {
+                if ($pending === null) {
+                    return Shared_State::KEEP;
+                }
 
-        if ($pending === null) {
-            return;
-        }
+                // A change that landed while this rebuild was running is not
+                // covered by the files it just wrote, so it has to stay
+                // outstanding: otherwise, on a site where WP-Cron never fires,
+                // clearing the marker would strand it exactly the way #629
+                // stranded everything.
+                if (
+                    $revision !== null
+                    && is_array($pending)
+                    && (int) ($pending['revision'] ?? 0) !== $revision
+                ) {
+                    // This attempt succeeded, so drop what it claimed: the
+                    // newer change waits the grace a fresh edit gets, not a
+                    // failure backoff it never earned. Not zero: that edit
+                    // queued its own debounced event, and a marker due at once
+                    // had the next admin request rebuild in its shutdown and
+                    // the event rebuild again seconds later.
+                    unset($pending['started'], $pending['memory_limit']);
+                    $pending['attempts']     = 0;
+                    $pending['next_attempt'] = time() + self::REGENERATION_TAKEOVER_GRACE;
 
-        // A change that landed while this rebuild was running is not covered by
-        // the files it just wrote, so it has to stay outstanding — otherwise, on
-        // a site where WP-Cron never fires, clearing the marker would strand it
-        // exactly the way #629 stranded everything.
-        if (
-            $revision !== null
-            && is_array($pending)
-            && (int) ($pending['revision'] ?? 0) !== $revision
-        ) {
-            // This attempt succeeded, so drop what it claimed: the newer change
-            // waits the grace a fresh edit gets, not a failure backoff it never
-            // earned. Not zero: that edit queued its own debounced event, and
-            // a marker due at once had the next admin request rebuild in its
-            // shutdown and the event rebuild again seconds later.
-            unset($pending['started'], $pending['memory_limit']);
-            $pending['attempts']     = 0;
-            $pending['next_attempt'] = time() + self::REGENERATION_TAKEOVER_GRACE;
+                    return $pending;
+                }
 
-            update_option(self::REGENERATION_PENDING_OPTION, $pending, true);
-            return;
-        }
-
-        delete_option(self::REGENERATION_PENDING_OPTION);
+                return Shared_State::DELETE;
+            },
+            true,
+            null
+        );
     }
 
     /**
@@ -2541,35 +2670,44 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return void
      */
     private function claim_regeneration_attempt(): void {
-        $pending = get_option(self::REGENERATION_PENDING_OPTION, null);
+        // Under the marker's lock and from its committed value: the copy this
+        // request read when it decided to rebuild can be older than an edit
+        // made since, and writing it back undid that edit's revision bump.
+        Shared_State::update_option(
+            self::REGENERATION_PENDING_OPTION,
+            function ($pending) {
+                // Nothing outstanding (e.g. a manual generation already
+                // satisfied it): there is no marker to retry from, so nothing
+                // to claim.
+                if (!is_array($pending) || empty($pending['since'])) {
+                    return Shared_State::KEEP;
+                }
 
-        // Nothing outstanding (e.g. a manual generation already satisfied it):
-        // there is no marker to retry from, so nothing to claim.
-        if (!is_array($pending) || empty($pending['since'])) {
-            return;
-        }
+                if (!empty($pending['started'])) {
+                    // The previous attempt claimed itself and never reported back.
+                    update_option(
+                        self::REGENERATION_ERROR_OPTION,
+                        [
+                            'message'  => __('The previous automatic sitemap rebuild stopped before it finished, most likely because PHP ran out of memory or time. It is retried with a growing delay. If this keeps happening, raise the PHP memory_limit or max_execution_time, or run WP-Cron from a system cron.', 'thinkrank'),
+                            'source'   => isset($pending['source']) ? (string) $pending['source'] : 'content',
+                            'attempts' => !empty($pending['attempts']) ? (int) $pending['attempts'] : 1,
+                            'time'     => (int) $pending['started'],
+                        ],
+                        false
+                    );
+                }
 
-        if (!empty($pending['started'])) {
-            // The previous attempt claimed itself and never reported back.
-            update_option(
-                self::REGENERATION_ERROR_OPTION,
-                [
-                    'message'  => __('The previous automatic sitemap rebuild stopped before it finished, most likely because PHP ran out of memory or time. It is retried with a growing delay. If this keeps happening, raise the PHP memory_limit or max_execution_time, or run WP-Cron from a system cron.', 'thinkrank'),
-                    'source'   => isset($pending['source']) ? (string) $pending['source'] : 'content',
-                    'attempts' => !empty($pending['attempts']) ? (int) $pending['attempts'] : 1,
-                    'time'     => (int) $pending['started'],
-                ],
-                false
-            );
-        }
+                $attempts = (!empty($pending['attempts']) ? (int) $pending['attempts'] : 0) + 1;
 
-        $attempts = (!empty($pending['attempts']) ? (int) $pending['attempts'] : 0) + 1;
+                $pending['attempts']     = $attempts;
+                $pending['next_attempt'] = time() + $this->regeneration_backoff($attempts);
+                $pending['started']      = time();
 
-        $pending['attempts']     = $attempts;
-        $pending['next_attempt'] = time() + $this->regeneration_backoff($attempts);
-        $pending['started']      = time();
-
-        update_option(self::REGENERATION_PENDING_OPTION, $pending, true);
+                return $pending;
+            },
+            true,
+            null
+        );
     }
 
     /**
@@ -2604,43 +2742,54 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return void
      */
     private function record_regeneration_failure(string $message, string $source, ?int $memory_limit = null): void {
-        $pending  = get_option(self::REGENERATION_PENDING_OPTION, []);
-        $pending  = is_array($pending) ? $pending : [];
-        $attempts = !empty($pending['attempts']) ? (int) $pending['attempts'] : 0;
+        $attempts = 1;
 
-        // An attempt that claimed itself up front has already been counted.
-        if (empty($pending['started'])) {
-            $attempts++;
-        }
-        $attempts = max($attempts, 1);
+        // Under the marker's lock, from its committed value, so an edit that
+        // bumped the revision while this rebuild ran is not written over.
+        Shared_State::update_option(
+            self::REGENERATION_PENDING_OPTION,
+            function ($pending) use ($source, $memory_limit, &$attempts): array {
+                $pending  = is_array($pending) ? $pending : [];
+                $attempts = !empty($pending['attempts']) ? (int) $pending['attempts'] : 0;
 
-        $backoff = $this->regeneration_backoff($attempts);
+                // An attempt that claimed itself up front has already been counted.
+                if (empty($pending['started'])) {
+                    $attempts++;
+                }
+                $attempts = max($attempts, 1);
 
-        // Same precedence mark_regeneration_pending() enforces: a settings
-        // rebuild outranks a content one and must not be downgraded by a failed
-        // attempt. Overwriting it routed the retry back through the content
-        // path, where should_auto_generate() can be false and the completion
-        // marker then discards the settings rebuild entirely. Only the
-        // outstanding rebuild is upgraded — the recorded error keeps reporting
-        // whichever attempt actually failed.
-        $current         = isset($pending['source']) ? (string) $pending['source'] : '';
-        $pending_source  = ($current === 'settings' || $source === 'settings') ? 'settings' : 'content';
+                $backoff = $this->regeneration_backoff($attempts);
 
-        $marker = [
-            'since'        => !empty($pending['since']) ? (int) $pending['since'] : time(),
-            'source'       => $pending_source,
-            'attempts'     => $attempts,
-            'next_attempt' => time() + $backoff,
-            'revision'     => !empty($pending['revision']) ? (int) $pending['revision'] : 0,
-        ];
+                // Same precedence mark_regeneration_pending() enforces: a
+                // settings rebuild outranks a content one and must not be
+                // downgraded by a failed attempt. Overwriting it routed the
+                // retry back through the content path, where
+                // should_auto_generate() can be false and the completion marker
+                // then discards the settings rebuild entirely. Only the
+                // outstanding rebuild is upgraded; the recorded error keeps
+                // reporting whichever attempt actually failed.
+                $current        = isset($pending['source']) ? (string) $pending['source'] : '';
+                $pending_source = ($current === 'settings' || $source === 'settings') ? 'settings' : 'content';
 
-        // Remembered so has_memory_for_retry() can keep requests with no more
-        // memory than this from repeating the same attempt.
-        if ($memory_limit !== null && $memory_limit > 0) {
-            $marker['memory_limit'] = $memory_limit;
-        }
+                $marker = [
+                    'since'        => !empty($pending['since']) ? (int) $pending['since'] : time(),
+                    'source'       => $pending_source,
+                    'attempts'     => $attempts,
+                    'next_attempt' => time() + $backoff,
+                    'revision'     => !empty($pending['revision']) ? (int) $pending['revision'] : 0,
+                ];
 
-        update_option(self::REGENERATION_PENDING_OPTION, $marker, true);
+                // Remembered so has_memory_for_retry() can keep requests with
+                // no more memory than this from repeating the same attempt.
+                if ($memory_limit !== null && $memory_limit > 0) {
+                    $marker['memory_limit'] = $memory_limit;
+                }
+
+                return $marker;
+            },
+            true,
+            []
+        );
 
         update_option(
             self::REGENERATION_ERROR_OPTION,
@@ -2739,23 +2888,56 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return bool True when this process may generate.
      */
     private function acquire_generation_lock(): bool {
-        if (get_transient(self::GENERATION_LOCK_TRANSIENT)) {
-            return false;
-        }
+        $this->generation_owner = self::claim_generation_lock();
 
-        set_transient(self::GENERATION_LOCK_TRANSIENT, time(), 5 * MINUTE_IN_SECONDS);
-
-        return true;
+        return '' !== $this->generation_owner;
     }
 
     /**
-     * Release the shared generation lock.
+     * Release the shared generation lock, if this process still holds it.
      *
      * @since 2.2.1
      * @return void
      */
     private function release_generation_lock(): void {
-        delete_transient(self::GENERATION_LOCK_TRANSIENT);
+        self::release_generation_lock_as($this->generation_owner);
+        $this->generation_owner = '';
+    }
+
+    /**
+     * Take the generation lock for one generation.
+     *
+     * Checked and taken in one locked step: a get_transient() check then
+     * set_transient() let two rebuilds that checked together both write. The
+     * claim carries a token so it can only be released by the generation that
+     * took it (review on #965): a generation that overran the lock's lifetime
+     * used to delete the lock a successor had taken since, and a third could
+     * then start alongside the successor. The REST generate endpoint takes the
+     * same lock through here.
+     *
+     * @since 2.19.0
+     *
+     * @return string The owner token, or '' when another generation holds the lock.
+     */
+    public static function claim_generation_lock(): string {
+        $owner = Shared_State::owner_token();
+
+        return Shared_State::claim_transient(self::GENERATION_LOCK_TRANSIENT, 5 * MINUTE_IN_SECONDS, $owner) ? $owner : '';
+    }
+
+    /**
+     * Release the generation lock taken with {@see self::claim_generation_lock()}.
+     *
+     * A no-op for an empty token (the lock was never taken) and for a lock a
+     * successor holds now.
+     *
+     * @since 2.19.0
+     *
+     * @param string $owner The token claim_generation_lock() returned.
+     * @return void
+     */
+    public static function release_generation_lock_as(string $owner): void {
+        Shared_State::release_transient(self::GENERATION_LOCK_TRANSIENT, $owner);
     }
 
     /**
@@ -4196,6 +4378,9 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             // File validation failed - error details available in exception
             return false;
         }
+
+        // Point a reader who opens this document at its own HTML view (#1156).
+        $sitemap_xml = Sitemap_Stylesheet::with_view_comment($sitemap_xml, $filename);
 
         // Dynamic delivery: hand the document to the collector instead of the
         // filesystem. Reported as published, because for this run it is — the

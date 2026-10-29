@@ -1080,7 +1080,11 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             return $this->last_alt_cache_purge;
         }
 
-        $posts  = Attachment_Usage::posts_using($ids);
+        // One lookup for the whole set, kept per attachment: a bulk batch is
+        // up to 200 images, and one query per image is the cost the batch
+        // lookup exists to avoid (#926).
+        $usage  = Attachment_Usage::usage($ids);
+        $posts  = $usage['posts'];
         $purged = Cache_Purger::purge_posts($posts);
 
         foreach ($ids as $id) {
@@ -1092,16 +1096,37 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
              * here to drop their own rendering of the affected posts.
              *
              * @since 2.12.0
+             * @since 2.15.0 `$post_ids` holds only the posts found to display
+             *               this attachment. A bulk batch used to pass every
+             *               post found for the whole batch to each image.
              *
              * @param int   $attachment_id The attachment whose alt text changed.
              * @param int[] $post_ids      Posts found to display that attachment.
              */
-            do_action('thinkrank_image_alt_updated', $id, $posts);
+            do_action('thinkrank_image_alt_updated', $id, $usage['by_attachment'][$id] ?? []);
+        }
+
+        $warnings = Cache_Purger::warnings();
+
+        // The lookup stops at Attachment_Usage::MAX_POSTS pages. Past that,
+        // the pages it never reached still serve the old alt text, and the
+        // write reports success over them unless this says otherwise.
+        if ($usage['truncated']) {
+            $warnings[] = sprintf(
+                /* translators: %d: number of pages whose cached copy was cleared. */
+                _n(
+                    'Only %d page showing the updated images was cleared from the cache, and the images appear on more pages than ThinkRank clears at once. Clear your page cache to show the new alt text everywhere.',
+                    'Only %d pages showing the updated images were cleared from the cache, and the images appear on more pages than ThinkRank clears at once. Clear your page cache to show the new alt text everywhere.',
+                    count($posts),
+                    'thinkrank'
+                ),
+                count($posts)
+            );
         }
 
         $this->last_alt_cache_purge = [
             'posts'    => $purged,
-            'warnings' => Cache_Purger::warnings(),
+            'warnings' => $warnings,
         ];
 
         return $this->last_alt_cache_purge;

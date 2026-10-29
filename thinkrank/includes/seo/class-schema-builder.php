@@ -243,7 +243,7 @@ class Schema_Builder {
             $schema['dateModified'] = $schema['datePublished'];
         }
 
-        $schema['publisher'] = $this->get_organization_schema();
+        $schema['publisher'] = $this->get_organization_schema($data);
 
         // URL for the article
         if (!empty($data['url'])) {
@@ -295,6 +295,25 @@ class Schema_Builder {
         $keywords = array_map('trim', $keywords);
 
         return array_values(array_filter($keywords, 'strlen'));
+    }
+
+    /**
+     * schema.org URL for a Product offer's availability.
+     *
+     * Takes the short names the Product form offers (and a WooCommerce stock
+     * status mapped onto them); anything else falls back to InStock, which is
+     * what every Product offer said before.
+     *
+     * @since 2.15.0
+     *
+     * @param mixed $value Short availability name, e.g. 'OutOfStock'.
+     * @return string
+     */
+    private static function product_availability_url($value): string {
+        $known = ['InStock', 'OutOfStock', 'PreOrder', 'BackOrder', 'Discontinued'];
+        $value = is_string($value) ? trim($value) : '';
+
+        return 'https://schema.org/' . (in_array($value, $known, true) ? $value : 'InStock');
     }
 
     /**
@@ -408,21 +427,20 @@ class Schema_Builder {
         }
 
         // Offers - prioritize user-configured price
-        // The form offers five availability values; anything else, or none,
-        // keeps the long-standing InStock default (#1012).
-        $availability = $data['site_data']['product_availability'] ?? '';
-        if (!in_array($availability, ['InStock', 'OutOfStock', 'PreOrder', 'BackOrder', 'Discontinued'], true)) {
-            $availability = 'InStock';
-        }
-
         $offers = [
             '@type' => 'Offer',
-            'availability' => 'https://schema.org/' . $availability,
+            // The form's Availability (#1012), or a WooCommerce product's stock
+            // status filled in where the form is empty (#1011), so an
+            // out-of-stock product no longer publishes an in-stock offer.
+            'availability' => self::product_availability_url($data['site_data']['product_availability'] ?? ''),
             'priceCurrency' => $data['site_data']['product_currency'] ?? 'USD'
         ];
 
-        if (!empty($data['site_data']['product_price'])) {
-            $offers['price'] = $data['site_data']['product_price'];
+        // Not empty(): a free product's price is 0, and an Offer without its
+        // price fails validation and cannot be deployed (#1011).
+        $price = $data['site_data']['product_price'] ?? null;
+        if (is_scalar($price) && '' !== trim((string) $price)) {
+            $offers['price'] = is_string($price) ? trim($price) : $price;
         }
 
         if (!empty($data['url'])) {
@@ -923,20 +941,46 @@ class Schema_Builder {
 
     /**
      * Get organization schema for publisher
-     * PRESERVED: Exact same method logic from original Schema_Generator
+     *
+     * Resolves the same organization the site's #organization node describes:
+     * the configured organization name, URL and logo first, the WordPress
+     * site title and theme logo only as fallbacks. It used the site title
+     * unconditionally, so on a site whose brand differs from its blog title
+     * every deployed Article named a second, logo-less publisher (#915).
      *
      * @since 1.0.0
+     * @since 2.15.0 Takes the content data and prefers the configured organization.
      *
+     * @param array $data Content data; reads `site_data`.
      * @return array Organization schema
      */
-    private function get_organization_schema(): array {
+    private function get_organization_schema(array $data = []): array {
+        $site_data = isset($data['site_data']) && is_array($data['site_data']) ? $data['site_data'] : [];
+
         $org_schema = [
             '@type' => 'Organization',
-            'name' => get_bloginfo('name'),
-            'url' => home_url()
+            'name' => $this->first_non_empty(
+                $site_data['organization_name'] ?? null,
+                get_bloginfo('name')
+            ),
+            'url' => $this->first_non_empty(
+                $site_data['organization_url'] ?? null,
+                home_url()
+            )
         ];
 
-        // Add logo if available
+        // Same logo order as the Organization node: Schema Manager logo, then
+        // Site Identity's, then the theme's custom logo.
+        $configured_logo = $this->first_non_empty(
+            $site_data['organization_logo'] ?? null,
+            $site_data['logo_url'] ?? null
+        );
+
+        if ('' !== $configured_logo) {
+            $org_schema['logo'] = $this->format_image_schema($configured_logo);
+            return $org_schema;
+        }
+
         $custom_logo_id = get_theme_mod('custom_logo');
         if ($custom_logo_id) {
             $logo_data = wp_get_attachment_image_src($custom_logo_id, 'full');

@@ -10,6 +10,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\SEO;
 
+use ThinkRank\Core\Shared_State;
+
 // Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
@@ -295,7 +297,10 @@ class Snippet_Index {
      * @return void
      */
     public static function bump_generation(): void {
-        update_option(self::GENERATION_OPTION, self::generation() + 1, true);
+        // One locked increment: generation() + 1 written back lost a bump when
+        // two saves landed together, and an entry rebuilt between them kept
+        // reading as current under the settings it no longer matched.
+        Shared_State::increment_option(self::GENERATION_OPTION, 1, true);
     }
 
     /**
@@ -318,7 +323,7 @@ class Snippet_Index {
      * @return void
      */
     private static function bump_revision(): void {
-        update_option(self::REVISION_OPTION, self::revision() + 1, false);
+        Shared_State::increment_option(self::REVISION_OPTION, 0, false);
     }
 
     /**
@@ -793,12 +798,16 @@ class Snippet_Index {
      *
      * @since 2.10.0
      *
-     * @param string[] $post_types Post types to group across.
-     * @param string[] $statuses   Post statuses.
-     * @param string   $which      'title' or 'description'.
+     * @since 2.15.0 `$indexable_only` groups only posts with a current
+     *              indexable verdict ({@see Indexability::refresh_verdicts()}).
+     *
+     * @param string[] $post_types     Post types to group across.
+     * @param string[] $statuses       Post statuses.
+     * @param string   $which          'title' or 'description'.
+     * @param bool     $indexable_only Group only indexable posts.
      * @return array{groups:int, posts:int}
      */
-    public static function duplicate_totals(array $post_types, array $statuses, string $which): array {
+    public static function duplicate_totals(array $post_types, array $statuses, string $which, bool $indexable_only = false): array {
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder. The index is itself the cache.
         global $wpdb;
 
@@ -806,7 +815,7 @@ class Snippet_Index {
             return ['groups' => 0, 'posts' => 0];
         }
 
-        $groups_sql = self::duplicate_group_sql($post_types, $statuses, $which, true);
+        $groups_sql = self::duplicate_group_sql($post_types, $statuses, $which, true, $indexable_only);
 
         $row = (array) $wpdb->get_row(
             "SELECT COUNT(*) AS groups_count, COALESCE(SUM(g.members), 0) AS posts_count
@@ -837,8 +846,10 @@ class Snippet_Index {
      * @param string[] $post_types  Post types to group across.
      * @param string[] $statuses    Post statuses.
      * @param string   $which       'title' or 'description'.
-     * @param int      $max_members Most member IDs to return per group.
-     * @param int      $max_groups  Most groups to return; 0 for all.
+     * @param int      $max_members    Most member IDs to return per group.
+     * @param int      $max_groups     Most groups to return; 0 for all.
+     * @param bool     $indexable_only Group only posts with a current indexable
+     *                                 verdict (since 2.15.0).
      * @return array<int,array{key:string, post_ids:int[], total:int}>
      */
     public static function duplicate_groups(
@@ -846,7 +857,8 @@ class Snippet_Index {
         array $statuses,
         string $which,
         int $max_members,
-        int $max_groups = 0
+        int $max_groups = 0,
+        bool $indexable_only = false
     ): array {
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder. The index is itself the cache.
         global $wpdb;
@@ -859,7 +871,8 @@ class Snippet_Index {
         $meta_alias  = 'title' === $which ? 'dm' : 'em';
         $key_sql     = self::key_sql($meta_alias, $which);
 
-        $limit_sql = $max_groups > 0 ? $wpdb->prepare(' LIMIT %d', $max_groups) : '';
+        $limit_sql    = $max_groups > 0 ? $wpdb->prepare(' LIMIT %d', $max_groups) : '';
+        $verdict_join = $indexable_only ? self::verdict_join_sql($which) : '';
 
         $rows = $wpdb->get_results($wpdb->prepare(
             "SELECT {$key_sql} AS dk,
@@ -868,6 +881,7 @@ class Snippet_Index {
              FROM {$wpdb->posts} {$posts_alias}
              INNER JOIN {$wpdb->postmeta} {$meta_alias}
                 ON {$meta_alias}.post_id = {$posts_alias}.ID AND {$meta_alias}.meta_key = %s
+             {$verdict_join}
              WHERE " . self::scope_sql($post_types, $statuses, $posts_alias) . "
                AND {$meta_alias}.meta_value LIKE %s
              GROUP BY dk
@@ -893,6 +907,51 @@ class Snippet_Index {
     }
 
     /**
+     * Every post carrying a key that more than one post in scope shares, as a
+     * subquery selecting `ID`.
+     *
+     * The duplicate report leaves out posts that are not indexable (#1013), and
+     * a pair with one noindexed member is no longer a duplicate, so each member
+     * needs a verdict before the groups are counted. This is handed to
+     * {@see Indexability::refresh_verdicts()}, which judges a bounded batch per
+     * call, rather than loading every member into PHP at once.
+     *
+     * @since 2.15.0
+     *
+     * @param string[] $post_types Post types to group across.
+     * @param string[] $statuses   Post statuses.
+     * @param string   $which      'title' or 'description'.
+     * @return string Trusted SQL, '' when there is nothing in scope.
+     */
+    public static function duplicate_member_sql(array $post_types, array $statuses, string $which): string {
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder.
+        global $wpdb;
+
+        if (empty($post_types)) {
+            return '';
+        }
+
+        $key_sql    = self::key_sql('m', $which);
+        $groups_sql = self::duplicate_group_sql($post_types, $statuses, $which);
+
+        // Each fragment is prepared on its own and the statement is only
+        // concatenated: the subquery is already prepared and carries the
+        // LIKE pattern's literal % signs, which a second prepare() over the
+        // whole statement would read as placeholders.
+        $meta_key_sql = $wpdb->prepare('m.meta_key = %s', self::META_KEY);
+        $current_sql  = $wpdb->prepare('m.meta_value LIKE %s', self::current_like());
+        $scope_sql    = self::scope_sql($post_types, $statuses, 'p');
+
+        return "SELECT p.ID
+             FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND {$meta_key_sql}
+             WHERE {$scope_sql}
+               AND {$current_sql}
+               AND {$key_sql} IN (SELECT g.dk FROM ({$groups_sql}) g)";
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+    }
+
+    /**
      * The keys shared by more than one post, as a subquery selecting `dk`.
      *
      * Each kind gets its own table aliases so two of these can appear in one
@@ -903,10 +962,17 @@ class Snippet_Index {
      * @param string[] $post_types  Post types to group across.
      * @param string[] $statuses    Post statuses.
      * @param string   $which       'title' or 'description'.
-     * @param bool     $with_counts Also select the group's size as `members`.
+     * @param bool     $with_counts    Also select the group's size as `members`.
+     * @param bool     $indexable_only Group only posts with a current indexable verdict.
      * @return string Trusted SQL.
      */
-    private static function duplicate_group_sql(array $post_types, array $statuses, string $which, bool $with_counts = false): string {
+    private static function duplicate_group_sql(
+        array $post_types,
+        array $statuses,
+        string $which,
+        bool $with_counts = false,
+        bool $indexable_only = false
+    ): string {
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- interpolated parts are this class's own table aliases (whitelisted in alias()) and fragments already passed through prepare(); every value is a placeholder. The index is itself the cache.
         global $wpdb;
 
@@ -914,12 +980,14 @@ class Snippet_Index {
         $meta_alias  = 'title' === $which ? 'dm' : 'em';
         $key_sql     = self::key_sql($meta_alias, $which);
         $members_sql = $with_counts ? ', COUNT(*) AS members' : '';
+        $verdict_join = $indexable_only ? self::verdict_join_sql($which) : '';
 
         return $wpdb->prepare(
             "SELECT {$key_sql} AS dk{$members_sql}
              FROM {$wpdb->posts} {$posts_alias}
              INNER JOIN {$wpdb->postmeta} {$meta_alias}
                 ON {$meta_alias}.post_id = {$posts_alias}.ID AND {$meta_alias}.meta_key = %s
+             {$verdict_join}
              WHERE " . self::scope_sql($post_types, $statuses, $posts_alias) . "
                AND {$meta_alias}.meta_value LIKE %s
              GROUP BY dk
@@ -928,6 +996,23 @@ class Snippet_Index {
             self::current_like()
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+    }
+
+    /**
+     * INNER JOIN keeping only indexable posts, with the aliases of one kind.
+     *
+     * The verdict join is prepared already; it is spliced into a statement
+     * that is then prepared again, so its own % signs are escaped first.
+     *
+     * @param string $which 'title' or 'description'.
+     * @return string Trusted SQL, safe to pass through prepare().
+     */
+    private static function verdict_join_sql(string $which): string {
+        $join = 'title' === $which
+            ? Indexability::indexable_join_sql('dp', 'dv')
+            : Indexability::indexable_join_sql('ep', 'ev');
+
+        return str_replace('%', '%%', $join);
     }
 
     /**

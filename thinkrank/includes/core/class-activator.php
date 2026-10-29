@@ -186,9 +186,11 @@ class Activator {
         try {
             // Use the Database_Schema class to create all 11 ThinkRank tables
             $schema = new Database_Schema();
-            $results = $schema->create_tables();
+            $results = $schema->create_tables_locked();
 
-            if (!$results['success']) {
+            // Another request is creating the tables right now (#1133), and
+            // it reports its own failure, so there is nothing to check here.
+            if (null !== $results && !$results['success']) {
                 $error_message = 'Failed to create database tables: ' . implode(', ', $results['errors']);
                 throw new \Exception($error_message);
             }

@@ -137,11 +137,13 @@ function notify(message, isError = false) {
  * mutates editor state or the post status.
  *
  * @param {Object} formData Current MetaboxApp form state.
- * @return {Promise<void>}
+ * @return {Promise<{success: boolean, message: string}>} Save outcome.
  */
 async function saveViaAjax(formData) {
 	const result = await persistSeoFields(formData);
 	notify(result.message, !result.success);
+	// MetaboxApp drops its local draft only on a confirmed save.
+	return result;
 }
 
 /**

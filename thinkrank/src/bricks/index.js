@@ -38,9 +38,16 @@ import '../global/tailwind.css';
 // Bricks-only stacking overrides — must load last so it wins the cascade.
 import './bricks.scss';
 import { persistSeoFields } from '../metabox/utils/persistSeoFields';
+import { followInstantNavigation } from './navigation';
+import { clearPanelStatus, showPanelStatus } from './panel-status';
 
 let mounted = false;
 let pinInjected = false;
+let root = null;
+
+// Set on <body> while the open document has no panel (a Bricks template, or a
+// switch still loading), so bricks.scss hides the toolbar launcher.
+const UNSUPPORTED_CLASS = 'thinkrank-bricks-unsupported';
 
 // Window event MetaboxApp listens for to open/close the drawer.
 const TOGGLE_EVENT = 'thinkrank:toggle-seo-drawer';
@@ -195,11 +202,26 @@ function notify(message, isError = false) {
  * builder state or the post status.
  *
  * @param {Object} formData Current MetaboxApp form state.
- * @return {Promise<void>}
+ * @param {number} postId   Post the panel was rendered for.
+ * @return {Promise<{success: boolean, message: string}>} Save outcome.
  */
-async function saveViaAjax(formData) {
+async function saveViaAjax(formData, postId) {
+	// The payload takes its post ID from the live config. A panel rendered for
+	// another document must never save into the one now open (#971).
+	if (Number(window.thinkrankMetabox?.postId) !== Number(postId)) {
+		const message = __(
+			'This SEO panel belongs to a document that is no longer open. Nothing was saved.',
+			'thinkrank'
+		);
+		notify(message, true);
+		// Not a confirmed save, so MetaboxApp keeps its local draft.
+		return { success: false, message };
+	}
+
 	const result = await persistSeoFields(formData);
 	notify(result.message, !result.success);
+	// MetaboxApp drops its local draft only on a confirmed save.
+	return result;
 }
 
 /**
@@ -337,6 +359,45 @@ function watchForToolbar() {
 	}
 }
 
+/**
+ * Render the panel for a document's config, or nothing.
+ *
+ * Keyed on the post ID, so a switch remounts the whole panel with fresh state
+ * instead of carrying the previous document's fields over (#971).
+ *
+ * @param {Object|null} data Panel config, or null to show nothing.
+ * @return {void}
+ */
+function renderPanel(data) {
+	// `wp_localize_script` turns false into '', hence the cast.
+	const supported = !!(data && data.supported && data.postId);
+
+	document.body.classList.toggle(UNSUPPORTED_CLASS, !supported);
+
+	if (!supported) {
+		root.render(null);
+		return;
+	}
+
+	root.render(
+		<MetaboxApp
+			key={`post-${data.postId}`}
+			postId={data.postId}
+			existingMetadata={data.existingMetadata || {}}
+			contentPreview={data.contentPreview || ''}
+			contentFull={data.contentFull}
+			strings={data.strings || {}}
+			postTitle={data.postTitle || ''}
+			homeUrl={data.homeUrl || window.location.origin}
+			postModified={data.postModified}
+			linkSuggestionsEnabled={data.linkSuggestionsEnabled}
+			saveHandler={(formData) => saveViaAjax(formData, data.postId)}
+			contentResolver={getBuilderContent}
+			hideLauncher={true}
+		/>
+	);
+}
+
 function mount() {
 	if (mounted) {
 		return;
@@ -354,23 +415,32 @@ function mount() {
 
 	mounted = true;
 
-	const root = createRoot(container);
-	root.render(
-		<MetaboxApp
-			postId={data.postId}
-			existingMetadata={data.existingMetadata || {}}
-			contentPreview={data.contentPreview || ''}
-			contentFull={data.contentFull}
-			strings={data.strings || {}}
-			postTitle={data.postTitle || ''}
-			homeUrl={data.homeUrl || window.location.origin}
-			postModified={data.postModified}
-			linkSuggestionsEnabled={data.linkSuggestionsEnabled}
-			saveHandler={saveViaAjax}
-			contentResolver={getBuilderContent}
-			hideLauncher={true}
-		/>
-	);
+	root = createRoot(container);
+	renderPanel(data);
+
+	// Bricks' instant navigation switches documents without a reload. Drop
+	// the old panel the moment it does, then render the new document's.
+	// While it loads, and if it fails, a banner says so; a failure offers a
+	// Retry, since the panel would otherwise stay gone until a reload.
+	followInstantNavigation({
+		getConfig: () => window.thinkrankMetabox || {},
+		onLeave: (postId) => {
+			window.thinkrankMetabox = {
+				...(window.thinkrankMetabox || {}),
+				postId,
+				supported: false,
+			};
+			renderPanel(null);
+		},
+		onLoad: () => showPanelStatus('loading'),
+		onArrive: (next) => {
+			clearPanelStatus();
+			window.thinkrankMetabox = next;
+			renderPanel(next);
+		},
+		onError: (postId, retry) =>
+			showPanelStatus('error', { onRetry: retry }),
+	});
 
 	watchForToolbar();
 }

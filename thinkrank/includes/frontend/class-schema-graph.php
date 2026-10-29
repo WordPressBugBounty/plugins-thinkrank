@@ -181,6 +181,18 @@ class Schema_Graph {
     private array $supporting = [];
 
     /**
+     * Indexes into $supporting of nodes that came from a per-post deployment.
+     *
+     * A post can deploy an Organization or a Person that is not the site (a
+     * guest company, an interviewee). Those must never be mistaken for the
+     * site entity that every article's publisher points at (#915).
+     *
+     * @since 2.15.0
+     * @var array<int,true>
+     */
+    private array $post_supporting = [];
+
+    /**
      * Index in $supporting of the Person the site says it represents.
      *
      * Set by add_site_person(). The page's publisher references this node,
@@ -306,6 +318,7 @@ class Schema_Graph {
         // An Event subtype ("MusicEvent", #1012) is an Event for this purpose.
         if (!in_array($type, self::PAGE_LEVEL_TYPES, true) && !\ThinkRank\SEO\Schema_Factory::is_event_type($type)) {
             $this->supporting[] = $schema;
+            $this->post_supporting[array_key_last($this->supporting)] = true;
             return;
         }
 
@@ -1234,11 +1247,20 @@ class Schema_Graph {
         $breadcrumb_id      = '';
         $organization_nodes = [];
         $person_nodes       = [];
+        $site_org_id        = '';
         $site_person_id     = '';
+        $site_org_ref       = home_url('/#organization');
 
         foreach ($this->supporting as $index => $node) {
-            $type = $node['@type'] ?? '';
-            $slot = $this->site_level_slot($type);
+            $type    = $node['@type'] ?? '';
+            $slot    = $this->site_level_slot($type);
+            $is_site = !isset($this->post_supporting[$index]);
+
+            // The Site Identity fallback emits the configured organization_type
+            // (Corporation, NGO, LocalBusiness, Restaurant, ...) with the
+            // #organization @id already set, so that @id, not the type, is what
+            // marks it as the site. Read before assign_id() can suffix it.
+            $claims_site_org = $is_site && $site_org_ref === ($node['@id'] ?? null);
 
             if ('BreadcrumbList' === $type) {
                 $node = $this->assign_id($node, $base . '#breadcrumb', $used_ids);
@@ -1247,8 +1269,12 @@ class Schema_Graph {
                 $node = $this->assign_id($node, home_url('/#website'), $used_ids);
                 $website_id = $node['@id'];
             } elseif ('Organization' === $type) {
-                $node = $this->assign_id($node, home_url('/#organization'), $used_ids);
+                $node = $this->assign_id($node, $site_org_ref, $used_ids);
                 $organization_nodes[] = $node;
+
+                if ($is_site && '' === $site_org_id) {
+                    $site_org_id = $node['@id'];
+                }
             } elseif ('' !== $slot) {
                 // Site-level entities describe the site, not the page, so their
                 // @id must be stable across URLs. Falling through to the
@@ -1266,6 +1292,10 @@ class Schema_Graph {
                 if (null !== $duplicate_key) {
                     $nodes[$duplicate_key] = $this->merge_entity($nodes[$duplicate_key], $node);
 
+                    if ($claims_site_org && '' === $site_org_id) {
+                        $site_org_id = (string) ($nodes[$duplicate_key]['@id'] ?? '');
+                    }
+
                     if ($index === $this->site_person_index) {
                         $site_person_id = (string) ($nodes[$duplicate_key]['@id'] ?? '');
                     }
@@ -1273,6 +1303,13 @@ class Schema_Graph {
                 }
 
                 $node = $this->assign_id($node, home_url('/#' . strtolower($slot)), $used_ids);
+
+                // A site configured as a LocalBusiness (or a subtype) lands in
+                // this slot rather than the Organization branch, and is still
+                // the organization that publishes its articles.
+                if ($claims_site_org && '' === $site_org_id) {
+                    $site_org_id = $node['@id'];
+                }
 
                 if ('Person' === $slot) {
                     $person_nodes[] = $node;
@@ -1283,6 +1320,12 @@ class Schema_Graph {
                 }
             } elseif (is_string($type) && $type !== '') {
                 $node = $this->assign_id($node, $base . '#' . strtolower($type), $used_ids);
+
+                // A custom organization_type (Corporation, NGO, ...) is still
+                // the site, see $claims_site_org above.
+                if ($claims_site_org && '' === $site_org_id) {
+                    $site_org_id = $node['@id'];
+                }
             }
 
             $nodes['supporting_' . $index] = $node;
@@ -1307,20 +1350,35 @@ class Schema_Graph {
             // logo Google needs for Article, was not the one publisher
             // referenced (#471).
             //
-            // Only collapse when the inline object names the SAME entity. A post
-            // author and the site's Person entity are frequently different
-            // people, so matching on position rather than identity would
-            // misattribute authorship.
+            // The publisher of anything on this site is the site entity, so it
+            // references that node outright. #471 linked it only when the
+            // inline name matched the node's, and the inline publisher is
+            // built from the WordPress site title while the node carries the
+            // configured organization name: on any site whose brand differs
+            // from its blog title the link never fired, and the page named
+            // two publishers, the one it pointed at having no logo (#915).
+            // On a site that represents a person, that person is the site
+            // entity and publishes its pages (#1332). An Organization wins
+            // over that Person when the site has both.
+            //
+            // The author is different. A post author and the site's Person
+            // entity are frequently different people, so it is only collapsed
+            // when the inline object names the SAME entity; matching on
+            // position rather than identity would misattribute authorship.
             if (isset($nodes['primary']['publisher'])) {
-                $linked = $this->link_to_node($nodes['primary']['publisher'], $organization_nodes);
-                if (null !== $linked) {
-                    $nodes['primary']['publisher'] = $linked;
-                } elseif ('' !== $site_person_id && empty($organization_nodes)) {
-                    // A site that represents a person is published by that
-                    // person. The inline publisher is an Organization named
-                    // after the blog, so leaving it would describe the site
-                    // as both a Person and an Organization (#1332).
-                    $nodes['primary']['publisher'] = ['@id' => $site_person_id];
+                // The configured Organization first, then the Person the site
+                // says it represents (add_site_person(), #1332). Any other
+                // Person in the graph, deployed or per post, is not taken for
+                // the publisher.
+                $site_entity_id = '' !== $site_org_id ? $site_org_id : $site_person_id;
+
+                if ('' !== $site_entity_id) {
+                    $nodes['primary']['publisher'] = ['@id' => $site_entity_id];
+                } else {
+                    $linked = $this->link_to_node($nodes['primary']['publisher'], $organization_nodes);
+                    if (null !== $linked) {
+                        $nodes['primary']['publisher'] = $linked;
+                    }
                 }
             }
 

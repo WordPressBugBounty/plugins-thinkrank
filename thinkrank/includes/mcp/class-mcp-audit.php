@@ -235,7 +235,7 @@ final class Mcp_Audit {
 				&& null !== $after_json
 				&& ! Mcp_Audit_Snapshot::contains_secret( $before )
 				&& ! Mcp_Audit_Snapshot::same( $before, $after )
-				&& ( 'counterpart' !== $plan['strategy'] || null !== Mcp_Audit_Snapshot::pad_merged( $tool, (array) $before, (array) $after ) ) ) ? 1 : 0;
+				&& ( 'counterpart' !== $plan['strategy'] || null !== self::revert_args( $tool, $plan, Mcp_Audit_Snapshot::pad_merged( $tool, (array) $before, (array) $after ), (array) $after ) ) ) ? 1 : 0;
 
 			self::insert( $row );
 		} catch ( \Throwable $e ) {
@@ -261,6 +261,48 @@ final class Mcp_Audit {
 		$get_props = $get ? self::schema_props( $get ) : null;
 
 		return Mcp_Audit_Snapshot::plan( $tool, $args, $update_props, $get_props );
+	}
+
+	/**
+	 * The input that writes `before` back through the update ability, fitted
+	 * to that ability's input schema, or null when the ability would refuse
+	 * it or could not apply it. Checked when the write is logged, so Revert
+	 * is only offered for a change it can undo, and again when it runs.
+	 *
+	 * @since 2.15.1
+	 *
+	 * @param string                   $tool    Bare write tool name.
+	 * @param array<string,mixed>      $plan    Plan with its view resolved.
+	 * @param array<string,mixed>|null $before  Projected before-values, padded
+	 *                                          by Mcp_Audit_Snapshot::pad_merged();
+	 *                                          null when that could not pad them.
+	 * @param array<string,mixed>      $current Projected values the write left,
+	 *                                          for guarded restores.
+	 * @return array<string,mixed>|null
+	 */
+	private static function revert_args( string $tool, array $plan, ?array $before, array $current = [] ): ?array {
+		if ( null === $before || ! Mcp_Audit_Snapshot::replayable( $tool, $before ) ) {
+			return null;
+		}
+
+		$input   = Mcp_Audit_Snapshot::revert_input( $plan, $before, $current );
+		$ability = Mcp_Tools::resolve( $tool );
+		if ( ! $ability || ! method_exists( $ability, 'get_input_schema' ) ) {
+			return $input;
+		}
+
+		$schema = $ability->get_input_schema();
+		$input  = Mcp_Audit_Snapshot::fit( $input, $schema );
+
+		if ( method_exists( $ability, 'validate_input' ) ) {
+			$valid = $ability->validate_input( $input );
+		} elseif ( function_exists( 'rest_validate_value_from_schema' ) && is_array( $schema ) && [] !== $schema ) {
+			$valid = rest_validate_value_from_schema( $input, $schema, 'input' );
+		} else {
+			$valid = true;
+		}
+
+		return is_wp_error( $valid ) || false === $valid ? null : $input;
 	}
 
 	/**
@@ -1217,11 +1259,14 @@ final class Mcp_Audit {
 		// What the revert must leave behind: `before`, plus an explicit value
 		// for each subkey the write added to a key its ability merges.
 		$target = Mcp_Audit_Snapshot::pad_merged( (string) $row['tool'], $before, $after );
-		if ( null === $target ) {
+
+		// Rows logged before the input was checked can still hold a before
+		// the update ability refuses; say so instead of failing on its schema.
+		$input = self::revert_args( (string) $row['tool'], $plan, $target, $current );
+		if ( null === $target || null === $input ) {
 			return new \WP_Error( 'thinkrank_mcp_revert_unsupported', __( 'This change cannot be reverted.', 'thinkrank' ), [ 'status' => 400 ] );
 		}
 
-		$input  = Mcp_Audit_Snapshot::revert_input( $plan, $target, $current );
 		$result = self::run( (string) $row['tool'], $input );
 		if ( is_wp_error( $result ) ) {
 			return new \WP_Error( $result->get_error_code(), $result->get_error_message(), [ 'status' => 400 ] );

@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\SEO;
 
+use ThinkRank\Core\Shared_State;
+
 // Prevent direct access.
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -587,12 +589,10 @@ class Instant_Indexing_Manager {
     private function is_recently_submitted_cache(string $url): bool {
         $cache_key = 'thinkrank_indexing_' . md5($url);
 
-        if (get_transient($cache_key)) {
-            return true;
-        }
-
-        set_transient($cache_key, true, 15); // Cache for 15 seconds
-        return false;
+        // Checked and marked in one locked step: a block-editor save fires
+        // more than one save hook, and two that both checked before either
+        // marked submitted the same URL twice. Held for 15 seconds.
+        return !Shared_State::claim_transient($cache_key, 15);
     }
 
     /**

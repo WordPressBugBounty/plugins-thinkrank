@@ -15,12 +15,18 @@ import { dateRangeOptions } from './utils';
 
 /**
  * KeywordsSection Component
- * @param root0
- * @param root0.dateRange
- * @param root0.setDateRange
- * @param root0.dashboardData
+ * @param           root0
+ * @param           root0.dateRange
+ * @param           root0.setDateRange
+ * @param           root0.dashboardData
+ * @param {boolean} root0.isRefreshing  Whether a load for the range is running.
  */
-const KeywordsSection = ({ dateRange, setDateRange, dashboardData }) => (
+const KeywordsSection = ({
+	dateRange,
+	setDateRange,
+	dashboardData,
+	isRefreshing,
+}) => (
 	<div className="thinkrank-space-y-6">
 		<Flex justify="space-between" align="center">
 			<div>
@@ -41,6 +47,10 @@ const KeywordsSection = ({ dateRange, setDateRange, dashboardData }) => (
 				<select
 					value={dateRange}
 					onChange={(e) => setDateRange(e.target.value)}
+					// Held while its own load runs, so the range shown is the
+					// one the data on screen belongs to.
+					disabled={isRefreshing}
+					aria-label={__('Date Range', 'thinkrank')}
 					style={{
 						appearance: 'none',
 						WebkitAppearance: 'none',
@@ -52,7 +62,8 @@ const KeywordsSection = ({ dateRange, setDateRange, dashboardData }) => (
 						fontSize: '14px',
 						fontWeight: '600',
 						color: 'var(--tr-accent)',
-						cursor: 'pointer',
+						cursor: isRefreshing ? 'not-allowed' : 'pointer',
+						opacity: isRefreshing ? 0.6 : 1,
 						outline: 'none',
 						lineHeight: '1.4',
 						boxShadow: 'none',

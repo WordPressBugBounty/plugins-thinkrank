@@ -61,6 +61,14 @@ class Global_SEO_Schema_Output {
     private $description_resolver = null;
 
     /**
+     * Memoized site-wide schema settings, see site_schema_settings().
+     *
+     * @since 2.15.0
+     * @var array|null
+     */
+    private ?array $site_schema_settings = null;
+
+    /**
      * Supply the request's resolved description.
      *
      * @since 2.10.0
@@ -1027,34 +1035,93 @@ class Global_SEO_Schema_Output {
     /**
      * Get publisher schema (Organization or Person)
      *
+     * Names the organization the site configured (Schema Manager, then Site
+     * Identity), the same one the graph's #organization node describes. It
+     * used the WordPress site title and theme logo unconditionally, so a site
+     * whose brand differs from its blog title published a second, logo-less
+     * publisher on every post (#915). Schema_Graph points `publisher` at the
+     * site entity whenever one is in the graph; this inline object is what
+     * remains when none is.
+     *
      * @since 1.0.0
+     * @since 2.15.0 Prefers the configured organization name, URL and logo.
      * @return array Publisher schema
      */
     private function get_publisher_schema(): array {
-        // The Site Identity Site Name, the name the WebSite node carries, so
-        // the publisher and the site it publishes agree (#1331).
-        $site_name = \ThinkRank\SEO\Site_Identity_Manager::site_name();
-        $site_url = home_url();
+        $configured = $this->site_schema_settings();
 
+        // The configured organization name, else the Site Identity Site Name
+        // (the name the WebSite node carries, #1331), which itself falls back
+        // to the WordPress title.
         $publisher = [
             '@type' => 'Organization',
-            'name' => self::normalize_name((string) $site_name),
-            'url' => $site_url,
+            'name' => self::normalize_name(self::first_filled(
+                $configured['organization_name'] ?? null,
+                \ThinkRank\SEO\Site_Identity_Manager::site_name()
+            )),
+            'url' => self::first_filled(
+                $configured['organization_url'] ?? null,
+                home_url()
+            ),
         ];
 
-        // Add logo if available
-        $custom_logo_id = get_theme_mod('custom_logo');
-        if ($custom_logo_id) {
-            $logo_url = wp_get_attachment_image_url($custom_logo_id, 'full');
-            if ($logo_url) {
-                $publisher['logo'] = [
-                    '@type' => 'ImageObject',
-                    'url' => $logo_url,
-                ];
+        // Same logo order as the Organization node: Schema Manager logo, then
+        // Site Identity's, then the theme's custom logo.
+        $logo_url = self::first_filled(
+            $configured['organization_logo'] ?? null,
+            $configured['logo_url'] ?? null
+        );
+
+        if ('' === $logo_url) {
+            $custom_logo_id = get_theme_mod('custom_logo');
+            if ($custom_logo_id) {
+                $logo_url = (string) wp_get_attachment_image_url($custom_logo_id, 'full');
             }
         }
 
+        if ('' !== $logo_url) {
+            $publisher['logo'] = [
+                '@type' => 'ImageObject',
+                'url' => $logo_url,
+            ];
+        }
+
         return $publisher;
+    }
+
+    /**
+     * Site-wide Schema Manager settings, Site Identity values layered in.
+     *
+     * Memoized: an archive renders one publisher per listed post.
+     *
+     * @since 2.15.0
+     * @return array
+     */
+    private function site_schema_settings(): array {
+        if (null === $this->site_schema_settings) {
+            $this->site_schema_settings = class_exists('ThinkRank\\SEO\\Schema_Management_System')
+                ? \ThinkRank\SEO\Schema_Management_System::site_settings()
+                : [];
+        }
+
+        return $this->site_schema_settings;
+    }
+
+    /**
+     * First argument that is a non-empty string after trimming.
+     *
+     * @since 2.15.0
+     * @param mixed ...$values Candidates in priority order.
+     * @return string
+     */
+    private static function first_filled(...$values): string {
+        foreach ($values as $value) {
+            if (is_string($value) && '' !== trim($value)) {
+                return $value;
+            }
+        }
+
+        return '';
     }
 
     /**

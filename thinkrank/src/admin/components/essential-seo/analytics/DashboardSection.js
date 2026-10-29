@@ -183,6 +183,9 @@ const DashboardSection = ({
 					<select
 						value={dateRange}
 						onChange={(e) => setDateRange(e.target.value)}
+						// Held while its own load runs, so the range shown is
+						// the one the data on screen belongs to.
+						disabled={isRefreshing}
 						style={{
 							appearance: 'none',
 							WebkitAppearance: 'none',
@@ -194,7 +197,8 @@ const DashboardSection = ({
 							fontSize: '14px',
 							fontWeight: '600',
 							color: 'var(--tr-accent)',
-							cursor: 'pointer',
+							cursor: isRefreshing ? 'not-allowed' : 'pointer',
+							opacity: isRefreshing ? 0.6 : 1,
 							outline: 'none',
 							lineHeight: '1.4',
 							boxShadow: 'none',

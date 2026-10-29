@@ -1,9 +1,9 @@
 /**
  * Fields the local metabox draft must never carry.
  *
- * The draft in localStorage is only discarded when the post's modified time
- * is newer than the draft, and each of these can change without the post
- * being saved:
+ * Each of these can change without the post being saved. The per-field
+ * baseline check in metaboxDraft.js would now catch that too, but they stay
+ * out of the draft altogether:
  *
  * - Focus keywords are written server-side by imports and bulk edits.
  * - The redirect lives in ThinkRank Pro's rules table, which the Redirections

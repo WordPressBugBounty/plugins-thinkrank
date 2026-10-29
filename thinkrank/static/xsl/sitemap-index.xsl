@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:sitemap="http://www.sitemaps.org/schemas/sitemap/0.9">
     <xsl:output method="html" version="1.0" encoding="UTF-8" indent="yes"/>
+
+    <!--
+        Set only when the server renders this stylesheet into the HTML view
+        (Sitemap_Stylesheet::render_view()). A child under the home URL then
+        links to its own HTML view rather than to its raw XML. Left empty, as a
+        browser running the stylesheet leaves it, every link is the plain loc.
+    -->
+    <xsl:param name="thinkrank_home" select="''"/>
+    <xsl:param name="thinkrank_view" select="''"/>
     
     <xsl:template match="/">
         <html xmlns="http://www.w3.org/1999/xhtml">
@@ -235,7 +244,18 @@
                             <xsl:for-each select="sitemap:sitemapindex/sitemap:sitemap">
                                 <tr>
                                     <td class="sitemap-cell">
-                                        <a href="{sitemap:loc}" target="_blank">
+                                        <a target="_blank">
+                                            <xsl:attribute name="href">
+                                                <xsl:variable name="child" select="substring-after(sitemap:loc, $thinkrank_home)"/>
+                                                <xsl:choose>
+                                                    <xsl:when test="$thinkrank_view != '' and $thinkrank_home != '' and starts-with(sitemap:loc, $thinkrank_home) and $child != '' and not(contains($child, '/'))">
+                                                        <xsl:value-of select="concat($thinkrank_view, $child)"/>
+                                                    </xsl:when>
+                                                    <xsl:otherwise>
+                                                        <xsl:value-of select="sitemap:loc"/>
+                                                    </xsl:otherwise>
+                                                </xsl:choose>
+                                            </xsl:attribute>
                                             <xsl:value-of select="sitemap:loc"/>
                                         </a>
                                     </td>

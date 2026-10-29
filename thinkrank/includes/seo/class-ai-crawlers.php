@@ -117,7 +117,7 @@ class AI_Crawlers {
             'token'   => 'Google-Extended',
             'label'   => 'Google-Extended',
             'vendor'  => 'google',
-            'purpose' => 'Controls whether your content trains Gemini and grounds its answers. Blocking it does NOT affect normal Google Search indexing or your rankings.',
+            'purpose' => 'Controls whether your content trains Gemini and grounds answers in Google’s other AI products. Blocking it does NOT affect normal Google Search indexing, your rankings, or AI Overviews and AI Mode, which use Googlebot.',
         ],
         'applebot-extended' => [
             'token'   => 'Applebot-Extended',

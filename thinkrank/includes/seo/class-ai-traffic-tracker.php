@@ -9,17 +9,28 @@
  * request path and can read the referrer first-party, with no pixel and no
  * JavaScript.
  *
+ * That only holds while PHP renders the page. A full-page cache answers
+ * before `template_redirect`, and ChatGPT's apps send no Referer at all, only
+ * `utm_source=chatgpt.com` (#966). So a visit is classified on its Referer
+ * and, failing that, its `utm_source`, and `Ai_Referral_Beacon` covers the
+ * cached case: a few lines of inline script that report an AI landing only
+ * when PHP did not already record it.
+ *
  * What is stored (and deliberately nothing more): daily aggregate counters,
  * one row per (day, kind, source, path). Three kinds:
  *
- *   referral — a human pageview whose referrer host matched an AI platform
+ *   referral — a human pageview whose referrer host (or, failing that,
+ *              utm_source) matched an AI platform
  *   crawler  — a request whose user agent matched a known AI crawler
  *   baseline — every human pageview (source 'all', no path), so the dashboard
  *              can say "AI referrals are N% of traffic" without Google
  *
- * No IPs, no raw user agents, no cookies, no per-visit rows — nothing that
- * identifies a visitor. That keeps the table small and the feature clean
- * under wordpress.org privacy expectations.
+ * No IPs, no raw user agents, no per-visit rows — nothing that identifies a
+ * visitor. That keeps the table small and the feature clean under
+ * wordpress.org privacy expectations. The only cookie is the beacon's
+ * two-minute marker on an AI-referred response, which holds the landing path
+ * (see Ai_Referral_Beacon); its rate limiter keeps a hashed client key for at
+ * most an hour.
  *
  * @package ThinkRank\SEO
  * @since 1.27.0
@@ -98,6 +109,29 @@ class Ai_Traffic_Tracker {
     ];
 
     /**
+     * Bare `utm_source` values → platform slug, for platforms that tag their
+     * outbound links with a name rather than a host. A host-shaped value
+     * (`utm_source=chatgpt.com`) is matched against REFERRER_PLATFORMS
+     * instead, so this only lists the names. Kept to names no ordinary
+     * campaign would use: `you` and `poe` are left out for that reason.
+     *
+     * @since 2.15.0
+     *
+     * @var array<string, string>
+     */
+    private const UTM_SOURCES = [
+        'chatgpt'    => 'chatgpt',
+        'perplexity' => 'perplexity',
+        'gemini'     => 'gemini',
+        'claude'     => 'claude',
+        'copilot'    => 'copilot',
+        'grok'       => 'grok',
+        'deepseek'   => 'deepseek',
+        'mistral'    => 'mistral',
+        'kimi'       => 'kimi',
+    ];
+
+    /**
      * Wire the front-end recorder and the retention cron.
      *
      * @return void
@@ -106,10 +140,113 @@ class Ai_Traffic_Tracker {
         // Priority 1: record before any template logic can redirect/exit.
         add_action('template_redirect', [$this, 'record'], 1);
 
+        // Cache hits never reach record(); the beacon reports those (#966).
+        (new Ai_Referral_Beacon($this))->init();
+
         add_action(self::PRUNE_HOOK, [$this, 'prune']);
         if (!wp_next_scheduled(self::PRUNE_HOOK)) {
             wp_schedule_event(time() + DAY_IN_SECONDS, 'daily', self::PRUNE_HOOK);
         }
+    }
+
+    /**
+     * Referrer host → platform slug, after the extension filter.
+     *
+     * The one platform map: the referrer check, the `utm_source` check, the
+     * client-side beacon and Pro's revenue attribution all read it, so they
+     * cannot disagree about which hosts are AI platforms.
+     *
+     * @since 2.15.0
+     *
+     * @return array<string, string>
+     */
+    public static function referrer_platforms(): array {
+        /**
+         * Filters the referrer hosts recognised as AI platforms.
+         *
+         * Keys are hosts, matched exactly or as a parent domain (`perplexity.ai`
+         * also matches `www.perplexity.ai`); values are platform slugs. A slug
+         * ThinkRank Pro does not know is counted as traffic but never credited
+         * with revenue.
+         *
+         * @since 2.15.0
+         *
+         * @param array<string, string> $platforms Host => platform slug.
+         */
+        $platforms = apply_filters('thinkrank_ai_referrer_platforms', self::REFERRER_PLATFORMS);
+
+        return self::clean_map(is_array($platforms) ? $platforms : self::REFERRER_PLATFORMS, true);
+    }
+
+    /**
+     * Bare `utm_source` name → platform slug, after the extension filter.
+     *
+     * @since 2.15.0
+     *
+     * @return array<string, string>
+     */
+    public static function utm_sources(): array {
+        /**
+         * Filters the bare `utm_source` names recognised as AI platforms.
+         *
+         * Matched exactly and case-insensitively. Host-shaped values such as
+         * `chatgpt.com` need no entry here: they are matched against the
+         * referrer hosts.
+         *
+         * @since 2.15.0
+         *
+         * @param array<string, string> $sources utm_source value => platform slug.
+         */
+        $sources = apply_filters('thinkrank_ai_utm_sources', self::UTM_SOURCES);
+
+        return self::clean_map(is_array($sources) ? $sources : self::UTM_SOURCES, false);
+    }
+
+    /**
+     * Drop map entries that could not match or could not be stored.
+     *
+     * @param array $map     Raw key => slug map.
+     * @param bool  $is_host Whether keys are hosts (dots allowed) or names.
+     * @return array<string, string>
+     */
+    private static function clean_map(array $map, bool $is_host): array {
+        $clean   = [];
+        $pattern = $is_host ? '/^[a-z0-9-]+(\.[a-z0-9-]+)+$/' : '/^[a-z0-9._-]+$/';
+
+        foreach ($map as $key => $slug) {
+            $key  = strtolower(trim((string) $key));
+            $slug = sanitize_key((string) $slug);
+
+            if ('' === $slug || 1 !== preg_match($pattern, $key)) {
+                continue;
+            }
+
+            $clean[$key] = substr($slug, 0, 191);
+        }
+
+        return $clean;
+    }
+
+    /**
+     * Classify a host against the referrer map.
+     *
+     * @param string $host Lower-case host.
+     * @return string|null
+     */
+    private static function classify_host(string $host): ?string {
+        if ('' === $host) {
+            return null;
+        }
+
+        foreach (self::referrer_platforms() as $fragment => $slug) {
+            // Suffix match on the host so evil.com/?q=claude.ai can't spoof
+            // via path, and subdomains (www.perplexity.ai) still match.
+            if ($host === $fragment || str_ends_with($host, '.' . $fragment)) {
+                return $slug;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -123,20 +260,60 @@ class Ai_Traffic_Tracker {
             return null;
         }
 
-        $host = strtolower((string) wp_parse_url($referrer, PHP_URL_HOST));
-        if ('' === $host) {
+        return self::classify_host(strtolower((string) wp_parse_url($referrer, PHP_URL_HOST)));
+    }
+
+    /**
+     * Classify a `utm_source` value as an AI platform.
+     *
+     * A host-shaped value (`chatgpt.com`, `https://www.perplexity.ai/`) is
+     * matched like a referrer host; anything else must be one of the bare
+     * names in utm_sources(). Never a substring match, so a campaign called
+     * `chatgpt-ads-test` is not counted.
+     *
+     * Mirrored by the inline script in Ai_Referral_Beacon; change both.
+     *
+     * @since 2.15.0
+     *
+     * @param string $utm_source Raw `utm_source` value (may be empty).
+     * @return string|null Platform slug, or null when not an AI platform.
+     */
+    public static function classify_utm_source(string $utm_source): ?string {
+        $value = strtolower(trim($utm_source));
+        if ('' === $value || strlen($value) > 200) {
             return null;
         }
 
-        foreach (self::REFERRER_PLATFORMS as $fragment => $slug) {
-            // Suffix match on the host so evil.com/?q=claude.ai can't spoof
-            // via path, and subdomains (www.perplexity.ai) still match.
-            if ($host === $fragment || str_ends_with($host, '.' . $fragment)) {
-                return $slug;
-            }
+        $host = $value;
+        $pos  = strpos($host, '://');
+        if (false !== $pos) {
+            $host = substr($host, $pos + 3);
+        }
+        $host = explode('/', $host)[0];
+
+        $platform = self::classify_host($host);
+        if (null !== $platform) {
+            return $platform;
         }
 
-        return null;
+        return self::utm_sources()[$value] ?? null;
+    }
+
+    /**
+     * Classify a visit: its referrer first, then its `utm_source`.
+     *
+     * The `utm_source` fallback applies when the referrer is missing or is not
+     * an AI platform: ChatGPT's mobile apps and many in-app browsers send no
+     * Referer, but tag the link with `utm_source=chatgpt.com`.
+     *
+     * @since 2.15.0
+     *
+     * @param string $referrer   Referrer URL (may be empty).
+     * @param string $utm_source `utm_source` value (may be empty).
+     * @return string|null Platform slug, or null when not an AI visit.
+     */
+    public static function classify_visit(string $referrer, string $utm_source): ?string {
+        return self::classify_referrer($referrer) ?? self::classify_utm_source($utm_source);
     }
 
     /**
@@ -201,10 +378,39 @@ class Ai_Traffic_Tracker {
         $this->bump('baseline', 'all');
 
         $referrer = isset($_SERVER['HTTP_REFERER']) ? (string) wp_unslash($_SERVER['HTTP_REFERER']) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- classified, never stored raw.
-        $platform = self::classify_referrer($referrer);
+        $utm      = isset($_GET['utm_source']) && is_string($_GET['utm_source']) ? (string) wp_unslash($_GET['utm_source']) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput -- a public link parameter, classified and never stored raw.
+        $platform = self::classify_visit($referrer, $utm);
         if (null !== $platform) {
             $this->bump('referral', $platform, $this->current_path());
+
+            // This request was rendered by PHP and is now counted. Tell the
+            // page's beacon so it does not count it a second time.
+            Ai_Referral_Beacon::mark_recorded($this->request_path());
         }
+    }
+
+    /**
+     * Record an AI referral that PHP did not see when the page was served.
+     *
+     * Called by Ai_Referral_Beacon once it has classified the visit itself.
+     * Counts the pageview into the baseline as well: the cached pageview never
+     * reached record(), and an AI referral missing from the baseline would let
+     * the AI share read above 100%.
+     *
+     * @since 2.15.0
+     *
+     * @param string $platform Platform slug from classify_visit().
+     * @param string $path     Landing path.
+     * @return void
+     */
+    public function record_referral(string $platform, string $path): void {
+        $platform = sanitize_key($platform);
+        if ('' === $platform) {
+            return;
+        }
+
+        $this->bump('baseline', 'all');
+        $this->bump('referral', $platform, substr('' !== $path ? $path : '/', 0, 191));
     }
 
     /**
@@ -259,12 +465,21 @@ class Ai_Traffic_Tracker {
      * @return string
      */
     private function current_path(): string {
+        return substr($this->request_path(), 0, 191);
+    }
+
+    /**
+     * The current request path, untruncated, as the browser sent it.
+     *
+     * @return string
+     */
+    private function request_path(): string {
         $uri  = isset($_SERVER['REQUEST_URI']) ? (string) wp_unslash($_SERVER['REQUEST_URI']) : '/'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- reduced to its path component below.
         $path = (string) wp_parse_url($uri, PHP_URL_PATH);
         if ('' === $path) {
             $path = '/';
         }
-        return substr($path, 0, 191);
+        return $path;
     }
 
     /**

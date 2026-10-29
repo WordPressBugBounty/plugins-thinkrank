@@ -16,6 +16,7 @@ declare(strict_types=1);
 namespace ThinkRank\API;
 
 use ThinkRank\Core\Settings;
+use ThinkRank\Core\Shared_State;
 use ThinkRank\SEO\Instant_Indexing_Reconciler;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -318,9 +319,35 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
 
         // Ensure api_key is always present
         if (empty($settings['api_key'])) {
-            $settings['api_key'] = $this->generate_api_key();
-            $this->manage_key_file($settings['api_key']);
-            update_option($this->option_name, $settings);
+            // Minted under the option's lock and merged into its committed
+            // value. Writing back the copy read above could undo a save made
+            // in between (enabled flipped back off), and two first loads each
+            // minted a key, so the stored one and a key file could disagree.
+            $minted   = '';
+            $settings = wp_parse_args(
+                (array) Shared_State::update_option(
+                    $this->option_name,
+                    function ($stored) use (&$minted) {
+                        $stored = is_array($stored) ? $stored : [];
+
+                        if (!empty($stored['api_key'])) {
+                            return Shared_State::KEEP;
+                        }
+
+                        $minted            = $this->generate_api_key();
+                        $stored['api_key'] = $minted;
+
+                        return $stored;
+                    },
+                    null,
+                    []
+                ),
+                $defaults
+            );
+
+            if ($minted !== '') {
+                $this->manage_key_file($minted);
+            }
         } else {
             // Verify file exists for existing key, create if missing
             $file_path = ABSPATH . $settings['api_key'] . '.txt';
@@ -358,11 +385,7 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
             $params = $request->get_params(); // Fallback if content-type is not JSON
         }
 
-        $current_settings = get_option($this->option_name, []);
-        if (!is_array($current_settings)) {
-            $current_settings = [];
-        }
-        $new_settings = $current_settings;
+        $new_settings = [];
 
         // Only write the post types when the caller actually sent them. Writing
         // unconditionally meant a payload of {"enabled": true} cleared the list,
@@ -396,7 +419,19 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
             $new_settings['api_key'] = $candidate_key;
         }
 
-        update_option($this->option_name, $new_settings);
+        // Only the fields this request sent are applied, onto the committed
+        // value under the option's lock. Writing back a copy read at the start
+        // of the request undid whatever changed in between: an API key
+        // regenerated a moment earlier came back as the old one, whose key
+        // file had just been deleted.
+        $new_settings = Shared_State::update_option(
+            $this->option_name,
+            static function ($stored) use ($new_settings): array {
+                return array_merge(is_array($stored) ? $stored : [], $new_settings);
+            },
+            null,
+            []
+        );
 
         return new WP_REST_Response([
             'success' => true,
@@ -447,17 +482,25 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
      * @return WP_REST_Response Response object
      */
     public function regenerate_api_key(WP_REST_Request $request): WP_REST_Response {
-        $settings = get_option($this->option_name, []);
-        $old_key = $settings['api_key'] ?? null;
-
         $new_key = $this->generate_api_key();
+        $old_key = null;
 
-        if (!is_array($settings)) {
-            $settings = [];
-        }
+        // Swap the key on the committed value under the option's lock, so a
+        // settings save in flight cannot write the old key back, and the old
+        // key read here is the one actually being replaced.
+        Shared_State::update_option(
+            $this->option_name,
+            static function ($settings) use ($new_key, &$old_key): array {
+                $settings = is_array($settings) ? $settings : [];
+                $old_key  = $settings['api_key'] ?? null;
 
-        $settings['api_key'] = $new_key;
-        update_option($this->option_name, $settings);
+                $settings['api_key'] = $new_key;
+
+                return $settings;
+            },
+            null,
+            []
+        );
 
         // Update key files (create new, delete old)
         $this->manage_key_file($new_key, $old_key);

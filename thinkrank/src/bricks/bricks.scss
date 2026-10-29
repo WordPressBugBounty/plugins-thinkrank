@@ -92,3 +92,13 @@ body > .tr-root > [aria-hidden="true"] {
 .tr-root *::after {
 	border-style: solid;
 }
+
+/*
+ * No launcher while the open document has no panel: a Bricks template, or an
+ * instant-navigation switch whose panel is still loading (#971). The bundle
+ * now loads for every document the user can edit, so a template-first session
+ * can still pick the panel up when it switches to a page.
+ */
+body.thinkrank-bricks-unsupported .thinkrank-bricks-toolbar-item {
+	display: none !important;
+}

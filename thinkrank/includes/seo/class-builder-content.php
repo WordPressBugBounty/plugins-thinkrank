@@ -344,6 +344,10 @@ class Builder_Content {
      */
     private const IMAGE_KEYS = [
         'image', 'src', 'image_url', 'background_image', 'bg_image', 'photo',
+        // Beaver Builder's Photo module keeps the URL here and only the
+        // attachment ID under `photo`, so without it the module was dropped
+        // entirely (#909).
+        'photo_src',
     ];
 
     /**
@@ -366,9 +370,35 @@ class Builder_Content {
     /**
      * Keys whose value is alternative text for a sibling image.
      *
+     * Lower-cased on both sides of the comparison, so `alttext` is Bricks'
+     * camelCase `altText`, its Image element's "Custom alt text" control.
+     *
+     * `title` is not here on purpose. It is also a content key, so a sibling
+     * heading's title would beat the attachment's alt text; it is only tried
+     * last, see ALT_FALLBACK_KEYS (#909).
+     *
      * @var string[]
      */
-    private const ALT_KEYS = ['alt', 'alt_text', 'image_alt', 'title'];
+    private const ALT_KEYS = ['alt', 'alt_text', 'image_alt', 'alttext'];
+
+    /**
+     * Keys read for alt text only once every explicit source came up empty.
+     *
+     * @since 2.15.0
+     * @var string[]
+     */
+    private const ALT_FALLBACK_KEYS = ['title'];
+
+    /**
+     * Keys holding the attachment ID of a sibling image.
+     *
+     * Beaver's Photo module stores the ID under `photo` next to its
+     * `photo_src` URL.
+     *
+     * @since 2.15.0
+     * @var string[]
+     */
+    private const IMAGE_ID_KEYS = ['photo'];
 
     /**
      * The global post and every global `setup_postdata()` writes.
@@ -1889,6 +1919,10 @@ class Builder_Content {
         // its heading through.
         $consumed = [];
 
+        // Every attachment alt the walk will read, in one query rather than one
+        // get_post_meta() round trip per image.
+        self::prime_attachment_alts($tree);
+
         // Markup is content wherever it appears; bare strings only count when
         // their key says they are content, so slugs and class names stay out of
         // the word count.
@@ -2086,7 +2120,7 @@ class Builder_Content {
         // Image: alt text matters as much as the tag, since alt checks run over
         // whatever this returns.
         if ('' !== $image['url']) {
-            $alt = '' !== $image['alt'] ? $image['alt'] : (string) self::first_value($node, self::ALT_KEYS);
+            $alt = self::image_alt($node, $image);
             if ('' !== $alt) {
                 $consumed[] = $alt;
             }
@@ -2176,10 +2210,14 @@ class Builder_Content {
     }
 
     /**
-     * Image URL and alt text held by a node.
+     * Image URL, alt text and attachment ID held by a node.
+     *
+     * `alt` is what the image value itself carries (Elementor keeps it there),
+     * and `fallback_alt` its `title`. `id` is the attachment ID, from the
+     * image value or a sibling ID key, 0 when there is none.
      *
      * @param array $node Builder node.
-     * @return array{url:string,alt:string}
+     * @return array{url:string,alt:string,fallback_alt:string,id:int}
      */
     private static function image_from(array $node): array {
         foreach ($node as $key => $value) {
@@ -2188,32 +2226,208 @@ class Builder_Content {
             }
 
             if (is_string($value) && self::looks_like_url($value)) {
-                return ['url' => trim($value), 'alt' => ''];
+                return [
+                    'url'          => trim($value),
+                    'alt'          => '',
+                    'fallback_alt' => '',
+                    'id'           => self::attachment_id_from($node, self::IMAGE_ID_KEYS),
+                ];
             }
 
             $nested_values = self::as_children($value);
             if (null !== $nested_values) {
                 $url = '';
-                $alt = '';
                 foreach ($nested_values as $nested_key => $nested) {
-                    if (!is_string($nested_key) || !is_string($nested)) {
-                        continue;
-                    }
-                    $nested_key = strtolower($nested_key);
-                    if ('' === $url && in_array($nested_key, ['url', 'src'], true) && self::looks_like_url($nested)) {
+                    if (is_string($nested_key)
+                        && is_string($nested)
+                        && in_array(strtolower($nested_key), ['url', 'src'], true)
+                        && self::looks_like_url($nested)
+                    ) {
                         $url = trim($nested);
-                    }
-                    if ('' === $alt && in_array($nested_key, self::ALT_KEYS, true)) {
-                        $alt = trim($nested);
+                        break;
                     }
                 }
                 if ('' !== $url) {
-                    return ['url' => $url, 'alt' => $alt];
+                    return [
+                        'url'          => $url,
+                        'alt'          => self::alt_from($nested_values, self::ALT_KEYS),
+                        'fallback_alt' => self::alt_from($nested_values, self::ALT_FALLBACK_KEYS),
+                        'id'           => self::attachment_id_from($nested_values, ['id']),
+                    ];
                 }
             }
         }
 
-        return ['url' => '', 'alt' => ''];
+        return ['url' => '', 'alt' => '', 'fallback_alt' => '', 'id' => 0];
+    }
+
+    /**
+     * Visit every node of a builder tree that text_from_tree() reconstructs
+     * markup for.
+     *
+     * A `link` / `image` / video sub-object is a destination descriptor its
+     * parent folds into its own markup, so the walk does not descend into it:
+     * doing so would emit the same URL a second time as a bare link, and would
+     * turn an image's own `url` field into a spurious <a>.
+     *
+     * @since 2.15.0
+     *
+     * @param mixed    $node  Builder node (array or object).
+     * @param callable $visit Called with each node as an array.
+     * @return void
+     */
+    private static function each_node($node, callable $visit): void {
+        $node = self::as_children($node);
+        if (null === $node) {
+            return;
+        }
+
+        $visit($node);
+
+        foreach ($node as $child_key => $child) {
+            if (is_string($child_key)
+                && (in_array(strtolower($child_key), self::URL_KEYS, true)
+                    || in_array(strtolower($child_key), self::IMAGE_KEYS, true)
+                    || in_array(strtolower($child_key), self::VIDEO_KEYS, true))
+            ) {
+                continue;
+            }
+
+            self::each_node($child, $visit);
+        }
+    }
+
+    /**
+     * Load the stored alt of every attachment image_alt() will read, at once.
+     *
+     * image_alt() falls back to `_wp_attachment_image_alt` for each image
+     * without an alt of its own. Core fills the meta cache per object, so on
+     * a cold cache a page of library images cost one query per image every
+     * time it was resolved. Priming the unique IDs first turns that into one
+     * query; update_meta_cache() skips IDs already cached.
+     *
+     * @since 2.15.0
+     *
+     * @param array $tree Decoded builder tree.
+     * @return void
+     */
+    private static function prime_attachment_alts(array $tree): void {
+        if (!function_exists('update_meta_cache')) {
+            return;
+        }
+
+        $ids = [];
+        self::each_node($tree, static function (array $node) use (&$ids): void {
+            $image = self::image_from($node);
+            if ('' === $image['url'] || $image['id'] <= 0 || '' !== $image['alt']) {
+                return;
+            }
+
+            // Same precedence as image_alt(): an alt setting next to the image
+            // wins, and its attachment is never read.
+            if ('' !== self::alt_from($node, self::ALT_KEYS)) {
+                return;
+            }
+
+            $ids[$image['id']] = $image['id'];
+        });
+
+        if (!empty($ids)) {
+            update_meta_cache('post', array_values($ids));
+        }
+    }
+
+    /**
+     * The alt text a builder image renders with.
+     *
+     * In order: the alt the image value carries (Elementor), an alt setting
+     * next to it (Bricks' `altText`), the attachment's own alt text, which is
+     * what `wp_get_attachment_image()` prints when a builder renders a library
+     * image (Bricks, Beaver's Photo module), and only then a `title`. Before,
+     * only the first two were read and `altText` was not among them, so every
+     * Bricks image resolved with `alt=""` (#909).
+     *
+     * @since 2.15.0
+     *
+     * @param array $node  Builder node.
+     * @param array $image From image_from().
+     * @return string Alt text, or '' when none is found.
+     */
+    private static function image_alt(array $node, array $image): string {
+        if ('' !== $image['alt']) {
+            return $image['alt'];
+        }
+
+        $alt = self::alt_from($node, self::ALT_KEYS);
+        if ('' !== $alt) {
+            return $alt;
+        }
+
+        if ($image['id'] > 0) {
+            $stored = get_post_meta($image['id'], '_wp_attachment_image_alt', true);
+            if (is_string($stored) && '' !== trim($stored)) {
+                return trim($stored);
+            }
+        }
+
+        if ('' !== $image['fallback_alt']) {
+            return $image['fallback_alt'];
+        }
+
+        return self::alt_from($node, self::ALT_FALLBACK_KEYS);
+    }
+
+    /**
+     * First usable alt text under any of the given keys.
+     *
+     * A value that is nothing but dynamic-data tags (Bricks' `{post_title}`)
+     * is skipped: the tags are stripped from the output later, which would
+     * leave an empty alt in place of the attachment's real one.
+     *
+     * @since 2.15.0
+     *
+     * @param array    $node Builder node or image value.
+     * @param string[] $keys Candidate keys.
+     * @return string Trimmed alt text, or ''.
+     */
+    private static function alt_from(array $node, array $keys): string {
+        foreach ($node as $key => $value) {
+            if (!is_string($key) || !is_string($value) || !in_array(strtolower($key), $keys, true)) {
+                continue;
+            }
+
+            $value = trim($value);
+            if ('' === $value || 1 === preg_match('/^(?:\{[a-z0-9_][a-z0-9_:\-\.]*\}\s*)+$/i', $value)) {
+                continue;
+            }
+
+            return $value;
+        }
+
+        return '';
+    }
+
+    /**
+     * Attachment ID held under any of the given keys.
+     *
+     * @since 2.15.0
+     *
+     * @param array    $node Builder node or image value.
+     * @param string[] $keys Candidate keys.
+     * @return int Attachment ID, or 0.
+     */
+    private static function attachment_id_from(array $node, array $keys): int {
+        foreach ($node as $key => $value) {
+            if (!is_string($key) || !in_array(strtolower($key), $keys, true)) {
+                continue;
+            }
+
+            if (is_int($value) || (is_string($value) && ctype_digit(trim($value)))) {
+                return max(0, (int) $value);
+            }
+        }
+
+        return 0;
     }
 
     /**

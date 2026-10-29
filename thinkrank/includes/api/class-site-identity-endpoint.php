@@ -18,6 +18,7 @@ declare(strict_types=1);
 namespace ThinkRank\API;
 
 use ThinkRank\SEO\Site_Identity_Manager;
+use ThinkRank\Core\Shared_State;
 use ThinkRank\AI\Manager as AI_Manager;
 use ThinkRank\API\Traits\CSRF_Protection;
 use ThinkRank\API\Traits\Context_Authorization;
@@ -1348,13 +1349,7 @@ class Site_Identity_Endpoint extends WP_REST_Controller {
         $user_id = get_current_user_id();
         $rate_key = "thinkrank_robots_rate_{$user_id}";
 
-        $requests = get_transient($rate_key) ?: 0;
-
-        if ($requests >= 20) { // Max 20 requests per 5 minutes
-            return false;
-        }
-
-        set_transient($rate_key, $requests + 1, 5 * MINUTE_IN_SECONDS);
-        return true;
+        // Max 20 requests per 5 minutes, counted in one locked step.
+        return Shared_State::take($rate_key, 20, 5 * MINUTE_IN_SECONDS);
     }
 }

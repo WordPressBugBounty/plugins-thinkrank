@@ -488,8 +488,8 @@ class OpenRouter_Client {
 
         if ($status_code >= 400) {
             $error_data = json_decode($response_body, true);
-            $error_message = $error_data['error']['message'] ?? 'Unknown API error';
-            throw new \Exception(sprintf('OpenRouter API error (%d): %s', (int) $status_code, esc_html($error_message)));
+            $this->log_error((int) $status_code, $error_data['error'] ?? null);
+            throw new \Exception(sprintf('OpenRouter API error (%d): %s', (int) $status_code, esc_html($this->describe_error($error_data['error'] ?? null))));
         }
 
         $data = json_decode($response_body, true);
@@ -505,7 +505,151 @@ class OpenRouter_Client {
             throw new \Exception('Unexpected non-array response from OpenRouter API');
         }
 
+        // OpenRouter can also answer 200 with the error in the body, at the top
+        // level or on the choice, when the upstream provider fails after the
+        // request was accepted. Report it like any other error instead of
+        // letting the parsers call it a format problem (#1045).
+        $body_error = $data['error'] ?? ($data['choices'][0]['error'] ?? null);
+        if (is_array($body_error)) {
+            $code = (int) ($body_error['code'] ?? 0);
+            $this->log_error($code, $body_error);
+            throw new \Exception(sprintf('OpenRouter API error (%d): %s', $code > 0 ? $code : (int) $status_code, esc_html($this->describe_error($body_error))));
+        }
+
         return $data;
+    }
+
+    /**
+     * Longest piece of an upstream provider's own error shown to the user.
+     *
+     * @since 2.15.1
+     * @var int
+     */
+    private const UPSTREAM_ERROR_MAX_CHARS = 300;
+
+    /**
+     * The user-facing text for an OpenRouter error object.
+     *
+     * When the upstream provider fails, OpenRouter's own message is often the
+     * generic "Provider returned error" and the cause sits in `error.metadata`:
+     * `provider_name` and `raw` (the provider's own error body), or `reasons`
+     * and `flagged_input` for a moderation block. Showing only `message` left
+     * the user nothing to act on (#1045). The provider and a trimmed cause are
+     * appended to the message.
+     *
+     * @since 2.15.1
+     *
+     * @param mixed $error      The decoded `error` object, if any.
+     * @param bool  $known_only Take the provider's cause only from a field
+     *                          known to hold an error message, never from
+     *                          raw text or a re-encoded body (for the log).
+     * @return string Plain text; the caller escapes it.
+     */
+    private function describe_error($error, bool $known_only = false): string {
+        if (!is_array($error)) {
+            return 'Unknown API error';
+        }
+
+        $message = is_string($error['message'] ?? null) && '' !== trim($error['message'])
+            ? trim($error['message'])
+            : 'Unknown API error';
+
+        $metadata = is_array($error['metadata'] ?? null) ? $error['metadata'] : [];
+        if (empty($metadata)) {
+            return $message;
+        }
+
+        $provider = is_string($metadata['provider_name'] ?? null) ? trim($metadata['provider_name']) : '';
+
+        $cause = '';
+        if (is_array($metadata['reasons'] ?? null) && !empty($metadata['reasons'])) {
+            $reasons = array_filter(array_map(
+                static fn($reason) => is_scalar($reason) ? trim((string) $reason) : '',
+                $metadata['reasons']
+            ));
+            if (!empty($reasons)) {
+                $cause = 'flagged for ' . implode(', ', $reasons);
+            }
+        } elseif (array_key_exists('raw', $metadata)) {
+            $cause = $this->upstream_error_text($metadata['raw'], $known_only);
+        }
+
+        // Nothing new to say: keep OpenRouter's message as it was.
+        if ('' === $cause || false !== stripos($message, $cause)) {
+            return '' === $provider ? $message : sprintf('%s (%s)', $message, $provider);
+        }
+
+        if (strlen($cause) > self::UPSTREAM_ERROR_MAX_CHARS) {
+            $cause = rtrim(substr($cause, 0, self::UPSTREAM_ERROR_MAX_CHARS)) . '...';
+        }
+
+        return '' === $provider
+            ? sprintf('%s: %s', $message, $cause)
+            : sprintf('%s (%s): %s', $message, $provider, $cause);
+    }
+
+    /**
+     * Readable text from an upstream provider's raw error.
+     *
+     * `metadata.raw` is usually the provider's own JSON error body, as a string
+     * or already decoded. Its message is read the way the common providers
+     * write it (`error.message`, `message`, `detail`); anything else is used
+     * as text with its whitespace collapsed.
+     *
+     * @since 2.15.1
+     *
+     * @param mixed $raw        `error.metadata.raw`.
+     * @param bool  $known_only Read only the known message fields; return ''
+     *                          for plain text or a body without them.
+     * @return string
+     */
+    private function upstream_error_text($raw, bool $known_only = false): string {
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+            if (!is_array($decoded)) {
+                return $known_only ? '' : trim((string) preg_replace('/\s+/', ' ', wp_strip_all_tags($raw)));
+            }
+            $raw = $decoded;
+        }
+
+        if (!is_array($raw)) {
+            return is_scalar($raw) && !$known_only ? trim((string) $raw) : '';
+        }
+
+        foreach ([$raw['error']['message'] ?? null, $raw['message'] ?? null, $raw['detail'] ?? null, $raw['error'] ?? null] as $candidate) {
+            if (is_string($candidate) && '' !== trim($candidate)) {
+                return trim((string) preg_replace('/\s+/', ' ', $candidate));
+            }
+        }
+
+        return $known_only ? '' : (string) wp_json_encode($raw);
+    }
+
+    /**
+     * Log an OpenRouter error for diagnosis, WP_DEBUG only.
+     *
+     * Logs a summary built from allowlisted fields (OpenRouter's message, the
+     * provider, moderation reasons and the provider's own error message),
+     * never the response body. A moderation block echoes the submitted text
+     * in `metadata.flagged_input`, and a provider's raw body can carry the
+     * request, so logging the body would copy the user's content into the
+     * PHP log, which has its own readers and retention.
+     *
+     * @since 2.15.1
+     *
+     * @param int   $status HTTP status or OpenRouter error code.
+     * @param mixed $error  The decoded `error` object, if any.
+     * @return void
+     */
+    private function log_error(int $status, $error): void {
+        if (!defined('WP_DEBUG') || !WP_DEBUG) {
+            return;
+        }
+
+        $summary = trim((string) preg_replace('/\s+/', ' ', $this->describe_error($error, true)));
+
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic, WP_DEBUG only.
+        error_log(sprintf('[ThinkRank] OpenRouter error %d: %s', $status, $summary));
     }
 
     /**

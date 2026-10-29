@@ -47,6 +47,15 @@ if (!defined('ABSPATH')) {
 class Bricks_Metabox {
 
     /**
+     * AJAX action returning the panel config for the document Bricks' instant
+     * navigation switched to.
+     *
+     * @since 2.15.1
+     * @var string
+     */
+    public const PANEL_DATA_ACTION = 'thinkrank_bricks_panel_data';
+
+    /**
      * Shared metabox manager (data builder + supported post types).
      *
      * @var Metabox_Manager
@@ -77,6 +86,8 @@ class Bricks_Metabox {
     public function init(): void {
         add_action('wp_enqueue_scripts', [$this, 'enqueue_editor_assets'], 9999);
         add_action('wp_footer', [$this, 'render_root']);
+        // No nopriv handler: only a signed-in editor has a panel to refresh.
+        add_action('wp_ajax_' . self::PANEL_DATA_ACTION, [$this, 'ajax_panel_data']);
     }
 
     /**
@@ -124,13 +135,20 @@ class Bricks_Metabox {
     }
 
     /**
-     * The post this request may mount the drawer for, if any.
+     * The post this request may load the panel bundle for, if any.
      *
      * Shared by the enqueue and the mount node so the two cannot disagree:
      * printing the root div for a post the bundle then declines to load for
      * would leave an orphan element in Bricks' footer.
      *
-     * @return int Post ID, or 0 when the drawer must not mount.
+     * Any document the user can edit, not only a supported post type. Bricks'
+     * instant navigation moves between documents without a reload, so a
+     * session that opens on a Bricks template and then switches to a page
+     * needs the bundle already loaded to show that page's panel. Whether the
+     * panel shows for the current document is `supported` in its config
+     * (#971).
+     *
+     * @return int Post ID, or 0 when the bundle must not load.
      */
     private function eligible_post_id(): int {
         if (!$this->is_builder()) {
@@ -148,12 +166,85 @@ class Bricks_Metabox {
             return 0;
         }
 
+        return get_post($post_id) ? $post_id : 0;
+    }
+
+    /**
+     * Whether the panel shows for a post.
+     *
+     * @since 2.15.1
+     *
+     * @param \WP_Post $post Post open in the builder.
+     * @return bool
+     */
+    private function is_supported(\WP_Post $post): bool {
+        return in_array($post->post_type, $this->metabox->get_supported_post_types(), true);
+    }
+
+    /**
+     * The panel config for a post, as the bundle reads it from
+     * `window.thinkrankMetabox`.
+     *
+     * Used for the page load and for every instant-navigation switch, so the
+     * two cannot drift. An unsupported document (a Bricks template, anything
+     * outside the supported post types) gets only what the bundle needs to
+     * follow the next switch, with `supported` false.
+     *
+     * @since 2.15.1
+     *
+     * @param int $post_id Post open in the builder.
+     * @return array<string,mixed>
+     */
+    public function get_panel_data(int $post_id): array {
         $post = get_post($post_id);
-        if (!$post || !in_array($post->post_type, $this->metabox->get_supported_post_types(), true)) {
-            return 0;
+
+        if (!$post || !$this->is_supported($post)) {
+            return [
+                'supported'     => false,
+                'postId'        => $post_id,
+                'ajaxUrl'       => admin_url('admin-ajax.php'),
+                'nonce'         => wp_create_nonce('thinkrank_metabox_ajax'),
+                'contextAction' => self::PANEL_DATA_ACTION,
+            ];
         }
 
-        return $post_id;
+        // Reuse the exact metabox config, then add the data the classic editor
+        // would normally hand the React app through hidden inputs.
+        $data = $this->metabox->get_localized_data($post_id);
+        $data['supported'] = true;
+        $data['context'] = 'bricks';
+        $data['contextAction'] = self::PANEL_DATA_ACTION;
+        $data['existingMetadata'] = $this->metabox->get_post_metadata($post_id);
+        $data['contentPreview'] = $this->metabox->get_content_preview($post);
+        $data['postTitle'] = get_the_title($post_id);
+        // AJAX route used to persist all fields (no #post form in the builder).
+        $data['saveAction'] = 'thinkrank_save_metabox';
+
+        return $data;
+    }
+
+    /**
+     * Return the panel config for the document Bricks switched to.
+     *
+     * Same nonce and capability as the save route the panel then uses, so
+     * nothing is readable here that the panel could not already save.
+     *
+     * @since 2.15.1
+     *
+     * @return void
+     */
+    public function ajax_panel_data(): void {
+        $nonce = sanitize_text_field(wp_unslash($_POST['nonce'] ?? ''));
+        if (!wp_verify_nonce($nonce, 'thinkrank_metabox_ajax')) {
+            wp_send_json_error(['message' => __('Security check failed', 'thinkrank')], 403);
+        }
+
+        $post_id = absint($_POST['post_id'] ?? 0);
+        if (!$post_id || !get_post($post_id) || !current_user_can('edit_post', $post_id)) {
+            wp_send_json_error(['message' => __('Insufficient permissions', 'thinkrank')], 403);
+        }
+
+        wp_send_json_success($this->get_panel_data($post_id));
     }
 
     /**
@@ -167,9 +258,9 @@ class Bricks_Metabox {
             return;
         }
 
-        $post = get_post($post_id);
-
-        // wp.media powers the social-image picker inside the drawer.
+        // wp.media powers the social-image picker inside the drawer. Loaded
+        // for an unsupported document too, which can switch to one that has
+        // the drawer.
         wp_enqueue_media();
 
         $asset_file = THINKRANK_PLUGIN_DIR . 'assets/bricks.asset.php';
@@ -186,18 +277,8 @@ class Bricks_Metabox {
             true
         );
 
-        // Reuse the exact metabox config, then add the data the classic editor
-        // would normally hand the React app through hidden inputs.
-        $data = $this->metabox->get_localized_data($post_id);
-        $data['context'] = 'bricks';
-        $data['existingMetadata'] = $this->metabox->get_post_metadata($post_id);
-        $data['contentPreview'] = $this->metabox->get_content_preview($post);
-        $data['postTitle'] = get_the_title($post_id);
-        // AJAX route used to persist all fields (no #post form in the builder).
-        $data['saveAction'] = 'thinkrank_save_metabox';
-
         wp_set_script_translations('thinkrank-bricks', 'thinkrank');
-        wp_localize_script('thinkrank-bricks', 'thinkrankMetabox', $data);
+        wp_localize_script('thinkrank-bricks', 'thinkrankMetabox', $this->get_panel_data($post_id));
 
         // Depend on wp-components so the @wordpress/components controls inside
         // the drawer keep their styling against the builder's global resets.

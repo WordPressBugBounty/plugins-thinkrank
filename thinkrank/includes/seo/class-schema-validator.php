@@ -262,7 +262,13 @@ class Schema_Validator {
             if (!isset($offers['@type']) || $offers['@type'] !== 'Offer') {
                 $validation['warnings'][] = 'Offers should be structured as an Offer entity';
             }
-            if (!isset($offers['price']) || !isset($offers['priceCurrency'])) {
+            // Google requires a price on a Product's Offer for both the product
+            // snippet and the merchant listing, so an Offer without one is not
+            // deployment-ready (#1011). A missing currency stays a warning.
+            if (!isset($offers['price']) || '' === (string) $offers['price']) {
+                $validation['errors'][] = 'Offers must include a price';
+                $validation['valid'] = false;
+            } elseif (!isset($offers['priceCurrency'])) {
                 $validation['warnings'][] = 'Offers should include price and priceCurrency';
             }
         }

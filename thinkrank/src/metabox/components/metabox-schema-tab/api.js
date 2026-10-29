@@ -141,13 +141,14 @@ export const loadSchemaFormData = async (ctx) => {
 		if (response && response.meta) {
 			const savedSchemaType =
 				response.meta._thinkrank_selected_schema_type;
+			// Only a type this post type's select offers. Any other (an
+			// Article saved on a product) would leave the select showing its
+			// first option while Generate sent the saved one (#1011).
 			if (savedSchemaType) {
-				const allValidTypes = [
-					...ctx.postSchemaTypes,
-					...ctx.pageSchemaTypes,
-				];
 				if (
-					allValidTypes.some((type) => type.value === savedSchemaType)
+					ctx.schemaTypes.some(
+						(type) => type.value === savedSchemaType
+					)
 				) {
 					ctx.setSelectedSchemaType(savedSchemaType);
 				}

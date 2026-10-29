@@ -20,6 +20,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\Database;
 
+use ThinkRank\Core\Shared_State;
+
 // Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
@@ -123,6 +125,60 @@ class Database_Schema {
      * @var string
      */
     private const CREATE_FAILURE_LOGGED_TRANSIENT = 'thinkrank_schema_create_error_logged';
+
+    /**
+     * Option that marks a schema upgrade as in progress.
+     *
+     * needs_update() stays true until create_tables() has walked every table
+     * and stored the new version, so on a busy site several requests used to
+     * start the upgrade at once. For a table that did not exist yet each one
+     * sent its own CREATE TABLE, and every request but the first logged
+     * "Table ... already exists" (#1133). add_option() is atomic, since
+     * option_name is a unique key, so exactly one request gets the lock and
+     * the rest skip the upgrade.
+     *
+     * @since 2.15.1
+     * @var string
+     */
+    public const UPGRADE_LOCK_OPTION = 'thinkrank_schema_lock';
+
+    /**
+     * Age after which a held upgrade lock is treated as left behind by a
+     * request that died mid-upgrade (timeout, fatal error) and taken over.
+     *
+     * @since 2.15.1
+     * @var int
+     */
+    public const UPGRADE_LOCK_TTL = 5 * MINUTE_IN_SECONDS;
+
+    /**
+     * How old the lock may get before the request holding it renews it.
+     *
+     * Well inside the TTL, so a live upgrade refreshes its lease long before
+     * anyone may take it over, and still rare enough that a fast upgrade
+     * never writes the lock row more than once.
+     *
+     * @since 2.15.1
+     * @var int
+     */
+    private const UPGRADE_LOCK_RENEW_AFTER = MINUTE_IN_SECONDS;
+
+    /**
+     * The lock value this request stored ("<time>:<token>"), or null when it
+     * holds no lock. The random token tells this request's lock apart from a
+     * successor's, so renewing and releasing only ever touch its own.
+     *
+     * @var string|null
+     */
+    private ?string $upgrade_lock = null;
+
+    /**
+     * Set when a renewal found the lock in another request's hands: that
+     * request owns the upgrade now, and this one stops where it is.
+     *
+     * @var bool
+     */
+    private bool $upgrade_lock_lost = false;
 
     /**
      * Database table definitions with specifications
@@ -309,6 +365,186 @@ class Database_Schema {
     }
 
     /**
+     * Run create_tables() unless another request is already running it.
+     *
+     * The upgrade on plugins_loaded and the activation hook both come through
+     * here, so only one request at a time sends CREATE TABLE statements (#1133).
+     * The lock is released whether create_tables() returns or throws.
+     *
+     * @since 2.15.1
+     *
+     * @return array|null The create_tables() results, or null when another
+     *                    request holds the lock and this one skipped the work.
+     */
+    public function create_tables_locked(): ?array {
+        if (!$this->acquire_upgrade_lock()) {
+            return null;
+        }
+
+        try {
+            $results = $this->create_tables();
+
+            // The upgrade outlived its lease and another request took it
+            // over, so that request finishes and reports the upgrade.
+            return $this->upgrade_lock_lost ? null : $results;
+        } finally {
+            $this->release_upgrade_lock();
+        }
+    }
+
+    /**
+     * Take the schema upgrade lock.
+     *
+     * add_option() only inserts when the row is absent, so one concurrent
+     * request wins it. A lock older than UPGRADE_LOCK_TTL belongs to a request
+     * that died, and is taken over with a compare-and-swap on the stored time:
+     * of several requests that find the same stale lock, only the one whose
+     * UPDATE still matches the old value gets it.
+     *
+     * @since 2.15.1
+     *
+     * @return bool Whether this request now holds the lock.
+     */
+    private function acquire_upgrade_lock(): bool {
+        $this->upgrade_lock_lost = false;
+
+        $now   = $this->upgrade_lock_clock();
+        $token = bin2hex(random_bytes(16));
+        $value = $now . ':' . $token;
+
+        if (add_option(self::UPGRADE_LOCK_OPTION, $value, '', false)) {
+            $this->upgrade_lock = $value;
+            return true;
+        }
+
+        // Read the row as stored, not a copy an object cache kept from earlier.
+        wp_cache_delete(self::UPGRADE_LOCK_OPTION, 'options');
+        $held = (string) get_option(self::UPGRADE_LOCK_OPTION, '');
+
+        if (self::lock_time($held) > $now - self::UPGRADE_LOCK_TTL) {
+            return false;
+        }
+
+        if (!$this->swap_upgrade_lock($held, $value)) {
+            return false;
+        }
+
+        $this->upgrade_lock = $value;
+        return true;
+    }
+
+    /**
+     * Keep this request's lock alive while the upgrade runs.
+     *
+     * Called before each table. A lock younger than UPGRADE_LOCK_RENEW_AFTER
+     * is left alone: nobody can take it over before the TTL. An older one is
+     * renewed with a compare-and-swap on the exact value this request stored,
+     * so the renewal fails, and the upgrade stops, if a successor took the
+     * lock over in the meantime. Running on after that would put two
+     * requests' schema changes side by side, which the lock exists to stop.
+     *
+     * @since 2.15.1
+     *
+     * @return bool Whether this request may go on with the upgrade.
+     */
+    private function keep_upgrade_lock(): bool {
+        if (null === $this->upgrade_lock) {
+            // create_tables() called directly, outside the lock.
+            return !$this->upgrade_lock_lost;
+        }
+
+        $now = $this->upgrade_lock_clock();
+
+        if (self::lock_time($this->upgrade_lock) > $now - self::UPGRADE_LOCK_RENEW_AFTER) {
+            return true;
+        }
+
+        $token   = substr($this->upgrade_lock, (int) strpos($this->upgrade_lock, ':') + 1);
+        $renewed = $now . ':' . $token;
+
+        if ($renewed !== $this->upgrade_lock && $this->swap_upgrade_lock($this->upgrade_lock, $renewed)) {
+            $this->upgrade_lock = $renewed;
+            return true;
+        }
+
+        $this->upgrade_lock      = null;
+        $this->upgrade_lock_lost = true;
+        return false;
+    }
+
+    /**
+     * Release the lock, but only if it is still the one this request stored.
+     *
+     * A successor that took an expired lock over owns the row now; deleting
+     * it unconditionally would let a third request in alongside that
+     * successor. The DELETE matches the stored value, so it is atomic.
+     *
+     * @since 2.15.1
+     */
+    private function release_upgrade_lock(): void {
+        if (null === $this->upgrade_lock) {
+            return;
+        }
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- conditional delete of this request's own lock row; the options cache entry is dropped below.
+        $this->wpdb->delete(
+            $this->wpdb->options,
+            ['option_name' => self::UPGRADE_LOCK_OPTION, 'option_value' => $this->upgrade_lock]
+        );
+
+        wp_cache_delete(self::UPGRADE_LOCK_OPTION, 'options');
+        $this->upgrade_lock = null;
+    }
+
+    /**
+     * Replace the lock row's value only if it still holds $expected.
+     *
+     * @since 2.15.1
+     *
+     * @param string $expected The value read from the row.
+     * @param string $value    The value to store in its place.
+     * @return bool Whether the row matched and was changed.
+     */
+    private function swap_upgrade_lock(string $expected, string $value): bool {
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-swap on the lock row; the options cache entry is dropped below.
+        $swapped = $this->wpdb->update(
+            $this->wpdb->options,
+            ['option_value' => $value],
+            ['option_name' => self::UPGRADE_LOCK_OPTION, 'option_value' => $expected]
+        );
+
+        wp_cache_delete(self::UPGRADE_LOCK_OPTION, 'options');
+
+        return 1 === (int) $swapped;
+    }
+
+    /**
+     * The time a lock value was taken or last renewed.
+     *
+     * Reads "<time>:<token>" as well as the bare time stored before the token
+     * was added, so a lock left by the earlier format still expires.
+     *
+     * @since 2.15.1
+     *
+     * @param string $value Stored lock value.
+     * @return int Unix time.
+     */
+    private static function lock_time(string $value): int {
+        return (int) strtok($value, ':');
+    }
+
+    /**
+     * Current time for the upgrade lock. A seam so tests can run a long upgrade.
+     *
+     * @since 2.15.1
+     *
+     * @return int Unix time.
+     */
+    protected function upgrade_lock_clock(): int {
+        return time();
+    }
+
+    /**
      * Create all database tables
      *
      * @since 1.0.0
@@ -330,6 +566,12 @@ class Database_Schema {
         }
 
         foreach ($this->table_definitions as $table_name => $definition) {
+            // A request that lost its lock to a successor stops here: the
+            // successor runs the whole upgrade, and stores the version.
+            if (!$this->keep_upgrade_lock()) {
+                return $results;
+            }
+
             try {
                 $full_table_name = $this->get_table_name($table_name);
                 $sql = $this->get_table_sql($table_name);
@@ -363,6 +605,10 @@ class Database_Schema {
                 $results['errors'][] = "Error creating {$table_name}: " . $e->getMessage();
                 $results['success'] = false;
             }
+        }
+
+        if (!$this->keep_upgrade_lock()) {
+            return $results;
         }
 
         // Read counters written before the MCP log's rollup key existed.
@@ -413,11 +659,11 @@ class Database_Schema {
 
         update_option(self::CREATE_FAILURE_OPTION, $reason, false);
 
-        if (get_transient(self::CREATE_FAILURE_LOGGED_TRANSIENT)) {
+        // Once an hour, claimed in one locked step so parallel requests that
+        // all hit the missing table write one line between them.
+        if (!Shared_State::claim_transient(self::CREATE_FAILURE_LOGGED_TRANSIENT, HOUR_IN_SECONDS)) {
             return;
         }
-
-        set_transient(self::CREATE_FAILURE_LOGGED_TRANSIENT, 1, HOUR_IN_SECONDS);
 
         // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- deliberate diagnostic; the UI can only report that a table is missing, never why.
         error_log('ThinkRank [schema]: table creation failed — ' . $reason);

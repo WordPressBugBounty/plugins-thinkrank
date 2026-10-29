@@ -12,6 +12,7 @@ import {
 	useState,
 	useEffect,
 	useRef,
+	useReducer,
 	memo,
 	useCallback,
 	useMemo,
@@ -42,7 +43,14 @@ import MetaboxDrawer from './MetaboxDrawer';
 import GeneralPanel from './panels/GeneralPanel';
 import AnalysisPanel from './panels/AnalysisPanel';
 import AdvancedPanel from './panels/AdvancedPanel';
-import { withoutServerOwnedFields } from '../utils/draftFields';
+import {
+	clearDraft,
+	draftableFields,
+	newDraftOwner,
+	readDraft,
+	resolveDraft,
+	writeDraft,
+} from '../utils/metaboxDraft';
 import useCustomFieldVariables from '../utils/useCustomFieldVariables';
 
 // Nav icons
@@ -172,7 +180,6 @@ const hashString = (value) => {
  * @param root0.strings
  * @param root0.postTitle
  * @param root0.homeUrl
- * @param root0.postModified
  * @param root0.linkSuggestionsEnabled
  * @param root0.saveHandler
  * @param root0.contentResolver
@@ -187,7 +194,6 @@ const MetaboxApp = ({
 	strings = {},
 	postTitle: initialPostTitle = '',
 	homeUrl = '',
-	postModified = '',
 	linkSuggestionsEnabled = true,
 	// Optional overrides used when the metabox is hosted outside the classic /
 	// block editor (e.g. the Elementor editor):
@@ -305,6 +311,31 @@ const MetaboxApp = ({
 			existingMetadata.twitter_description || '',
 		thinkrank_twitter_image: existingMetadata.twitter_image || '',
 	});
+
+	// Draftable fields as last loaded from or saved to the server. The local
+	// draft is written only while the form differs from these, and records
+	// them so a later load can tell whether the server moved on (#986).
+	const draftBaselineRef = useRef(null);
+	if (draftBaselineRef.current === null) {
+		draftBaselineRef.current = draftableFields(formData);
+	}
+	// Whether this instance has a draft in storage, so reverting every edit
+	// removes it without touching a draft another tab owns.
+	const hasDraftRef = useRef(false);
+	// This instance's name on the drafts it writes, and the owner named in
+	// the draft it last wrote or restored. Another tab on the same post
+	// shares the storage key, so only a draft still carrying that owner is
+	// ever removed from here.
+	const draftOwnerRef = useRef(null);
+	if (draftOwnerRef.current === null) {
+		draftOwnerRef.current = newDraftOwner();
+	}
+	const ownedDraftRef = useRef(null);
+	// Latest form state for callbacks that outlive a render (save listeners).
+	const formDataRef = useRef(formData);
+	formDataRef.current = formData;
+	// One of the hidden inputs, to find the form (if any) that posts them.
+	const hiddenFieldsRef = useRef(null);
 
 	// The page carries only the custom fields its saved fields name; a
 	// %customfield(key)% typed since is looked up (#1277).
@@ -434,6 +465,9 @@ const MetaboxApp = ({
 		description: existingMetadata.description || '',
 	});
 	const seoAdoptedRef = useRef(false);
+	// Re-renders the `__orig` inputs below after a save moves syncedSeoRef;
+	// an adoption already re-renders through the form state.
+	const [, bumpSyncedSeo] = useReducer((n) => n + 1, 0);
 	// Guards for refreshSeoFromServer below: one request at a time, and never
 	// straight after the previous one. See #329.
 	const seoRefreshInFlightRef = useRef(false);
@@ -502,6 +536,9 @@ const MetaboxApp = ({
 			let changed = false;
 			// Untouched-since-last-sync + differs + non-blank → a background
 			// writer filled it after load; adopt it into the live form.
+			// An adopted value is the server's, so it is also the draft
+			// baseline: otherwise the draft would record it as an edit
+			// and could restore it over a later server change (#986).
 			if (
 				serverTitle &&
 				prev.thinkrank_seo_title === syncedSeoRef.current.title &&
@@ -509,6 +546,10 @@ const MetaboxApp = ({
 			) {
 				next.thinkrank_seo_title = serverTitle;
 				syncedSeoRef.current.title = serverTitle;
+				draftBaselineRef.current = {
+					...draftBaselineRef.current,
+					thinkrank_seo_title: serverTitle,
+				};
 				changed = true;
 			}
 			if (
@@ -519,6 +560,10 @@ const MetaboxApp = ({
 			) {
 				next.thinkrank_meta_description = serverDesc;
 				syncedSeoRef.current.description = serverDesc;
+				draftBaselineRef.current = {
+					...draftBaselineRef.current,
+					thinkrank_meta_description: serverDesc,
+				};
 				changed = true;
 			}
 			if (changed) {
@@ -1046,32 +1091,102 @@ const MetaboxApp = ({
 	]);
 
 	/**
-	 * Auto-save form data to local storage
+	 * Keep unsaved edits in a local draft.
+	 *
+	 * Only fields that differ from the server baseline are stored, so opening
+	 * the editor without editing leaves nothing behind (#986). Server-owned
+	 * fields (focus keywords, the redirect) never go in; see draftFields.js.
 	 */
 	const autoSave = useCallback(() => {
 		if (!postId) return;
 
-		try {
-			// Server-owned fields (focus keywords, the redirect) are left out:
-			// they change without bumping post_modified, so the staleness check
-			// below cannot catch a stale copy. See draftFields.js. Other
-			// in-progress fields (title, description, …) still recover.
-			const draftFormData = withoutServerOwnedFields(formData);
-
-			const saveData = {
-				formData: draftFormData,
-				timestamp: Date.now(),
+		if (
+			writeDraft(
 				postId,
-			};
-			localStorage.setItem(
-				`thinkrank_metabox_${postId}`,
-				JSON.stringify(saveData)
-			);
+				formData,
+				draftBaselineRef.current,
+				draftOwnerRef.current
+			)
+		) {
+			hasDraftRef.current = true;
+			ownedDraftRef.current = draftOwnerRef.current;
 			setLastSaved(new Date());
-		} catch (error) {
-			// Local storage failed - not critical
+		} else if (hasDraftRef.current) {
+			// Every edit was reverted: the draft no longer holds anything.
+			clearDraft(postId, ownedDraftRef.current);
+			hasDraftRef.current = false;
 		}
 	}, [formData, postId]);
+
+	/**
+	 * Record a successful save: the saved values are the new baseline and the
+	 * draft that held them is no longer needed.
+	 *
+	 * @param {Object} savedData Form data that was written.
+	 */
+	const markSaved = useCallback(
+		(savedData) => {
+			if (!postId) return;
+			draftBaselineRef.current = draftableFields(savedData);
+			if (hasDraftRef.current) {
+				clearDraft(postId, ownedDraftRef.current);
+			}
+			hasDraftRef.current = false;
+			// The server now holds these, so they are what a later blank
+			// is compared against (the `__orig` inputs) and what a later
+			// background write is adopted over.
+			syncedSeoRef.current = {
+				title: savedData.thinkrank_seo_title || '',
+				description: savedData.thinkrank_meta_description || '',
+			};
+			bumpSyncedSeo();
+		},
+		[postId]
+	);
+
+	// Block editor: the hidden inputs below ride along on the editor's own
+	// save (Update / Publish), so a completed save stores the drawer's fields
+	// too and the draft can go. Only when those inputs sit in a form the
+	// editor submits; builder hosts save through the drawer instead.
+	useEffect(() => {
+		const dataApi = window.wp?.data;
+		if (!postId || !dataApi?.select?.('core/editor')) {
+			return undefined;
+		}
+
+		let snapshot = null;
+		try {
+			return dataApi.subscribe(() => {
+				const editor = dataApi.select('core/editor');
+				if (!editor) return;
+				const editPost = dataApi.select('core/edit-post');
+				const saving =
+					(!!editor.isSavingPost?.() &&
+						!editor.isAutosavingPost?.()) ||
+					!!editPost?.isSavingMetaBoxes?.();
+
+				if (saving) {
+					if (!snapshot) {
+						snapshot = formDataRef.current;
+					}
+					return;
+				}
+				if (!snapshot) return;
+
+				const saved = snapshot;
+				snapshot = null;
+				if (
+					editor.didPostSaveRequestSucceed?.() &&
+					hiddenFieldsRef.current?.form
+				) {
+					markSaved(saved);
+				}
+			});
+		} catch (e) {
+			// Editor store unavailable: the drawer's own Save still clears it.
+			return undefined;
+		}
+	}, [postId, markSaved]);
 
 	/**
 	 * Save the SEO fields from the drawer header.
@@ -1108,7 +1223,13 @@ const MetaboxApp = ({
 		// #post form to submit). Persists the fields and reports its own result.
 		if (typeof saveHandler === 'function') {
 			try {
-				await saveHandler(dataToSave);
+				const outcome = await saveHandler(dataToSave);
+				// Only a confirmed save drops the draft; a handler that
+				// reports nothing keeps it, which is harmless (a restored
+				// field matching the server is a no-op).
+				if (outcome?.success === true) {
+					markSaved(dataToSave);
+				}
 			} finally {
 				setIsSaving(false);
 			}
@@ -1149,6 +1270,7 @@ const MetaboxApp = ({
 			}
 
 			setLastSaved(new Date());
+			markSaved(dataToSave);
 
 			// The slug WordPress actually stored can differ from what was typed
 			// (sanitization, collision de-dupe). Reflect the final value in the
@@ -1198,6 +1320,7 @@ const MetaboxApp = ({
 		}
 	}, [
 		autoSave,
+		markSaved,
 		saveHandler,
 		formData,
 		showError,
@@ -1208,43 +1331,33 @@ const MetaboxApp = ({
 	]);
 
 	/**
-	 * Load saved data from local storage
+	 * Restore the local draft, field by field.
+	 *
+	 * A field comes back only while the server still holds the value the
+	 * draft was edited from. Anything changed since (MCP, imports, bulk edits,
+	 * Auto AI, another browser) wins, whether or not post_modified moved,
+	 * because a restored stale value would be posted on the next save (#986).
+	 * Drafts from before the baseline existed are discarded unread.
 	 */
 	const loadSavedData = useCallback(() => {
 		if (!postId) return;
 
-		try {
-			const saved = localStorage.getItem(`thinkrank_metabox_${postId}`);
-			if (saved) {
-				const saveData = JSON.parse(saved);
-				// Only load if data is less than 24 hours old AND post hasn't been modified on server since
-				const isRecent =
-					Date.now() - saveData.timestamp < 24 * 60 * 60 * 1000;
+		const draft = readDraft(postId);
+		if (!draft) return;
 
-				// If we have a post modified date from server, check if local storage is stale
-				let isStale = false;
-				if (postModified) {
-					const serverModifiedTime = new Date(postModified).getTime();
-					// If server modified time is NEWER than local storage save time, data is stale
-					if (serverModifiedTime > saveData.timestamp) {
-						isStale = true;
-					}
-				}
-
-				if (isRecent && !isStale) {
-					// Never restore server-owned fields from a draft (see
-					// autoSave). Strip them here too, since a draft written
-					// before this guard still carries them.
-					const restoredFormData = withoutServerOwnedFields(
-						saveData.formData
-					);
-					setFormData((prev) => ({ ...prev, ...restoredFormData }));
-					setLastSaved(new Date(saveData.timestamp));
-				}
-			}
-		} catch (error) {
-			// Failed to load - not critical
+		const { restore, discard } = resolveDraft(
+			draft,
+			draftBaselineRef.current,
+			postId
+		);
+		if (discard) {
+			clearDraft(postId, draft.owner);
+			return;
 		}
+		hasDraftRef.current = true;
+		ownedDraftRef.current = draft.owner ?? null;
+		setFormData((prev) => ({ ...prev, ...restore }));
+		setLastSaved(new Date(draft.timestamp));
 	}, [postId]);
 
 	/**
@@ -1813,6 +1926,7 @@ const MetaboxApp = ({
 			    Rendered directly into #thinkrank-metabox-container (in the post
 			    form), NOT into the portaled drawer, so they submit on save. */}
 			<input
+				ref={hiddenFieldsRef}
 				type="hidden"
 				name="thinkrank_seo_title"
 				value={formData.thinkrank_seo_title || ''}
@@ -1821,6 +1935,22 @@ const MetaboxApp = ({
 				type="hidden"
 				name="thinkrank_meta_description"
 				value={formData.thinkrank_meta_description || ''}
+			/>
+			{/* The server's title and description as this form last knew
+			    them (loaded, adopted or saved), never the edited value.
+			    persist_seo_text_field() skips a blank submit when the field
+			    was blank here too but storage has since been filled by a
+			    background writer. The PHP-rendered copies are cleared with
+			    the container before React mounts, so they come from here. */}
+			<input
+				type="hidden"
+				name="thinkrank_seo_title__orig"
+				value={syncedSeoRef.current.title}
+			/>
+			<input
+				type="hidden"
+				name="thinkrank_meta_description__orig"
+				value={syncedSeoRef.current.description}
 			/>
 			<input
 				type="hidden"

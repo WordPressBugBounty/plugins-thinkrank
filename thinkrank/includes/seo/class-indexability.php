@@ -11,6 +11,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\SEO;
 
+use ThinkRank\Core\Shared_State;
+
 // Prevent direct access.
 if (!defined('ABSPATH')) {
     exit;
@@ -69,6 +71,303 @@ final class Indexability {
      * Meta key holding a post's or term's canonical override.
      */
     private const CANONICAL_META = '_thinkrank_canonical_url';
+
+    /**
+     * Option counting changes to any input of the decision.
+     *
+     * The thin content and duplicate snippet reports leave non-indexable posts
+     * out (#1013) and cache their answer. Their indexes only move when a post's
+     * text does, so noindexing or redirecting a post would leave it listed
+     * until something unrelated changed. This counter goes into each report's
+     * cache signature instead.
+     *
+     * @since 2.15.0
+     */
+    public const REVISION_OPTION = 'thinkrank_indexability_revision';
+
+    /**
+     * Option counting changes to the site-wide inputs of the decision.
+     *
+     * Stamped on every stored verdict ({@see self::VERDICT_META}): bumping it
+     * makes all of them stale at once, which is what a change to the global
+     * robots settings, the content type matrix or a redirect rule needs. A
+     * change to one post only drops that post's verdict.
+     *
+     * @since 2.15.0
+     */
+    public const GENERATION_OPTION = 'thinkrank_indexability_generation';
+
+    /**
+     * Post meta holding the stored verdict, as `{generation}:{0|1}`.
+     *
+     * The reports judge a post once and then count and list from SQL, joining
+     * on this, so a rebuild never has to load and judge every thin post or
+     * every duplicate-group member in one request (review on #1017).
+     *
+     * @since 2.15.0
+     */
+    public const VERDICT_META = '_thinkrank_indexable';
+
+    /**
+     * Bounds on one batch of verdicts. The decision can reach a redirect
+     * provider per URL, so a batch is capped by count and by time, the same
+     * way the word count and snippet indexes fill.
+     */
+    private const REFRESH_MAX_POSTS   = 50;
+    private const REFRESH_MAX_SECONDS = 3.0;
+
+    /**
+     * Post meta read by the decision.
+     */
+    private const WATCHED_META = ['_thinkrank_robots_meta', '_thinkrank_robots_meta_enabled'];
+
+    /**
+     * Register the hooks that keep stored verdicts and the revision current.
+     * Runs on every request, because robots settings and redirects change from
+     * many screens.
+     *
+     * @since 2.15.0
+     *
+     * @return void
+     */
+    public function init(): void {
+        foreach ([self::GLOBAL_ROBOTS_OPTION, Content_Type_Settings::OPTION_NAME] as $option) {
+            add_action('update_option_' . $option, [self::class, 'bump_generation'], 10, 0);
+            add_action('add_option_' . $option, [self::class, 'bump_generation'], 10, 0);
+        }
+
+        add_action('added_post_meta', [self::class, 'on_meta_change'], 10, 3);
+        add_action('updated_post_meta', [self::class, 'on_meta_change'], 10, 3);
+        add_action('deleted_post_meta', [self::class, 'on_meta_change'], 10, 3);
+
+        // A password, a status or a slug the redirect provider matches on all
+        // change with the post itself.
+        add_action('save_post', [self::class, 'forget_post'], 10, 1);
+
+        // A redirect lives with its provider, not here: free brokers the
+        // per-object field, and ThinkRank Pro announces any rule change.
+        add_action('thinkrank_object_redirect_saved', [self::class, 'on_object_redirect_saved'], 10, 2);
+        add_action('thinkrank_pro_redirects_changed', [self::class, 'bump_generation'], 10, 0);
+    }
+
+    /**
+     * Drop a post's verdict when one of its robots meta keys changes.
+     *
+     * @since 2.15.0
+     *
+     * @param mixed $meta_id   Meta ID, or IDs on delete.
+     * @param mixed $object_id Post ID.
+     * @param mixed $meta_key  Meta key.
+     * @return void
+     */
+    public static function on_meta_change($meta_id, $object_id, $meta_key): void {
+        if (in_array($meta_key, self::WATCHED_META, true)) {
+            self::drop_verdict($object_id);
+            self::bump_revision();
+        }
+    }
+
+    /**
+     * Drop a post's verdict when its own "Redirect this to" field is saved.
+     *
+     * @since 2.15.0
+     *
+     * @param mixed $object_type 'post' or 'term'.
+     * @param mixed $object_id   Object ID.
+     * @return void
+     */
+    public static function on_object_redirect_saved($object_type, $object_id): void {
+        if ('post' === $object_type) {
+            self::drop_verdict($object_id);
+        }
+
+        self::bump_revision();
+    }
+
+    /**
+     * Drop one post's stored verdict, so the next report batch judges it again.
+     *
+     * @since 2.15.0
+     *
+     * @param mixed $post_id Post ID.
+     * @return void
+     */
+    public static function forget_post($post_id): void {
+        // Only a verdict that really went away changes a report.
+        if (self::drop_verdict($post_id)) {
+            self::bump_revision();
+        }
+    }
+
+    /**
+     * Delete one post's stored verdict.
+     *
+     * @param mixed $post_id Post ID.
+     * @return bool Whether there was one to delete.
+     */
+    private static function drop_verdict($post_id): bool {
+        $post_id = (int) $post_id;
+
+        return $post_id > 0 && delete_post_meta($post_id, self::VERDICT_META);
+    }
+
+    /**
+     * How many times an input of the decision has changed.
+     *
+     * @since 2.15.0
+     *
+     * @return int
+     */
+    public static function revision(): int {
+        return (int) get_option(self::REVISION_OPTION, 0);
+    }
+
+    /**
+     * Record that an input of the decision changed.
+     *
+     * @since 2.15.0
+     *
+     * @return void
+     */
+    public static function bump_revision(): void {
+        Shared_State::increment_option(self::REVISION_OPTION, 0, false);
+    }
+
+    /**
+     * Generation stamped on stored verdicts.
+     *
+     * @since 2.15.0
+     *
+     * @return int
+     */
+    public static function generation(): int {
+        return (int) get_option(self::GENERATION_OPTION, 0);
+    }
+
+    /**
+     * Make every stored verdict stale: a site-wide input changed.
+     *
+     * @since 2.15.0
+     *
+     * @return void
+     */
+    public static function bump_generation(): void {
+        Shared_State::increment_option(self::GENERATION_OPTION, 0, false);
+        self::bump_revision();
+    }
+
+    /**
+     * Judge a bounded batch of the posts that have no current verdict.
+     *
+     * Each caller passes the posts it reports on, as subqueries selecting
+     * `ID`, so only thin posts and duplicate-group members are ever judged,
+     * never the whole site. The caller adds the return value to its own
+     * `pending` and keeps asking until it reaches zero, as it already does for
+     * the word count and snippet indexes.
+     *
+     * @since 2.15.0
+     *
+     * @param string[] $candidate_sqls Trusted, already prepared subqueries selecting `ID`.
+     * @return int How many candidates still have no current verdict.
+     */
+    public static function refresh_verdicts(array $candidate_sqls): int {
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the candidates are subqueries the index classes built through prepare(), and every other fragment is prepared on its own; they are only concatenated, because the candidates carry LIKE patterns whose literal % a second prepare() would read as placeholders. The stored verdicts are themselves the cache.
+        global $wpdb;
+
+        $candidate_sqls = array_values(array_filter($candidate_sqls, static function ($sql): bool {
+            return is_string($sql) && '' !== $sql;
+        }));
+        if (empty($candidate_sqls)) {
+            return 0;
+        }
+
+        $stale_sql = self::stale_candidates_sql($candidate_sqls);
+        $started   = microtime(true);
+
+        $ids = array_map('intval', (array) $wpdb->get_col(
+            "SELECT c.ID {$stale_sql} ORDER BY c.ID DESC" . $wpdb->prepare(' LIMIT %d', self::REFRESH_MAX_POSTS)
+        ));
+
+        if (!empty($ids)) {
+            _prime_post_caches($ids, false, true);
+
+            $generation = self::generation();
+            foreach ($ids as $post_id) {
+                $post = get_post($post_id);
+                if ($post instanceof \WP_Post) {
+                    update_post_meta(
+                        $post_id,
+                        self::VERDICT_META,
+                        $generation . ':' . (self::is_indexable_post($post) ? '1' : '0')
+                    );
+                }
+
+                // Checked per post: one redirect lookup can be slow.
+                if (microtime(true) - $started > self::REFRESH_MAX_SECONDS) {
+                    break;
+                }
+            }
+        }
+
+        return max(0, (int) $wpdb->get_var("SELECT COUNT(*) {$stale_sql}"));
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+    }
+
+    /**
+     * FROM and WHERE selecting the candidates without a current verdict.
+     *
+     * @param string[] $candidate_sqls Trusted subqueries selecting `ID`.
+     * @return string Trusted SQL.
+     */
+    private static function stale_candidates_sql(array $candidate_sqls): string {
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- see refresh_verdicts().
+        global $wpdb;
+
+        $union = implode(' UNION ', $candidate_sqls);
+
+        return "FROM ({$union}) c
+             LEFT JOIN {$wpdb->postmeta} v ON v.post_id = c.ID AND " . $wpdb->prepare('v.meta_key = %s', self::VERDICT_META) . '
+             WHERE (v.meta_value IS NULL OR ' . $wpdb->prepare('v.meta_value NOT LIKE %s', self::current_verdict_like()) . ')';
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+    }
+
+    /**
+     * INNER JOIN keeping only posts whose current stored verdict is indexable.
+     *
+     * A post with no verdict yet, or a stale one, is left out until a batch
+     * judges it; the report says it is still pending meanwhile.
+     *
+     * @since 2.15.0
+     *
+     * @param string $posts_alias Alias of the posts table in the caller's query.
+     * @param string $alias       Alias to give the joined meta row.
+     * @return string Trusted SQL.
+     */
+    public static function indexable_join_sql(string $posts_alias, string $alias): string {
+        global $wpdb;
+
+        $posts_alias = in_array($posts_alias, ['p', 'dp', 'ep'], true) ? $posts_alias : 'p';
+        $alias       = in_array($alias, ['v', 'dv', 'ev'], true) ? $alias : 'v';
+
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- both aliases are whitelisted above; the values are placeholders.
+        return $wpdb->prepare(
+            " INNER JOIN {$wpdb->postmeta} {$alias} ON {$alias}.post_id = {$posts_alias}.ID AND {$alias}.meta_key = %s AND {$alias}.meta_value = %s",
+            self::VERDICT_META,
+            self::generation() . ':1'
+        );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+    }
+
+    /**
+     * LIKE pattern matching any verdict of the current generation.
+     *
+     * @return string
+     */
+    private static function current_verdict_like(): string {
+        global $wpdb;
+
+        return $wpdb->esc_like(self::generation() . ':') . '%';
+    }
 
     /**
      * Whether a post or term may be submitted to search engines.

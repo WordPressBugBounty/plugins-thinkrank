@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace ThinkRank\SEO;
 
 use ThinkRank\Core\Seo_Text;
+use ThinkRank\Core\Shared_State;
 
 // Prevent direct access
 if (!defined('ABSPATH')) {
@@ -459,7 +460,8 @@ class Word_Count_Index {
      * @return void
      */
     private static function bump_revision(): void {
-        update_option('thinkrank_word_count_index_revision', self::revision() + 1, false);
+        // Locked increment; see Snippet_Index::bump_revision().
+        Shared_State::increment_option('thinkrank_word_count_index_revision', 0, false);
     }
 
     /**
@@ -941,11 +943,15 @@ class Word_Count_Index {
      * One query for every post type rather than one each, and the comparison
      * happens in SQL so a site with 20,000 products never loads them.
      *
-     * @param array<string,int> $thresholds Post type => threshold.
-     * @param string[]          $statuses   Post statuses.
+     * @since 2.15.0 `$indexable_only` counts only thin posts with a current
+     *              indexable verdict ({@see Indexability::refresh_verdicts()}).
+     *
+     * @param array<string,int> $thresholds     Post type => threshold.
+     * @param string[]          $statuses       Post statuses.
+     * @param bool              $indexable_only Count only indexable posts as thin.
      * @return array<string,array{counted:int, thin:int}>
      */
-    public static function totals(array $thresholds, array $statuses): array {
+    public static function totals(array $thresholds, array $statuses, bool $indexable_only = false): array {
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the interpolated fragment is built by scope_sql() through prepare(); the CASE compares a column against integers cast from the threshold map. The index is itself the cache.
         global $wpdb;
 
@@ -955,36 +961,28 @@ class Word_Count_Index {
 
         $count_sql = self::count_sql('m');
 
-        // One CASE arm per post type, each prepared on its own and
-        // concatenated rather than left as placeholders in the outer query.
-        //
-        // The order matters and is easy to get wrong: these placeholders sit
-        // in the SELECT clause, *before* the ones in the JOIN and WHERE, so a
-        // single prepare() over the whole statement binds them in that order.
-        // Getting it wrong does not error — it silently hands `meta_key` a
-        // post type name, the INNER JOIN matches nothing and the report reads
-        // "0 posts counted" on a site full of content. Preparing each fragment
-        // where it is built removes the ordering question entirely.
-        $arms = [];
-        foreach ($thresholds as $post_type => $threshold) {
-            $arms[] = $wpdb->prepare(
-                'WHEN p.post_type = %s THEN %d',
-                (string) $post_type,
-                max(0, (int) $threshold)
-            );
-        }
-        $threshold_sql = 'CASE ' . implode(' ', $arms) . ' ELSE 0 END';
+        // Prepared arm by arm; see threshold_sql() for why the order matters.
+        $threshold_sql = self::threshold_sql($thresholds);
 
         $scope = self::scope_sql(array_keys($thresholds), $statuses);
         $meta_key_sql = $wpdb->prepare('m.meta_key = %s', self::META_KEY);
         $current_sql = $wpdb->prepare('m.meta_value LIKE %s', self::current_like());
 
+        // Every counted post stays counted; only the thin tally is narrowed,
+        // through a LEFT JOIN so a post not yet judged still counts as scanned.
+        $verdict_join = '';
+        $thin_sql     = "{$count_sql} < {$threshold_sql}";
+        if ($indexable_only) {
+            $verdict_join = str_replace(' INNER JOIN ', ' LEFT JOIN ', Indexability::indexable_join_sql('p', 'v'));
+            $thin_sql     = "({$thin_sql} AND v.post_id IS NOT NULL)";
+        }
+
         $rows = $wpdb->get_results(
             "SELECT p.post_type,
                     COUNT(*) AS counted,
-                    SUM({$count_sql} < {$threshold_sql}) AS thin
+                    SUM({$thin_sql}) AS thin
              FROM {$wpdb->posts} p
-             INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND {$meta_key_sql}
+             INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND {$meta_key_sql}{$verdict_join}
              WHERE {$scope} AND {$current_sql}
              GROUP BY p.post_type",
             ARRAY_A
@@ -1008,22 +1006,28 @@ class Word_Count_Index {
      * Thinnest first: the emptiest page is the one worth opening, and on a site
      * with hundreds of thin pages the tail is noise.
      *
-     * @param string   $post_type Post type.
-     * @param int      $threshold Count below which a post is thin.
-     * @param string[] $statuses  Post statuses.
-     * @param int      $limit     Most posts to return.
+     * @since 2.15.0 `$indexable_only` lists only posts with a current
+     *              indexable verdict ({@see Indexability::refresh_verdicts()}).
+     *
+     * @param string   $post_type      Post type.
+     * @param int      $threshold      Count below which a post is thin.
+     * @param string[] $statuses       Post statuses.
+     * @param int      $limit          Most posts to return.
+     * @param bool     $indexable_only List only indexable posts.
      * @return array<int,array{post_id:int, count:int}>
      */
-    public static function thinnest(string $post_type, int $threshold, array $statuses, int $limit): array {
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the interpolated fragment is built by scope_sql() through prepare(); every value is a placeholder. The index is itself the cache.
+    public static function thinnest(string $post_type, int $threshold, array $statuses, int $limit, bool $indexable_only = false): array {
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the interpolated fragments are built by scope_sql() and Indexability::indexable_join_sql() through prepare(); every value is a placeholder. The index is itself the cache.
         global $wpdb;
 
-        $count_sql = self::count_sql('m');
+        $count_sql    = self::count_sql('m');
+        $verdict_join = $indexable_only ? Indexability::indexable_join_sql('p', 'v') : '';
 
         $rows = $wpdb->get_results($wpdb->prepare(
             "SELECT p.ID, {$count_sql} AS word_count
              FROM {$wpdb->posts} p
              INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = %s
+             {$verdict_join}
              WHERE " . self::scope_sql([$post_type], $statuses) . "
                AND m.meta_value LIKE %s
                AND {$count_sql} < %d
@@ -1045,6 +1049,69 @@ class Word_Count_Index {
 
         return $posts;
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+    }
+
+    /**
+     * Every thin post, as a subquery selecting `ID`.
+     *
+     * Handed to {@see Indexability::refresh_verdicts()} so the report judges
+     * thin posts a bounded batch at a time and never loads the set into PHP.
+     *
+     * @since 2.15.0
+     *
+     * @param array<string,int> $thresholds Post type => threshold.
+     * @param string[]          $statuses   Post statuses.
+     * @return string Trusted SQL, '' when there is nothing in scope.
+     */
+    public static function thin_sql(array $thresholds, array $statuses): string {
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- every fragment is prepared where it is built and only concatenated here; see totals().
+        global $wpdb;
+
+        if (empty($thresholds)) {
+            return '';
+        }
+
+        $count_sql = self::count_sql('m');
+
+        return "SELECT p.ID
+             FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND " . $wpdb->prepare('m.meta_key = %s', self::META_KEY) . '
+             WHERE ' . self::scope_sql(array_keys($thresholds), $statuses) . '
+               AND ' . $wpdb->prepare('m.meta_value LIKE %s', self::current_like()) . "
+               AND {$count_sql} < " . self::threshold_sql($thresholds);
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+    }
+
+    /**
+     * Each post type's threshold as a CASE over `p.post_type`.
+     *
+     * One arm per post type, each prepared on its own and concatenated rather
+     * than left as placeholders in the outer query.
+     *
+     * The order matters and is easy to get wrong: these placeholders sit in
+     * the SELECT clause, *before* the ones in the JOIN and WHERE, so a single
+     * prepare() over the whole statement binds them in that order. Getting it
+     * wrong does not error: it silently hands `meta_key` a post type name, the
+     * INNER JOIN matches nothing and the report reads "0 posts counted" on a
+     * site full of content. Preparing each fragment where it is built removes
+     * the ordering question entirely.
+     *
+     * @param array<string,int> $thresholds Post type => threshold.
+     * @return string Trusted SQL.
+     */
+    private static function threshold_sql(array $thresholds): string {
+        global $wpdb;
+
+        $arms = [];
+        foreach ($thresholds as $post_type => $threshold) {
+            $arms[] = $wpdb->prepare(
+                'WHEN p.post_type = %s THEN %d',
+                (string) $post_type,
+                max(0, (int) $threshold)
+            );
+        }
+
+        return 'CASE ' . implode(' ', $arms) . ' ELSE 0 END';
     }
 
     /**

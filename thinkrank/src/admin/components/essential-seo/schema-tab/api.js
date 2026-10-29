@@ -5,8 +5,9 @@
  * Extracted from SchemaTab.js for maintainability.
  *
  * Each function accepts a `ctx` (context) object with the component's
- * state helpers: { settings, setSettings, setHasChanges, updateLoadingState,
- * safeSetState, setNotice, updateSchemaData, isMountedRef, abortControllerRef }
+ * state helpers: { settings, savedSettings, setSettings, setSavedSettings,
+ * setHasChanges, settingsRevisionRef, updateLoadingState, safeSetState,
+ * setNotice, updateSchemaData, isMountedRef, abortControllerRef }
  *
  * @package
  * @since 1.11.0
@@ -25,6 +26,22 @@ import {
 	mapSiteIdentityData,
 	getSyncTypeDisplayName,
 } from './validation';
+
+/**
+ * The settings as last loaded from or saved to the server.
+ *
+ * Generate and Deploy work from this snapshot, never the form. The server
+ * builds every field value from the saved settings, so taking the Schema
+ * Types (or the generate options) from unsaved form state mixed two
+ * snapshots: an unsaved untick retired live schema on Deploy while the saved
+ * selection still listed it (#1007). Falls back to the form only before a
+ * load has succeeded, when there is no saved copy and nothing is dirty.
+ *
+ * @param {Object} ctx API context.
+ * @return {Object} Saved settings.
+ */
+export const getSavedSettings = (ctx) =>
+	ctx.savedSettings || ctx.settings || {};
 
 /**
  * Load settings from Settings Management API
@@ -49,6 +66,7 @@ export const loadSettings = async (ctx) => {
 			const normalizedSettings =
 				normalizeSettingsDataTypes(mergedSettings);
 			ctx.safeSetState(ctx.setSettings, normalizedSettings);
+			ctx.safeSetState(ctx.setSavedSettings, normalizedSettings);
 		} else {
 			ctx.safeSetState(ctx.setSettings, getDefaultSettings());
 		}
@@ -106,6 +124,8 @@ export const saveSettings = async (ctx) => {
 		}
 
 		const normalizedSettings = normalizeSettingsDataTypes(ctx.settings);
+		// The form can still be edited while the request is out.
+		const revision = ctx.settingsRevisionRef?.current;
 
 		const response = await apiFetch({
 			path: '/thinkrank/v1/schema/settings',
@@ -118,7 +138,20 @@ export const saveSettings = async (ctx) => {
 		});
 
 		if (response.success) {
-			ctx.safeSetState(ctx.setHasChanges, false);
+			// What the server now holds, whatever the form shows since.
+			ctx.safeSetState(ctx.setSavedSettings, normalizedSettings);
+			// Clean only if nothing was edited while the request was out: a
+			// later edit is still unsaved, and Generate and Deploy must keep
+			// waiting for it rather than run from this older snapshot (#1007).
+			if (revision === ctx.settingsRevisionRef?.current) {
+				ctx.safeSetState(ctx.setHasChanges, false);
+			}
+			// The save redeploys the site schema on the server, and anything
+			// generated before it was built from the previous saved settings.
+			// Deploying that set would put the old values back, so it is
+			// dropped and the live set reloaded (#1007).
+			ctx.updateSchemaData('generatedSchemas', null);
+			loadDeployedSchemas(ctx);
 			notify.success(
 				__('Schema settings saved successfully!', 'thinkrank')
 			);
@@ -420,6 +453,10 @@ export const generateSchema = async (ctx) => {
 	try {
 		ctx.updateLoadingState('isGenerating', true);
 
+		// The saved settings, not the form: the server fills every field
+		// from them, so the types and options have to match (#1007).
+		const saved = getSavedSettings(ctx);
+
 		// Valid site-level schema types (post/page schemas handled by metabox)
 		const validSchemaTypes = [
 			'Organization',
@@ -429,7 +466,7 @@ export const generateSchema = async (ctx) => {
 		];
 
 		// Filter and validate schema types
-		let enabledTypes = ctx.settings.enabled_schema_types || [];
+		let enabledTypes = saved.enabled_schema_types || [];
 		if (Array.isArray(enabledTypes)) {
 			enabledTypes = enabledTypes.filter((type) =>
 				validSchemaTypes.includes(type)
@@ -445,19 +482,18 @@ export const generateSchema = async (ctx) => {
 			context_type: 'site',
 			schema_types: enabledTypes,
 			options: {
-				validation_level: ctx.settings.validation_level || 'moderate',
+				validation_level: saved.validation_level || 'moderate',
 				// `?? true` not `|| true` — `false || true` is `true`, so these
 				// three could never be turned off (#472).
 				rich_snippets_optimization:
-					ctx.settings.rich_snippets_optimization ?? true,
-				knowledge_graph: ctx.settings.knowledge_graph ?? true,
-				auto_generate_schema: ctx.settings.auto_generate_schema ?? true,
+					saved.rich_snippets_optimization ?? true,
+				knowledge_graph: saved.knowledge_graph ?? true,
+				auto_generate_schema: saved.auto_generate_schema ?? true,
 				enable_breadcrumbs_schema:
-					ctx.settings.enable_breadcrumbs_schema || false,
+					saved.enable_breadcrumbs_schema || false,
 				enable_accordion_faq_schema:
-					ctx.settings.enable_accordion_faq_schema || false,
-				enable_local_business:
-					ctx.settings.enable_local_business || false,
+					saved.enable_accordion_faq_schema || false,
+				enable_local_business: saved.enable_local_business || false,
 			},
 		};
 
@@ -647,7 +683,8 @@ export const deploySchema = async (ctx) => {
 			context_type: 'site',
 			schema_data: schemasToDeploy,
 			options: {
-				deployment_method: ctx.settings.deployment_method || 'json_ld',
+				deployment_method:
+					getSavedSettings(ctx).deployment_method || 'json_ld',
 			},
 		};
 

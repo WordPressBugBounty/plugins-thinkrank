@@ -89,8 +89,12 @@ const MetaboxSchemaTab = ({
 	formData,
 	showNotice,
 }) => {
-	// Schema state
-	const [selectedSchemaType, setSelectedSchemaType] = useState('Article');
+	// Schema state. A product's type list has no Article, so starting there
+	// left the select showing Product while Generate sent Article, and an
+	// untouched product never reached the WooCommerce Product fill (#1011).
+	const [selectedSchemaType, setSelectedSchemaType] = useState(() =>
+		window.thinkrankMetabox?.postType === 'product' ? 'Product' : 'Article'
+	);
 	const [generatedSchemas, setGeneratedSchemas] = useState(null);
 	const [deployedSchemas, setDeployedSchemas] = useState(null);
 	const [isGenerating, setIsGenerating] = useState(false);
@@ -226,8 +230,7 @@ const MetaboxSchemaTab = ({
 		showNotice,
 		currentPostType,
 		postRestBase,
-		postSchemaTypes,
-		pageSchemaTypes,
+		schemaTypes,
 		selectedSchemaType,
 		schemaFormData,
 		generatedSchemas,

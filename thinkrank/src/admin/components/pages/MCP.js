@@ -103,6 +103,9 @@ const MCP = ({ appsRefreshSignal = 0 }) => {
 	const [notice, setNotice] = useState(null);
 	// The capability list is collapsed by default; expand on demand.
 	const [showCapabilities, setShowCapabilities] = useState(false);
+	// Bumped after the connection token is reset, so the cards that show it
+	// load it again instead of keeping what they read on page load.
+	const [tokenKey, setTokenKey] = useState(0);
 	// Connection the Activity card is filtered to; set from a connection's
 	// "N changes" link in Connected AI apps.
 	const [activityClient, setActivityClient] = useState('');
@@ -316,7 +319,10 @@ const MCP = ({ appsRefreshSignal = 0 }) => {
 				<Card>
 					<div className="tr-flex tr-flex-col tr-gap-6">
 						{!dependenciesReady && <DependencyMissingAlert />}
-						<MCPConnectionConfig key={configKey} />
+						<MCPConnectionConfig
+							key={configKey}
+							onTokenReset={() => setTokenKey((k) => k + 1)}
+						/>
 					</div>
 				</Card>
 			)}
@@ -324,6 +330,7 @@ const MCP = ({ appsRefreshSignal = 0 }) => {
 			{savedMcp && dependenciesReady && (
 				<Card>
 					<MCPConnectedApps
+						key={tokenKey}
 						onViewActivity={viewActivity}
 						onRevokedAll={() => setConfigKey((k) => k + 1)}
 						onTokenChanged={() => setHealthKey((k) => k + 1)}
@@ -351,7 +358,9 @@ const MCP = ({ appsRefreshSignal = 0 }) => {
 
 			{savedMcp && (
 				<Card>
-					<MCPConnectionHealth key={`${configKey}-${healthKey}`} />
+					<MCPConnectionHealth
+						key={`${configKey}-${healthKey}-${tokenKey}`}
+					/>
 				</Card>
 			)}
 		</div>

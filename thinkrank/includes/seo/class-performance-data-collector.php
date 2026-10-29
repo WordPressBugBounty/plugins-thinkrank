@@ -19,6 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use ThinkRank\Integrations\Google_PageSpeed_Client;
+use ThinkRank\Core\Shared_State;
 
 /**
  * Performance Data Collector Class
@@ -152,6 +153,23 @@ class Performance_Data_Collector {
     private const AUTO_REFRESH_GAP = 7 * DAY_IN_SECONDS;
 
     /**
+     * Option holding the claim on an automatic collection in progress, so
+     * overlapping runs do not repeat the PageSpeed calls.
+     *
+     * @since 2.15.0
+     */
+    private const COLLECT_CLAIM_OPTION = 'thinkrank_cwv_collect_claim';
+
+    /**
+     * Seconds after which an unreleased claim counts as abandoned. Two
+     * PageSpeed audits take well under this; a run that died holding the claim
+     * delays the next automatic one by at most this long.
+     *
+     * @since 2.15.0
+     */
+    private const COLLECT_CLAIM_TTL = 10 * MINUTE_IN_SECONDS;
+
+    /**
      * Failure classes a collection can end in. Every one of these used to
      * collapse into a bare `false` and then into the literal string
      * "Data collection failed", which told the user nothing and made the REST
@@ -188,12 +206,29 @@ class Performance_Data_Collector {
         $this->last_error = '';
         $this->last_error_code = '';
 
+        $claimed = false;
+
         try {
             // Auto-collections (cron / background) re-measure at most every
             // 7 days; only an explicit user refresh forces a new audit.
             if (!$force) {
-                $last = (int) get_option(self::LAST_COLLECTED_OPTION, 0);
-                if ($last && (time() - $last) < self::AUTO_REFRESH_GAP) {
+                if ($this->collected_recently()) {
+                    return true;
+                }
+
+                // The stamp below lands only after two slow PageSpeed calls, so
+                // the check above let every overlapping run (a cron tick and a
+                // cold-cache kick, two cron processes) through to make the same
+                // calls against the shared quota. Claim the run first: whoever
+                // loses is covered by the run in flight.
+                if (!Shared_State::claim_option(self::COLLECT_CLAIM_OPTION, self::COLLECT_CLAIM_TTL)) {
+                    return true;
+                }
+                $claimed = true;
+
+                // A run that finished between the check and the claim has
+                // already measured.
+                if ($this->collected_recently(true)) {
                     return true;
                 }
             }
@@ -228,7 +263,27 @@ class Performance_Data_Collector {
         } catch (\Exception $e) {
             $this->record_error($e);
             return false;
+        } finally {
+            if ($claimed) {
+                delete_option(self::COLLECT_CLAIM_OPTION);
+            }
         }
+    }
+
+    /**
+     * Was the site measured within the auto-refresh gap?
+     *
+     * @since 2.15.0
+     *
+     * @param bool $fresh Read the committed stamp rather than this request's copy.
+     * @return bool
+     */
+    private function collected_recently(bool $fresh = false): bool {
+        $last = (int) ($fresh
+            ? Shared_State::fresh_option(self::LAST_COLLECTED_OPTION, 0)
+            : get_option(self::LAST_COLLECTED_OPTION, 0));
+
+        return $last > 0 && (time() - $last) < self::AUTO_REFRESH_GAP;
     }
 
     /**

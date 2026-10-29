@@ -16,6 +16,7 @@ declare(strict_types=1);
 namespace ThinkRank\SEO;
 
 use ThinkRank\Core\Settings_Manager;
+use ThinkRank\Core\Shared_State;
 use ThinkRank\Integrations\Google_PageSpeed_Client;
 
 // Prevent direct access
@@ -1955,10 +1956,11 @@ class Performance_Monitoring_Manager extends Abstract_SEO_Manager {
      * @return void
      */
     private function schedule_background_collection(): void {
-        if (get_transient('thinkrank_cwv_collect_lock')) {
+        // Checked and taken in one locked step, so a burst of cold-cache
+        // requests schedules one collection rather than one each.
+        if (!Shared_State::claim_transient('thinkrank_cwv_collect_lock', 15 * MINUTE_IN_SECONDS)) {
             return;
         }
-        set_transient('thinkrank_cwv_collect_lock', 1, 15 * MINUTE_IN_SECONDS);
         // Due immediately so the spawn_cron() kick below can pick it up.
         wp_schedule_single_event(time() - 1, 'thinkrank_collect_performance_data');
 

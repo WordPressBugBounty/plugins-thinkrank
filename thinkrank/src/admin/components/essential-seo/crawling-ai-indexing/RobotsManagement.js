@@ -1250,7 +1250,7 @@ const RobotsManagement = ({ onNavigate }) => {
 									<>
 										<p className="tr-text-sm tr-text-tertiary">
 											{__(
-												'Blocking Google-Extended stops your content training Gemini. It does not affect normal Google Search indexing or your rankings: those are a different crawler.',
+												'Google-Extended is a training control, like GPTBot and ClaudeBot: blocking it stops your content training Gemini. It does not affect Google Search, your rankings, or Google AI Overviews and AI Mode, which use Googlebot.',
 												'thinkrank'
 											)}
 										</p>

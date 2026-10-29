@@ -18,6 +18,7 @@ declare(strict_types=1);
 namespace ThinkRank\SEO;
 
 use ThinkRank\Core\Settings_Manager;
+use ThinkRank\Core\Shared_State;
 use ThinkRank\Integrations\Google_Search_Console_Client;
 use ThinkRank\Integrations\Google_PageSpeed_Client;
 use ThinkRank\Integrations\Google_Search_Analytics_Client;
@@ -569,24 +570,13 @@ class Analytics_Manager {
             return (bool) wp_cache_add(self::REFRESH_LOCK, time(), 'thinkrank', self::REFRESH_LOCK_TTL);
         }
 
-        // Without one, the options table is the shared store, and the unique
-        // index on option_name gives add_option() the same all-or-nothing
-        // result. set_transient() would not: it is an update, so every
-        // concurrent caller would "win".
-        if (add_option(self::REFRESH_LOCK, time(), '', 'no')) {
-            return true;
-        }
-
-        // Reclaim a lock whose holder died before releasing it.
-        $held = (int) get_option(self::REFRESH_LOCK);
-
-        if ($held > 0 && (time() - $held) > self::REFRESH_LOCK_TTL) {
-            delete_option(self::REFRESH_LOCK);
-
-            return (bool) add_option(self::REFRESH_LOCK, time(), '', 'no');
-        }
-
-        return false;
+        // Without one, the options table is the shared store. add_option()
+        // is not all-or-nothing there: core writes it as INSERT … ON DUPLICATE
+        // KEY UPDATE, which reports success to both of two racing callers, and
+        // the stale-lock reclaim (delete, then add) let a third in as well.
+        // The claim is taken under an advisory lock instead, and a claim older
+        // than the TTL is taken over in the same step.
+        return Shared_State::claim_option(self::REFRESH_LOCK, self::REFRESH_LOCK_TTL);
     }
 
     /**

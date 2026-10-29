@@ -532,7 +532,7 @@ class Metabox_Manager {
             <!-- Hidden form fields for React to read initial data -->
             <input type="hidden" id="thinkrank_seo_title" name="thinkrank_seo_title" value="<?php echo esc_attr($existing_metadata['title'] ?? ''); ?>" />
             <input type="hidden" id="thinkrank_meta_description" name="thinkrank_meta_description" value="<?php echo esc_attr($existing_metadata['description'] ?? ''); ?>" />
-            <?php // Render-time mirrors of the two fields a background writer (Auto AI, bulk, import) can fill after load. The React app never touches these, so on save they still hold the value shown when the form loaded — letting persist_metadata() tell a stale blank apart from a deliberate clear. ?>
+            <?php // Render-time mirrors of the two fields a background writer (Auto AI, bulk, import) can fill after load, letting persist_metadata() tell a stale blank apart from a deliberate clear. The React metabox clears this container on mount and renders its own copies (MetaboxApp), so these only post when the script never mounts. ?>
             <input type="hidden" id="thinkrank_seo_title__orig" name="thinkrank_seo_title__orig" value="<?php echo esc_attr($existing_metadata['title'] ?? ''); ?>" />
             <input type="hidden" id="thinkrank_meta_description__orig" name="thinkrank_meta_description__orig" value="<?php echo esc_attr($existing_metadata['description'] ?? ''); ?>" />
             <input type="hidden" id="thinkrank_focus_keyword" name="thinkrank_focus_keyword" value="<?php echo esc_attr($existing_metadata['focus_keyword'] ?? ''); ?>" />
@@ -1127,6 +1127,12 @@ JS;
             'nonce' => wp_create_nonce('thinkrank_metabox_ajax'),
             'postId' => $post_id,
             'postType' => $post_type,
+            // The Product schema form defaults its Currency to this on a
+            // WooCommerce product; empty fields there take the product's own
+            // values server-side (#1011).
+            'storeCurrency' => ('product' === $post_type && function_exists('get_woocommerce_currency'))
+                ? (string) get_woocommerce_currency()
+                : '',
             'postRestBase' => $post_rest_base,
             'postPermalink' => get_permalink($post_id),
             'postSlug' => $post ? $post->post_name : '',

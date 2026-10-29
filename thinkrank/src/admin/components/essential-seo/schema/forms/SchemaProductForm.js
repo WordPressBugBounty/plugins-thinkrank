@@ -85,6 +85,19 @@ const AVAILABILITY_OPTIONS = [
 const SchemaProductForm = ({ settings, onSettingChange, isLoading }) => {
 	const disabled = !settings.enabled;
 
+	// On a WooCommerce product, empty fields take the product's own price,
+	// SKU and stock, so the Currency default is the store's rather than USD,
+	// and is offered even when it is not one of the ten listed (#1011).
+	const storeCurrency = window.thinkrankMetabox?.storeCurrency || '';
+	const currencyOptions =
+		storeCurrency &&
+		!CURRENCY_OPTIONS.some((option) => option.value === storeCurrency)
+			? [
+					{ value: storeCurrency, label: storeCurrency },
+					...CURRENCY_OPTIONS,
+				]
+			: CURRENCY_OPTIONS;
+
 	return (
 		<div className="tr-flex tr-flex-col tr-gap-4">
 			{/* ── Product Details ───────────────────────────────────────── */}
@@ -182,13 +195,24 @@ const SchemaProductForm = ({ settings, onSettingChange, isLoading }) => {
 							onChange={(e) =>
 								onSettingChange('product_price', e.target.value)
 							}
-							description={__('e.g., 29.99', 'thinkrank')}
+							description={
+								storeCurrency
+									? __(
+											"Leave empty to use the product's WooCommerce price",
+											'thinkrank'
+										)
+									: __('e.g., 29.99', 'thinkrank')
+							}
 							disabled={disabled}
 						/>
 						<Select
 							label={__('Currency', 'thinkrank')}
-							value={settings.product_currency || 'USD'}
-							options={CURRENCY_OPTIONS}
+							value={
+								settings.product_currency ||
+								storeCurrency ||
+								'USD'
+							}
+							options={currencyOptions}
 							onChange={(e) =>
 								onSettingChange(
 									'product_currency',

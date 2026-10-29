@@ -93,6 +93,13 @@ final class Mcp_Audit_Snapshot {
 	 *             once it has run. `item_*` say how to undo one entry.
 	 * - object:   type and id for the log's object column, when the
 	 *             arguments do not name a target.
+	 * - no_clear: the update ability skips an empty value instead of
+	 *             storing it, so a write over an empty value cannot be
+	 *             undone and is logged without a Revert.
+	 * - replays:  a callable taking the projected before-values and
+	 *             answering whether the update ability can write them back
+	 *             as they were, for state its input has no field for. A
+	 *             write it answers false for is logged without a Revert.
 	 * - merge:    a callable answering, per key the update ability merges
 	 *             subkey by subkey instead of replacing, the value each
 	 *             subkey has when it is absent. A revert sends that value
@@ -122,9 +129,13 @@ final class Mcp_Audit_Snapshot {
 		'update-post-content'          => [
 			'get' => '',
 		],
+		// update-faq writes its block with FAQPage schema on and takes no
+		// input to switch it off, so a FAQ whose schema was off cannot be
+		// put back as it was.
 		'update-faq'                   => [
-			'keys'  => [ 'items' ],
-			'extra' => [ 'mode' => 'replace' ],
+			'keys'    => [ 'items' ],
+			'extra'   => [ 'mode' => 'replace' ],
+			'replays' => [ self::class, 'faq_replays' ],
 		],
 		'update-image-alt-text'        => [
 			'keys'  => [ 'alt_text' ],
@@ -132,6 +143,11 @@ final class Mcp_Audit_Snapshot {
 		],
 		'update-email-report-settings' => [
 			'view' => 'config',
+		],
+		// Only non-empty values are saved, so an ID the agent set where
+		// there was none cannot be cleared again through the same ability.
+		'update-social-platforms-settings' => [
+			'no_clear' => true,
 		],
 		// Writing a robots blob without the toggle switches the per-post
 		// override on, so the toggle is part of what a revert puts back.
@@ -419,6 +435,120 @@ final class Mcp_Audit_Snapshot {
 		}
 
 		return array_merge( $input, (array) ( $plan['extra'] ?? [] ) );
+	}
+
+	/**
+	 * Fit a revert input to the update ability's input schema.
+	 *
+	 * A read counterpart reports values in its own shape, which is not always
+	 * one its update ability accepts: a switch that was never set reads back
+	 * as `""` where the update takes a boolean, and get-faq items carry
+	 * `source`, `schema_enabled`, `image_url` and `image_alt`, which
+	 * update-faq's closed item schema rejects. An empty or null boolean is
+	 * written back as false, which is what an unset switch means, and keys a
+	 * closed object does not declare are dropped. Everything else passes
+	 * through untouched, for the update ability's own validation to judge.
+	 *
+	 * A dropped key must be one the write can do without. `schema_enabled`
+	 * is, only because replayable() refuses a FAQ whose schema was off.
+	 *
+	 * @since 2.15.1
+	 *
+	 * @param mixed $value  Value to fit.
+	 * @param mixed $schema JSON schema for it.
+	 * @return mixed
+	 */
+	public static function fit( $value, $schema ) {
+		if ( $schema instanceof \ArrayObject ) {
+			$schema = $schema->getArrayCopy();
+		}
+		if ( ! is_array( $schema ) ) {
+			return $value;
+		}
+
+		$type = $schema['type'] ?? '';
+
+		if ( 'boolean' === $type && ( null === $value || '' === $value ) ) {
+			return false;
+		}
+
+		if ( 'object' === $type && is_array( $value ) ) {
+			$props = $schema['properties'] ?? [];
+			if ( $props instanceof \ArrayObject ) {
+				$props = $props->getArrayCopy();
+			}
+			$props  = is_array( $props ) ? $props : [];
+			$closed = false === ( $schema['additionalProperties'] ?? true );
+
+			foreach ( $value as $key => $item ) {
+				if ( array_key_exists( $key, $props ) ) {
+					$value[ $key ] = self::fit( $item, $props[ $key ] );
+				} elseif ( $closed ) {
+					unset( $value[ $key ] );
+				}
+			}
+			return $value;
+		}
+
+		if ( 'array' === $type && is_array( $value ) && isset( $schema['items'] ) ) {
+			foreach ( $value as $key => $item ) {
+				$value[ $key ] = self::fit( $item, $schema['items'] );
+			}
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Whether the update ability can write `before` back at all, for what
+	 * its schema cannot say: an ability marked `no_clear` ignores an empty
+	 * value, so restoring one would change nothing.
+	 *
+	 * @since 2.15.1
+	 *
+	 * @param string              $tool   Bare write tool name.
+	 * @param array<string,mixed> $before Projected before-values.
+	 * @return bool
+	 */
+	public static function replayable( string $tool, array $before ): bool {
+		$override = self::override( $tool );
+
+		$replays = $override['replays'] ?? null;
+		if ( is_callable( $replays ) && ! call_user_func( $replays, $before ) ) {
+			return false;
+		}
+
+		if ( empty( $override['no_clear'] ) ) {
+			return true;
+		}
+		foreach ( $before as $value ) {
+			if ( null === $value || '' === $value ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether update-faq can write a FAQ snapshot back as it was.
+	 *
+	 * get-faq reports `schema_enabled: false` for a question whose block has
+	 * its FAQPage output switched off. update-faq has no input for that and
+	 * writes the block with schema on, so restoring those questions would
+	 * quietly turn the author's opt-out back on.
+	 *
+	 * @since 2.15.1
+	 *
+	 * @param array<string,mixed> $before Projected before-values.
+	 * @return bool
+	 */
+	public static function faq_replays( array $before ): bool {
+		foreach ( (array) ( $before['items'] ?? [] ) as $item ) {
+			if ( is_array( $item ) && false === ( $item['schema_enabled'] ?? true ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

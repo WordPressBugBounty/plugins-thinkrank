@@ -363,16 +363,34 @@ class Schema_Management_System extends Abstract_SEO_Manager {
     private static bool $foreign_settings_listener_registered = false;
 
     /**
+     * Settings-only instance behind site_settings(), built once per request.
+     *
+     * @since 2.20.1
+     * @var self|null
+     */
+    private static ?self $site_settings_reader = null;
+
+    /**
      * Constructor
      *
      * @since 1.0.0
+     * @since 2.20.1 Takes $settings_only.
+     *
+     * @param bool $settings_only Build only what get_settings() needs, without
+     *                            the schema builder, the cache manager or the
+     *                            settings listener. Use site_settings() rather
+     *                            than passing it.
      */
-    public function __construct() {
+    public function __construct(bool $settings_only = false) {
         parent::__construct('schema_management_system');
 
         // Load shared settings configuration
         if (!class_exists('ThinkRank\\Config\\Schema_Settings_Config')) {
             require_once THINKRANK_PLUGIN_DIR . 'includes/config/schema-settings-config.php';
+        }
+
+        if ($settings_only) {
+            return;
         }
 
         // Initialize Schema Builder for schema construction
@@ -1843,6 +1861,19 @@ class Schema_Management_System extends Abstract_SEO_Manager {
                     }
                 }
 
+                // A WooCommerce product already knows its price, currency, SKU,
+                // GTIN and stock. Without them the form's empty fields produced
+                // an Offer with no price in USD, and deploying it replaced the
+                // product's correct node (#1011). They fill whatever the form
+                // leaves empty; a value typed into the form still wins.
+                $woo_defaults = self::woocommerce_product_defaults($post);
+                if (!empty($woo_defaults)) {
+                    $options['schema_form_data'] = self::fill_empty_fields(
+                        is_array($options['schema_form_data'] ?? null) ? $options['schema_form_data'] : [],
+                        $woo_defaults
+                    );
+                }
+
                 // Merge schema form data into site_data if provided (for content-specific schemas)
                 if (!empty($options['schema_form_data'])) {
                     $form_data = $options['schema_form_data'];
@@ -1862,6 +1893,77 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         }
 
         return $content_data;
+    }
+
+    /**
+     * Product schema fields a WooCommerce product can answer for itself.
+     *
+     * Keyed like the Product schema form, so they slot in where the form is
+     * empty. Empty for anything that is not a WooCommerce product.
+     *
+     * @since 2.15.0
+     *
+     * @param \WP_Post $post Post being described.
+     * @return array<string,string>
+     */
+    public static function woocommerce_product_defaults(\WP_Post $post): array {
+        if ('product' !== $post->post_type || !function_exists('wc_get_product') || !function_exists('get_woocommerce_currency')) {
+            return [];
+        }
+
+        $product = wc_get_product($post->ID);
+        if (!is_object($product)) {
+            return [];
+        }
+
+        return self::product_fields_from_woocommerce($product, (string) get_woocommerce_currency());
+    }
+
+    /**
+     * Fill the form fields left empty, keeping every value the user typed.
+     *
+     * @since 2.15.0
+     *
+     * @param array<string,mixed>  $form     Schema form data.
+     * @param array<string,string> $defaults Values to use where the form is empty.
+     * @return array<string,mixed>
+     */
+    public static function fill_empty_fields(array $form, array $defaults): array {
+        foreach ($defaults as $key => $value) {
+            if (!isset($form[$key]) || (is_scalar($form[$key]) && '' === trim((string) $form[$key]))) {
+                $form[$key] = $value;
+            }
+        }
+
+        return $form;
+    }
+
+    /**
+     * Map a WooCommerce product onto the Product schema form's fields.
+     *
+     * @since 2.15.0
+     *
+     * @param object $product  WC_Product.
+     * @param string $currency Store currency code.
+     * @return array<string,string> Only the fields the product has a value for.
+     */
+    public static function product_fields_from_woocommerce($product, string $currency): array {
+        $availability = [
+            'instock'     => 'InStock',
+            'outofstock'  => 'OutOfStock',
+            'onbackorder' => 'BackOrder',
+        ];
+
+        $defaults = [
+            'product_price'        => (string) $product->get_price(),
+            'product_currency'     => $currency,
+            'product_sku'          => (string) $product->get_sku(),
+            // WooCommerce 9.2+ core field: "GTIN, UPC, EAN or ISBN".
+            'product_gtin'         => method_exists($product, 'get_global_unique_id') ? (string) $product->get_global_unique_id() : '',
+            'product_availability' => $availability[(string) $product->get_stock_status()] ?? '',
+        ];
+
+        return array_filter($defaults, static fn(string $value): bool => '' !== $value);
     }
 
     /**
@@ -2804,6 +2906,25 @@ class Schema_Management_System extends Abstract_SEO_Manager {
         // excerpt, and a template's %excerpt%, can be HTML (a WooCommerce
         // short description is), and shortcodes are removed first.
         return \ThinkRank\Core\Seo_Text::normalize_schema_text(strip_shortcodes($description));
+    }
+
+    /**
+     * The site-wide schema settings, Site Identity values layered in.
+     *
+     * The same array get_settings('site') returns, for front-end readers that
+     * only need the settings. Constructing the full manager also built a
+     * schema builder and a cache manager, and the cache manager read the
+     * settings once more, on every page that asked (review on #932).
+     *
+     * @since 2.20.1
+     * @return array
+     */
+    public static function site_settings(): array {
+        if (null === self::$site_settings_reader) {
+            self::$site_settings_reader = new self(true);
+        }
+
+        return self::$site_settings_reader->get_settings('site', null);
     }
 
     /**

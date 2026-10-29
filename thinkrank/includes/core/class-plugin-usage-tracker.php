@@ -394,9 +394,24 @@ class Plugin_Usage_Tracker {
      * @since 1.12.0
      */
     public function set_track_time() {
-        $track_times                       = get_option('wpins_last_track_time', array());
-        $track_times[$this->plugin_name]   = time();
-        update_option('wpins_last_track_time', $track_times);
+        // The option is shared by every plugin that bundles this tracker, and
+        // the stamp is written after a remote call that can take seconds. A
+        // copy read before that call and written back after it erased any
+        // stamp another plugin wrote meanwhile, so that plugin tracked again.
+        // Re-read and write it under the option's lock instead.
+        $plugin = $this->plugin_name;
+
+        Shared_State::update_option(
+            'wpins_last_track_time',
+            static function ($track_times) use ($plugin): array {
+                $track_times          = is_array($track_times) ? $track_times : array();
+                $track_times[$plugin] = time();
+
+                return $track_times;
+            },
+            null,
+            array()
+        );
     }
 
     /**

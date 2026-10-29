@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace ThinkRank\API\Traits;
 
+use ThinkRank\Core\Shared_State;
 use WP_Error;
 
 // Prevent direct access
@@ -59,36 +60,42 @@ trait Rate_Limiter {
     protected function check_rate_limit(string $endpoint_name, int $user_id = 0) {
         // Get user identifier (IP for anonymous, user ID for authenticated)
         $identifier = $user_id > 0 ? "user_{$user_id}" : $this->get_client_ip();
-        
-        // Check minute-based rate limit
+
         $minute_key = "thinkrank_rate_limit_{$endpoint_name}_{$identifier}_" . floor(time() / 60);
-        $minute_attempts = get_transient($minute_key) ?: 0;
-        
-        if ($minute_attempts >= $this->rate_limit_per_minute) {
-            return new WP_Error(
-                'rate_limit_exceeded',
-                'Too many requests per minute. Please slow down.',
-                ['status' => 429]
-            );
-        }
-        
-        // Check hour-based rate limit
-        $hour_key = "thinkrank_rate_limit_{$endpoint_name}_{$identifier}_" . floor(time() / 3600);
-        $hour_attempts = get_transient($hour_key) ?: 0;
-        
-        if ($hour_attempts >= $this->rate_limit_per_hour) {
-            return new WP_Error(
-                'rate_limit_exceeded',
-                'Too many requests per hour. Please try again later.',
-                ['status' => 429]
-            );
-        }
-        
-        // Increment counters
-        set_transient($minute_key, $minute_attempts + 1, 60);
-        set_transient($hour_key, $hour_attempts + 1, 3600);
-        
-        return true;
+        $hour_key   = "thinkrank_rate_limit_{$endpoint_name}_{$identifier}_" . floor(time() / 3600);
+
+        // Both counters are read, checked and written under one lock. Read
+        // → +1 → write without it let a burst all read the same count and all
+        // get through, so the limiter undercounted exactly when it mattered.
+        return Shared_State::locked(
+            "rate_limit|{$endpoint_name}|{$identifier}",
+            function (bool $locked) use ($minute_key, $hour_key) {
+                $minute_attempts = (int) Shared_State::read_transient($minute_key, $locked);
+
+                if ($minute_attempts >= $this->rate_limit_per_minute) {
+                    return new WP_Error(
+                        'rate_limit_exceeded',
+                        'Too many requests per minute. Please slow down.',
+                        ['status' => 429]
+                    );
+                }
+
+                $hour_attempts = (int) Shared_State::read_transient($hour_key, $locked);
+
+                if ($hour_attempts >= $this->rate_limit_per_hour) {
+                    return new WP_Error(
+                        'rate_limit_exceeded',
+                        'Too many requests per hour. Please try again later.',
+                        ['status' => 429]
+                    );
+                }
+
+                set_transient($minute_key, $minute_attempts + 1, 60);
+                set_transient($hour_key, $hour_attempts + 1, 3600);
+
+                return true;
+            }
+        );
     }
 
     /**

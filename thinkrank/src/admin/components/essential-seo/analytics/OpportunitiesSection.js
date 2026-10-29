@@ -51,6 +51,9 @@ const OpportunitiesSection = ({
 						value={dateRange}
 						options={dateRangeOptions}
 						onChange={(e) => setDateRange(e.target.value)}
+						// Held while its own load runs, so the range shown is
+						// the one the data on screen belongs to.
+						disabled={isRefreshing}
 					/>
 				</div>
 			</Flex>

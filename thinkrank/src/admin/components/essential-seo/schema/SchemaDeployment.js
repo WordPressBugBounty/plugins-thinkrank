@@ -163,6 +163,9 @@ const stableStringify = (value) => {
  * @param root0.onGenerateSchema
  * @param root0.isGenerating
  * @param root0.settings
+ * @param root0.hasUnsavedChanges
+ * @param root0.onSaveSettings
+ * @param root0.isSaving
  */
 const SchemaDeployment = ({
 	generatedSchemas,
@@ -172,6 +175,9 @@ const SchemaDeployment = ({
 	onGenerateSchema,
 	isGenerating = false,
 	settings = {},
+	hasUnsavedChanges = false,
+	onSaveSettings,
+	isSaving = false,
 }) => {
 	const generated = generatedSchemas?.generated_schemas || {};
 	const validation = generatedSchemas?.validation_results || {};
@@ -228,10 +234,14 @@ const SchemaDeployment = ({
 
 	const state = getState();
 	const isDisabledFeature = settings.enabled === false;
+	// Generate and Deploy build from the SAVED settings, so with unsaved
+	// edits on the form they would publish something other than what the
+	// screens show. Both wait for a save (#1007).
 	const canDeploy =
 		(state === 'ready' || state === 'update') &&
 		!isDisabledFeature &&
-		!isDeploying;
+		!isDeploying &&
+		!hasUnsavedChanges;
 
 	const STATUS = {
 		empty: { variant: 'neutral', label: __('Not deployed', 'thinkrank') },
@@ -290,6 +300,37 @@ const SchemaDeployment = ({
 						</Badge>
 					}
 				/>
+
+				{hasUnsavedChanges && (
+					<Alert
+						variant="warning"
+						title={__(
+							'Save your Schema changes first',
+							'thinkrank'
+						)}
+						className="tr-mb-3"
+					>
+						<p className="tr-m-0">
+							{__(
+								'Generate and Deploy use your saved Schema settings. You have unsaved changes, so save them before you generate or deploy.',
+								'thinkrank'
+							)}
+						</p>
+						{onSaveSettings && (
+							<Button
+								variant="secondary"
+								size="sm"
+								className="tr-mt-2"
+								onClick={onSaveSettings}
+								loading={isSaving}
+							>
+								{isSaving
+									? __('Saving…', 'thinkrank')
+									: __('Save Settings', 'thinkrank')}
+							</Button>
+						)}
+					</Alert>
+				)}
 
 				{/* ── State message ─────────────────────────────────── */}
 				{state === 'empty' && (
@@ -448,7 +489,7 @@ const SchemaDeployment = ({
 						icon={RegenerateIcon}
 						onClick={onGenerateSchema}
 						loading={isGenerating}
-						disabled={isGenerating}
+						disabled={isGenerating || hasUnsavedChanges}
 					>
 						{isGenerating
 							? __('Generating…', 'thinkrank')

@@ -12,7 +12,7 @@
  * @since 1.0.0
  */
 
-import { useState, useEffect } from '@wordpress/element';
+import { useState, useEffect, useRef } from '@wordpress/element';
 import { __, sprintf, _n } from '@wordpress/i18n';
 import { SkeletonCard, Card, Button, Badge, EmptyState } from '../../ui';
 import SettingsCard from '../../common/SettingsCard';
@@ -155,14 +155,30 @@ const History = ({ onNavigate }) => {
 	const [isHelpOpen, setIsHelpOpen] = useState(false);
 	const itemsPerPage = 10;
 	const [totalItems, setTotalItems] = useState(0);
+	// Numbers each history load. Pages can be flipped faster than the server
+	// answers, and only the newest answer may reach the table: a late page 2
+	// used to land on top of page 3.
+	const loadSeq = useRef(0);
+
+	// Leaving the screen orphans any answer still in flight.
+	useEffect(
+		() => () => {
+			loadSeq.current++;
+		},
+		[]
+	);
 
 	const fetchHistory = (page = currentPage, notify = false) => {
+		const seq = ++loadSeq.current;
 		setIsLoading(true);
 		// Server-side pagination: request only the current page.
 		apiFetch({
 			path: `/thinkrank/v1/instant-indexing/history?page=${page}&per_page=${itemsPerPage}`,
 		})
 			.then((response) => {
+				if (seq !== loadSeq.current) {
+					return; // Superseded by a newer load.
+				}
 				if (response.success && Array.isArray(response.data)) {
 					setHistory(response.data);
 					setTotalItems(
@@ -180,6 +196,9 @@ const History = ({ onNavigate }) => {
 				}
 			})
 			.catch((error) => {
+				if (seq !== loadSeq.current) {
+					return;
+				}
 				logger.error('Error fetching history:', error);
 				setIsLoading(false);
 				if (notify) {
@@ -209,14 +228,22 @@ const History = ({ onNavigate }) => {
 		}
 
 		setIsClearing(true);
+		// A load already in flight was read before the delete and would put
+		// the cleared rows back, so it is made stale here.
+		loadSeq.current++;
 		apiFetch({
 			path: '/thinkrank/v1/instant-indexing/history',
 			method: 'DELETE',
 		})
 			.then(() => {
-				setCurrentPage(1);
-				fetchHistory(1);
 				setIsClearing(false);
+				// One load of page 1: changing the page already triggers it,
+				// and calling fetchHistory() as well started two.
+				if (currentPage !== 1) {
+					setCurrentPage(1);
+				} else {
+					fetchHistory(1);
+				}
 			})
 			.catch((error) => {
 				logger.error('Error clearing history:', error);
@@ -419,7 +446,11 @@ const History = ({ onNavigate }) => {
 											Math.max(prev - 1, 1)
 										)
 									}
-									disabled={currentPage === 1}
+									disabled={
+										currentPage === 1 ||
+										isLoading ||
+										isClearing
+									}
 								>
 									{__('Previous', 'thinkrank')}
 								</Button>
@@ -439,7 +470,11 @@ const History = ({ onNavigate }) => {
 											Math.min(prev + 1, totalPages)
 										)
 									}
-									disabled={currentPage === totalPages}
+									disabled={
+										currentPage === totalPages ||
+										isLoading ||
+										isClearing
+									}
 								>
 									{__('Next', 'thinkrank')}
 								</Button>

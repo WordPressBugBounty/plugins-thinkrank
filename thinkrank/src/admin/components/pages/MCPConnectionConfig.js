@@ -244,7 +244,16 @@ const toBase64 = (str) => {
 
 /* ============================================================= component */
 
-const MCPConnectionConfig = () => {
+/**
+ * MCP connection guide and token controls.
+ *
+ * @param {Object}   props              Component props.
+ * @param {Function} props.onTokenReset Called after the connection token was
+ *                                      reset, so the cards that show it (the
+ *                                      Connected apps row, connection health)
+ *                                      can load it again.
+ */
+const MCPConnectionConfig = ({ onTokenReset }) => {
 	// Live connection status from /thinkrank/v1/mcp/connection. The token is
 	// minted automatically (server-side) when MCP is enabled, so this usually
 	// loads with `connected` true and the recipes populated. After Disconnect,
@@ -261,6 +270,14 @@ const MCPConnectionConfig = () => {
 	// Reset-token confirm modal + in-flight state.
 	const [showReset, setShowReset] = useState(false);
 	const [resetting, setResetting] = useState(false);
+	// A failed reset is reported inside its dialog: the dialog stays open on
+	// failure, and the user's attention is on it rather than on the page.
+	const [resetError, setResetError] = useState('');
+
+	const closeReset = () => {
+		setShowReset(false);
+		setResetError('');
+	};
 	// Creating a connection token after the owner had none.
 	const [creating, setCreating] = useState(false);
 
@@ -314,18 +331,25 @@ const MCPConnectionConfig = () => {
 	const resetToken = async () => {
 		setResetting(true);
 		setError('');
+		setResetError('');
 		try {
 			const response = await apiFetch({
 				path: '/thinkrank/v1/mcp/rotate',
 				method: 'POST',
 			});
 			setStatus(response);
-			setShowReset(false);
+			closeReset();
 			notify.success(__('Connection token reset.', 'thinkrank'));
+			// The Connected apps row and the health check still describe
+			// the token that was just replaced.
+			onTokenReset?.();
 		} catch (err) {
 			logger.error('ThinkRank: MCP token reset failed', err);
-			notify.error(
-				__('Couldn’t reset the connection token.', 'thinkrank')
+			setResetError(
+				__(
+					'Couldn’t reset the connection token. Please try again.',
+					'thinkrank'
+				)
 			);
 		} finally {
 			setResetting(false);
@@ -844,14 +868,14 @@ const MCPConnectionConfig = () => {
 
 			<Modal
 				isOpen={showReset}
-				onClose={() => (resetting ? null : setShowReset(false))}
+				onClose={() => (resetting ? null : closeReset())}
 				title={__('Reset connection token?', 'thinkrank')}
 				size="sm"
 				footer={
 					<div className="tr-flex tr-justify-end tr-gap-2">
 						<Button
 							variant="secondary"
-							onClick={() => setShowReset(false)}
+							onClick={closeReset}
 							disabled={resetting}
 						>
 							{__('Cancel', 'thinkrank')}
@@ -866,6 +890,11 @@ const MCPConnectionConfig = () => {
 					</div>
 				}
 			>
+				{resetError && (
+					<Alert variant="error" className="tr-mb-3">
+						{resetError}
+					</Alert>
+				)}
 				<p className="tr-m-0 tr-text-sm tr-text-secondary">
 					{__(
 						'A new token is generated immediately. Every header-based client (Claude Code, Cursor, VS Code, Windsurf, Claude Desktop) is disconnected and must reconnect with the new token. OAuth-connected apps like Claude on the web, Codex and Gemini CLI keep working.',

@@ -106,6 +106,27 @@ class SEO_Manager {
     private ?array $site_identity_data = null;
 
     /**
+     * How many Bricks render_data calls are open right now.
+     *
+     * Bricks renders a template element, or a Post Content element for a
+     * Bricks-built post, by calling render_data again from inside the outer
+     * render. Each nested call fires render_data for itself and its HTML then
+     * becomes part of the parent's, so only the outermost call is rewritten.
+     *
+     * @var int
+     */
+    private int $bricks_render_depth = 0;
+
+    /**
+     * Last id handed to a the_content result marked inside a Bricks render.
+     *
+     * @see SEO_Manager::mark_bricks_nested_content()
+     *
+     * @var int
+     */
+    private int $bricks_done_marks = 0;
+
+    /**
      * Image SEO Manager instance
      *
      * @var \ThinkRank\SEO\Image_SEO_Manager|null
@@ -327,6 +348,18 @@ class SEO_Manager {
         add_filter('post_thumbnail_html', [$this, 'filter_content_images'], 11, 2);
         add_filter('woocommerce_single_product_image_thumbnail_html', [$this, 'filter_content_images'], 11);
 
+        // Bricks renders a page's content area through its own element tree
+        // and never calls the_content, so neither filter above ever saw a
+        // Bricks page: a site-wide nofollow left every outbound link in a
+        // Bricks text element bare (#917). render_data is the hook Bricks
+        // offers for that rendered HTML. Registered unconditionally for the
+        // same reason as the disable_seo filters above: Bricks is a theme and
+        // loads after plugins, and the hook only fires from inside Bricks.
+        add_filter('bricks/frontend/render_data', [$this, 'filter_bricks_render_data'], 100000, 3);
+        add_action('bricks/frontend/before_render_data', [$this, 'enter_bricks_render_data'], 10, 0);
+        // After both rewrites above, so the mark wraps HTML they already did.
+        add_filter('the_content', [$this, 'mark_bricks_nested_content'], 100001);
+
         // Persist alt text to the Media Library for newly uploaded images (opt-in).
         add_action('add_attachment', [$this, 'maybe_fill_attachment_alt']);
     }
@@ -445,6 +478,166 @@ class SEO_Manager {
         }
 
         return $this->external_links_manager->process_content($content);
+    }
+
+    /**
+     * Count a Bricks render_data call as open.
+     *
+     * Hooked to `bricks/frontend/before_render_data`, which Bricks fires at
+     * the start of every render_data call that has elements to render; the
+     * matching `bricks/frontend/render_data` filter closes it again.
+     *
+     * @since 2.15.0
+     * @return void
+     */
+    public function enter_bricks_render_data(): void {
+        ++$this->bricks_render_depth;
+    }
+
+    /**
+     * Apply Image SEO and External Links to a Bricks content area.
+     *
+     * Same order as on the_content: images (99999), then links (100000).
+     * Only the `content` area is touched. Header and footer are site chrome
+     * that a classic theme renders outside the_content as well, so rewriting
+     * them here would make a Bricks site behave differently from any other.
+     *
+     * A template nested in the area (or a Post Content element showing a
+     * Bricks-built post) fires render_data for itself first, and its HTML is
+     * then part of the parent's. Only the outermost call is rewritten, so
+     * the final content area is scanned once however deep the nesting goes;
+     * a template nested in the header or footer stays chrome with its parent.
+     * A Post Content element showing a classic post goes through the_content
+     * with that post's own context, and that HTML comes back marked (see
+     * mark_bricks_nested_content()). The outer pass cuts the marked parts out
+     * before either rewrite runs and puts them back after, so no byte of the
+     * area is scanned twice.
+     *
+     * @since 2.15.0
+     *
+     * @param mixed $content Rendered element HTML.
+     * @param mixed $post    Post the area renders for.
+     * @param mixed $area    Bricks area: header, content or footer.
+     * @return mixed
+     */
+    public function filter_bricks_render_data($content, $post = null, $area = 'content') {
+        // Close this render before anything else, so the depth stays paired
+        // with before_render_data whichever way the call returns.
+        $this->bricks_render_depth = max(0, $this->bricks_render_depth - 1);
+
+        if ($this->bricks_render_depth > 0 || !is_string($content) || '' === $content) {
+            return $content;
+        }
+
+        $done   = [];
+        $masked = $this->cut_bricks_done_parts($content, $done);
+
+        // The builder canvas renders through the same path; what the author
+        // is editing is not the page a visitor gets.
+        if ('content' === $area
+            && !(function_exists('bricks_is_builder') && bricks_is_builder())
+            && !(function_exists('bricks_is_builder_call') && bricks_is_builder_call())
+        ) {
+            $masked = $this->filter_content_images($masked, $post instanceof \WP_Post ? (int) $post->ID : null);
+            $masked = $this->filter_external_links($masked);
+        }
+
+        // Nothing was marked: hand back the rewritten string as is, with no
+        // second walk over it.
+        if ([] === $done) {
+            return $masked;
+        }
+
+        return strtr($masked, $done);
+    }
+
+    /**
+     * Mark the_content HTML rendered inside a Bricks render as already done.
+     *
+     * A Post Content element showing a classic post calls the_content, which
+     * has just run both rewrites with that post's own context (its title for
+     * %title%, which a loop item needs). The HTML is then part of the
+     * enclosing Bricks area, and the outermost render_data pass would scan
+     * all of it again. The mark lets that pass cut it out first.
+     *
+     * Outside a Bricks render nothing is marked, so a classic theme and the
+     * Bricks header and footer get the_content exactly as before. A mark is
+     * an HTML comment, and the outermost render_data call always takes it
+     * out again, whatever the area.
+     *
+     * @since 2.15.0
+     *
+     * @param mixed $content the_content result.
+     * @return mixed
+     */
+    public function mark_bricks_nested_content($content) {
+        if ($this->bricks_render_depth < 1 || !is_string($content) || '' === $content) {
+            return $content;
+        }
+
+        $id = ++$this->bricks_done_marks;
+
+        return '<!--thinkrank-done:' . $id . '-->' . $content . '<!--/thinkrank-done:' . $id . '-->';
+    }
+
+    /**
+     * Cut the marked parts out of a Bricks area.
+     *
+     * Each marked part is replaced by its opening mark alone, and $done maps
+     * that mark to the part's HTML with every mark inside it removed, ready
+     * for strtr() once the rest has been rewritten. Plain strpos() rather
+     * than a regex: a lazy match across a long post can hit PCRE's backtrack
+     * limit and fail on exactly the pages this is for.
+     *
+     * @since 2.15.0
+     *
+     * @param string               $content Rendered Bricks area.
+     * @param array<string,string> $done    Filled with mark => original HTML.
+     * @return string The area with every marked part cut out.
+     */
+    private function cut_bricks_done_parts(string $content, array &$done): string {
+        $open   = '<!--thinkrank-done:';
+        $out    = '';
+        $offset = 0;
+
+        while (true) {
+            $start = strpos($content, $open, $offset);
+
+            if (false === $start) {
+                break;
+            }
+
+            $id_end = strpos($content, '-->', $start);
+
+            if (false === $id_end) {
+                break;
+            }
+
+            $id     = substr($content, $start + strlen($open), $id_end - $start - strlen($open));
+            $mark   = $open . $id . '-->';
+            $closer = '<!--/thinkrank-done:' . $id . '-->';
+            $end    = ctype_digit($id) ? strpos($content, $closer, $id_end) : false;
+
+            // Not one of ours, or never closed: keep it as it stands.
+            if (false === $end) {
+                $out   .= substr($content, $offset, $id_end + 3 - $offset);
+                $offset = $id_end + 3;
+                continue;
+            }
+
+            $inner = substr($content, $id_end + 3, $end - $id_end - 3);
+
+            // the_content inside the_content leaves its own marks inside.
+            if (false !== strpos($inner, '<!--')) {
+                $inner = (string) preg_replace('#<!--/?thinkrank-done:\d+-->#', '', $inner);
+            }
+
+            $done[$mark] = $inner;
+            $out        .= substr($content, $offset, $start - $offset) . $mark;
+            $offset      = $end + strlen($closer);
+        }
+
+        return $out . substr($content, $offset);
     }
 
     /**
@@ -2720,10 +2913,7 @@ class SEO_Manager {
             return null;
         }
 
-        $template = $global_seo_settings['title'];
-        $placeholders = $this->get_global_seo_placeholders($template);
-
-        return $this->process_global_seo_template($template, $placeholders);
+        return $this->resolve_global_seo_template((string) $global_seo_settings['title']);
     }
 
     /**
@@ -2738,65 +2928,63 @@ class SEO_Manager {
     }
 
     /**
-     * Get placeholders for Global SEO template processing
+     * Resolve a Global SEO template for the current post.
      *
-     * The product tokens and the `%customfield(key)%` tokens come from
-     * Pattern_Resolver::template_tokens(), the map the score, the editor
-     * preview and og/twitter resolve with, so the page publishes what they
-     * show (#1277).
+     * Global SEO templates resolve through Pattern_Resolver, the same resolver
+     * the editor preview and the per-post fields use. This class kept its own
+     * copy of the token map and the cleanup, and the copy fell behind: it never
+     * learned the WooCommerce tokens (%price%, %sku%, %stock_status%,
+     * %short_description%, %sale_price%, %brand%) and never stripped a token it
+     * could not resolve, so a product template printed "%price%" in the
+     * <title>, the meta description and the og and twitter tags while the
+     * editor preview showed the price (#974).
      *
-     * @param string $template Template being resolved.
-     * @return array Placeholder values
+     * One guard stays here. An authored post_excerpt is public, but deriving
+     * %excerpt% from the body of a password-protected post publishes the
+     * gated content (#363), so the token is removed from the template for that
+     * post before it is resolved. Matching uses the same token grammar as
+     * Pattern_Resolver's unresolved-token strip, so "%%excerpt%%" is left for
+     * that strip to remove whole and "%excerpt%%sep%" still loses its excerpt.
+     *
+     * @since 2.15.0
+     *
+     * @param string $template Global SEO template.
+     * @return string Resolved value, or '' when it resolves to nothing.
      */
-    private function get_global_seo_placeholders(string $template = ''): array {
-        $placeholders = [
-            '%title%' => '',
-            '%sitename%' => \ThinkRank\SEO\Site_Identity_Manager::site_name(),
-            '%sep%' => $this->get_global_seo_separator(),
-            '%excerpt%' => '',
-            '%date%' => get_the_date(),
-            '%modified%' => get_the_modified_date(),
-            '%author%' => '',
-            '%category%' => '',
-        ];
+    private function resolve_global_seo_template(string $template): string {
+        $post_id = (int) $this->current_post_id;
 
-        // Get current post data if available
-        if ($this->current_post_id) {
-            $placeholders['%title%'] = get_the_title($this->current_post_id);
-
-            // Get excerpt
-            $post = get_post($this->current_post_id);
-            if ($post) {
-                // An authored post_excerpt is written for public consumption, so
-                // it stays. Falling back to the body does not: for a protected
-                // post that derivation leaks the gated content through any
-                // template containing %excerpt%, and this branch runs BEFORE the
-                // derive-from-content priority below, so guarding only that one
-                // would leave this path open (#363).
-                if (!empty($post->post_excerpt)) {
-                    // As plain text: a WooCommerce short description is HTML (#1355).
-                    $placeholders['%excerpt%'] = \ThinkRank\SEO\Pattern_Resolver::excerpt_text($post->post_excerpt);
-                } elseif (!$this->is_content_password_protected($post->ID)) {
-                    $placeholders['%excerpt%'] = \ThinkRank\SEO\Pattern_Resolver::derive_excerpt(
-                        \ThinkRank\SEO\Builder_Content::visible_content($post)
-                    );
-                }
-            }
-
-            // Get author
-            $author_id = get_post_field('post_author', $this->current_post_id);
-            $placeholders['%author%'] = get_the_author_meta('display_name', $author_id);
-
-            // Get category (for posts)
-            if (get_post_type($this->current_post_id) === 'post') {
-                $categories = get_the_category($this->current_post_id);
-                $placeholders['%category%'] = !empty($categories) ? $categories[0]->name : '';
-            }
-
-            $placeholders += \ThinkRank\SEO\Pattern_Resolver::template_tokens($template, (int) $this->current_post_id);
+        if (strpos($template, '%excerpt%') !== false && $this->excerpt_would_expose_protected_body($post_id)) {
+            $template = (string) preg_replace_callback(
+                '/%%[a-z0-9_-]+%%|%[a-z0-9_-]+%/i',
+                static fn (array $found): string => '%excerpt%' === $found[0] ? '' : $found[0],
+                $template
+            );
         }
 
-        return $placeholders;
+        return \ThinkRank\SEO\Pattern_Resolver::resolve_value($template, $post_id);
+    }
+
+    /**
+     * Whether %excerpt% for a post would have to be derived from a gated body.
+     *
+     * True only when the post has no authored excerpt and its content is
+     * password-protected for this visitor. An authored post_excerpt is written
+     * for public consumption and still fills the token (#363).
+     *
+     * @since 2.15.0
+     *
+     * @param int $post_id Post ID.
+     * @return bool
+     */
+    private function excerpt_would_expose_protected_body(int $post_id): bool {
+        $post = $post_id ? get_post($post_id) : null;
+
+        if (!$post instanceof \WP_Post || !empty($post->post_excerpt)) {
+            return false;
+        }
+
+        return $this->is_content_password_protected($post->ID);
     }
 
     /**
@@ -2806,32 +2994,6 @@ class SEO_Manager {
      */
     public function get_global_seo_separator(): string {
         return \ThinkRank\SEO\Site_Identity_Manager::get_active_separator_symbol();
-    }
-
-    /**
-     * Process Global SEO template with placeholders
-     *
-     * @param string $template Template string with variables
-     * @param array $placeholders Placeholder values
-     * @return string Processed title
-     */
-    private function process_global_seo_template(string $template, array $placeholders): string {
-        // Replace all placeholders
-        $title = str_replace(array_keys($placeholders), array_values($placeholders), $template);
-
-        // Clean up multiple spaces
-        $title = preg_replace('/\s+/', ' ', $title);
-        $title = trim($title);
-
-        // Clean up multiple separators (e.g., "| |" becomes "|")
-        $separator = $placeholders['%sep%'] ?? '|';
-        $separator_pattern = preg_quote($separator, '/');
-        $title = preg_replace('/\s*' . $separator_pattern . '\s*' . $separator_pattern . '\s*/', ' ' . $separator . ' ', $title);
-
-        // Remove leading/trailing separators
-        $title = \ThinkRank\Core\Seo_Text::trim_separator($title, $separator);
-
-        return $title;
     }
 
     /**
@@ -3501,26 +3663,7 @@ class SEO_Manager {
             return null;
         }
 
-        $template = $global_seo_settings['description'];
-        $placeholders = $this->get_global_seo_placeholders($template);
-
-        return $this->process_global_seo_description_template($template, $placeholders);
-    }
-
-    /**
-     * Process Global SEO description template with placeholders
-     *
-     * @param string $template Template string with variables
-     * @param array $placeholders Placeholder values
-     * @return string Processed description
-     */
-    private function process_global_seo_description_template(string $template, array $placeholders): string {
-        // Replace all placeholders
-        $description = str_replace(array_keys($placeholders), array_values($placeholders), $template);
-
-        // Clean up multiple spaces
-        $description = preg_replace('/\s+/', ' ', $description);
-        $description = trim($description);
+        $description = $this->resolve_global_seo_template((string) $global_seo_settings['description']);
 
         // Ensure description doesn't exceed recommended length (160 characters)
         // Measure and cut in CHARACTERS. strlen() counts bytes, so a Thai or

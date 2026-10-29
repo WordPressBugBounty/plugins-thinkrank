@@ -27,6 +27,7 @@ import SectionHeader from '../common/SectionHeader';
 import FormField from '../common/FormField';
 import useAutosaveSettings from '../../hooks/useAutosaveSettings';
 import logger from '../../../shared/utils/logger';
+import { collectCacheWarnings } from '../../utils/cacheWarnings';
 
 const separatorMap = {
 	pipe: '|',
@@ -204,6 +205,9 @@ const ImageSEOTab = () => {
 		let aiFailed = 0;
 		let aiError = '';
 		let completed = false;
+		// Pages left serving the old alt text, gathered from every batch and
+		// shown once at the end so a stale cache never reads as success (#926).
+		let cacheWarnings = [];
 		try {
 			// Loop batches until the server reports it has processed the whole
 			// library. The cap is a backstop, not an expected exit: at limit 100
@@ -220,6 +224,7 @@ const ImageSEOTab = () => {
 					},
 				});
 				totalUpdated += res.updated || 0;
+				cacheWarnings = collectCacheWarnings(cacheWarnings, res);
 				totalLowQuality += res.skipped_low_quality || 0;
 				aiFailed += res.ai_failed || 0;
 				if (!aiError && res.ai_error) {
@@ -248,6 +253,7 @@ const ImageSEOTab = () => {
 						),
 						totalUpdated
 					),
+					details: cacheWarnings,
 				});
 				await loadMediaStats();
 				return;
@@ -283,13 +289,14 @@ const ImageSEOTab = () => {
 							aiFailed,
 							aiError
 						) + lowQualityNote,
+					details: cacheWarnings,
 				});
 				await loadMediaStats();
 				return;
 			}
 
 			setNotice({
-				status: 'success',
+				status: cacheWarnings.length > 0 ? 'warning' : 'success',
 				message:
 					sprintf(
 						/* translators: %d: number of images updated */
@@ -299,16 +306,34 @@ const ImageSEOTab = () => {
 						),
 						totalUpdated
 					) + lowQualityNote,
+				details: cacheWarnings,
 			});
 			await loadMediaStats();
 		} catch (error) {
 			logger.error('Failed to fill media alt text:', error);
+			// Batches before the failing one may already have saved alt text,
+			// and the pages using it can still be cached with the old value, so
+			// the failure keeps both the count and the cache warnings (#926).
+			const savedNote =
+				totalUpdated > 0
+					? ' ' +
+						sprintf(
+							/* translators: %d: number of images updated before the error */
+							__(
+								'Alt text was saved for %d image(s) before it stopped.',
+								'thinkrank'
+							),
+							totalUpdated
+						)
+					: '';
 			setNotice({
 				status: 'error',
-				message: __(
-					'An error occurred while filling alt text.',
-					'thinkrank'
-				),
+				message:
+					__(
+						'An error occurred while filling alt text.',
+						'thinkrank'
+					) + savedNote,
+				details: cacheWarnings,
 			});
 		} finally {
 			setIsFilling(false);
@@ -653,11 +678,22 @@ const ImageSEOTab = () => {
 		<div className="tab-content">
 			{notice && (
 				<Alert
-					variant={notice.status === 'success' ? 'success' : 'error'}
+					variant={
+						['success', 'warning'].includes(notice.status)
+							? notice.status
+							: 'error'
+					}
 					onDismiss={() => setNotice(null)}
 					className="tr-mb-4"
 				>
 					{notice.message}
+					{notice.details?.length > 0 && (
+						<ul className="tr-m-0 tr-mt-2 tr-pl-5 tr-list-disc">
+							{notice.details.map((detail) => (
+								<li key={detail}>{detail}</li>
+							))}
+						</ul>
+					)}
 				</Alert>
 			)}
 

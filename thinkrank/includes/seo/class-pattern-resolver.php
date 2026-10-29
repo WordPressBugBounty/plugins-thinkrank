@@ -96,7 +96,7 @@ class Pattern_Resolver {
         if (strpos($value, '%') === false) {
             return $value;
         }
-        return self::process($value, self::placeholders_for($post_id) + self::custom_field_placeholders($value, 'post', $post_id));
+        return self::process($value, self::placeholders_for($post_id, $value) + self::custom_field_placeholders($value, 'post', $post_id));
     }
 
     /**
@@ -256,7 +256,7 @@ class Pattern_Resolver {
      * @return array<string,string> Token => value.
      */
     public static function template_tokens(string $template, int $post_id): array {
-        return self::product_placeholders($post_id) + self::custom_field_placeholders($template, 'post', $post_id);
+        return self::product_placeholders($post_id, $template) + self::custom_field_placeholders($template, 'post', $post_id);
     }
 
     /**
@@ -713,48 +713,94 @@ class Pattern_Resolver {
     /**
      * Build placeholder values for an explicit post (no loop dependency).
      *
-     * @param int $post_id Post ID.
+     * Given the template, only the tokens it names are worked out (review on
+     * #1022). Global SEO titles and descriptions resolve here on every public
+     * page, and the full map loads the WooCommerce product, formats two prices
+     * and asks up to four brand taxonomies for terms, none of which a
+     * "%title% %sep% %sitename%" template needs. A token left out of the map
+     * is one the template does not contain, so nothing downstream changes:
+     * process() only replaces and strips what the template holds. %sep% is
+     * always there, because process() collapses doubled separators with it.
+     *
+     * @since 2.15.0 `$template` limits the map to the tokens it names.
+     *
+     * @param int         $post_id  Post ID.
+     * @param string|null $template Template being resolved; null for every token.
      * @return array<string,string> Placeholder map.
      */
-    private static function placeholders_for(int $post_id): array {
-        $post = get_post($post_id);
+    private static function placeholders_for(int $post_id, ?string $template = null): array {
+        $resolvers = [
+            '%title%'    => static fn (): string => (string) get_the_title($post_id),
+            '%sitename%' => static fn (): string => self::site_name(),
+            '%sep%'      => static fn (): string => self::separator(),
+            '%excerpt%'  => static fn (): string => self::excerpt_for($post_id),
+            '%date%'     => static fn (): string => (string) get_the_date('', $post_id),
+            '%modified%' => static fn (): string => (string) get_the_modified_date('', $post_id),
+            '%author%'   => static function () use ($post_id): string {
+                $author_id = (int) get_post_field('post_author', $post_id);
 
-        // An authored excerpt is written for public consumption, so it stays.
-        // The body is not: deriving %excerpt% from a protected post's body put
-        // the gated text into the title, meta, og/twitter tags and JSON-LD of
-        // the page that asks for the password. The Global SEO path closed this
-        // in #363; the per-post templates resolve here, so the same rule
-        // applies here too (#973).
-        $excerpt = '';
-        if ($post) {
-            if (!empty($post->post_excerpt)) {
-                $excerpt = self::excerpt_text($post->post_excerpt);
-            } elseif (!self::is_password_required($post)) {
-                $excerpt = self::derive_excerpt(Builder_Content::visible_content($post));
+                return $author_id ? (string) get_the_author_meta('display_name', $author_id) : '';
+            },
+            '%category%' => static function () use ($post_id): string {
+                if (get_post_type($post_id) !== 'post') {
+                    return '';
+                }
+
+                $categories = get_the_category($post_id);
+
+                return !empty($categories) ? (string) $categories[0]->name : '';
+            },
+        ];
+
+        $placeholders = [];
+        foreach ($resolvers as $token => $resolve) {
+            if ('%sep%' === $token || self::names_token($template, $token)) {
+                $placeholders[$token] = $resolve();
             }
         }
 
-        $author_id = (int) get_post_field('post_author', $post_id);
+        return array_merge($placeholders, self::product_placeholders($post_id, $template));
+    }
 
-        $category = '';
-        if (get_post_type($post_id) === 'post') {
-            $categories = get_the_category($post_id);
-            $category = !empty($categories) ? $categories[0]->name : '';
+    /**
+     * Whether a template names a token. A null template names every token.
+     *
+     * A plain substring test, so `%%title%%` counts as naming `%title%`; the
+     * value is then worked out and the strip removes the double-percent form
+     * as before. Erring that way only costs a lookup, never a token.
+     *
+     * @param string|null $template Template, or null.
+     * @param string      $token    Token, e.g. '%price%'.
+     * @return bool
+     */
+    private static function names_token(?string $template, string $token): bool {
+        return null === $template || false !== strpos($template, $token);
+    }
+
+    /**
+     * What %excerpt% says for a post.
+     *
+     * An authored excerpt is written for public consumption, so it stays.
+     * The body is not: deriving %excerpt% from a protected post's body put
+     * the gated text into the title, meta, og/twitter tags and JSON-LD of
+     * the page that asks for the password. The Global SEO path closed this
+     * in #363; the per-post templates resolve here, so the same rule
+     * applies here too (#973).
+     *
+     * @param int $post_id Post ID.
+     * @return string
+     */
+    private static function excerpt_for(int $post_id): string {
+        $post = get_post($post_id);
+        if (!$post) {
+            return '';
         }
 
-        return array_merge(
-            [
-                '%title%' => get_the_title($post_id),
-                '%sitename%' => self::site_name(),
-                '%sep%' => self::separator(),
-                '%excerpt%' => $excerpt,
-                '%date%' => get_the_date('', $post_id),
-                '%modified%' => get_the_modified_date('', $post_id),
-                '%author%' => $author_id ? get_the_author_meta('display_name', $author_id) : '',
-                '%category%' => $category,
-            ],
-            self::product_placeholders($post_id)
-        );
+        if (!empty($post->post_excerpt)) {
+            return self::excerpt_text($post->post_excerpt);
+        }
+
+        return self::is_password_required($post) ? '' : self::derive_excerpt(Builder_Content::visible_content($post));
     }
 
     /**
@@ -767,26 +813,35 @@ class Pattern_Resolver {
      * customer in support #171748 found four variables where they had had a
      * stock one (#715).
      *
-     * Always present, never conditional on the post type. A token that exists
-     * on a product and is an unknown token everywhere else would resolve on
-     * one page and leak literally on another; resolving to an empty string off
-     * a product is the same answer every other token gives when it has nothing
-     * to say, and process() then collapses the separator it leaves behind.
+     * Present whenever the template names them, never conditional on the post
+     * type. A token that exists on a product and is an unknown token
+     * everywhere else would resolve on one page and leak literally on another;
+     * resolving to an empty string off a product is the same answer every
+     * other token gives when it has nothing to say, and process() then
+     * collapses the separator it leaves behind.
+     *
+     * The product is only loaded when the template names one of these, and
+     * the brand taxonomies are only asked when it names %brand% (review on
+     * #1022).
      *
      * @since 2.10.1
+     * @since 2.15.0 `$template` limits the map to the tokens it names.
      *
-     * @param int $post_id Post ID.
+     * @param int         $post_id  Post ID.
+     * @param string|null $template Template being resolved; null for every token.
      * @return array<string,string>
      */
-    private static function product_placeholders(int $post_id): array {
-        $empty = [
-            '%price%'             => '',
-            '%sale_price%'        => '',
-            '%sku%'               => '',
-            '%stock_status%'      => '',
-            '%short_description%' => '',
-            '%brand%'             => '',
-        ];
+    private static function product_placeholders(int $post_id, ?string $template = null): array {
+        $wanted = array_values(array_filter(
+            ['%price%', '%sale_price%', '%sku%', '%stock_status%', '%short_description%', '%brand%'],
+            static fn (string $token): bool => self::names_token($template, $token)
+        ));
+
+        if (empty($wanted)) {
+            return [];
+        }
+
+        $empty = array_fill_keys($wanted, '');
 
         if (!function_exists('wc_get_product') || 'product' !== get_post_type($post_id)) {
             return $empty;
@@ -802,24 +857,31 @@ class Pattern_Resolver {
         // form on a variable product are all store settings, and a second
         // formatter is how a template starts disagreeing with the price shown
         // three lines below it on the same page.
-        $price      = (string) $product->get_price();
-        $sale_price = (string) $product->get_sale_price();
-
-        $stock_status = (string) $product->get_stock_status();
         $stock_labels = [
             'instock'     => __('In stock', 'thinkrank'),
             'outofstock'  => __('Out of stock', 'thinkrank'),
             'onbackorder' => __('On backorder', 'thinkrank'),
         ];
 
-        return [
-            '%price%'             => self::formatted_price($price),
-            '%sale_price%'        => self::formatted_price($sale_price),
-            '%sku%'               => (string) $product->get_sku(),
-            '%stock_status%'      => $stock_labels[$stock_status] ?? $stock_status,
-            '%short_description%' => self::derive_excerpt((string) $product->get_short_description()),
-            '%brand%'             => self::product_brand($post_id),
+        $resolvers = [
+            '%price%'             => static fn (): string => self::formatted_price((string) $product->get_price()),
+            '%sale_price%'        => static fn (): string => self::formatted_price((string) $product->get_sale_price()),
+            '%sku%'               => static fn (): string => (string) $product->get_sku(),
+            '%stock_status%'      => static function () use ($product, $stock_labels): string {
+                $stock_status = (string) $product->get_stock_status();
+
+                return $stock_labels[$stock_status] ?? $stock_status;
+            },
+            '%short_description%' => static fn (): string => self::derive_excerpt((string) $product->get_short_description()),
+            '%brand%'             => static fn (): string => self::product_brand($post_id),
         ];
+
+        $placeholders = [];
+        foreach ($wanted as $token) {
+            $placeholders[$token] = $resolvers[$token]();
+        }
+
+        return $placeholders;
     }
 
     /**

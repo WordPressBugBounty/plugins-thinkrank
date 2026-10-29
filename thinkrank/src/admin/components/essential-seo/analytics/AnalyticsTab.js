@@ -104,6 +104,20 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 	// completion so a change made during a slow load isn't dropped.
 	const reloadQueuedRef = useRef(false);
 	const [reloadTick, setReloadTick] = useState(0);
+	// Numbers each dashboard load. The in-flight guard above keeps loads from
+	// starting together, but not from finishing together: a failed request
+	// ends a load early (Promise.all rejects on the first error) while its
+	// other requests are still out, and those used to land on top of the
+	// next range's data. Only the newest load may change the screen.
+	const loadSeqRef = useRef(0);
+
+	// Leaving the tab orphans any answer still in flight.
+	useEffect(
+		() => () => {
+			loadSeqRef.current++;
+		},
+		[]
+	);
 
 	// Reflects the persisted master toggle (set after settings load or save).
 	// Data loads key on this — not on the in-form toggle value — so Google API
@@ -298,6 +312,9 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 		}
 		loadInFlightRef.current = true;
 
+		const seq = ++loadSeqRef.current;
+		const isCurrent = () => seq === loadSeqRef.current;
+
 		try {
 			setIsRefreshing(true);
 			setIsLoadingIntelligence(true);
@@ -315,7 +332,7 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 						method: 'GET',
 					});
 
-					if (dashboardResponse.success) {
+					if (dashboardResponse.success && isCurrent()) {
 						setDashboardData(dashboardResponse.data);
 					}
 				})()
@@ -331,12 +348,14 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 							path: `/thinkrank/v1/seo-analytics/search-totals?start_date=${prevStart}&end_date=${prevEnd}`,
 							method: 'GET',
 						});
-						if (prevPeriodResponse.success) {
+						if (prevPeriodResponse.success && isCurrent()) {
 							setPreviousPeriodData(prevPeriodResponse.data);
 						}
 					} catch (prevError) {
 						// Previous period data is optional — silently skip if unavailable
-						setPreviousPeriodData(null);
+						if (isCurrent()) {
+							setPreviousPeriodData(null);
+						}
 					}
 				})()
 			);
@@ -349,12 +368,14 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 							path: `/thinkrank/v1/seo-analytics/search-daily?date_range=${dateRange}`,
 							method: 'GET',
 						});
-						if (dailyResponse.success) {
+						if (dailyResponse.success && isCurrent()) {
 							setSearchDailyData(dailyResponse.data);
 						}
 					} catch (dailyError) {
 						// Daily data is optional — chart falls back gracefully if unavailable
-						setSearchDailyData(null);
+						if (isCurrent()) {
+							setSearchDailyData(null);
+						}
 					}
 				})()
 			);
@@ -367,11 +388,13 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 							path: `/thinkrank/v1/seo-analytics/countries?date_range=${dateRange}`,
 							method: 'GET',
 						});
-						if (countriesResponse.success) {
+						if (countriesResponse.success && isCurrent()) {
 							setCountryData(countriesResponse.data);
 						}
 					} catch (_) {
-						setCountryData(null);
+						if (isCurrent()) {
+							setCountryData(null);
+						}
 					}
 				})()
 			);
@@ -384,11 +407,13 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 							path: `/thinkrank/v1/seo-analytics/branded?date_range=${dateRange}`,
 							method: 'GET',
 						});
-						if (brandedResponse.success) {
+						if (brandedResponse.success && isCurrent()) {
 							setBrandedData(brandedResponse.data);
 						}
 					} catch (_) {
-						setBrandedData(null);
+						if (isCurrent()) {
+							setBrandedData(null);
+						}
 					}
 				})()
 			);
@@ -401,7 +426,7 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 						method: 'GET',
 					});
 
-					if (opportunitiesResponse.success) {
+					if (opportunitiesResponse.success && isCurrent()) {
 						setSeoOpportunities(opportunitiesResponse.data);
 					}
 				})()
@@ -420,12 +445,15 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 				tasks.push(
 					(async () => {
 						try {
-							setTrafficTrends(
-								await loadTrafficTrends(dateRange)
-							);
+							const trends = await loadTrafficTrends(dateRange);
+							if (isCurrent()) {
+								setTrafficTrends(trends);
+							}
 						} catch (_) {
 							// Trends are an optional badge on each card.
-							setTrafficTrends(null);
+							if (isCurrent()) {
+								setTrafficTrends(null);
+							}
 						}
 					})()
 				);
@@ -434,6 +462,9 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 			await Promise.all(tasks);
 		} catch (error) {
 			logger.error('Dashboard data load error:', error);
+			if (!isCurrent()) {
+				return;
+			}
 			setNotice({
 				status: 'error',
 				message: __(
@@ -442,8 +473,10 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 				),
 			});
 		} finally {
-			setIsRefreshing(false);
-			setIsLoadingIntelligence(false);
+			if (isCurrent()) {
+				setIsRefreshing(false);
+				setIsLoadingIntelligence(false);
+			}
 			loadInFlightRef.current = false;
 			// A load was requested while this one ran — re-run once with the
 			// latest deps (fresh closure via the effect) so nothing is lost.
@@ -584,6 +617,7 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 						dateRange={dateRange}
 						setDateRange={setDateRange}
 						dashboardData={dashboardData}
+						isRefreshing={isRefreshing}
 					/>
 				);
 			case 'rank-tracker':
