@@ -73,6 +73,7 @@ class Get_Schema_Settings extends Ability_Base {
 		'organization_social_pinterest',
 		'organization_social_whatsapp',
 		'organization_social_telegram',
+		'organization_social_tiktok',
 		'organization_contact_type',
 		'organization_contact_phone',
 		'organization_contact_email',

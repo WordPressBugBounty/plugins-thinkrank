@@ -472,6 +472,16 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }, 20, 2);
         }
 
+        // The files list each URL as it was when they were written, so moving
+        // the URLs has to rewrite them. Nothing else fires for a permalink
+        // switch: the REST route, the ability, a migration and a restore all
+        // only write this option (#1485).
+        foreach (['update_option_', 'add_option_'] as $option_hook) {
+            add_action($option_hook . Permalinks::OPTION, static function (): void {
+                self::listener()->schedule_regeneration();
+            }, 20, 0);
+        }
+
         add_action('thinkrank_object_redirect_saved', static function (): void {
             self::listener()->schedule_regeneration();
         }, 20, 0);
@@ -1292,11 +1302,17 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                         $lastmod = gmdate('c', strtotime($post->post_modified_gmt));
                         $priority = $this->calculate_intelligent_priority($post, $post->post_type);
                         $changefreq = $this->calculate_change_frequency($post, $post->post_type);
-                        $images = $this->extract_post_images($post, $settings);
+                        $gallery_ids = $this->product_gallery_ids($post, $settings);
+                        $images = $this->extract_post_images($post, $settings, $gallery_ids);
 
                         $thumbnail_id = (int) get_post_thumbnail_id($post);
                         if ($thumbnail_id > 0) {
                             $attachment_ids[] = $thumbnail_id;
+                        }
+
+                        // Gallery images are hydrated under their own IDs too.
+                        foreach ($gallery_ids as $gallery_id) {
+                            $attachment_ids[] = $gallery_id;
                         }
 
                         yield $this->generate_url_entry($url, $lastmod, $priority, $changefreq, $images);
@@ -1570,11 +1586,16 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      *
      * @since 1.0.0
      *
-     * @param \WP_Post $post Post object
-     * @param array $settings Sitemap settings
+     * @since 2.21.0 Lists a WooCommerce product's gallery images (#1478).
+     *
+     * @param \WP_Post   $post        Post object
+     * @param array      $settings    Sitemap settings
+     * @param int[]|null $gallery_ids The product's gallery attachment IDs, when
+     *                                the caller already has them; null to look
+     *                                them up.
      * @return array Array of image data
      */
-    private function extract_post_images(\WP_Post $post, array $settings): array {
+    private function extract_post_images(\WP_Post $post, array $settings, ?array $gallery_ids = null): array {
         $images = [];
 
         // Skip if images are disabled
@@ -1587,6 +1608,16 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             $featured_image = $this->get_featured_image($post->ID);
             if ($featured_image) {
                 $images[] = $featured_image;
+            }
+        }
+
+        // A product's gallery is product imagery as much as its featured
+        // image, and it is usually not in the description, so the body scan
+        // below never found it. Rank Math lists it (#1478).
+        foreach ($gallery_ids ?? $this->product_gallery_ids($post, $settings) as $gallery_id) {
+            $gallery_image = $this->attachment_image((int) $gallery_id);
+            if ($gallery_image) {
+                $images[] = $gallery_image;
             }
         }
 
@@ -1726,13 +1757,49 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             return null;
         }
 
-        $image_url = wp_get_attachment_image_url($thumbnail_id, 'full');
+        return $this->attachment_image((int) $thumbnail_id);
+    }
+
+    /**
+     * A WooCommerce product's gallery attachment IDs, when images are listed.
+     *
+     * Empty for anything that is not a WooCommerce product, and without
+     * asking WooCommerce at all when the sitemap lists no images.
+     *
+     * @since 2.21.0
+     *
+     * @param \WP_Post $post     Post object.
+     * @param array    $settings Sitemap settings.
+     * @return int[]
+     */
+    private function product_gallery_ids(\WP_Post $post, array $settings): array {
+        if (empty($settings['include_images'])) {
+            return [];
+        }
+
+        return \ThinkRank\Integrations\Woocommerce::stored_gallery_image_ids((int) $post->ID);
+    }
+
+    /**
+     * Sitemap image data for one attachment.
+     *
+     * @since 2.21.0
+     *
+     * @param int $attachment_id Attachment ID.
+     * @return array|null url, title and alt, or null when it has no URL.
+     */
+    private function attachment_image(int $attachment_id): ?array {
+        if ($attachment_id <= 0) {
+            return null;
+        }
+
+        $image_url = wp_get_attachment_image_url($attachment_id, 'full');
         if (!$image_url) {
             return null;
         }
 
-        $image_title = get_the_title($thumbnail_id);
-        $image_alt = get_post_meta($thumbnail_id, '_wp_attachment_image_alt', true);
+        $image_title = get_the_title($attachment_id);
+        $image_alt = get_post_meta($attachment_id, '_wp_attachment_image_alt', true);
 
         return [
             'url' => $image_url,

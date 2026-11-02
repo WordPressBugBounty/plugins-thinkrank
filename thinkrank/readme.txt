@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.20.1
+Stable tag: 2.21.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -263,6 +263,20 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.21.0 =
+Release Date: 2026-11-02
+
+- New: Title and description templates for every taxonomy and post type archive
+- New: Remove the product, product category and category bases from URLs, with 301 redirects
+- New: %currentyear% and %taxonomy(slug)% variables for live dates and a post's terms in titles
+- New: WooCommerce Store settings for brand taxonomy, shop archive schema and the generator tag
+- New: Product weight, dimensions and gallery images in schema and the image sitemap
+- New: TikTok in the Organization's Social Media Profiles
+- New: The Migration screen restores date variables that older imports froze
+- Improved: Migrations carry archive templates, URL settings, GTINs, author SEO and WooCommerce settings
+- Fixed: The shop page uses its own SEO, social and robots values and the product archive template
+- Fixed: Search and filtered shop titles, plus minor sitemap, permalink, taxonomy title and preview issues
+
 = 2.20.1 =
 Release Date: 2026-10-29
 
@@ -319,26 +333,12 @@ Release Date: 2026-10-26
 - Fixed: Minor robots.txt, word count, WPML sitemap, schema, MCP and Claude AI issues
 - Removed: The Exclude Private Posts sitemap setting, which never had an effect
 
-= 2.18.0 =
-Release Date: 2026-10-25
-
-- New: AI agents can edit a post's body and URL slug over MCP, with a preview first and an undo
-- New: SEO scores and suggestions follow each post's own language, with French readability rules
-- Improved: The admin screens and editor SEO panels now show in your site's language
-- Fixed: WooCommerce cart, checkout and account pages are now noindex, as WooCommerce asks
-- Fixed: Preview no longer publishes unsaved SEO fields on a published post
-- Fixed: The SEO score is the same whole number in the editor and the posts list
-- Fixed: Author archives follow the Metas switch in the Content Type Matrix
-- Fixed: The sitemap drops a post as soon as it is unpublished
-- Fixed: Instant Indexing sends nothing while off and announces trashed and unpublished posts
-- Fixed: Minor email report subject, AI pause and social image setting issues
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.21.0 =
+Adds taxonomy and archive title templates, URL base removal with 301 redirects, live date variables and WooCommerce store settings. The shop page now uses its own SEO values. Recommended for all sites.
+
 = 2.20.1 =
 Sitemaps keep their styled view once Chrome drops XSLT, AI visits on cached pages are counted, and WooCommerce Product schema starts from the product. Recommended for all sites.
-
-= 2.20.0 =
-Adds Gemini, Grok, Codex, Windsurf and Le Chat to the MCP guide and Kadence breadcrumbs. Chinese, Japanese and Thai posts get fair word counts, and title formats drop unknown variables. Recommended for all sites.

@@ -1,7 +1,8 @@
 /**
  * WooCommerce Tab
  *
- * Rendered through ProGatedTab: the Pro panel when licensed, a
+ * The free store settings card first, on WooCommerce sites only (#1478), then
+ * the Pro area through ProGatedTab: the Pro panel when licensed, a
  * licence-activation teaser when Pro is installed but unlicensed, and the
  * upsell teaser when Pro is absent.
  *
@@ -12,11 +13,16 @@
 import { __ } from '@wordpress/i18n';
 
 import ProGatedTab from '../pro/ProGatedTab';
+import PermalinkSettings from './permalinks/PermalinkSettings';
 import ProTeaser from '../pro/ProTeaser';
 import { WooCommerceIllustration } from '../pro/pro-teaser-illustrations';
+import WooCommerceSettingsCard from './woocommerce/WooCommerceSettingsCard';
 
-const WooCommerceTab = () => {
-	return (
+const WooCommerceTab = () => (
+	<div className="tr-flex tr-flex-col tr-gap-4">
+		<WooCommerceSettingsCard />
+		{/* Product URL bases (#1476). Renders nothing without WooCommerce. */}
+		<PermalinkSettings scope="woocommerce" />
 		<ProGatedTab
 			filter="thinkrank.woocommerce.tab"
 			teaser={
@@ -48,7 +54,7 @@ const WooCommerceTab = () => {
 				/>
 			}
 		/>
-	);
-};
+	</div>
+);
 
 export default WooCommerceTab;

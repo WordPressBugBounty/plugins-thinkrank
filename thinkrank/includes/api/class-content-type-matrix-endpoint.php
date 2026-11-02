@@ -22,8 +22,10 @@ declare(strict_types=1);
 
 namespace ThinkRank\API;
 
+use ThinkRank\SEO\Archive_Templates;
 use ThinkRank\SEO\Content_Type_Settings;
 use ThinkRank\SEO\Content_Type_Robots_State;
+use ThinkRank\SEO\Pattern_Resolver;
 use ThinkRank\SEO\Sitemap_Generator;
 use WP_Error;
 use WP_REST_Controller;
@@ -96,6 +98,9 @@ class Content_Type_Matrix_Endpoint extends WP_REST_Controller {
                             'properties' => [
                                 'robots_state' => Content_Type_Robots_State::schema(),
                                 'expected_robots_state' => ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$'],
+                                // A taxonomy's title and description templates (#1425).
+                                'title_template'       => ['type' => 'string'],
+                                'description_template' => ['type' => 'string'],
                             ],
                         ],
                     ],
@@ -146,6 +151,7 @@ class Content_Type_Matrix_Endpoint extends WP_REST_Controller {
             $entity['sitemap_include']     = $entity['supports_sitemap']
                 ? Content_Type_Settings::is_included_in_sitemap($entity['group'], $entity['object'], $sitemap_settings)
                 : null;
+            $entity = array_merge($entity, self::templates_of($entity));
 
             $entities[] = $entity;
         }
@@ -205,6 +211,17 @@ class Content_Type_Matrix_Endpoint extends WP_REST_Controller {
             $patch['robots_meta_enabled'] = (bool) $settings['robots_meta_enabled'];
         }
 
+        // A taxonomy's title and description templates (#1425), stored as
+        // `title` / `description` like a post type's. Other entities have no
+        // template here, so a value sent for one is not stored.
+        if ('taxonomy' === $descriptor['group']) {
+            foreach (Archive_Templates::FIELDS as $field) {
+                if (array_key_exists($field . '_template', $settings)) {
+                    $patch[$field] = Pattern_Resolver::sanitize_template((string) $settings[$field . '_template']);
+                }
+            }
+        }
+
         if (isset($settings['robots_meta']) && is_array($settings['robots_meta'])) {
             $robots = [];
             foreach (['index', 'noindex', 'nofollow', 'noarchive', 'noimageindex', 'nosnippet'] as $key) {
@@ -252,8 +269,28 @@ class Content_Type_Matrix_Endpoint extends WP_REST_Controller {
                 'sitemap_include'     => $descriptor['supports_sitemap']
                     ? Content_Type_Settings::is_included_in_sitemap($descriptor['group'], $descriptor['object'], $sitemap_settings)
                     : null,
-            ],
+            ] + self::templates_of($descriptor),
         ], 200);
+    }
+
+    /**
+     * A taxonomy row's stored title and description templates (#1425).
+     *
+     * @param array $entity Entity descriptor.
+     * @return array{title_template?: string, description_template?: string}
+     *               Empty for an entity that is not a taxonomy.
+     */
+    private static function templates_of(array $entity): array {
+        if ('taxonomy' !== ($entity['group'] ?? '')) {
+            return [];
+        }
+
+        $templates = [];
+        foreach (Archive_Templates::FIELDS as $field) {
+            $templates[$field . '_template'] = Archive_Templates::taxonomy_template((string) $entity['object'], $field);
+        }
+
+        return $templates;
     }
 
     /**

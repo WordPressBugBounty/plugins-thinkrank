@@ -40,6 +40,14 @@ if (!defined('ABSPATH')) {
 class Snapshot_Migrator {
 
     /**
+     * What a URL move could not clear from a page cache, for the settings result.
+     *
+     * @since 2.21.0
+     * @var string[]
+     */
+    private array $cache_warnings = [];
+
+    /**
      * Canonical field → ThinkRank meta key mapping.
      * This map grows as ThinkRank adds features.
      */
@@ -123,6 +131,15 @@ class Snapshot_Migrator {
         'sitemap_settings',
         'analytics_connected',
         'focus_pages',
+        // Applied by migrate_woocommerce_settings() (#1478, thinkrank-pro#481).
+        // pro_woocommerce only while Pro is active; a cleanup without Pro
+        // removes a few switches, never content.
+        'woocommerce_settings',
+        'pro_woocommerce',
+        // Applied by migrate_permalinks() (#1476). `no_category_base` is the
+        // shape Slim SEO snapshots carried before there was a ThinkRank home.
+        'permalinks',
+        'no_category_base',
         // Applied by migrate_site_identity() (#886).
         'robots_txt',
         'feed',
@@ -2145,6 +2162,16 @@ class Snapshot_Migrator {
             $processed++;
         }
 
+        // URL bases the source removed, before anything that builds a link (#1476).
+        if ($this->migrate_permalinks($extended)) {
+            $processed++;
+        }
+
+        // WooCommerce settings, free and Pro (#1478, thinkrank-pro#481).
+        if ($this->migrate_woocommerce_settings($extended)) {
+            $processed++;
+        }
+
         // Per-post-type title/description templates and (active) robots defaults.
         if (!empty($extended['post_type_settings']) && is_array($extended['post_type_settings'])) {
             if ($this->migrate_post_type_settings($extended['post_type_settings'])) {
@@ -2153,8 +2180,13 @@ class Snapshot_Migrator {
         }
 
         // Per-taxonomy and blog-index noindex, into the Content Type Matrix.
-        // The templates beside them have no ThinkRank store and stay preserved.
         if ($this->migrate_archive_noindex($extended)) {
+            $processed++;
+        }
+
+        // Per-taxonomy and post type archive title/description templates,
+        // into the Global SEO templates beside them (#1425).
+        if ($this->migrate_archive_templates($extended)) {
             $processed++;
         }
 
@@ -2234,6 +2266,8 @@ class Snapshot_Migrator {
             // Schema the source holds and ThinkRank did not import, so the
             // import can name it instead of reporting a clean finish (#1286).
             'schema_not_imported' => $this->schema_not_imported($extended),
+            // Caches still answering the old URLs, which only the admin can clear.
+            'cache_warnings'      => $this->cache_warnings,
         ];
     }
 
@@ -2644,7 +2678,7 @@ class Snapshot_Migrator {
         }
 
         // The Organization node's sameAs.
-        $schema_platforms = ['facebook', 'twitter', 'linkedin', 'instagram', 'youtube', 'pinterest', 'whatsapp', 'telegram'];
+        $schema_platforms = ['facebook', 'twitter', 'linkedin', 'instagram', 'youtube', 'pinterest', 'whatsapp', 'telegram', 'tiktok'];
         $manager = $this->create_schema_manager();
         if ($manager !== null) {
             $current = $manager->get_settings('site');
@@ -2689,6 +2723,116 @@ class Snapshot_Migrator {
         $segment = ltrim(rawurldecode($segment), '@');
 
         return preg_match('/^[A-Za-z0-9_]{1,15}$/', $segment) ? $segment : '';
+    }
+
+    /**
+     * Carry over the source's WooCommerce settings (#1478, thinkrank-pro#481).
+     *
+     * `extended.woocommerce_settings` holds keys of the free
+     * `thinkrank_woocommerce_seo` option, `extended.pro_woocommerce` keys of
+     * ThinkRank Pro's `thinkrank_pro_woocommerce`. A key is written only while
+     * the site has never saved it, so a setting chosen in ThinkRank is kept.
+     * Pro's keys are written only while ThinkRank Pro is active: free's
+     * uninstall leaves Pro's options alone, so one written without Pro would
+     * outlive both plugins. Without Pro the bucket stays in the snapshot.
+     *
+     * @param array $extended Canonical settings `extended` payload
+     * @return bool True when anything was written
+     */
+    private function migrate_woocommerce_settings(array $extended): bool {
+        $written = false;
+
+        $free = is_array($extended['woocommerce_settings'] ?? null) ? $extended['woocommerce_settings'] : [];
+        if (!empty($free) && class_exists('ThinkRank\\Integrations\\WooCommerce_Settings')) {
+            $option = \ThinkRank\Integrations\WooCommerce_Settings::OPTION;
+            $apply = array_diff_key(
+                array_intersect_key($free, \ThinkRank\Integrations\WooCommerce_Settings::defaults()),
+                self::stored_keys($option)
+            );
+            // A brand taxonomy no longer registered on products would be
+            // refused, and take the rest of the settings down with it.
+            if (isset($apply['brand_taxonomy'])
+                && !isset(\ThinkRank\Integrations\WooCommerce_Settings::brand_taxonomy_choices()[(string) $apply['brand_taxonomy']])) {
+                unset($apply['brand_taxonomy']);
+            }
+            if (!empty($apply) && !is_wp_error(\ThinkRank\Integrations\WooCommerce_Settings::validate($apply))) {
+                \ThinkRank\Integrations\WooCommerce_Settings::save($apply);
+                $written = true;
+            }
+        }
+
+        $pro = is_array($extended['pro_woocommerce'] ?? null) ? $extended['pro_woocommerce'] : [];
+        $known = [
+            'noindex_hidden_products', 'noindex_empty_product_categories', 'show_identifier',
+            'identifier_label', 'custom_brand', 'product_group',
+        ];
+        $apply = array_diff_key(array_intersect_key($pro, array_flip($known)), self::stored_keys('thinkrank_pro_woocommerce'));
+        if (!empty($apply) && class_exists('ThinkRank\\Pro\\WooCommerce\\Settings')) {
+            (new \ThinkRank\Pro\WooCommerce\Settings())->save($apply);
+            $written = true;
+        }
+
+        return $written;
+    }
+
+    /**
+     * The keys an option array holds, as an array to diff against.
+     *
+     * @param string $option Option name
+     * @return array<string, true>
+     */
+    private static function stored_keys(string $option): array {
+        $stored = get_option($option, []);
+
+        return is_array($stored) ? array_fill_keys(array_keys($stored), true) : [];
+    }
+
+    /**
+     * Carry over the URL bases the source plugin removed (#1476).
+     *
+     * A store that published `/jerseys/` with Rank Math's "Remove category
+     * base" got `/product-category/jerseys/` back after switching, and every
+     * ranked base-free URL answered 404. Reads `extended.permalinks` (the four
+     * {@see \ThinkRank\SEO\Permalinks::DEFAULTS} switches) and the
+     * `no_category_base` flag older Slim SEO snapshots carry.
+     *
+     * Only turns on a switch the site has never saved: a source that kept a
+     * base says nothing about a choice made in ThinkRank, and either changing a
+     * saved switch or turning one off would move live URLs.
+     *
+     * @param array $extended Canonical settings `extended` payload
+     * @return bool True when a switch was turned on
+     */
+    private function migrate_permalinks(array $extended): bool {
+        if (!class_exists('ThinkRank\\SEO\\Permalinks')) {
+            return false;
+        }
+
+        $source = is_array($extended['permalinks'] ?? null) ? $extended['permalinks'] : [];
+        if (!empty($extended['no_category_base'])) {
+            $source['remove_category_base'] = true;
+        }
+
+        // A switch the site has saved is the admin's decision, off included:
+        // re-running a migration must not move live URLs again (#1489). A
+        // source's "off" is never applied either, so a migration only ever
+        // fills a switch the site has no answer for.
+        $saved = self::stored_keys(\ThinkRank\SEO\Permalinks::OPTION);
+        $turn_on = [];
+        foreach (array_keys(\ThinkRank\SEO\Permalinks::DEFAULTS) as $key) {
+            if (!empty($source[$key]) && !isset($saved[$key])) {
+                $turn_on[$key] = true;
+            }
+        }
+
+        if (empty($turn_on)) {
+            return false;
+        }
+
+        \ThinkRank\SEO\Permalinks::save($turn_on);
+        $this->cache_warnings = \ThinkRank\SEO\Permalinks::purge_changed_urls();
+
+        return true;
     }
 
     /**
@@ -3753,8 +3897,9 @@ class Snapshot_Migrator {
      * migrate_archive_noindex() consumes are removed.
      *
      * `taxonomy_settings` and `post_type_archive_settings` carry a `noindex`
-     * per context that is applied, beside templates and images that are not.
-     * Any other bucket is returned whole.
+     * and converted `title_template` / `description_template` per context
+     * that are applied, beside images and source-syntax templates that are
+     * not. Any other bucket is returned whole.
      *
      * @param string $key   Extended bucket key
      * @param array  $value Bucket contents
@@ -3770,9 +3915,14 @@ class Snapshot_Migrator {
             if (!is_array($settings)) {
                 continue;
             }
-            // Only the blog index has an archive entity to receive a noindex.
-            $applied = $key === 'taxonomy_settings' || (string) $context === 'post';
-            $rest = $applied ? array_diff_key($settings, ['noindex' => true]) : $settings;
+            // migrate_archive_templates() applies the templates of every
+            // context; only the blog index has an archive entity to receive a
+            // noindex.
+            $handled = ['title_template' => true, 'description_template' => true];
+            if ($key === 'taxonomy_settings' || (string) $context === 'post') {
+                $handled['noindex'] = true;
+            }
+            $rest = array_diff_key($settings, $handled);
             if (!empty($rest)) {
                 $remainder[$context] = $rest;
             }
@@ -3835,6 +3985,141 @@ class Snapshot_Migrator {
         }
 
         return $written;
+    }
+
+    /**
+     * Title-template tokens that name the archive's subject, by bucket.
+     *
+     * @var array<string, string[]>
+     */
+    private const ARCHIVE_TEMPLATE_SUBJECTS = [
+        'taxonomy_settings'          => ['%term_title%', '%term%', '%title%'],
+        'post_type_archive_settings' => ['%pt_plural%', '%pt_single%', '%archive_title%', '%title%'],
+    ];
+
+    /**
+     * Apply per-taxonomy and post type archive title/description templates
+     * (#1425).
+     *
+     * Reads `extended.taxonomy_settings[<taxonomy>]` into the taxonomy's
+     * `taxonomy:<slug>` row and `extended.post_type_archive_settings[<type>]`
+     * into the post type's `archive_title` / `archive_description`, the
+     * stores the front end resolves those archives from. Only the converted
+     * `title_template` / `description_template` keys are read; a bucket in
+     * the source plugin's own syntax (Slim SEO keeps `title`) stays
+     * preserved.
+     *
+     * Non-destructive: a template already set in ThinkRank is kept. The
+     * category and tag titles are skipped, because they arrive in the Site
+     * Identity Category and Tag formats (title_formats), and a title that no
+     * longer names its subject is skipped too: an exporter that stripped the
+     * term token would otherwise title every term with the site name alone.
+     *
+     * @param array $extended Canonical settings `extended` payload
+     * @return bool True if any template was written
+     */
+    private function migrate_archive_templates(array $extended): bool {
+        if (!class_exists('ThinkRank\\SEO\\Content_Type_Settings')) {
+            return false;
+        }
+
+        // migrate_post_type_settings() writes the same option straight
+        // through update_option(), so a copy memoised before it is stale and
+        // writing it back would undo that write.
+        \ThinkRank\SEO\Content_Type_Settings::flush_cache();
+
+        $written = false;
+
+        $taxonomies = is_array($extended['taxonomy_settings'] ?? null) ? $extended['taxonomy_settings'] : [];
+        foreach ($taxonomies as $taxonomy => $settings) {
+            $taxonomy = (string) $taxonomy;
+            $object = taxonomy_exists($taxonomy) ? get_taxonomy($taxonomy) : null;
+            if (!is_array($settings) || !is_object($object) || empty($object->public)) {
+                continue;
+            }
+
+            $entity_key = \ThinkRank\SEO\Content_Type_Settings::PREFIX_TAXONOMY . $taxonomy;
+            $existing   = \ThinkRank\SEO\Content_Type_Settings::get_entity_settings($entity_key);
+            $skip_title = in_array($taxonomy, ['category', 'post_tag'], true);
+
+            $patch = $this->archive_template_patch($settings, 'taxonomy_settings', [
+                'title'       => $skip_title ? null : 'title',
+                'description' => 'description',
+            ], $existing);
+
+            if (!empty($patch) && \ThinkRank\SEO\Content_Type_Settings::update_entity_settings($entity_key, $patch)) {
+                $written = true;
+            }
+        }
+
+        $archives = is_array($extended['post_type_archive_settings'] ?? null) ? $extended['post_type_archive_settings'] : [];
+        foreach ($archives as $post_type => $settings) {
+            $post_type = (string) $post_type;
+            $object = post_type_exists($post_type) ? get_post_type_object($post_type) : null;
+            if (!is_array($settings) || !is_object($object) || empty($object->has_archive)) {
+                continue;
+            }
+
+            $existing = \ThinkRank\SEO\Content_Type_Settings::get_entity_settings($post_type);
+            $patch = $this->archive_template_patch($settings, 'post_type_archive_settings', [
+                'title'       => 'archive_title',
+                'description' => 'archive_description',
+            ], $existing);
+
+            if (!empty($patch) && \ThinkRank\SEO\Content_Type_Settings::update_entity_settings($post_type, $patch)) {
+                $written = true;
+            }
+        }
+
+        return $written;
+    }
+
+    /**
+     * The template values one archive context adds to its ThinkRank row.
+     *
+     * @param array                     $settings Context from the bucket.
+     * @param string                    $bucket   Bucket key, for the subject tokens.
+     * @param array<string,string|null> $targets  Field => row key, null to skip.
+     * @param array                     $existing Row as stored.
+     * @return array<string,string> Row key => template.
+     */
+    private function archive_template_patch(array $settings, string $bucket, array $targets, array $existing): array {
+        $patch = [];
+
+        foreach ($targets as $field => $row_key) {
+            $template = is_string($settings[$field . '_template'] ?? null)
+                ? \ThinkRank\SEO\Pattern_Resolver::sanitize_template($settings[$field . '_template'])
+                : '';
+
+            if (null === $row_key || '' === trim($template) || '' !== trim((string) ($existing[$row_key] ?? ''))) {
+                continue;
+            }
+
+            if ('title' === $field && !$this->names_archive_subject($template, self::ARCHIVE_TEMPLATE_SUBJECTS[$bucket])) {
+                continue;
+            }
+
+            $patch[$row_key] = $template;
+        }
+
+        return $patch;
+    }
+
+    /**
+     * Whether a template names one of the given subject tokens.
+     *
+     * @param string   $template Template.
+     * @param string[] $subjects Tokens.
+     * @return bool
+     */
+    private function names_archive_subject(string $template, array $subjects): bool {
+        foreach ($subjects as $subject) {
+            if (false !== stripos($template, $subject)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

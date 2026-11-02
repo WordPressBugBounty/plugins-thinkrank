@@ -200,6 +200,7 @@ const validateOrganizationSchema = (data, validation) => {
 		{ key: 'organization_social_linkedin', name: 'LinkedIn' },
 		{ key: 'organization_social_instagram', name: 'Instagram' },
 		{ key: 'organization_social_youtube', name: 'YouTube' },
+		{ key: 'organization_social_tiktok', name: 'TikTok' },
 	];
 
 	let hasSocialProfiles = false;

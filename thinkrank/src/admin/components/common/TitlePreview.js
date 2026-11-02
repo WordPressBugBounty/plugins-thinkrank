@@ -22,7 +22,16 @@ const getSeparatorChar = (type) =>
 	})[type] || '|';
 
 const replaceVariables = (template, siteInfo) => {
+	const now = new Date();
 	const map = {
+		// The server works these out on every request; today's, in the
+		// browser's locale, is close enough for a preview.
+		'%currentyear%': String(now.getFullYear()),
+		'%currentmonth%': now.toLocaleDateString(undefined, { month: 'long' }),
+		'%currentday%': String(now.getDate()),
+		'%currentdate%': now.toLocaleDateString(undefined, {
+			dateStyle: 'long',
+		}),
 		'%site_title%': siteInfo.site_name || 'Your Site Name',
 		'%site_name%': siteInfo.site_name || 'Your Site Name',
 		'%site_description%':

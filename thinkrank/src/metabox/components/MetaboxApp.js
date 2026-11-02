@@ -337,8 +337,9 @@ const MetaboxApp = ({
 	// One of the hidden inputs, to find the form (if any) that posts them.
 	const hiddenFieldsRef = useRef(null);
 
-	// The page carries only the custom fields its saved fields name; a
-	// %customfield(key)% typed since is looked up (#1277).
+	// The page carries only the custom fields and taxonomies its saved fields
+	// name; a %customfield(key)% or %taxonomy(slug)% typed since is looked up
+	// (#1277, #1468).
 	const {
 		vars: patternVariables,
 		status: customFieldStatus,

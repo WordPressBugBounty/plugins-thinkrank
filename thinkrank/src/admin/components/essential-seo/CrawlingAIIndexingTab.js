@@ -17,6 +17,7 @@ import RobotsManagement from './crawling-ai-indexing/RobotsManagement';
 import SitemapGeneration from './crawling-ai-indexing/sitemap';
 import LLMsAIIndexing from './crawling-ai-indexing/LLMsAIIndexing';
 import GlobalRobotMeta from './crawling-ai-indexing/GlobalRobotMeta';
+import PermalinkSettings from './permalinks/PermalinkSettings';
 import ProGatedTab from '../pro/ProGatedTab';
 import ProTeaser from '../pro/ProTeaser';
 import {
@@ -73,6 +74,8 @@ const CrawlingAIIndexingTab = ({
 						return <LLMsAIIndexing onNavigate={onNavigate} />;
 					case 'global-robot-meta':
 						return <GlobalRobotMeta onNavigate={onNavigate} />;
+					case 'permalinks':
+						return <PermalinkSettings scope="categories" />;
 					case 'publisher-sitemaps':
 						return (
 							<ProGatedTab

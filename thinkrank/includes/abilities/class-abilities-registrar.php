@@ -51,6 +51,10 @@ use ThinkRank\Abilities\Settings\Update_Llms_Txt_Settings;
 use ThinkRank\Abilities\Settings\Get_Robots_Meta_Settings;
 use ThinkRank\Abilities\Links\Get_External_Links_Settings;
 use ThinkRank\Abilities\Links\Update_External_Links_Settings;
+use ThinkRank\Abilities\Permalinks\Get_Permalink_Settings;
+use ThinkRank\Abilities\Permalinks\Update_Permalink_Settings;
+use ThinkRank\Abilities\Settings\Get_Woocommerce_Settings;
+use ThinkRank\Abilities\Settings\Update_Woocommerce_Settings;
 use ThinkRank\Abilities\Matrix\Get_Content_Type_Matrix;
 use ThinkRank\Abilities\Matrix\Update_Content_Type_Matrix;
 use ThinkRank\Abilities\Content\Get_FAQ;
@@ -384,6 +388,10 @@ class Abilities_Registrar {
 			new Get_Robots_Meta_Settings(),
 			new Get_External_Links_Settings(),
 			new Update_External_Links_Settings(),
+			new Get_Permalink_Settings(),
+			new Update_Permalink_Settings(),
+			new Get_Woocommerce_Settings(),
+			new Update_Woocommerce_Settings(),
 			new Get_Content_Type_Matrix(),
 			new Update_Content_Type_Matrix(),
 			new List_Images(),

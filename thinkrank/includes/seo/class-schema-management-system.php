@@ -1576,6 +1576,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             'organization_description', 'organization_social_facebook', 'organization_social_twitter',
             'organization_social_linkedin', 'organization_social_instagram', 'organization_social_youtube',
             'organization_social_pinterest', 'organization_social_whatsapp', 'organization_social_telegram',
+            'organization_social_tiktok',
             'organization_contact_type', 'organization_contact_phone', 'organization_contact_email',
             'organization_contact_hours'
         ];
@@ -3058,6 +3059,7 @@ class Schema_Management_System extends Abstract_SEO_Manager {
             'organization_social_pinterest' => $schema_settings['organization_social_pinterest'] ?? '',
             'organization_social_whatsapp' => $schema_settings['organization_social_whatsapp'] ?? '',
             'organization_social_telegram' => $schema_settings['organization_social_telegram'] ?? '',
+            'organization_social_tiktok' => $schema_settings['organization_social_tiktok'] ?? '',
             // Contact point information
             'organization_contact_type' => $schema_settings['organization_contact_type'] ?? 'customer service',
             'organization_contact_phone' => $schema_settings['organization_contact_phone'] ?? '',

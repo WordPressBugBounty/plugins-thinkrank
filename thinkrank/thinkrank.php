@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 2.20.1
+ * Version: 2.21.0
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Requires PHP: 7.4
  * 
  * @package ThinkRank
- * @version 2.20.1
+ * @version 2.21.0
  * @since 1.0.0
  */
 
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '2.20.1');
+define('THINKRANK_VERSION', '2.21.0');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -386,6 +386,9 @@ final class ThinkRank {
             'webroot_writable_notice' => new ThinkRank\Admin\Webroot_Writable_Notice(),
             'performance_collector' => new ThinkRank\SEO\Performance_Data_Collector(),
             'query_guard' => new ThinkRank\SEO\Query_Guard(),
+            // Optional removal of the product, product category and category
+            // bases, and 301s from a URL's old form to its current one (#1476).
+            'permalinks' => new ThinkRank\SEO\Permalinks(),
             'feeds' => new ThinkRank\SEO\Feed_Manager(),
             'sitemap_stylesheet' => new ThinkRank\SEO\Sitemap_Stylesheet(),
             'oembed' => new ThinkRank\SEO\Oembed_Manager(),
@@ -411,6 +414,9 @@ final class ThinkRank {
             // JSON-LD; this stands them down so exactly one plugin describes a
             // product page, and reads its data into ThinkRank's graph (#256).
             'surecart' => new ThinkRank\Integrations\Surecart(),
+            // The free WooCommerce settings; applies the generator-tag
+            // switch and does nothing without WooCommerce (#1478).
+            'woocommerce' => new ThinkRank\Integrations\WooCommerce_Settings(),
             'ai_traffic' => new ThinkRank\SEO\Ai_Traffic_Tracker(),
             'analytics' => new ThinkRank\SEO\Analytics_Manager(),
             'schema_conflict_health_check' => new ThinkRank\Diagnostics\Schema_Conflict_Health_Check(),

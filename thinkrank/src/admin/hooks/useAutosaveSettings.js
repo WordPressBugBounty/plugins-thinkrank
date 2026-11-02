@@ -38,8 +38,9 @@ import logger from '../../shared/utils/logger';
  * @param {Object}   options             Options.
  * @param {Object}   options.settings    Current settings object.
  * @param {Function} options.setSettings State setter for the settings object.
- * @param {Function} options.save        Async (next) => complete settings object,
- *                                       or nothing. Throws on failure.
+ * @param {Function} options.save        Async (next, patch) => complete settings
+ *                                       object, or nothing. Throws on failure.
+ *                                       `patch` is only what this change touched.
  * @param {string}   [options.errorText] Message shown when a save fails.
  * @param {string}   [options.logLabel]  Prefix used for console diagnostics.
  * @param {Function} [options.onSuccess] Override the success toast (message) => void.
@@ -123,7 +124,7 @@ export default function useAutosaveSettings({
 				const confirmedAtStart = confirmedRef.current;
 
 				try {
-					const saved = await save(next);
+					const saved = await save(next, patch);
 					const confirmed =
 						saved && typeof saved === 'object' ? saved : next;
 

@@ -709,7 +709,10 @@ class SEO_Manager {
         // fell through to the theme default and no description tag was printed
         // at all. Term robots was fixed for the same reason in 1.31.0 (#290);
         // this is the title and description half (#386).
-        if (is_category() || is_tag() || is_tax()) {
+        //
+        // A search filtered to a term (?s=x&product_cat=y) also answers is_tax(),
+        // and it is still a search (#1509).
+        if (!is_search() && (is_category() || is_tag() || is_tax())) {
             $queried = get_queried_object();
             if ($queried instanceof \WP_Term) {
                 $this->current_term_id  = $queried->term_id;
@@ -727,6 +730,13 @@ class SEO_Manager {
         // the request is still the blog listing for everything that reads the
         // post id (canonical, schema, breadcrumbs, the content-derived
         // description).
+        // The shop page is the same case: WooCommerce answers it as the product
+        // archive, so it is not singular and its own values went unread (#1501).
+        $shop_page_id = self::shop_page_id();
+        if ($shop_page_id > 0) {
+            $this->current_metadata = $this->get_post_seo_metadata($shop_page_id);
+        }
+
         if (self::is_static_posts_page()) {
             $posts_page = get_post((int) get_option('page_for_posts'));
             if ($posts_page instanceof \WP_Post) {
@@ -791,14 +801,16 @@ class SEO_Manager {
             return 'post';
         } elseif (is_page()) {
             return 'page';
+        } elseif (is_search()) {
+            // Ahead of the archives: a search can be filtered to any of them,
+            // and answers their conditionals too (#1509).
+            return 'search';
         } elseif (is_category()) {
             return 'category';
         } elseif (is_tag()) {
             return 'tag';
         } elseif (is_author()) {
             return 'author';
-        } elseif (is_search()) {
-            return 'search';
         } elseif (is_archive()) {
             return 'archive';
         }
@@ -1531,6 +1543,12 @@ class SEO_Manager {
         // after the archive block, so it is final on every page of the listing.
         if (self::is_static_posts_page()) {
             $robots = $this->apply_post_robots_override((int) get_option('page_for_posts'), $robots, $current_settings);
+        }
+
+        // The shop page's own override, for the same reason (#1501).
+        $shop_page_id = self::shop_page_id();
+        if ($shop_page_id > 0) {
+            $robots = $this->apply_post_robots_override($shop_page_id, $robots, $current_settings);
         }
 
         // 4. Term meta override for taxonomy archives (Overrides everything).
@@ -2672,7 +2690,8 @@ class SEO_Manager {
             $canonical_url = is_home() && !is_front_page()
                 ? (string) get_permalink((int) get_option('page_for_posts'))
                 : home_url('/');
-        } elseif (is_post_type_archive()) {
+        } elseif (is_post_type_archive() && !is_tax()) {
+            // A term-filtered shop answers both, and it is the term's page (#1538).
             $canonical_url = (string) get_post_type_archive_link((string) get_query_var('post_type'));
         } elseif (is_category() || is_tag() || is_tax()) {
             $term_link = get_term_link(get_queried_object());
@@ -2877,6 +2896,14 @@ class SEO_Manager {
             return $global_seo_title;
         }
 
+        // Priority 1b: the taxonomy's or post type archive's own Global SEO
+        // template, ahead of the Site Identity Category, Tag and Archive Title
+        // formats it specialises (#1425).
+        $archive_template_title = $this->get_archive_template_value('title');
+        if ('' !== $archive_template_title) {
+            return $archive_template_title;
+        }
+
         // Priority 2: Fall back to Site Identity templates
         if (!$this->site_identity_data || !$this->site_identity_data['enabled']) {
             return null;
@@ -2914,6 +2941,59 @@ class SEO_Manager {
         }
 
         return $this->resolve_global_seo_template((string) $global_seo_settings['title']);
+    }
+
+    /**
+     * The current archive's value from its per-taxonomy or post type archive
+     * template (#1425).
+     *
+     * A term archive reads its taxonomy's template, category and tag
+     * included; a post type archive reads its post type's. Empty when the
+     * request is neither, when no template is set, or when it resolves to
+     * nothing, so the caller falls through to what it printed before.
+     *
+     * @since 2.20.1
+     *
+     * @param string $field 'title' or 'description'.
+     * @return string
+     */
+    private function get_archive_template_value(string $field): string {
+        // A search filtered to a post type or a term answers both conditionals
+        // below, and every search would print that archive's title (#1509).
+        if (is_search()) {
+            return '';
+        }
+
+        if (is_category() || is_tag() || is_tax()) {
+            $term = get_queried_object();
+            if (!$term instanceof \WP_Term) {
+                return '';
+            }
+
+            return 'title' === $field
+                ? \ThinkRank\SEO\Archive_Templates::term_title($term)
+                : \ThinkRank\SEO\Archive_Templates::term_description($term);
+        }
+
+        if (is_post_type_archive()) {
+            // WooCommerce makes the shop page the queried object of the product
+            // archive, so the shop has no post type object to read (#1471).
+            $queried   = get_queried_object();
+            $post_type = $queried instanceof \WP_Post_Type ? $queried->name : '';
+            if ('' === $post_type && function_exists('is_shop') && is_shop()) {
+                $post_type = 'product';
+            }
+
+            if ('' === $post_type) {
+                return '';
+            }
+
+            return 'title' === $field
+                ? \ThinkRank\SEO\Archive_Templates::post_type_archive_title($post_type)
+                : \ThinkRank\SEO\Archive_Templates::post_type_archive_description($post_type);
+        }
+
+        return '';
     }
 
     /**
@@ -3106,12 +3186,23 @@ class SEO_Manager {
                 $queried = get_queried_object();
                 if ($queried instanceof \WP_Term) {
                     $placeholders['%term%'] = (string) $queried->name;
+
+                    // A term-filtered shop: core's archive title asks
+                    // is_post_type_archive() first and says "Shop" (#1538).
+                    if (is_post_type_archive()) {
+                        $placeholders['%archive_title%'] = $placeholders['%term%'];
+                        $placeholders['%title%'] = $placeholders['%term%'];
+                    }
                 }
 
-                // A date archive is the one archive whose subject IS a date.
-                if (is_date()) {
-                    $placeholders['%date%'] = $placeholders['%archive_title%'];
-                }
+                // %date% names the archive's subject on every archive, not
+                // only a date archive. The importers fill this template from
+                // the source plugin's date-archive template ("%date% %page%
+                // %sep% %sitename%"), and custom taxonomy and post type
+                // archives use it too; with %date% empty there, a product
+                // category's title was the site name alone (#1469). On a date
+                // archive the subject is the date, as before.
+                $placeholders['%date%'] = $placeholders['%archive_title%'];
                 break;
 
             case 'homepage':
@@ -3251,7 +3342,9 @@ class SEO_Manager {
             // used to be the current month on every page, which put "October
             // 2026" into the title of a category archive (#1330).
             '%date%' => '',
-        ];
+            // The current year, month, day and date, which every page has
+            // (#1472).
+        ] + \ThinkRank\SEO\Pattern_Resolver::current_date_placeholders();
     }
 
     /**
@@ -3277,7 +3370,8 @@ class SEO_Manager {
             return ['%tag_title%' => $name, '%tag%' => $name] + $aliases;
         }
 
-        return ['%archive_title%' => $name] + $aliases;
+        // %date% as the live archive resolves it there (#1469).
+        return ['%archive_title%' => $name, '%date%' => $name] + $aliases;
     }
 
     /**
@@ -3287,9 +3381,9 @@ class SEO_Manager {
      * used to preview the bare term name, while the archive printed the Site
      * Identity template ("Clothing - Media Wipe"), because nothing passed the
      * template to the screen (#1217). This follows the same chain as
-     * override_document_title() on a term archive: a Global SEO template only
-     * applies to singular content, so it is the Site Identity category, tag or
-     * archive template, and without one WordPress's own "Name - Site".
+     * override_document_title() on a term archive: the taxonomy's Global SEO
+     * title template when one is set (#1425), then the Site Identity category,
+     * tag or archive template, and without one WordPress's own "Name - Site".
      *
      * On a custom taxonomy the archive's %archive_title% is the term name as
      * WordPress prints it, so filters on `single_term_title` can change it on
@@ -3301,6 +3395,12 @@ class SEO_Manager {
      * @return string Title, without markup.
      */
     public static function term_archive_fallback_title(\WP_Term $term): string {
+        // The taxonomy's own template comes first, as on the archive (#1425).
+        $taxonomy_title = \ThinkRank\SEO\Archive_Templates::term_title($term);
+        if ('' !== $taxonomy_title) {
+            return self::strip_title_tags($taxonomy_title);
+        }
+
         $name     = (string) $term->name;
         $identity = new \ThinkRank\SEO\Site_Identity_Manager();
         $settings = $identity->get_settings('site');
@@ -3334,8 +3434,9 @@ class SEO_Manager {
     /**
      * The meta description a term archive prints while the term has none.
      *
-     * Same chain as get_meta_description() on a term archive: the term's own
-     * description, then the Site Identity default meta description. Empty when
+     * Same chain as get_meta_description() on a term archive: the taxonomy's
+     * description template (#1425), the term's own description, then the Site
+     * Identity default meta description. Empty when
      * the archive prints no description at all.
      *
      * @since 2.17.0
@@ -3344,6 +3445,13 @@ class SEO_Manager {
      * @return string Description, or ''.
      */
     public static function term_archive_fallback_description(\WP_Term $term): string {
+        // The taxonomy's description template comes first, as on the archive
+        // (#1425).
+        $templated = \ThinkRank\SEO\Archive_Templates::term_description($term);
+        if ('' !== $templated) {
+            return $templated;
+        }
+
         $description = \ThinkRank\Core\Seo_Text::plain_text((string) $term->description);
         if ('' !== $description) {
             return \ThinkRank\Core\Seo_Text::trim_to_length($description);
@@ -3392,6 +3500,28 @@ class SEO_Manager {
     }
 
     /**
+     * The shop page's ID, when this request is the shop and not the front page.
+     *
+     * A shop page set as the front page is the homepage, and keeps its values.
+     * A product search also answers is_shop(), but it is a search, so every
+     * search would print the shop page's title (#1509). A term filter does too
+     * (`/shop/?product_cat=hoodies`), and that page is the term's (#1538).
+     *
+     * @since 2.21.0
+     *
+     * @return int Page ID, 0 otherwise.
+     */
+    public static function shop_page_id(): int {
+        if (!function_exists('is_shop') || !is_shop() || is_search() || is_tax() || is_front_page()) {
+            return 0;
+        }
+
+        $page_id = (int) wc_get_page_id('shop');
+
+        return $page_id > 0 && get_post($page_id) instanceof \WP_Post ? $page_id : 0;
+    }
+
+    /**
      * Process title template with placeholders
      *
      * The separator cleanup (legacy pipe, doubled separators, a trailing
@@ -3406,7 +3536,7 @@ class SEO_Manager {
      * @return string Processed title
      */
     private static function process_title_template(string $template, array $placeholders): string {
-        // A token this context cannot resolve (%page%, %currentyear%, a
+        // A token this context cannot resolve (%page%, %term%, a
         // Yoast %%title%%, a post token on an archive) goes before
         // substitution, decided against the placeholder map exactly as the
         // Content Types templates do. Left in, it reached <title>, og:title
@@ -3528,6 +3658,14 @@ class SEO_Manager {
             return $global_seo_description;
         }
 
+        // The taxonomy's or post type archive's own description template,
+        // ahead of the term or post type description it can name with
+        // %term_description% (#1425).
+        $archive_template_description = $this->get_archive_template_value('description');
+        if ('' !== $archive_template_description) {
+            return $archive_template_description;
+        }
+
         // Archive contexts: derive the description from the archive itself
         // (term description, post type description, author bio)
         $archive_description = $this->get_archive_meta_description();
@@ -3614,11 +3752,16 @@ class SEO_Manager {
      * @return string|null Archive description or null when not applicable
      */
     private function get_archive_meta_description(): ?string {
+        // A search filtered to a post type or a term is not that archive (#1509).
+        if (is_search()) {
+            return null;
+        }
+
         $description = '';
 
         // Author archives are intentionally excluded — Author_Archives_Manager
         // outputs its own template-based meta description on wp_head.
-        if (is_post_type_archive()) {
+        if (is_post_type_archive() && !is_tax()) {
             $post_type_object = get_queried_object();
             if ($post_type_object instanceof \WP_Post_Type && !empty($post_type_object->description)) {
                 $description = $post_type_object->description;
@@ -4160,6 +4303,9 @@ class SEO_Manager {
         }
         if (!empty($schema_settings['organization_social_telegram'])) {
             $social_urls[] = $schema_settings['organization_social_telegram'];
+        }
+        if (!empty($schema_settings['organization_social_tiktok'])) {
+            $social_urls[] = $schema_settings['organization_social_tiktok'];
         }
 
         // Fallback to Site Identity social profiles if no Schema Manager profiles
@@ -5382,6 +5528,18 @@ class SEO_Manager {
                     ];
                 }
             }
+        } elseif (is_search()) {
+            // Ahead of the archives: a search filtered to a term, a post type,
+            // an author or a date answers their conditionals too (#1509).
+            if ($settings['show_current_page'] ?? true) {
+                $items[] = [
+                    /* translators: %s: search query. */
+                    'title' => sprintf(__('Search results for "%s"', 'thinkrank'), get_search_query(false)),
+                    'url' => get_search_link(),
+                    'position' => $position,
+                    'current' => true
+                ];
+            }
         } elseif (is_category() || is_tag() || is_tax()) {
             // Tags and custom taxonomies stopped at Home: only categories had a
             // branch (#984). A hierarchical taxonomy lists its ancestors first,
@@ -5512,16 +5670,6 @@ class SEO_Manager {
                     'title' => $title,
                     'url' => $url,
                     'position' => $position++
-                ];
-            }
-        } elseif (is_search()) {
-            if ($settings['show_current_page'] ?? true) {
-                $items[] = [
-                    /* translators: %s: search query. */
-                    'title' => sprintf(__('Search results for "%s"', 'thinkrank'), get_search_query(false)),
-                    'url' => get_search_link(),
-                    'position' => $position,
-                    'current' => true
                 ];
             }
         }

@@ -558,8 +558,8 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
                     // migrator's Global-SEO path writes it verbatim, so decode
                     // here at the source.
                     'separator'            => $this->decode_entities($search_appearance['global']['separator'] ?? '-'),
-                    'homepage_title'       => $this->convert_template_variables($search_appearance['global']['siteTitle'] ?? ''),
-                    'homepage_description' => $this->convert_template_variables($search_appearance['global']['metaDescription'] ?? ''),
+                    'homepage_title'       => $this->convert_keeping_dates($search_appearance['global']['siteTitle'] ?? '', self::POST_TOKENS),
+                    'homepage_description' => $this->convert_keeping_dates($search_appearance['global']['metaDescription'] ?? '', self::POST_TOKENS),
                     'organization_name'    => $this->convert_template_variables($search_appearance['global']['schema']['organizationName'] ?? ''),
                     'organization_logo'    => $search_appearance['global']['schema']['organizationLogo'] ?? '',
                     'knowledge_graph'      => $this->extract_aioseo_knowledge_graph($search_appearance),
@@ -582,6 +582,7 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
                         'linkedin'  => $social['profiles']['urls']['linkedinUrl'] ?? '',
                         'youtube'   => $social['profiles']['urls']['youtubeUrl'] ?? '',
                         'pinterest' => $social['profiles']['urls']['pinterestUrl'] ?? '',
+                        'tiktok'    => $social['profiles']['urls']['tiktokUrl'] ?? '',
                     ],
                 ],
                 'extended' => [
@@ -597,10 +598,17 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
                     // Site-Identity per-context title formats (template dialect:
                     // %site_title%/%post_title%/%sep%/…).
                     'title_formats'     => $this->extract_aioseo_title_formats($search_appearance, $dynamic_sa, $archives),
+                    // Search Appearance → Advanced → "Remove Category Base" (#1476).
+                    'permalinks'        => [
+                        'remove_category_base' => !empty($search_appearance['advanced']['removeCategoryBase']),
+                    ],
                     // Global-SEO per-post-type templates (template dialect:
                     // %title%/%sitename%/%sep%/…) — a DIFFERENT vocabulary from
                     // title_formats, resolved by a different renderer.
                     'post_type_settings' => $this->extract_aioseo_post_type_settings($dynamic_sa),
+                    // Per-taxonomy and post type archive templates (#1425).
+                    'taxonomy_settings'          => $this->extract_aioseo_archive_templates($dynamic_sa['taxonomies'] ?? [], self::TERM_ARCHIVE_TAGS),
+                    'post_type_archive_settings' => $this->extract_aioseo_archive_templates($dynamic_sa['archives'] ?? [], self::POST_TYPE_ARCHIVE_TAGS),
                     'author_archives'    => $this->extract_aioseo_author_archives($archives),
                     'breadcrumb_settings' => $this->extract_aioseo_breadcrumbs(is_array($options['breadcrumbs'] ?? null) ? $options['breadcrumbs'] : []),
                     // Webmaster-tools verification codes. ThinkRank only renders
@@ -756,6 +764,11 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
             // a single %author_name%, so first maps onto it and last collapses.
             '#author_first_name' => '%author_name%',
             '#author_last_name'  => '',
+            // Resolved on every request (#1472).
+            '#current_year'      => '%currentyear%',
+            '#current_month'     => '%currentmonth%',
+            '#current_day'       => '%currentday%',
+            '#current_date'      => '%currentdate%',
         ];
         if ($context_token !== '') {
             $map['#post_title']     = $context_token;
@@ -831,6 +844,64 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
     }
 
     /**
+     * AIOSEO term-archive tags => ThinkRank tokens (#1425).
+     */
+    private const TERM_ARCHIVE_TAGS = [
+        '#taxonomy_description' => '%term_description%',
+        '#taxonomy_title'       => '%term_title%',
+        '#category_title'       => '%term_title%',
+        '#tag_title'            => '%term_title%',
+        '#tax_parent_name'      => '%parent_term%',
+        '#tax_name'             => '%taxonomy_name%',
+        '#tagline'              => '%site_description%',
+    ];
+
+    /**
+     * AIOSEO post type archive tags => ThinkRank tokens (#1425).
+     */
+    private const POST_TYPE_ARCHIVE_TAGS = [
+        '#archive_title' => '%pt_plural%',
+        '#post_type'     => '%pt_single%',
+        '#tagline'       => '%site_description%',
+    ];
+
+    /**
+     * Per-taxonomy (`taxonomies[{taxonomy}]`) or per-post-type-archive
+     * (`archives[{type}]`) title and meta description templates, in the
+     * shape migrate_archive_templates() consumes (#1425).
+     *
+     * @param mixed                $nodes Dynamic searchAppearance subtree, keyed by slug
+     * @param array<string,string> $tags  The archive's own tags => ThinkRank tokens
+     * @return array slug => {title_template?, description_template?}
+     */
+    private function extract_aioseo_archive_templates($nodes, array $tags): array {
+        $settings = [];
+
+        foreach (is_array($nodes) ? $nodes : [] as $slug => $node) {
+            if (!is_array($node)) {
+                continue;
+            }
+
+            $entry = [];
+            foreach (['title' => 'title', 'description' => 'metaDescription'] as $field => $source) {
+                $raw = is_string($node[$source] ?? null) ? $node[$source] : '';
+                // The archive's own tags first: the shared conversion maps
+                // nothing of a term and strips what it does not know.
+                $converted = $this->convert_aioseo_global_template(str_replace(array_keys($tags), array_values($tags), $raw));
+                if ('' !== $converted) {
+                    $entry[$field . '_template'] = $converted;
+                }
+            }
+
+            if (!empty($entry)) {
+                $settings[(string) $slug] = $entry;
+            }
+        }
+
+        return $settings;
+    }
+
+    /**
      * Convert an AIOSEO template into the Global SEO Pattern_Resolver
      * vocabulary (%title%/%sitename%/%sep%/%excerpt% — a DIFFERENT dialect
      * from the Site Identity one).
@@ -851,8 +922,14 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
             '#post_date'      => '%date%',
             '#author_name'    => '%author%',
             '#category_title' => '%category%',
+            // Resolved on every request (#1472).
+            '#current_year'   => '%currentyear%',
+            '#current_month'  => '%currentmonth%',
+            '#current_day'    => '%currentday%',
+            '#current_date'   => '%currentdate%',
         ];
         $template = str_replace(array_keys($map), array_values($map), $template);
+        $template = (string) preg_replace(self::ASSIGNED_TERM_TAG, '%taxonomy($1)%', $template);
 
         // Drop remaining AIOSEO tags the resolver cannot handle.
         $template = (string) preg_replace(self::AIOSEO_TAG_PATTERN, '', $template);
@@ -1229,6 +1306,11 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
         '#post_date'      => '%date%',
         '#author_name'    => '%author%',
         '#category_title' => '%category%',
+        // Kept live rather than frozen to the year of the migration (#1472).
+        '#current_year'   => '%currentyear%',
+        '#current_month'  => '%currentmonth%',
+        '#current_day'    => '%currentday%',
+        '#current_date'   => '%currentdate%',
     ];
 
     /**
@@ -1240,6 +1322,10 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
         '#taxonomy_description' => '%excerpt%',
         '#site_title'           => '%sitename%',
         '#separator_sa'         => '%sep%',
+        '#current_year'         => '%currentyear%',
+        '#current_month'        => '%currentmonth%',
+        '#current_day'          => '%currentday%',
+        '#current_date'         => '%currentdate%',
     ];
 
     /**
@@ -1250,9 +1336,11 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
      * @return string
      */
     private function convert_post_value($value, int $post_id): string {
+        $value = $this->stringify_template_value($value);
+
         return $this->tokenize_object_template(
-            $this->stringify_template_value($value),
-            self::aioseo_token_patterns(self::POST_TOKENS),
+            $value,
+            self::literal_token_patterns(self::assigned_term_tokens($value, self::ASSIGNED_TERM_TAG)) + self::aioseo_token_patterns(self::POST_TOKENS),
             fn(string $rest): string => $this->convert_template_variables($rest, $post_id)
         );
     }
@@ -1270,6 +1358,18 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
             fn(string $rest): string => $this->convert_template_variables($rest)
         );
     }
+
+    /**
+     * AIOSEO's `#tax_name-<tax>`, the same pattern AIOSEO parses it with
+     * (#1468). AIOSEO prints the first assigned term, ThinkRank every one,
+     * joined by a comma. Without its argument `#tax_name` names a term
+     * archive's taxonomy: see TERM_ARCHIVE_TAGS.
+     *
+     * @since 2.21.0
+     *
+     * @var string
+     */
+    private const ASSIGNED_TERM_TAG = '/#tax_name-([a-zA-Z0-9_-]+)/i';
 
     /**
      * AIOSEO tags have no closing delimiter, so each one must end at a word

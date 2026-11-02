@@ -14,6 +14,7 @@ import {
 	addSchemaResult,
 	EMPTY_SCHEMA_TOTALS,
 } from '../components/import-export/schemaReport';
+import notify from '../utils/notify';
 
 /**
  * Workflow states
@@ -282,6 +283,12 @@ const useImportWorkflow = (plugin, initialSnapshot = null) => {
 							unrestoredTypes.push(type);
 							break;
 						}
+
+						// A page cache still serving the old URLs after a
+						// migration moved them. Needs doing, so it stays up.
+						(result.cache_warnings || []).forEach((warning) =>
+							notify.warning(warning, { autoClose: false })
+						);
 
 						totalProcessed += result.processed || 0;
 						totalSkipped += result.skipped || 0;

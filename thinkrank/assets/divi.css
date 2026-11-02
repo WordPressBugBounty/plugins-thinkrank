@@ -1618,6 +1618,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   --tw-border-opacity: 1;
   border-color: rgb(213 213 221 / var(--tw-border-opacity, 1));
 }
+.tr-root .tr-border-line-2{
+  --tw-border-opacity: 1;
+  border-color: rgb(226 230 241 / var(--tw-border-opacity, 1));
+}
 .tr-root .tr-border-primary{
   --tw-border-opacity: 1;
   border-color: rgb(213 213 221 / var(--tw-border-opacity, 1));
@@ -2727,12 +2731,20 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   border-top-width: 0px;
 }
 
+.tr-root .first\:tr-pt-0:first-child{
+  padding-top: 0px;
+}
+
 .tr-root .last\:tr-border-0:last-child{
   border-width: 0px;
 }
 
 .tr-root .last\:tr-border-b-0:last-child{
   border-bottom-width: 0px;
+}
+
+.tr-root .last\:tr-pb-0:last-child{
+  padding-bottom: 0px;
 }
 
 .tr-root .focus-within\:tr-border-brand:focus-within{

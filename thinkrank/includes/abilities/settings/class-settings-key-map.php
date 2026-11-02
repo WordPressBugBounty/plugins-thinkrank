@@ -569,7 +569,7 @@ final class Settings_Key_Map {
 	 * @return array<string, mixed>
 	 */
 	private static function template( string $what, string $extra ): array {
-		$shared = '%site_title%, %site_name%, %site_description%, %tagline%, %sep%, %separator%, %date%';
+		$shared = '%site_title%, %site_name%, %site_description%, %tagline%, %sep%, %separator%, %date%, %currentyear%, %currentmonth%, %currentday%, %currentdate%';
 
 		$description = '' === $extra
 			/* translators: 1: the pages a title template applies to. 2: the list of available variable tags. */

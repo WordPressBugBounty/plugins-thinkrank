@@ -109,6 +109,36 @@ class Import_Controller extends \WP_REST_Controller {
             ],
         ]);
 
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/date-variables', [
+            [
+                'methods'             => \WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'repair_date_variables'],
+                'permission_callback' => [$this, 'check_permissions'],
+                'args'                => [
+                    'plugin' => [
+                        'type'     => 'string',
+                        'required' => true,
+                        'enum'     => self::SOURCE_PLUGINS,
+                    ],
+                    'type'   => [
+                        'type'     => 'string',
+                        'required' => true,
+                        'enum'     => ['postmeta', 'termmeta'],
+                    ],
+                    'page'   => [
+                        'type'    => 'integer',
+                        'default' => 1,
+                        'minimum' => 1,
+                    ],
+                    'apply'  => [
+                        'type'              => 'boolean',
+                        'default'           => false,
+                        'sanitize_callback' => 'rest_sanitize_boolean',
+                    ],
+                ],
+            ],
+        ]);
+
         register_rest_route($this->namespace, '/' . $this->rest_base . '/export', [
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
@@ -245,6 +275,50 @@ class Import_Controller extends \WP_REST_Controller {
             // source plugins the user can migrate FROM.
             'native'    => $detector->detect_native(),
             'snapshots' => $snapshots,
+            'date_repair_sources' => $this->date_repair_sources(),
+        ], 200);
+    }
+
+    /**
+     * The source plugins this site imported from, for the date repair card.
+     *
+     * @return array<int,array{plugin: string, plugin_name: string}>
+     */
+    private function date_repair_sources(): array {
+        $sources = [];
+
+        foreach (array_intersect(self::SOURCE_PLUGINS, Date_Variable_Repair::imported_sources()) as $slug) {
+            $exporter = $this->get_exporter($slug);
+            if (!is_wp_error($exporter)) {
+                $sources[] = ['plugin' => $slug, 'plugin_name' => $exporter->get_plugin_name()];
+            }
+        }
+
+        return $sources;
+    }
+
+    /**
+     * POST /import/date-variables — Find a page of migrated values whose date
+     * variable was frozen at import, and restore them when `apply` is set (#1497).
+     *
+     * @since 2.21.0
+     *
+     * @param \WP_REST_Request $request Request object
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function repair_date_variables(\WP_REST_Request $request) {
+        $plugin   = (string) $request->get_param('plugin');
+        $exporter = $this->get_exporter($plugin);
+
+        if (is_wp_error($exporter)) {
+            return $exporter;
+        }
+
+        $page = $exporter->read_page((string) $request->get_param('type'), (int) $request->get_param('page'));
+
+        return new \WP_REST_Response([
+            'matches'  => Date_Variable_Repair::process_records($page['records'], $plugin, (bool) $request->get_param('apply')),
+            'has_more' => $page['has_more'],
         ], 200);
     }
 

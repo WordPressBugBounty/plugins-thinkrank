@@ -252,8 +252,8 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
                     'separator'            => $titles['seopress_titles_sep'] ?? '-',
-                    'homepage_title'       => $this->convert_template_variables($titles['seopress_titles_home_site_title'] ?? ''),
-                    'homepage_description' => $this->convert_template_variables($titles['seopress_titles_home_site_desc'] ?? ''),
+                    'homepage_title'       => $this->convert_keeping_dates($titles['seopress_titles_home_site_title'] ?? '', self::POST_TOKENS),
+                    'homepage_description' => $this->convert_keeping_dates($titles['seopress_titles_home_site_desc'] ?? '', self::POST_TOKENS),
                     // Knowledge Graph lives in SEOPress's SOCIAL option
                     // (knowledge_type 'Organization'|'Person', name, img).
                     'organization_name'    => $this->convert_template_variables($social['seopress_social_knowledge_name'] ?? ''),
@@ -297,7 +297,16 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
                         'pinterest' => (string) ($advanced['seopress_advanced_advanced_pinterest'] ?? ''),
                     ]),
                     'title_formats'      => $this->extract_seopress_title_formats($titles),
+                    // Advanced → "Remove /category/ in URL" and "Remove
+                    // /product-category/ in URL" (#1476).
+                    'permalinks'         => [
+                        'remove_category_base'         => !empty($advanced['seopress_advanced_advanced_category_url']),
+                        'remove_product_category_base' => !empty($advanced['seopress_advanced_advanced_product_cat_url']),
+                    ],
                     'post_type_settings' => $this->extract_seopress_post_type_settings($titles),
+                    // Per-taxonomy and post type archive templates (#1425).
+                    'taxonomy_settings'          => $this->extract_seopress_archive_templates($titles['seopress_titles_tax_titles'] ?? [], self::TERM_ARCHIVE_VARS),
+                    'post_type_archive_settings' => $this->extract_seopress_archive_templates($titles['seopress_titles_archive_titles'] ?? [], self::POST_TYPE_ARCHIVE_VARS),
                     'author_archives'    => $this->extract_seopress_author_archives($titles),
                     // Auto image alt is a single toggle in SEOPress (no format).
                     'image_seo'          => !empty($advanced['seopress_advanced_advanced_image_auto_alt_txt'])
@@ -387,6 +396,11 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
             '%%archive_date%%'    => '%date%',
             '%%post_date%%'       => '%date%',
             '%%post_author%%'     => '%author_name%',
+            // Resolved on every request (#1472).
+            '%%currentyear%%'     => '%currentyear%',
+            '%%currentmonth%%'    => '%currentmonth%',
+            '%%currentday%%'      => '%currentday%',
+            '%%currentdate%%'     => '%currentdate%',
         ];
         if ($context_token !== '') {
             $map['%%post_title%%'] = $context_token;
@@ -465,6 +479,16 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
     }
 
     /**
+     * SEOPress's `%%_ct_<tax>%%` (#1468). SEOPress prints the first assigned
+     * term, ThinkRank every one, joined by a comma.
+     *
+     * @since 2.21.0
+     *
+     * @var string
+     */
+    private const ASSIGNED_TERM_TOKEN = '/%%_ct_([^%\s()]+)%%/i';
+
+    /**
      * Convert a SEOPress template into the Global SEO Pattern_Resolver
      * vocabulary (%title%/%sitename%/%sep%/%excerpt%).
      *
@@ -487,13 +511,79 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
             '%%post_date%%'    => '%date%',
             '%%post_author%%'  => '%author%',
             '%%post_category%%' => '%category%',
+            // Resolved on every request (#1472).
+            '%%currentyear%%'   => '%currentyear%',
+            '%%currentmonth%%'  => '%currentmonth%',
+            '%%currentday%%'    => '%currentday%',
+            '%%currentdate%%'   => '%currentdate%',
         ];
         $template = str_replace(array_keys($map), array_values($map), $template);
+        $template = (string) preg_replace(self::ASSIGNED_TERM_TOKEN, '%taxonomy($1)%', $template);
 
         $template = (string) preg_replace('/%%[a-z0-9_-]+%%/i', '', $template);
         $template = (string) preg_replace('/\s+/', ' ', $template);
 
         return trim($template);
+    }
+
+    /**
+     * SEOPress term-archive variables => ThinkRank tokens (#1425).
+     */
+    private const TERM_ARCHIVE_VARS = [
+        '%%_category_title%%'       => '%term_title%',
+        '%%_category_description%%' => '%term_description%',
+        '%%tag_title%%'             => '%term_title%',
+        '%%tag_description%%'       => '%term_description%',
+        '%%term_title%%'            => '%term_title%',
+        '%%term_description%%'      => '%term_description%',
+        '%%tagline%%'               => '%site_description%',
+        '%%sitedesc%%'              => '%site_description%',
+    ];
+
+    /**
+     * SEOPress post type archive variables => ThinkRank tokens (#1425).
+     */
+    private const POST_TYPE_ARCHIVE_VARS = [
+        '%%cpt_plural%%'    => '%pt_plural%',
+        '%%archive_title%%' => '%pt_plural%',
+        '%%tagline%%'       => '%site_description%',
+        '%%sitedesc%%'      => '%site_description%',
+    ];
+
+    /**
+     * Per-taxonomy (`seopress_titles_tax_titles`) or per-post-type-archive
+     * (`seopress_titles_archive_titles`) title and description templates, in
+     * the shape migrate_archive_templates() consumes (#1425).
+     *
+     * @param mixed                $nodes Option subtree, keyed by slug
+     * @param array<string,string> $vars  The archive's own variables => ThinkRank tokens
+     * @return array slug => {title_template?, description_template?}
+     */
+    private function extract_seopress_archive_templates($nodes, array $vars): array {
+        $settings = [];
+
+        foreach (is_array($nodes) ? $nodes : [] as $slug => $node) {
+            if (!is_array($node)) {
+                continue;
+            }
+
+            $entry = [];
+            foreach (['title', 'description'] as $field) {
+                $raw = is_string($node[$field] ?? null) ? $node[$field] : '';
+                // The archive's own variables first: the shared conversion
+                // strips every %%var%% it does not know.
+                $converted = $this->convert_seopress_global_template(str_replace(array_keys($vars), array_values($vars), $raw));
+                if ('' !== $converted) {
+                    $entry[$field . '_template'] = $converted;
+                }
+            }
+
+            if (!empty($entry)) {
+                $settings[(string) $slug] = $entry;
+            }
+        }
+
+        return $settings;
     }
 
     /**
@@ -638,6 +728,11 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
         '%%post_modified_date%%' => '%modified%',
         '%%post_author%%'        => '%author%',
         '%%post_category%%'      => '%category%',
+        // Kept live rather than frozen to the year of the migration (#1472).
+        '%%currentyear%%'        => '%currentyear%',
+        '%%currentmonth%%'       => '%currentmonth%',
+        '%%currentday%%'         => '%currentday%',
+        '%%currentdate%%'        => '%currentdate%',
     ];
 
     /**
@@ -654,6 +749,10 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
         '%%sitetitle%%'             => '%sitename%',
         '%%sitename%%'              => '%sitename%',
         '%%sep%%'                   => '%sep%',
+        '%%currentyear%%'           => '%currentyear%',
+        '%%currentmonth%%'          => '%currentmonth%',
+        '%%currentday%%'            => '%currentday%',
+        '%%currentdate%%'           => '%currentdate%',
     ];
 
     /**
@@ -664,9 +763,11 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
      * @return string
      */
     private function convert_post_value($value, int $post_id): string {
+        $value = $this->stringify_template_value($value);
+
         return $this->tokenize_object_template(
-            $this->stringify_template_value($value),
-            self::literal_token_patterns(self::POST_TOKENS),
+            $value,
+            self::literal_token_patterns(self::assigned_term_tokens($value, self::ASSIGNED_TERM_TOKEN) + self::POST_TOKENS),
             fn(string $rest): string => $this->convert_template_variables($rest, $post_id)
         );
     }

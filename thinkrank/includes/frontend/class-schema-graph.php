@@ -85,14 +85,20 @@ class Schema_Graph {
      * demoted to supporting merely adds a node, whereas letting a non-page-level
      * type win the slot deletes the page's real entity.
      *
+     * ProductGroup is a Product: the page of a product sold in variants, which
+     * ThinkRank Pro publishes as one with its variants under hasVariant
+     * (thinkrank-pro#481). As a supporting node it lost the page slot, so a
+     * deployed Product on the same page was not arbitrated against it.
+     *
+     * @since 2.21.0 ProductGroup.
      * @var array<int,string>
      */
     private const PAGE_LEVEL_TYPES = [
         'Article', 'BlogPosting', 'NewsArticle', 'ScholarlyArticle', 'TechArticle',
         'TechnicalArticle', 'Report', 'WebPage', 'AboutPage', 'ContactPage',
         'ProfilePage', 'ItemPage', 'FAQPage', 'QAPage', 'CollectionPage',
-        'Product', 'Event', 'Recipe', 'Course', 'JobPosting', 'SoftwareApplication',
-        'Book', 'Movie', 'Service', 'ImageObject', 'VideoObject',
+        'Product', 'ProductGroup', 'Event', 'Recipe', 'Course', 'JobPosting',
+        'SoftwareApplication', 'Book', 'Movie', 'Service', 'ImageObject', 'VideoObject',
     ];
 
     /**

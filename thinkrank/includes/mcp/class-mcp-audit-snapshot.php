@@ -385,7 +385,8 @@ final class Mcp_Audit_Snapshot {
 
 		if ( 'matrix' === $view ) {
 			// One entity of the content type matrix: its feature values plus
-			// its sitemap flag, which is what update-content-type-matrix takes.
+			// its sitemap flag and templates, which is what
+			// update-content-type-matrix takes.
 			// `noindex` is deliberately absent: the read reports the resolved
 			// robots value, not the override the write sets, so a write that
 			// touched it is not revertable rather than reverted wrongly.
@@ -395,6 +396,12 @@ final class Mcp_Audit_Snapshot {
 					$values = is_array( $item['values'] ?? null ) ? $item['values'] : [];
 					if ( array_key_exists( 'sitemap_include', $item ) ) {
 						$values['sitemap_include'] = $item['sitemap_include'];
+					}
+					// A taxonomy's templates, read back as written (#1425).
+					foreach ( [ 'title_template', 'description_template' ] as $template_key ) {
+						if ( array_key_exists( $template_key, $item ) ) {
+							$values[ $template_key ] = $item[ $template_key ];
+						}
 					}
 					$state = \ThinkRank\SEO\Content_Type_Robots_State::validate( $item['robots_state'] ?? null );
 					$fingerprint = $item['robots_state_fingerprint'] ?? null;

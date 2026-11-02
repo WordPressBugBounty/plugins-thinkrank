@@ -25,8 +25,9 @@ if (!defined('ABSPATH')) {
  * its second-best one.
  *
  * This produces everything *after* the primary, in the order the issue asked
- * for: the featured image (when a per-post override displaced it), then images
- * found in the content. The primary itself is resolved elsewhere and passed in,
+ * for: the featured image (when a per-post override displaced it), then a
+ * WooCommerce product's gallery images (#1478), then images found in the
+ * content. The primary itself is resolved elsewhere and passed in,
  * so there is one answer to "what is the main image" and this cannot disagree
  * with it.
  *
@@ -149,6 +150,20 @@ class Social_Images {
                 $candidates[] = [
                     'url'           => (string) $src[0],
                     'attachment_id' => $thumbnail_id,
+                ];
+            }
+        }
+
+        // A WooCommerce product's gallery, in gallery order. Product photos a
+        // shopper would recognise come before images in the description
+        // (#1478). Same size as the featured image, for the same reason.
+        foreach (\ThinkRank\Integrations\Woocommerce::gallery_image_ids($post_id) as $gallery_id) {
+            $src = wp_get_attachment_image_src($gallery_id, 'large');
+
+            if (is_array($src) && !empty($src[0])) {
+                $candidates[] = [
+                    'url'           => (string) $src[0],
+                    'attachment_id' => $gallery_id,
                 ];
             }
         }

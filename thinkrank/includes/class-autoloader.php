@@ -148,6 +148,9 @@ class Autoloader {
             'Slim_SEO_Schema_Converter' => 'slim-seo-schema-converter',
             'Mcp_OAuth' => 'mcp-oauth',
             'Google_OAuth_Proxy' => 'google-oauth-proxy',
+            // WooCommerce is one word in the file names, as in class-woocommerce.php.
+            'WooCommerce_Settings' => 'woocommerce-settings',
+            'WooCommerce_Endpoint' => 'woocommerce-endpoint',
         ];
 
         if (isset($special_cases[$class_name])) {

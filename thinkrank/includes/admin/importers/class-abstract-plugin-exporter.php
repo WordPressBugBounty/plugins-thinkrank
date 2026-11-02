@@ -344,6 +344,62 @@ abstract class Abstract_Plugin_Exporter {
     }
 
     /**
+     * Source token => `%taxonomy(slug)%` for the assigned-term variables a
+     * value holds (#1468).
+     *
+     * These carry the taxonomy in the token, so no fixed POST_TOKENS map can
+     * name them. Longest first: a source without a closing delimiter
+     * (AIOSEO's `#tax_name-x`) would otherwise have a shorter token mask the
+     * start of a longer one.
+     *
+     * @since 2.21.0
+     *
+     * @param string $value   Raw source value.
+     * @param string $pattern Pattern with the taxonomy slug as its first group.
+     * @return array<string,string> Source token => ThinkRank tag.
+     */
+    final protected static function assigned_term_tokens(string $value, string $pattern): array {
+        if (!preg_match_all($pattern, $value, $found, PREG_SET_ORDER)) {
+            return [];
+        }
+
+        $tokens = [];
+        foreach ($found as $match) {
+            $tokens[$match[0]] = '%taxonomy(' . $match[1] . ')%';
+        }
+        uksort($tokens, static fn(string $a, string $b): int => strlen($b) <=> strlen($a));
+
+        return $tokens;
+    }
+
+    /**
+     * Convert a value that is not tied to one object, keeping its date variables.
+     *
+     * The rest converts as convert_template_variables() always has. The
+     * current-date tags render on every request, so resolving them here would
+     * freeze them at the year of the migration (#1472, #1499).
+     *
+     * @since 2.21.0
+     *
+     * @param mixed                $value      Raw source value.
+     * @param array<string,string> $post_tokens The exporter's source token => ThinkRank tag map.
+     * @return string Converted value.
+     */
+    final protected function convert_keeping_dates($value, array $post_tokens): string {
+        $date_tags   = ['%currentyear%', '%currentmonth%', '%currentday%', '%currentdate%'];
+        $date_tokens = array_filter(
+            $post_tokens,
+            static fn(string $tag): bool => in_array($tag, $date_tags, true)
+        );
+
+        return $this->tokenize_object_template(
+            $this->stringify_template_value($value),
+            self::literal_token_patterns($date_tokens),
+            fn(string $rest): string => $this->convert_template_variables($rest)
+        );
+    }
+
+    /**
      * Token map for tokenize_object_template() from brace-style variable
      * names (`title` matches `{{title}}` and `{{ title }}`).
      *
@@ -433,6 +489,30 @@ abstract class Abstract_Plugin_Exporter {
             'page'     => $page,
             'total'    => $total,
             'exported' => $exported_count,
+        ];
+    }
+
+    /**
+     * Read a page of post or term records without touching the snapshot.
+     *
+     * For checks against the source plugin's current data, which must not
+     * replace a snapshot the user may still be relying on.
+     *
+     * @since 2.21.0
+     *
+     * @param string $type postmeta or termmeta.
+     * @param int    $page Page number.
+     * @return array{records: array[], has_more: bool}
+     */
+    public function read_page(string $type, int $page): array {
+        $this->last_page_row_count = null;
+
+        $records = 'termmeta' === $type ? $this->export_termmeta_page($page) : $this->export_postmeta_page($page);
+        $fetched = $this->last_page_row_count ?? count($records);
+
+        return [
+            'records'  => $records,
+            'has_more' => $fetched >= $this->chunk_size,
         ];
     }
 

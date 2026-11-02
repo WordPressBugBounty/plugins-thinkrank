@@ -1,11 +1,16 @@
 /**
- * Custom field values for a `%customfield(key)%` the author types.
+ * Custom field values for a `%customfield(key)%` the author types, and assigned
+ * term names for a `%taxonomy(slug)%` (#1468).
  *
- * The editor page carries only the custom fields its saved SEO fields and
- * templates already name (Pattern_Resolver::variables(), bounded since the
- * #1277 review). A key typed afterwards is looked up here, a short while
- * after typing stops, so the live preview shows the item's value rather than
- * dropping the token.
+ * The editor page carries only the ones its saved SEO fields and templates
+ * already name (Pattern_Resolver::variables(), bounded since the #1277 review).
+ * One typed afterwards is looked up here, a short while after typing stops, so
+ * the live preview shows the item's value rather than dropping the token.
+ *
+ * A term has no assigned terms, so on a term `%taxonomy(slug)%` is not looked
+ * up and resolvePattern() drops it, as the page does. The terms are the ones
+ * last saved: a term ticked but not saved shows after the post is saved and
+ * the editor reloaded.
  *
  * @package
  * @since 2.19.0
@@ -32,24 +37,43 @@ const MAX_KEYS = 20;
 
 const TOKEN = /%customfield\(([^\s%()]+)\)%/gi;
 
+const TAXONOMY_TOKEN = /%taxonomy\(([^\s%()]+)\)%/gi;
+
+/**
+ * What a token pattern captures across some templates.
+ *
+ * @param {string[]} templates Templates.
+ * @param {RegExp}   pattern   Global pattern with one capture group.
+ * @return {string[]} Unique captures.
+ */
+const captured = (templates, pattern) => {
+	const found = new Set();
+	templates.forEach((template) => {
+		if (typeof template !== 'string') {
+			return;
+		}
+		for (const match of template.matchAll(pattern)) {
+			found.add(match[1]);
+		}
+	});
+	return [...found];
+};
+
 /**
  * The meta keys the custom field tokens in some templates name.
  *
  * @param {string[]} templates Templates.
  * @return {string[]} Unique keys.
  */
-export const customFieldKeys = (templates) => {
-	const keys = new Set();
-	templates.forEach((template) => {
-		if (typeof template !== 'string') {
-			return;
-		}
-		for (const match of template.matchAll(TOKEN)) {
-			keys.add(match[1]);
-		}
-	});
-	return [...keys];
-};
+export const customFieldKeys = (templates) => captured(templates, TOKEN);
+
+/**
+ * The taxonomy slugs the `%taxonomy(slug)%` tokens in some templates name.
+ *
+ * @param {string[]} templates Templates.
+ * @return {string[]} Unique slugs.
+ */
+export const taxonomySlugs = (templates) => captured(templates, TAXONOMY_TOKEN);
 
 /**
  * The token as typed, for a key whose value is not known yet.
@@ -84,16 +108,35 @@ const useCustomFieldVariables = (baseVars, templates, objectType, objectId) => {
 
 	const has = (map, key) =>
 		Object.prototype.hasOwnProperty.call(map, `customfield(${key})`);
+	const hasTaxonomy = (map, slug) =>
+		Object.prototype.hasOwnProperty.call(map, `taxonomy(${slug})`);
 
 	const missing = customFieldKeys(templates).filter(
 		(key) => !has(baseVars, key) && !has(fetched, key)
 	);
-	const missingKey = missing.slice(0, MAX_KEYS).join('\n');
+	const missingTaxonomies =
+		'post' === objectType
+			? taxonomySlugs(templates).filter(
+					(slug) =>
+						!hasTaxonomy(baseVars, slug) &&
+						!hasTaxonomy(fetched, slug)
+				)
+			: [];
+	// One string, so the effect below reruns only when what is missing changes.
+	const missingKey =
+		missing.length || missingTaxonomies.length
+			? JSON.stringify([
+					missing.slice(0, MAX_KEYS),
+					missingTaxonomies.slice(0, MAX_KEYS),
+				])
+			: '';
 
 	useEffect(() => {
 		if (!missingKey || !objectId) {
 			return undefined;
 		}
+
+		const [keys, taxonomies] = JSON.parse(missingKey);
 
 		const request = ++latest.current;
 		const timer = setTimeout(async () => {
@@ -102,7 +145,8 @@ const useCustomFieldVariables = (baseVars, templates, objectType, objectId) => {
 					path: addQueryArgs('/thinkrank/v1/custom-fields', {
 						object_type: objectType,
 						object_id: objectId,
-						keys: missingKey.split('\n'),
+						keys,
+						taxonomies,
 					}),
 				});
 				if (request === latest.current) {
@@ -119,7 +163,7 @@ const useCustomFieldVariables = (baseVars, templates, objectType, objectId) => {
 						message:
 							e?.message ||
 							__(
-								'Custom field values could not be loaded.',
+								'Custom field and taxonomy values could not be loaded.',
 								'thinkrank'
 							),
 					});
@@ -133,6 +177,9 @@ const useCustomFieldVariables = (baseVars, templates, objectType, objectId) => {
 	const unknown = {};
 	missing.forEach((key) => {
 		unknown[`customfield(${key})`] = asTyped(key);
+	});
+	missingTaxonomies.forEach((slug) => {
+		unknown[`taxonomy(${slug})`] = `%taxonomy(${slug})%`;
 	});
 
 	let status = 'idle';

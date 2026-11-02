@@ -106,30 +106,141 @@ class Woocommerce {
     }
 
     /**
-     * The product's brand, from whichever taxonomy the site uses for one.
+     * The brand taxonomies "Automatic" tries, in order.
      *
-     * `product_brand` is WooCommerce's own since 9.4; `pwb-brand` and
-     * `yith_product_brand` are the two plugins that owned the job before that
-     * and are still on a large share of stores.
+     * `product_brand` is WooCommerce's own since 9.4; `pwb-brand`,
+     * `yith_product_brand` and `berocket_brand` belong to the plugins that
+     * owned the job before that and are still on a large share of stores. The
+     * schema and Open Graph asked the first three and the `%brand%` token all
+     * four, so a BeRocket store had a brand in its title and none in its
+     * schema; there is now one list (#1478).
+     *
+     * @since 2.21.0
+     * @var string[]
+     */
+    public const AUTO_BRAND_TAXONOMIES = ['product_brand', 'pwb-brand', 'yith_product_brand', 'berocket_brand'];
+
+    /**
+     * The taxonomies a product's brand is read from.
+     *
+     * The one the store chose in the WooCommerce settings, or the automatic
+     * list. A chosen taxonomy that is no longer registered, because the brand
+     * plugin behind it was deactivated, falls back to the automatic list
+     * rather than to no brand at all.
+     *
+     * @since 2.21.0
+     *
+     * @return string[]
+     */
+    public static function brand_taxonomies(): array {
+        $chosen = WooCommerce_Settings::brand_taxonomy();
+
+        if ('' !== $chosen && taxonomy_exists($chosen)) {
+            return [$chosen];
+        }
+
+        return self::AUTO_BRAND_TAXONOMIES;
+    }
+
+    /**
+     * The product's brand.
+     *
+     * The single place a WooCommerce product's brand is resolved: Product
+     * schema `brand` and the `product:brand` Open Graph tag read it through
+     * product_data(), and the `%brand%` token calls it directly.
      *
      * @since 2.19.0
+     * @since 2.21.0 Public; reads the chosen brand taxonomy and applies
+     *               `thinkrank_product_brand`.
      *
      * @param int $post_id Post id.
      * @return string
      */
-    private static function brand(int $post_id): string {
-        foreach (['product_brand', 'pwb-brand', 'yith_product_brand'] as $taxonomy) {
+    public static function brand(int $post_id): string {
+        $brand = '';
+
+        foreach (self::brand_taxonomies() as $taxonomy) {
             if (!taxonomy_exists($taxonomy)) {
                 continue;
             }
 
             $terms = get_the_terms($post_id, $taxonomy);
 
-            if (!empty($terms) && !is_wp_error($terms) && isset($terms[0]->name)) {
-                return (string) $terms[0]->name;
+            if (is_array($terms) && isset($terms[0]->name) && '' !== (string) $terms[0]->name) {
+                $brand = (string) $terms[0]->name;
+                break;
             }
         }
 
-        return '';
+        /**
+         * Filters a WooCommerce product's brand.
+         *
+         * Runs whether or not a brand term was found, so a store-wide brand can
+         * be supplied for products that have none (ThinkRank Pro uses this),
+         * and a found one can be replaced. Return '' to publish no brand.
+         *
+         * @since 2.21.0
+         *
+         * @param string $brand   Brand read from the brand taxonomy, or ''.
+         * @param int    $post_id Product post id.
+         */
+        $brand = apply_filters('thinkrank_product_brand', $brand, $post_id);
+
+        return is_scalar($brand) ? trim((string) $brand) : '';
+    }
+
+    /**
+     * The attachment ids of a product's gallery images, in gallery order.
+     *
+     * The featured image is not part of the gallery in WooCommerce and is not
+     * returned here.
+     *
+     * @since 2.21.0
+     *
+     * @param int $post_id Post id.
+     * @return int[]
+     */
+    public static function gallery_image_ids(int $post_id): array {
+        if (!self::owns($post_id)) {
+            return [];
+        }
+
+        $product = wc_get_product($post_id);
+
+        if (!is_object($product) || !method_exists($product, 'get_gallery_image_ids')) {
+            return [];
+        }
+
+        $ids = array_map('intval', (array) $product->get_gallery_image_ids());
+
+        return array_values(array_unique(array_filter($ids, static function (int $id): bool {
+            return $id > 0;
+        })));
+    }
+
+    /**
+     * A product's gallery image IDs, read from the meta WooCommerce stores them
+     * in, without building a product.
+     *
+     * For the sitemap walk, where a product per item grows with the catalog:
+     * WooCommerce's caches outlive the walk's own release. The walk's get_posts()
+     * has already primed this meta.
+     *
+     * @since 2.21.0
+     *
+     * @param int $post_id Product ID.
+     * @return int[] Attachment IDs, in gallery order.
+     */
+    public static function stored_gallery_image_ids(int $post_id): array {
+        if (!self::owns($post_id)) {
+            return [];
+        }
+
+        $stored = get_post_meta($post_id, '_product_image_gallery', true);
+        $ids = array_map('intval', explode(',', is_string($stored) ? $stored : ''));
+
+        return array_values(array_unique(array_filter($ids, static function (int $id): bool {
+            return $id > 0;
+        })));
     }
 }

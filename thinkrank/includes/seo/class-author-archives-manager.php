@@ -292,9 +292,9 @@ class Author_Archives_Manager {
             // current month, which no author page is about (#1330).
             '%date%'             => '',
             '%page%'             => '',
-        ];
+        ] + Pattern_Resolver::current_date_placeholders(); // %currentyear% and the rest (#1472).
 
-        // Anything else (%currentyear%, %term%, a Yoast %%token%%) is dropped
+        // Anything else (%term%, a Yoast %%token%%) is dropped
         // before substitution, the rule the Content Types templates follow,
         // rather than reaching the <title> as literal text (#1330).
         $template = Pattern_Resolver::strip_unresolved_tokens($template, $replacements);

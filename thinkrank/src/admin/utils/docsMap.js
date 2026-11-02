@@ -767,6 +767,9 @@ export const SCREEN_DOCS = {
 	'essential-seo:crawling-ai-indexing:robots-management': [
 		'/docs/sitemaps-crawling/robots-txt/',
 	],
+	'essential-seo:crawling-ai-indexing:permalinks': [
+		'/docs/sitemaps-crawling/',
+	],
 	'essential-seo:crawling-ai-indexing:global-robot-meta': [
 		'/docs/on-page-seo/content-type-matrix/',
 	],

@@ -24,6 +24,7 @@ const TITLE_VARIABLES = [
 	{ label: __('+ Title', 'thinkrank'), value: '%title%' },
 	{ label: __('+ Site Title', 'thinkrank'), value: '%sitename%' },
 	{ label: __('+ Separator', 'thinkrank'), value: '%sep%' },
+	{ label: __('+ Current Year', 'thinkrank'), value: '%currentyear%' },
 ];
 
 const DESCRIPTION_VARIABLES = [
@@ -61,8 +62,17 @@ const CUSTOM_FIELD_VARIABLE = {
 };
 
 /**
+ * The terms this item is assigned in a taxonomy, on any post type.
+ * `taxonomy-slug` is replaced with the slug (#1468).
+ */
+const TAXONOMY_VARIABLE = {
+	label: __('+ Taxonomy terms', 'thinkrank'),
+	value: '%taxonomy(taxonomy-slug)%',
+};
+
+/**
  * The variable chips for a field, with the product tokens appended on a
- * product and the custom field token last.
+ * product and the custom field and taxonomy tokens last.
  *
  * @param {Array} base The tokens every post type offers.
  * @return {Array} The chips to render.
@@ -73,6 +83,7 @@ const variablesFor = (base) => [
 		? PRODUCT_VARIABLES
 		: []),
 	CUSTOM_FIELD_VARIABLE,
+	TAXONOMY_VARIABLE,
 ];
 
 const GeneralPanel = ({

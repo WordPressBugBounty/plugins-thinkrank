@@ -19,20 +19,28 @@
  * single-percent form, so a double-percent token is always unresolved, and
  * eating the inner `%x%` out of it would leave a stray percent at each end. A
  * bare percent is not a token, so "50% off" is left alone. `%customfield(key)%`
- * is one token, whose map key is `customfield(key)` (#1277).
+ * is one token, whose map key is `customfield(key)` (#1277), and so is
+ * `%taxonomy(slug)%`, keyed `taxonomy(slug)` (#1468). Any argument counts for
+ * the latter, because Pattern_Resolver::strip_unresolved_tokens() removes a
+ * malformed one rather than printing it.
  *
  * @type {RegExp}
  */
-const TOKEN = /%%[a-z0-9_-]+%%|%(customfield\([^\s%()]+\)|[a-z0-9_-]+)%/gi;
+const TOKEN =
+	/%%[a-z0-9_-]+%%|%(customfield\([^\s%()]+\)|taxonomy\([^%()]*\)|[a-z0-9_-]+)%/gi;
 
 /**
  * The map key for a token: `%CustomField(x)%` resolves like
- * `%customfield(x)%`, as Pattern_Resolver matches it.
+ * `%customfield(x)%` and `%Taxonomy(x)%` like `%taxonomy(x)%`, as
+ * Pattern_Resolver matches them.
  *
  * @param {string} key Token without its percents.
  * @return {string} Map key.
  */
-const keyFor = (key) => key.replace(/^customfield\(/i, 'customfield(');
+const keyFor = (key) =>
+	key
+		.replace(/^customfield\(/i, 'customfield(')
+		.replace(/^taxonomy\(/i, 'taxonomy(');
 
 /**
  * Resolve a variable-tag template against a token => value map.

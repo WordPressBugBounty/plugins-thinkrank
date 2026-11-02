@@ -90,7 +90,7 @@ export const getMigrateDialog = () => ({
 			</p>
 			<p>
 				{__(
-					'Running the migration again may overwrite existing ThinkRank settings and metadata where applicable ThinkRank fields still at their defaults are filled from the snapshot, while values you have already customized are preserved.',
+					'Running the migration again only fills ThinkRank settings and metadata that are still empty or at their defaults. Values you have already customized are preserved.',
 					'thinkrank'
 				)}
 			</p>

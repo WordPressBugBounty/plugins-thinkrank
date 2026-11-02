@@ -1030,7 +1030,8 @@ class Schema_Builder {
             'organization_social_youtube',
             'organization_social_pinterest',
             'organization_social_whatsapp',
-            'organization_social_telegram'
+            'organization_social_telegram',
+            'organization_social_tiktok'
         ];
 
         foreach ($social_fields as $field) {
@@ -1540,7 +1541,8 @@ class Schema_Builder {
             'organization_social_youtube',
             'organization_social_pinterest',
             'organization_social_whatsapp',
-            'organization_social_telegram'
+            'organization_social_telegram',
+            'organization_social_tiktok'
         ];
 
         foreach ($social_fields as $field) {

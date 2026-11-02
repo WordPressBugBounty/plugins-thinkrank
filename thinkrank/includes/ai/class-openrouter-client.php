@@ -513,7 +513,8 @@ class OpenRouter_Client {
         if (is_array($body_error)) {
             $code = (int) ($body_error['code'] ?? 0);
             $this->log_error($code, $body_error);
-            throw new \Exception(sprintf('OpenRouter API error (%d): %s', $code > 0 ? $code : (int) $status_code, esc_html($this->describe_error($body_error))));
+            $shown_code = $code > 0 ? $code : $status_code;
+            throw new \Exception(sprintf('OpenRouter API error (%d): %s', (int) $shown_code, esc_html($this->describe_error($body_error))));
         }
 
         return $data;

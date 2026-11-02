@@ -82,9 +82,15 @@ const TITLE_FIELDS = [
 // Clickable variable chips shown under each title field. The context-specific
 // token comes first, then the shared Site Title / Separator. Values are the
 // exact tokens the front-end renderer resolves (see get_title_placeholders()).
+const CURRENT_YEAR_VAR = {
+	label: __('+ Current Year', 'thinkrank'),
+	value: '%currentyear%',
+};
+
 const COMMON_VARS = [
 	{ label: __('+ Site Title', 'thinkrank'), value: '%site_title%' },
 	{ label: __('+ Separator', 'thinkrank'), value: '%sep%' },
+	CURRENT_YEAR_VAR,
 ];
 
 const FIELD_VARIABLES = {
@@ -96,6 +102,7 @@ const FIELD_VARIABLES = {
 			value: '%site_description%',
 		},
 		{ label: __('+ Separator', 'thinkrank'), value: '%sep%' },
+		CURRENT_YEAR_VAR,
 	],
 	post_title: [
 		{ label: __('+ Post Title', 'thinkrank'), value: '%post_title%' },

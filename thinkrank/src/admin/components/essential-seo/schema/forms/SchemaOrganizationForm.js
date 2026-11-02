@@ -95,6 +95,12 @@ const IconYouTube = () => (
 	</svg>
 );
 
+const IconTikTok = () => (
+	<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+		<path d="M16.6 5.82A4.28 4.28 0 0 1 15.54 3h-3.09v12.4a2.59 2.59 0 0 1-2.59 2.5 2.6 2.6 0 0 1-2.59-2.6 2.6 2.6 0 0 1 3.38-2.48V9.66a5.7 5.7 0 0 0-.79-.05A5.67 5.67 0 0 0 4.19 15.3 5.67 5.67 0 0 0 9.86 21a5.67 5.67 0 0 0 5.67-5.67V9.01a7.33 7.33 0 0 0 4.28 1.37V7.29a4.28 4.28 0 0 1-3.21-1.47z" />
+	</svg>
+);
+
 const IconClock = () => (
 	<svg
 		width="15"
@@ -268,6 +274,14 @@ const SOCIAL_PLATFORMS = [
 		color: '#FF0000',
 		tint: '#FFEAEA',
 		placeholder: 'https://youtube.com/c/yourchannel',
+	},
+	{
+		key: 'organization_social_tiktok',
+		label: __('TikTok', 'thinkrank'),
+		Icon: IconTikTok,
+		color: '#000000',
+		tint: '#EEF0F2',
+		placeholder: 'https://www.tiktok.com/@yourhandle',
 	},
 ];
 

@@ -2,7 +2,8 @@
  * Template preview against real items.
  *
  * The Search Engine Preview above it fills the template with sample text,
- * which cannot show what %price% or %customfield(key)% give each item. This
+ * which cannot show what %price%, %customfield(key)% or %taxonomy(slug)% give
+ * each item. This
  * asks the server to resolve the unsaved templates for the post type's newest
  * published items, so the admin sees every item's own values before saving
  * (#1277).

@@ -266,8 +266,8 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
             $display_name = (string) get_the_author_meta('display_name', $user_id);
             $author_title = (string) (get_user_meta($user_id, 'wpseo_title', true) ?: '');
             $author_desc  = (string) (get_user_meta($user_id, 'wpseo_metadesc', true) ?: '');
-            $author_title = $this->convert_template_variables(str_replace('%%name%%', $display_name, $author_title));
-            $author_desc  = $this->convert_template_variables(str_replace('%%name%%', $display_name, $author_desc));
+            $author_title = $this->convert_keeping_dates(str_replace('%%name%%', $display_name, $author_title), self::POST_TOKENS);
+            $author_desc  = $this->convert_keeping_dates(str_replace('%%name%%', $display_name, $author_desc), self::POST_TOKENS);
 
             $records[] = [
                 'object_id'     => $user_id,
@@ -315,8 +315,8 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
                     'separator'            => $this->map_yoast_separator($titles['separator'] ?? 'sc-dash'),
-                    'homepage_title'       => $this->convert_template_variables($titles['title-home-wpseo'] ?? ''),
-                    'homepage_description' => $this->convert_template_variables($titles['metadesc-home-wpseo'] ?? ''),
+                    'homepage_title'       => $this->convert_keeping_dates($titles['title-home-wpseo'] ?? '', self::POST_TOKENS),
+                    'homepage_description' => $this->convert_keeping_dates($titles['metadesc-home-wpseo'] ?? '', self::POST_TOKENS),
                     'organization_name'    => $this->yoast_identity($titles, $wpseo, 'company_name'),
                     'organization_logo'    => $this->yoast_identity($titles, $wpseo, 'company_logo'),
                     // Schema `alternateName` for the site.
@@ -370,10 +370,17 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
                     ]),
                     'post_type_settings'   => $this->extract_post_type_settings($titles),
                     'taxonomy_settings'    => $this->extract_taxonomy_settings($titles),
+                    // Post type archive templates (#1425).
+                    'post_type_archive_settings' => $this->extract_post_type_archive_settings($titles),
                     // Per-context title formats in ThinkRank's SITE IDENTITY token
                     // vocabulary, which is a different dialect from the Global SEO
                     // one used by post_type_settings above.
                     'title_formats'        => $this->extract_yoast_title_formats($titles),
+                    // Search Appearance → Taxonomies → "Remove the categories
+                    // prefix" (#1476).
+                    'permalinks'           => [
+                        'remove_category_base' => !empty($titles['stripcategorybase']),
+                    ],
                     // Author archive behaviour (Author Archives feature).
                     'author_archives'      => $this->extract_yoast_author_archives($titles),
                     // Role Manager assignments (live on the roles, not in wpseo_*).
@@ -532,7 +539,23 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
         '%%wc_sku%%'           => '%sku%',
         '%%wc_shortdesc%%'     => '%short_description%',
         '%%wc_brand%%'         => '%brand%',
+        // Kept live rather than frozen to the year of the migration (#1472).
+        '%%currentyear%%'      => '%currentyear%',
+        '%%currentmonth%%'     => '%currentmonth%',
+        '%%currentday%%'       => '%currentday%',
+        '%%currentdate%%'      => '%currentdate%',
     ];
+
+    /**
+     * Yoast's `%%ct_<tax>%%`, also as `%%ct_<tax>%%single%%` (the first term
+     * only, which `%taxonomy(tax)%` has no form of) (#1468). `%%ct_desc_<tax>%%`
+     * is a term's description, which has no ThinkRank token.
+     *
+     * @since 2.21.0
+     *
+     * @var string
+     */
+    private const ASSIGNED_TERM_TOKEN = '/%%ct_(?!desc_)([^%\s()]+)(?:%%single)?%%/i';
 
     /**
      * Yoast per-term tokens ThinkRank resolves on a term archive. The term's
@@ -546,6 +569,10 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
         '%%tag_description%%'      => '%excerpt%',
         '%%sitename%%'             => '%sitename%',
         '%%sep%%'                  => '%sep%',
+        '%%currentyear%%'          => '%currentyear%',
+        '%%currentmonth%%'         => '%currentmonth%',
+        '%%currentday%%'           => '%currentday%',
+        '%%currentdate%%'          => '%currentdate%',
     ];
 
     /**
@@ -556,9 +583,11 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
      * @return string
      */
     private function convert_post_value($value, int $post_id): string {
+        $value = $this->stringify_template_value($value);
+
         return $this->tokenize_object_template(
-            $this->stringify_template_value($value),
-            self::literal_token_patterns(self::POST_TOKENS),
+            $value,
+            self::literal_token_patterns(self::assigned_term_tokens($value, self::ASSIGNED_TERM_TOKEN) + self::POST_TOKENS),
             fn(string $rest): string => $this->convert_template_variables($rest, $post_id)
         );
     }
@@ -621,9 +650,15 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
             '%%wc_sku%%'           => '%sku%',
             '%%wc_shortdesc%%'     => '%short_description%',
             '%%wc_brand%%'         => '%brand%',
+            // Resolved on every request (#1472).
+            '%%currentyear%%'      => '%currentyear%',
+            '%%currentmonth%%'     => '%currentmonth%',
+            '%%currentday%%'       => '%currentday%',
+            '%%currentdate%%'      => '%currentdate%',
         ];
 
         $template = str_replace(array_keys($map), array_values($map), $template);
+        $template = (string) preg_replace(self::ASSIGNED_TERM_TOKEN, '%taxonomy($1)%', $template);
 
         // Drop any remaining Yoast tokens ThinkRank cannot resolve
         // (e.g. %%page%%, %%sitedesc%%, %%pt_single%%, %%tag%%).
@@ -828,7 +863,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
      * Convert a Yoast title template into ThinkRank's Site Identity token
      * vocabulary, preserving structure.
      *
-     * Tokens ThinkRank cannot resolve (%%page%%, %%pt_single%%, %%currentyear%%)
+     * Tokens ThinkRank cannot resolve (%%page%%, %%pt_single%%)
      * are stripped so they never render literally, and a separator left dangling
      * by that strip is dropped rather than rendering as a leading/trailing dash.
      *
@@ -848,6 +883,11 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
             '%%date%%'         => '%date%',
             '%%searchphrase%%' => '%search_term%',
             '%%name%%'         => '%author_name%',
+            // Resolved on every request (#1472).
+            '%%currentyear%%'  => '%currentyear%',
+            '%%currentmonth%%' => '%currentmonth%',
+            '%%currentday%%'   => '%currentday%',
+            '%%currentdate%%'  => '%currentdate%',
             // Yoast's own archive/term variables, which ThinkRank resolves under
             // the same names.
             '%%archive_title%%' => '%archive_title%',
@@ -1064,10 +1104,10 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
         foreach ($taxonomies as $tax) {
             $tax_settings = [];
             if (isset($titles["title-tax-{$tax}"])) {
-                $tax_settings['title_template'] = $this->convert_template_pattern($titles["title-tax-{$tax}"]);
+                $tax_settings['title_template'] = $this->convert_archive_pattern($titles["title-tax-{$tax}"], self::TERM_ARCHIVE_TOKENS);
             }
             if (isset($titles["metadesc-tax-{$tax}"])) {
-                $tax_settings['description_template'] = $this->convert_template_pattern($titles["metadesc-tax-{$tax}"]);
+                $tax_settings['description_template'] = $this->convert_archive_pattern($titles["metadesc-tax-{$tax}"], self::TERM_ARCHIVE_TOKENS);
             }
             if (isset($titles["noindex-tax-{$tax}"])) {
                 $tax_settings['noindex'] = (bool) $titles["noindex-tax-{$tax}"];
@@ -1078,6 +1118,72 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
         }
 
         return $settings;
+    }
+
+    /**
+     * Extract post type archive templates from Yoast titles option
+     * (`title-ptarchive-{type}`, `metadesc-ptarchive-{type}`), in the shape
+     * migrate_archive_templates() consumes (#1425).
+     *
+     * @param array $titles Yoast wpseo_titles option
+     * @return array post_type => {title_template?, description_template?}
+     */
+    private function extract_post_type_archive_settings(array $titles): array {
+        $settings = [];
+
+        foreach (get_post_types(['public' => true], 'names') as $pt) {
+            $pt_settings = [];
+            if (isset($titles["title-ptarchive-{$pt}"])) {
+                $pt_settings['title_template'] = $this->convert_archive_pattern($titles["title-ptarchive-{$pt}"], self::POST_TYPE_ARCHIVE_TOKENS);
+            }
+            if (isset($titles["metadesc-ptarchive-{$pt}"])) {
+                $pt_settings['description_template'] = $this->convert_archive_pattern($titles["metadesc-ptarchive-{$pt}"], self::POST_TYPE_ARCHIVE_TOKENS);
+            }
+            $pt_settings = array_filter($pt_settings, static fn ($value): bool => '' !== $value);
+            if (!empty($pt_settings)) {
+                $settings[$pt] = $pt_settings;
+            }
+        }
+
+        return $settings;
+    }
+
+    /**
+     * Yoast term-archive variables => ThinkRank tokens (#1425).
+     */
+    private const TERM_ARCHIVE_TOKENS = [
+        '%%term_title%%'           => '%term_title%',
+        '%%term_description%%'     => '%term_description%',
+        '%%category_description%%' => '%term_description%',
+        '%%tag_description%%'      => '%term_description%',
+        '%%sitedesc%%'             => '%site_description%',
+    ];
+
+    /**
+     * Yoast post type archive variables => ThinkRank tokens (#1425).
+     */
+    private const POST_TYPE_ARCHIVE_TOKENS = [
+        '%%pt_plural%%' => '%pt_plural%',
+        '%%pt_single%%' => '%pt_single%',
+        '%%sitedesc%%'  => '%site_description%',
+    ];
+
+    /**
+     * Convert an archive template: the archive's own variables first, then
+     * the shared Global SEO conversion, which strips any Yoast variable left.
+     *
+     * The shared conversion knows only post tokens, so on its own it removed
+     * %%term_title%% and imported "%%term_title%% Archives %%sep%%
+     * %%sitename%%" as "Archives %sep% %sitename%".
+     *
+     * @param mixed                $template Raw Yoast template
+     * @param array<string,string> $tokens   Archive variable => ThinkRank token
+     * @return string
+     */
+    private function convert_archive_pattern($template, array $tokens): string {
+        $template = $this->stringify_template_value($template);
+
+        return $this->convert_template_pattern(str_ireplace(array_keys($tokens), array_values($tokens), $template));
     }
 
     /**

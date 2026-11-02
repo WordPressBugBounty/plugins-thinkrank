@@ -70,6 +70,10 @@ class Thinkrank_Exporter extends Abstract_Plugin_Exporter {
         // Thin content thresholds (#565). Saved by Thin_Content, not Settings,
         // so without this an Export/Restore round trip dropped them.
         'thinkrank_thin_content_settings',
+        // URL bases (#1476) and the free WooCommerce settings (#1478), both
+        // plain options outside Settings.
+        'thinkrank_permalinks',
+        'thinkrank_woocommerce_seo',
     ];
 
     /**

@@ -47,12 +47,14 @@ class Import_Detector {
         'yoast' => [
             'name'         => 'Yoast SEO',
             'meta_prefix'  => '_yoast_wpseo_',
+            'user_meta_prefix' => 'wpseo_',
             'option_keys'  => ['wpseo', 'wpseo_titles', 'wpseo_social'],
             'plugin_files' => ['wordpress-seo/wp-seo.php', 'wordpress-seo-premium/wp-seo-premium.php'],
         ],
         'rankmath' => [
             'name'         => 'Rank Math',
             'meta_prefix'  => 'rank_math_',
+            'user_meta_prefix' => 'rank_math_',
             'option_keys'  => ['rank-math-options-general', 'rank-math-options-titles'],
             'plugin_files' => ['seo-by-rank-math/rank-math.php', 'seo-by-rank-math-pro/rank-math-pro.php'],
         ],
@@ -238,6 +240,22 @@ class Import_Detector {
 
             if ($term_count > 0) {
                 $counts['termmeta'] = $term_count;
+            }
+
+            // Author SEO values, for the plugins whose exporter reads them. The
+            // UI derives its types from these counts, so without this the
+            // screen never offered them (#1519).
+            if (!empty($config['user_meta_prefix'])) {
+                $user_count = (int) $wpdb->get_var(
+                    $wpdb->prepare(
+                        "SELECT COUNT(DISTINCT user_id) FROM {$wpdb->usermeta} WHERE meta_key LIKE %s",
+                        $wpdb->esc_like($config['user_meta_prefix']) . '%'
+                    )
+                );
+
+                if ($user_count > 0) {
+                    $counts['usermeta'] = $user_count;
+                }
             }
         }
 

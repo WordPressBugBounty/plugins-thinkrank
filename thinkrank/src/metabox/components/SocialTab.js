@@ -31,6 +31,7 @@ const SOCIAL_TITLE_VARIABLES = [
 	{ label: __('+ Title', 'thinkrank'), value: '%title%' },
 	{ label: __('+ Site Title', 'thinkrank'), value: '%sitename%' },
 	{ label: __('+ Separator', 'thinkrank'), value: '%sep%' },
+	{ label: __('+ Current Year', 'thinkrank'), value: '%currentyear%' },
 ];
 const SOCIAL_DESCRIPTION_VARIABLES = [
 	{ label: __('+ Excerpt', 'thinkrank'), value: '%excerpt%' },

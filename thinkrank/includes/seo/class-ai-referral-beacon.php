@@ -269,20 +269,23 @@ class Ai_Referral_Beacon {
 
         $json = (string) wp_json_encode($config, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP);
 
-        return <<<JS
-(function(c){try{
-var l=window.location,d=document,p=l.pathname,m=d.cookie.match(new RegExp('(?:^|; )'+c.k+'=([^;]*)'));
-if(m){try{if(decodeURIComponent(m[1])===p){return;}}catch(e){}}
-var hit=function(h){h=(h||'').toLowerCase();for(var i=0;i<c.h.length;i++){var f=c.h[i];if(h===f||(h.length>f.length&&h.slice(-f.length-1)==='.'+f)){return true;}}return false;};
-var r='',rh='';if(d.referrer){try{rh=new URL(d.referrer).hostname;r=d.referrer;}catch(e){}}
-if(rh===l.hostname){rh='';}
-var u='';try{u=(new URLSearchParams(l.search).get('utm_source')||'').trim();}catch(e){}
-var v=u.toLowerCase(),uh=v.indexOf('://')>-1?v.slice(v.indexOf('://')+3):v;uh=uh.split('/')[0];
-if(!hit(rh)&&!(v&&(hit(uh)||c.u.indexOf(v)>-1))){return;}
-var b=new URLSearchParams();b.append('ref',r);b.append('utm',u);b.append('path',p);
-fetch(c.e,{method:'POST',body:b,credentials:'same-origin',keepalive:true,cache:'no-store'}).catch(function(){});
-}catch(e){}})({$json});
-JS;
+        return implode(
+            "\n",
+            [
+                '(function(c){try{',
+                'var l=window.location,d=document,p=l.pathname,m=d.cookie.match(new RegExp(\'(?:^|; )\'+c.k+\'=([^;]*)\'));',
+                'if(m){try{if(decodeURIComponent(m[1])===p){return;}}catch(e){}}',
+                'var hit=function(h){h=(h||\'\').toLowerCase();for(var i=0;i<c.h.length;i++){var f=c.h[i];if(h===f||(h.length>f.length&&h.slice(-f.length-1)===\'.\'+f)){return true;}}return false;};',
+                'var r=\'\',rh=\'\';if(d.referrer){try{rh=new URL(d.referrer).hostname;r=d.referrer;}catch(e){}}',
+                'if(rh===l.hostname){rh=\'\';}',
+                'var u=\'\';try{u=(new URLSearchParams(l.search).get(\'utm_source\')||\'\').trim();}catch(e){}',
+                'var v=u.toLowerCase(),uh=v.indexOf(\'://\')>-1?v.slice(v.indexOf(\'://\')+3):v;uh=uh.split(\'/\')[0];',
+                'if(!hit(rh)&&!(v&&(hit(uh)||c.u.indexOf(v)>-1))){return;}',
+                'var b=new URLSearchParams();b.append(\'ref\',r);b.append(\'utm\',u);b.append(\'path\',p);',
+                'fetch(c.e,{method:\'POST\',body:b,credentials:\'same-origin\',keepalive:true,cache:\'no-store\'}).catch(function(){});',
+                '}catch(e){}})(' . $json . ');',
+            ]
+        );
     }
 
     /**

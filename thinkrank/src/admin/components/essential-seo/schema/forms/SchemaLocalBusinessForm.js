@@ -181,6 +181,7 @@ const SchemaLocalBusinessForm = ({
 		settings.organization_social_linkedin,
 		settings.organization_social_instagram,
 		settings.organization_social_youtube,
+		settings.organization_social_tiktok,
 	].filter((p) => p && p.trim());
 
 	const isEnabled = !!settings.enabled;

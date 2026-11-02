@@ -587,6 +587,7 @@ class Content_Brief_Generator {
                 )));
             }
             if ('length' === $finish) {
+                // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Fixed plain text, shown as JSON.
                 throw new \Exception(self::TRUNCATED_MESSAGE);
             }
         }
@@ -608,6 +609,7 @@ class Content_Brief_Generator {
                 throw new \Exception('The AI declined to generate this brief for this topic. Try a different topic or less sensitive keywords.');
             }
             if ('max_tokens' === $stop_reason) {
+                // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Fixed plain text, shown as JSON.
                 throw new \Exception(self::TRUNCATED_MESSAGE);
             }
         }
@@ -633,6 +635,7 @@ class Content_Brief_Generator {
             throw new \Exception('The AI stopped because its answer repeated published text too closely. Try a different topic or angle.');
         }
         if ('MAX_TOKENS' === $gemini_finish) {
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Fixed plain text, shown as JSON.
             throw new \Exception(self::TRUNCATED_MESSAGE);
         }
     }

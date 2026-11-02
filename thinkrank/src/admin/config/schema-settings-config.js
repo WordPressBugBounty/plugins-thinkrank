@@ -47,6 +47,7 @@ export const getDefaultSettings = (contextType = 'site') => {
 		organization_social_linkedin: '',
 		organization_social_instagram: '',
 		organization_social_youtube: '',
+		organization_social_tiktok: '',
 		organization_contact_type: 'customer service',
 		organization_contact_phone: '',
 		organization_contact_email: '',

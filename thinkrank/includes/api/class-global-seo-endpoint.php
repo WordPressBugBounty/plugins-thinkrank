@@ -81,6 +81,10 @@ class Global_SEO_Endpoint extends WP_REST_Controller {
     private const DEFAULT_SETTINGS = [
         'title' => '%title% %sep% %sitename%',
         'description' => '%excerpt%',
+        // The post type's archive page (#1425). Empty: the archive keeps the
+        // Site Identity Archive Title and the post type's own description.
+        'archive_title' => '',
+        'archive_description' => '',
         'schema_type' => 'WebPage',
         'article_type' => '',
         'media_type' => '',
@@ -644,6 +648,13 @@ class Global_SEO_Endpoint extends WP_REST_Controller {
         if (isset($settings['description'])) {
             $out['description'] = Pattern_Resolver::sanitize_template((string) $settings['description']);
         }
+        // The post type archive's templates (#1425). Same sanitizer: they
+        // are templates too.
+        foreach (['archive_title', 'archive_description'] as $key) {
+            if (isset($settings[$key])) {
+                $out[$key] = Pattern_Resolver::sanitize_template((string) $settings[$key]);
+            }
+        }
         if (isset($settings['schema_type'])) {
             $value = sanitize_text_field((string) $settings['schema_type']);
             $out['schema_type'] = in_array($value, self::ALLOWED_SCHEMA_TYPES, true) ? $value : 'WebPage';
@@ -747,6 +758,14 @@ class Global_SEO_Endpoint extends WP_REST_Controller {
                     'description' => [
                         'type' => 'string',
                         'description' => 'Description format with variables like %excerpt%'
+                    ],
+                    'archive_title' => [
+                        'type' => 'string',
+                        'description' => 'Title format of the post type archive, with variables like %pt_plural%, %site_title%, %sep%. Empty keeps the Site Identity Archive Title'
+                    ],
+                    'archive_description' => [
+                        'type' => 'string',
+                        'description' => 'Meta description format of the post type archive. Empty keeps the post type description'
                     ],
                     'schema_type' => [
                         'type' => 'string',

@@ -29,6 +29,7 @@ use ThinkRank\API\LLMs_Txt_Endpoint;
 use ThinkRank\API\Global_SEO_Endpoint;
 use ThinkRank\API\Image_SEO_Endpoint;
 use ThinkRank\API\External_Links_Endpoint;
+use ThinkRank\API\Permalinks_Endpoint;
 use ThinkRank\API\Instant_Indexing_Endpoint;
 use ThinkRank\API\Pillar_Content_Endpoint;
 use ThinkRank\API\Global_Robot_Meta_Endpoint;
@@ -311,9 +312,10 @@ class Manager {
             ],
         ]);
 
-        // Custom field values for a %customfield(key)% the author types in an
-        // editor preview; the editor page itself carries only the keys its
-        // saved fields name (#1277 review). Its own prefix, so the Role
+        // Custom field values for a %customfield(key)% and assigned term names
+        // for a %taxonomy(slug)% the author types in an editor preview; the
+        // editor page itself carries only the ones its saved fields name
+        // (#1277 review, #1468). Its own prefix, so the Role
         // Manager asks only for ThinkRank access: the post editor and the
         // term screen both use it, and the handler checks the object.
         register_rest_route(self::NAMESPACE, '/custom-fields', [
@@ -335,7 +337,13 @@ class Manager {
                     'type' => 'array',
                     'items' => ['type' => 'string'],
                     'maxItems' => \ThinkRank\SEO\Pattern_Resolver::CUSTOM_FIELD_LIMIT,
-                    'required' => true,
+                    'default' => [],
+                ],
+                'taxonomies' => [
+                    'type' => 'array',
+                    'items' => ['type' => 'string'],
+                    'maxItems' => \ThinkRank\SEO\Pattern_Resolver::TAXONOMY_LIMIT,
+                    'default' => [],
                 ],
             ],
         ]);
@@ -1376,20 +1384,29 @@ class Manager {
     }
 
     /**
-     * Values of the custom fields a preview names, bounded like the map the
-     * editor page carries (Pattern_Resolver::custom_field_values()).
+     * Values of the custom fields and assigned terms a preview names, bounded
+     * like the map the editor page carries
+     * (Pattern_Resolver::custom_field_values(), ::taxonomy_values()). A term
+     * has no assigned terms, so `taxonomies` only applies to a post.
      *
      * @since 2.19.0
+     * @since 2.21.0 Takes `taxonomies`.
      *
      * @param \WP_REST_Request $request Request object.
      * @return \WP_REST_Response
      */
     public function get_custom_field_values(\WP_REST_Request $request): \WP_REST_Response {
+        $is_term   = 'term' === $request->get_param('object_type');
+        $object_id = (int) $request->get_param('object_id');
+
         $values = \ThinkRank\SEO\Pattern_Resolver::custom_field_values(
-            'term' === $request->get_param('object_type') ? 'term' : 'post',
-            (int) $request->get_param('object_id'),
+            $is_term ? 'term' : 'post',
+            $object_id,
             (array) $request->get_param('keys')
-        );
+        ) + ($is_term ? [] : \ThinkRank\SEO\Pattern_Resolver::taxonomy_values(
+            $object_id,
+            (array) $request->get_param('taxonomies')
+        ));
 
         return new \WP_REST_Response([
             'success' => true,
@@ -2985,6 +3002,21 @@ class Manager {
             $external_links_endpoint->register_routes();
         } catch (\Exception $e) {
             // Failed to register External Links endpoint
+        }
+
+        try {
+            (new Permalinks_Endpoint())->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register Permalinks endpoint
+        }
+
+        // Free WooCommerce settings (#1478). Registered on every site: the
+        // tab asks it whether WooCommerce is active before showing its card.
+        try {
+            $woocommerce_endpoint = new \ThinkRank\API\WooCommerce_Endpoint();
+            $woocommerce_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register WooCommerce endpoint
         }
 
         // Import_Controller is deliberately NOT gated on enable_migration_tools.

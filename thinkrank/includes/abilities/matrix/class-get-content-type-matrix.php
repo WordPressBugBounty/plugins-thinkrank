@@ -42,7 +42,7 @@ class Get_Content_Type_Matrix extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-content-type-matrix';
 		$this->label       = __( 'Get ThinkRank Content Type Matrix', 'thinkrank' );
-		$this->description = __( 'Read the per-content-type SEO feature matrix: inherited or pinned features, resolved robots directives, exact stored robots_state and its fingerprint, and sitemap inclusion. Null robots_state means unsupported stored values that cannot be restored here. Also returns site-wide feature defaults. Use update-content-type-matrix with the exact state and fingerprint to change or restore one row, including inherited mode.', 'thinkrank' );
+		$this->description = __( 'Read the per-content-type SEO feature matrix: inherited or pinned features, resolved robots directives, exact stored robots_state and its fingerprint, sitemap inclusion and each taxonomy\'s default title and description templates. Null robots_state means unsupported stored values that cannot be restored here. Also returns site-wide feature defaults. Use update-content-type-matrix with the exact state and fingerprint to change or restore one row, including inherited mode.', 'thinkrank' );
 	}
 
 	/**
@@ -119,6 +119,14 @@ class Get_Content_Type_Matrix extends Ability_Base {
 							'robots_state_fingerprint' => [ 'type' => [ 'string', 'null' ], 'pattern' => '^[a-f0-9]{64}$' ],
 							'sitemap_include'  => [ 'type' => [ 'boolean', 'null' ] ],
 							'supports_sitemap' => [ 'type' => 'boolean' ],
+							'title_template'   => [
+								'type'        => 'string',
+								'description' => __( 'Taxonomy entities only: the default title template of the taxonomy\'s terms. Empty when none is set.', 'thinkrank' ),
+							],
+							'description_template' => [
+								'type'        => 'string',
+								'description' => __( 'Taxonomy entities only: the default meta description template of the taxonomy\'s terms. Empty when none is set.', 'thinkrank' ),
+							],
 						],
 					],
 				],

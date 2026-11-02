@@ -94,6 +94,7 @@ const TITLE_VARIABLES = [
 	{ label: __('+ Term', 'thinkrank'), value: '%term%' },
 	{ label: __('+ Site Title', 'thinkrank'), value: '%sitename%' },
 	{ label: __('+ Separator', 'thinkrank'), value: '%sep%' },
+	{ label: __('+ Current Year', 'thinkrank'), value: '%currentyear%' },
 ];
 
 const DESCRIPTION_VARIABLES = [
@@ -244,7 +245,8 @@ const TermSeoPanel = ({ config }) => {
 	const [robotsDirty, setRobotsDirty] = useState(false);
 	const [advancedDirty, setAdvancedDirty] = useState(false);
 
-	// A %customfield(key)% typed since the page loaded is looked up (#1277).
+	// A %customfield(key)% typed since the page loaded is looked up (#1277). A
+	// %taxonomy(slug)% is empty here: a term has no assigned terms (#1468).
 	const {
 		vars,
 		status: customFieldStatus,

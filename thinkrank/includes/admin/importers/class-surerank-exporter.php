@@ -214,6 +214,11 @@ class SureRank_Exporter extends Abstract_Plugin_Exporter {
         '%published%'   => '%date%',
         '%modified%'    => '%modified%',
         '%author_name%' => '%author%',
+        // Kept live rather than frozen to the year of the migration (#1472).
+        '%currentyear%' => '%currentyear%',
+        '%currentmonth%' => '%currentmonth%',
+        '%currentday%'  => '%currentday%',
+        '%currentdate%' => '%currentdate%',
     ];
 
     /**
@@ -228,6 +233,10 @@ class SureRank_Exporter extends Abstract_Plugin_Exporter {
         '%content%'          => '%excerpt%',
         '%site_name%'        => '%sitename%',
         '%separator%'        => '%sep%',
+        '%currentyear%'      => '%currentyear%',
+        '%currentmonth%'     => '%currentmonth%',
+        '%currentday%'       => '%currentday%',
+        '%currentdate%'      => '%currentdate%',
     ];
 
     /**
@@ -1564,6 +1573,7 @@ class SureRank_Exporter extends Abstract_Plugin_Exporter {
         $supported = [
             '%site_title%', '%site_description%', '%sep%', '%date%', '%search_term%', '%post_title%',
             '%page_title%', '%category_title%', '%tag_title%', '%archive_title%', '%author_name%',
+            '%currentyear%', '%currentmonth%', '%currentday%', '%currentdate%',
         ];
 
         return $this->map_tokens($template, $map, $supported);
@@ -1588,7 +1598,10 @@ class SureRank_Exporter extends Abstract_Plugin_Exporter {
             '%published%'   => '%date%',
             '%author_name%' => '%author%',
         ];
-        $supported = ['%title%', '%sitename%', '%sep%', '%excerpt%', '%date%', '%modified%', '%author%'];
+        $supported = [
+            '%title%', '%sitename%', '%sep%', '%excerpt%', '%date%', '%modified%', '%author%',
+            '%currentyear%', '%currentmonth%', '%currentday%', '%currentdate%',
+        ];
 
         return $this->map_tokens($template, $map, $supported);
     }

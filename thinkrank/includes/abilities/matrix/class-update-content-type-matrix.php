@@ -42,7 +42,7 @@ class Update_Content_Type_Matrix extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-content-type-matrix';
 		$this->label       = __( 'Update ThinkRank Content Type Matrix', 'thinkrank' );
-		$this->description = __( 'Set SEO features for one discovered content type, each "inherit", "on" or "off", plus noindex and sitemap inclusion. For an exactly restorable robots change, send robots_state and expected_robots_state from a fresh get-content-type-matrix read, with no other change fields. This preserves inactive directives and can restore inherited mode. Omitted keys in robots_state remove those stored keys; null read state is not editable through this contract.', 'thinkrank' );
+		$this->description = __( 'Set SEO features for one discovered content type, each "inherit", "on" or "off", plus noindex and sitemap inclusion, and for a taxonomy its default title and meta description templates. For an exactly restorable robots change, send robots_state and expected_robots_state from a fresh get-content-type-matrix read, with no other change fields. This preserves inactive directives and can restore inherited mode. Omitted keys in robots_state remove those stored keys; null read state is not editable through this contract.', 'thinkrank' );
 	}
 
 	/**
@@ -88,6 +88,16 @@ class Update_Content_Type_Matrix extends Ability_Base {
 			'type'        => 'boolean',
 			'description' => __( 'Whether this entity belongs in the XML sitemap. Only accepted for entities the sitemap generator emits.', 'thinkrank' ),
 		];
+		// phpcs:ignore WordPress.WP.I18n.MissingTranslatorsComment,WordPress.WP.I18n.UnorderedPlaceholdersText -- %term_title% and the rest are template variable names, not printf placeholders.
+		$tokens = __( 'Variables: %term_title% (alias %term% or %title%), %term_description%, %taxonomy_name%, %parent_term%, %count%, %site_title% (alias %sitename%), %site_description%, %sep%, %customfield(key)%. %taxonomy(slug)% names terms assigned to a post, so it is empty on a term archive.', 'thinkrank' );
+		$properties['title_template']       = [
+			'type'        => 'string',
+			'description' => __( 'Taxonomy entities only. Default title template for every term of the taxonomy that has no SEO title of its own, ahead of the Site Identity Category, Tag and Archive Title formats. An empty string removes it.', 'thinkrank' ) . ' ' . $tokens,
+		];
+		$properties['description_template'] = [
+			'type'        => 'string',
+			'description' => __( 'Taxonomy entities only. Default meta description template for every term of the taxonomy that has no SEO description of its own, ahead of the term\'s WordPress description. An empty string removes it.', 'thinkrank' ) . ' ' . $tokens,
+		];
 		$properties['robots_state'] = Content_Type_Robots_State::schema();
 		$properties['expected_robots_state'] = [
 			'type' => 'string', 'pattern' => '^[a-f0-9]{64}$',
@@ -116,7 +126,7 @@ class Update_Content_Type_Matrix extends Ability_Base {
 				'data'    => [
 					'type'                 => 'object',
 					'additionalProperties' => true,
-					'description'          => __( 'The entity as stored after the write: resolved feature values, robots directives and sitemap inclusion.', 'thinkrank' ),
+					'description'          => __( 'The entity as stored after the write: resolved feature values, robots directives, sitemap inclusion and, for a taxonomy, its templates.', 'thinkrank' ),
 				],
 			],
 		];
@@ -203,6 +213,29 @@ class Update_Content_Type_Matrix extends Ability_Base {
 			$settings['robots_meta']         = $resolved;
 		}
 
+		foreach ( [ 'title_template', 'description_template' ] as $template_key ) {
+			if ( ! array_key_exists( $template_key, $input ) ) {
+				continue;
+			}
+
+			// Only a taxonomy row has templates. The endpoint would drop one
+			// sent for another entity and still report success.
+			if ( 'taxonomy' !== ( $descriptor['group'] ?? '' ) ) {
+				return new \WP_Error(
+					'thinkrank_templates_not_available',
+					sprintf(
+						/* translators: 1: field name. 2: entity key. */
+						__( '"%1$s" is only available for taxonomy entities, not "%2$s". A post type\'s templates are set with update-global-settings.', 'thinkrank' ),
+						$template_key,
+						$entity
+					),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$settings[ $template_key ] = (string) $input[ $template_key ];
+		}
+
 		if ( array_key_exists( 'sitemap_include', $input ) ) {
 			if ( empty( $descriptor['supports_sitemap'] ) ) {
 				return new \WP_Error(
@@ -222,7 +255,7 @@ class Update_Content_Type_Matrix extends Ability_Base {
 		if ( ! $settings ) {
 			return new \WP_Error(
 				'thinkrank_no_settings_provided',
-				__( 'Provide at least one feature, noindex, or sitemap_include to change.', 'thinkrank' ),
+				__( 'Provide at least one feature, noindex, sitemap_include or template to change.', 'thinkrank' ),
 				[ 'status' => 400 ]
 			);
 		}

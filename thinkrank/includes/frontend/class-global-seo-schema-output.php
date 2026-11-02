@@ -288,17 +288,24 @@ class Global_SEO_Schema_Output {
      * @return void
      */
     private function output_archive_schema(): void {
+        // A search filtered to a post type or a term answers those conditionals
+        // too, and would describe the archive rather than the results (#1509).
+        if (is_search()) {
+            return;
+        }
+
         $type = 'CollectionPage';
         $name = '';
         $url = '';
         $description = '';
         $main_entity = [];
+        $lists_products = false;
 
         if (is_home() && !is_front_page()) {
             $posts_page_id = (int) get_option('page_for_posts');
             $name = $posts_page_id ? get_the_title($posts_page_id) : __('Blog', 'thinkrank');
             $url = $posts_page_id ? (string) get_permalink($posts_page_id) : home_url('/');
-        } elseif (is_post_type_archive()) {
+        } elseif (is_post_type_archive() && !is_tax()) {
             $post_type_object = get_queried_object();
 
             // WooCommerce maps the shop archive onto a real page, so
@@ -319,6 +326,7 @@ class Global_SEO_Schema_Output {
             $name = $post_type_object->labels->name ?? $post_type_object->label;
             $url = (string) get_post_type_archive_link($post_type_object->name);
             $description = $post_type_object->description;
+            $lists_products = 'product' === $post_type_object->name;
         } elseif (is_category() || is_tag() || is_tax()) {
             $term = get_queried_object();
             if (!$term instanceof \WP_Term) {
@@ -331,6 +339,7 @@ class Global_SEO_Schema_Output {
             $name = $term->name;
             $url = $term_link;
             $description = (string) term_description($term);
+            $lists_products = in_array($term->taxonomy, self::PRODUCT_LIST_TAXONOMIES, true);
         } elseif (is_author()) {
             $author_id = (int) get_queried_object_id();
             $author    = $author_id > 0 ? get_userdata($author_id) : false;
@@ -399,7 +408,16 @@ class Global_SEO_Schema_Output {
             $schema['description'] = $description;
         }
 
-        if (!empty($main_entity)) {
+        // The shop and a product category or tag list the products on this
+        // page (#1478). Never an author archive, so it cannot displace the
+        // Person above.
+        if (empty($main_entity)) {
+            $product_list = $lists_products ? $this->product_archive_item_list() : [];
+
+            if (!empty($product_list)) {
+                $schema['mainEntity'] = $product_list;
+            }
+        } else {
             $schema['mainEntity'] = $main_entity;
         }
 
@@ -465,6 +483,115 @@ class Global_SEO_Schema_Output {
         }
 
         return [(string) $year, (string) get_year_link($year)];
+    }
+
+    /**
+     * Product taxonomies whose archives list their products in schema.
+     *
+     * WooCommerce's own category and tag, the archives Rank Math covers.
+     *
+     * @since 2.21.0
+     * @var string[]
+     */
+    private const PRODUCT_LIST_TAXONOMIES = ['product_cat', 'product_tag'];
+
+    /**
+     * Most products one archive page lists in its ItemList.
+     *
+     * A theme or a "show all" link can put hundreds of products on one page,
+     * and each one costs a product load and an offer. A page of a shop is
+     * rarely longer than this; the filter raises it.
+     *
+     * @since 2.21.0
+     * @var int
+     */
+    private const PRODUCT_LIST_LIMIT = 50;
+
+    /**
+     * An ItemList of the products the current archive page shows (#1478).
+     *
+     * Rank Math gave the shop and product category pages a list of their
+     * products, and stores switching from it lost that markup. Each entry is a
+     * Product with the name, URL, image and offer the product's own page
+     * publishes; the offer comes from the same builder, so a list and a
+     * product page cannot disagree about a price. The product's `@id` is the
+     * one its own page gives the node, so the two describe one entity.
+     *
+     * Empty without WooCommerce, with the "Product list on shop archives"
+     * setting off, and on a page with no products. The schema master switch
+     * and the archive's own Schema switch are applied before this runs.
+     *
+     * @since 2.21.0
+     * @return array ItemList, or [] for none.
+     */
+    private function product_archive_item_list(): array {
+        if (!\ThinkRank\Integrations\Woocommerce::is_active()
+            || !\ThinkRank\Integrations\WooCommerce_Settings::shop_archive_schema()) {
+            return [];
+        }
+
+        $query = $GLOBALS['wp_query'] ?? null;
+        $posts = is_object($query) && isset($query->posts) && is_array($query->posts) ? $query->posts : [];
+
+        /**
+         * Filter how many products an archive page's ItemList holds.
+         *
+         * @since 2.21.0
+         *
+         * @param int $limit Most products listed. 0 lists none.
+         */
+        $limit = max(0, (int) apply_filters('thinkrank_product_list_schema_limit', self::PRODUCT_LIST_LIMIT));
+
+        $items = [];
+
+        foreach ($posts as $post) {
+            if (count($items) >= $limit) {
+                break;
+            }
+
+            if (!$post instanceof \WP_Post || 'product' !== $post->post_type) {
+                continue;
+            }
+
+            $url = (string) get_permalink($post);
+
+            if ('' === $url) {
+                continue;
+            }
+
+            $product = [
+                '@type' => 'Product',
+                '@id'   => $url . '#product',
+                'name'  => self::normalize_name(get_the_title($post)),
+                'url'   => $url,
+            ];
+
+            $image = $this->get_product_image($post);
+            if (!empty($image)) {
+                $product['image'] = $image;
+            }
+
+            $offers = $this->get_product_offers($post);
+            if (!empty($offers)) {
+                $product['offers'] = $offers;
+            }
+
+            $items[] = [
+                '@type'    => 'ListItem',
+                'position' => count($items) + 1,
+                'item'     => $product,
+            ];
+        }
+
+        if (empty($items)) {
+            return [];
+        }
+
+        return [
+            '@type'           => 'ItemList',
+            'numberOfItems'   => count($items),
+            'itemListElement' => $items,
+        ];
     }
 
     /**
@@ -999,6 +1126,11 @@ class Global_SEO_Schema_Output {
             ];
         }
 
+        // Shipping weight and size, as WooCommerce stores them (#1478).
+        foreach ($this->woocommerce_measurements($this->woocommerce_product($post)) as $property => $value) {
+            $schema[$property] = $value;
+        }
+
         // Add offers (required for valid Product schema)
         $offers = $this->get_product_offers($post);
         if (!empty($offers)) {
@@ -1245,8 +1377,11 @@ class Global_SEO_Schema_Output {
         // Try custom meta field
         $brand = get_post_meta($post->ID, '_thinkrank_product_brand', true);
 
-        // Try WooCommerce brand taxonomy if available
-        if (empty($brand) && taxonomy_exists('product_brand')) {
+        // A WooCommerce product's brand comes from the commerce data below,
+        // which reads the brand taxonomy the store chose and applies
+        // `thinkrank_product_brand`. Reading `product_brand` here first would
+        // override that choice (#1478). Anything else keeps the old lookup.
+        if (empty($brand) && !\ThinkRank\Integrations\Woocommerce::owns((int) $post->ID) && taxonomy_exists('product_brand')) {
             $terms = get_the_terms($post->ID, 'product_brand');
             if (!empty($terms) && !is_wp_error($terms)) {
                 $brand = $terms[0]->name;
@@ -1420,6 +1555,86 @@ class Global_SEO_Schema_Output {
         $gtin = preg_replace('/[^0-9]/', '', (string) $product->get_global_unique_id());
 
         return (is_string($gtin) && preg_match('/^(\d{8}|\d{12,14})$/', $gtin)) ? $gtin : '';
+    }
+
+    /**
+     * UN/CEFACT codes for WooCommerce's weight and dimension units.
+     *
+     * schema.org's QuantitativeValue takes the unit as a UN/CEFACT Common
+     * Code; these are every unit WooCommerce's settings offer.
+     *
+     * @since 2.21.0
+     * @var array<string,string>
+     */
+    private const UNIT_CODES = [
+        'kg'  => 'KGM',
+        'g'   => 'GRM',
+        'lbs' => 'LBR',
+        'oz'  => 'ONZ',
+        'cm'  => 'CMT',
+        'm'   => 'MTR',
+        'mm'  => 'MMT',
+        'in'  => 'INH',
+        'yd'  => 'YRD',
+    ];
+
+    /**
+     * A product's weight and dimensions as Product properties.
+     *
+     * Rank Math publishes them, and a store switching from it lost them from
+     * every Product node (#1478). WooCommerce's length is the product's depth
+     * in schema.org's terms. Each is published only when the product has a
+     * positive number for it, so an empty field adds nothing.
+     *
+     * @since 2.21.0
+     * @param object|null $product WC_Product.
+     * @return array<string,array<string,mixed>> weight/width/height/depth => QuantitativeValue.
+     */
+    private function woocommerce_measurements(?object $product): array {
+        if (null === $product) {
+            return [];
+        }
+
+        $fields = [
+            'weight' => ['get_weight', 'woocommerce_weight_unit'],
+            'width'  => ['get_width', 'woocommerce_dimension_unit'],
+            'height' => ['get_height', 'woocommerce_dimension_unit'],
+            'depth'  => ['get_length', 'woocommerce_dimension_unit'],
+        ];
+
+        $measurements = [];
+
+        foreach ($fields as $property => [$getter, $unit_option]) {
+            if (!method_exists($product, $getter)) {
+                continue;
+            }
+
+            $raw = trim((string) $product->$getter());
+
+            if ('' === $raw || !is_numeric($raw) || (float) $raw <= 0) {
+                continue;
+            }
+
+            $value = [
+                '@type' => 'QuantitativeValue',
+                // An int stays an int and a decimal a decimal, so "2" is not
+                // published as 2.0.
+                'value' => $raw + 0,
+            ];
+
+            $unit = strtolower(trim((string) get_option($unit_option, '')));
+
+            if (isset(self::UNIT_CODES[$unit])) {
+                $value['unitCode'] = self::UNIT_CODES[$unit];
+            } elseif ('' !== $unit) {
+                // A unit another plugin added: still say what it is.
+                $value['unitText'] = $unit;
+            }
+
+            $measurements[$property] = $value;
+        }
+
+        return $measurements;
     }
 
     /**

@@ -247,6 +247,118 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
     /**
      * {@inheritDoc}
      */
+    /**
+     * Rank Math's WooCommerce settings in ThinkRank's free vocabulary
+     * (`thinkrank_woocommerce_seo`). Only keys Rank Math stored are returned.
+     *
+     * @param array $general rank-math-options-general
+     * @return array<string, mixed>
+     */
+    private function extract_rm_woocommerce_settings(array $general): array {
+        $settings = [];
+
+        $brand = (string) ($general['product_brand'] ?? '');
+        if ('' !== $brand && 'custom' !== $brand) {
+            $settings['brand_taxonomy'] = sanitize_key($brand);
+        }
+        if (isset($general['remove_shop_snippet_data'])) {
+            // Rank Math's switch removes the markup; ThinkRank's keeps it.
+            $settings['shop_archive_schema'] = 'on' !== $general['remove_shop_snippet_data'];
+        }
+        if (isset($general['wc_remove_generator'])) {
+            $settings['remove_generator'] = 'on' === $general['wc_remove_generator'];
+        }
+
+        return $settings;
+    }
+
+    /**
+     * Rank Math Pro's WooCommerce settings in ThinkRank Pro's vocabulary
+     * (`thinkrank_pro_woocommerce`). Only keys Rank Math stored are returned.
+     *
+     * Rank Math ties hidden products and empty product categories to one
+     * switch, so both ThinkRank switches follow it.
+     *
+     * @param array $general rank-math-options-general
+     * @return array<string, mixed>
+     */
+    private function extract_rm_pro_woocommerce(array $general): array {
+        $settings = [];
+
+        if (isset($general['noindex_hidden_products'])) {
+            $noindex = 'on' === $general['noindex_hidden_products'];
+            $settings['noindex_hidden_products'] = $noindex;
+            $settings['noindex_empty_product_categories'] = $noindex;
+        }
+        if (isset($general['show_gtin'])) {
+            $settings['show_identifier'] = 'on' === $general['show_gtin'];
+        }
+        if ('' !== trim((string) ($general['gtin_label'] ?? ''))) {
+            $settings['identifier_label'] = sanitize_text_field((string) $general['gtin_label']);
+        }
+        if ('custom' === ($general['product_brand'] ?? '') && '' !== trim((string) ($general['custom_product_brand'] ?? ''))) {
+            $settings['custom_brand'] = sanitize_text_field((string) $general['custom_product_brand']);
+        }
+
+        return $settings;
+    }
+
+    /**
+     * Rank Math Pro's GTIN meta key, on products and on each variation.
+     */
+    private const GTIN_META_KEY = '_rank_math_gtin_code';
+
+    /**
+     * Posts carrying Rank Math meta, plus products and variations carrying
+     * only a GTIN.
+     *
+     * The shared query matches the `rank_math_` prefix on viewable post types.
+     * The GTIN key starts with an underscore, and variations are not a
+     * viewable type, so a product whose only Rank Math data was its GTIN, and
+     * every variation's GTIN, were never visited (#1477).
+     *
+     * @param int $page Page number (1-indexed)
+     * @return array Post IDs
+     */
+    protected function get_post_ids_with_meta(int $page): array {
+        global $wpdb;
+
+        $offset = ($page - 1) * $this->chunk_size;
+        $post_types = $this->get_exportable_post_types();
+        if (post_type_exists('product_variation')) {
+            $post_types[] = 'product_variation';
+        }
+
+        if (empty($post_types)) {
+            return [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($post_types), '%s'));
+
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- table names are $wpdb properties, and every value is a placeholder replacement.
+        $sql = $wpdb->prepare(
+            "SELECT DISTINCT pm.post_id
+             FROM {$wpdb->postmeta} pm
+             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+             WHERE (pm.meta_key LIKE %s OR pm.meta_key = %s)
+             AND p.post_type IN ({$placeholders})
+             ORDER BY pm.post_id ASC
+             LIMIT %d OFFSET %d",
+            array_merge(
+                [$wpdb->esc_like($this->meta_key_prefix) . '%', self::GTIN_META_KEY],
+                $post_types,
+                [$this->chunk_size, $offset]
+            )
+        );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- one-off migration read of another plugin's meta; $sql is prepared above.
+        $ids = $wpdb->get_col($sql);
+        $this->last_page_row_count = count($ids);
+
+        return $ids;
+    }
+
     protected function export_postmeta_page(int $page): array {
         $post_ids = $this->get_post_ids_with_meta($page);
 
@@ -258,6 +370,14 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         foreach ($post_ids as $post_id) {
             $post_id = (int) $post_id;
             $meta = $this->get_all_plugin_meta($post_id);
+
+            // Rank Math Pro keeps the GTIN under a key with a leading
+            // underscore, which the `rank_math_` prefix never matched: no
+            // store's identifiers were ever imported (#1477).
+            $gtin = (string) get_post_meta($post_id, self::GTIN_META_KEY, true);
+            if ('' !== $gtin) {
+                $meta[self::GTIN_META_KEY] = $gtin;
+            }
 
             if (empty($meta)) {
                 continue;
@@ -305,14 +425,16 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                     'twitter_title'       => $this->convert_post_value($meta['rank_math_twitter_title'] ?? '', $post_id),
                     'twitter_description' => $this->convert_post_value($meta['rank_math_twitter_description'] ?? '', $post_id),
                     'twitter_image'       => $meta['rank_math_twitter_image'] ?? '',
-                    'primary_category'    => (int) ($meta['rank_math_primary_category'] ?? 0),
+                    // A product's primary category is kept per taxonomy:
+                    // rank_math_primary_product_cat, not _category (#1477).
+                    'primary_category'    => (int) ($meta['rank_math_primary_category'] ?? 0) ?: (int) ($meta['rank_math_primary_product_cat'] ?? 0),
                     'schema_type'         => $this->resolve_schema_type($meta),
                     // WooCommerce product identifier. Rank Math keeps it in its
                     // own per-post meta; ThinkRank Pro reads the canonical field
                     // this maps to, so a migrating store keeps the identifier
                     // Google asks for instead of collecting a "missing
                     // identifier" warning on every product (#715).
-                    'product_identifier'  => (string) ($meta['rank_math_gtin_code'] ?? ''),
+                    'product_identifier'  => (string) ($meta[self::GTIN_META_KEY] ?? $meta['rank_math_gtin_code'] ?? ''),
                     // Rank Math pillar content maps directly to ThinkRank pillar content.
                     'pillar_content'      => $this->normalize_pillar_content($meta['rank_math_pillar_content'] ?? ''),
                 ],
@@ -430,8 +552,8 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             // Author-archive SEO title/description override (Rank Math stores these
             // on the user profile). Values are literal text — resolve any stray
             // template tokens with the site-level resolver (no post context).
-            $seo_title = $this->convert_template_variables($meta['rank_math_title'] ?? '');
-            $meta_description = $this->convert_template_variables($meta['rank_math_description'] ?? '');
+            $seo_title = $this->convert_keeping_dates($meta['rank_math_title'] ?? '', self::POST_TOKENS);
+            $meta_description = $this->convert_keeping_dates($meta['rank_math_description'] ?? '', self::POST_TOKENS);
 
             // Rank Math also stores per-user social-overlay, permalink, twitter
             // card and SEO-score meta; ThinkRank has no equivalent for those, so a
@@ -476,8 +598,8 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                 'source_plugin' => $this->plugin_slug,
                 'data' => [
                     'separator'            => $titles['title_separator'] ?? '-',
-                    'homepage_title'       => $this->convert_template_variables($titles['homepage_title'] ?? ''),
-                    'homepage_description' => $this->convert_template_variables($titles['homepage_description'] ?? ''),
+                    'homepage_title'       => $this->convert_keeping_dates($titles['homepage_title'] ?? '', self::POST_TOKENS),
+                    'homepage_description' => $this->convert_keeping_dates($titles['homepage_description'] ?? '', self::POST_TOKENS),
                     'organization_name'    => $titles['knowledgegraph_name'] ?? '',
                     'organization_logo'    => $titles['knowledgegraph_logo'] ?? '',
                     // Rank Math's "Alternate Name" (schema.org alternateName) maps
@@ -553,10 +675,32 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                         'opening_hours'  => $this->extract_rm_opening_hours($titles),
                     ],
                     'post_type_settings' => $this->extract_rm_post_type_settings($titles),
+                    // Per-taxonomy and post type archive templates, in the
+                    // Global SEO dialect plus the term and archive tokens
+                    // (#1425).
+                    'taxonomy_settings'          => $this->extract_rm_taxonomy_settings($titles),
+                    'post_type_archive_settings' => $this->extract_rm_post_type_archive_settings($titles),
                     // Per-context title formats in ThinkRank's SITE IDENTITY token
                     // vocabulary (%site_title%/%post_title%/…), which is a different
                     // dialect from the Global SEO one used by post_type_settings.
                     'title_formats'      => $this->extract_rm_title_formats($titles),
+                    // URL bases Rank Math removed: Links → Strip Category Base,
+                    // WooCommerce → Remove base / category base / parent slugs.
+                    // Without them every base-free URL 404s after a switch (#1476).
+                    // WooCommerce settings with a ThinkRank home (#1478): the
+                    // brand taxonomy (or Pro's store-wide brand when Rank Math
+                    // is set to "custom"), the shop-archive schema switch and
+                    // the generator tag.
+                    'woocommerce_settings' => $this->extract_rm_woocommerce_settings($general),
+                    // Rank Math Pro's WooCommerce switches, for ThinkRank Pro
+                    // (thinkrank-pro#481).
+                    'pro_woocommerce'    => $this->extract_rm_pro_woocommerce($general),
+                    'permalinks'         => [
+                        'remove_category_base'            => ($general['strip_category_base'] ?? 'off') === 'on',
+                        'remove_product_base'             => ($general['wc_remove_product_base'] ?? 'off') === 'on',
+                        'remove_product_category_base'    => ($general['wc_remove_category_base'] ?? 'off') === 'on',
+                        'remove_product_category_parents' => ($general['wc_remove_category_parent_slugs'] ?? 'off') === 'on',
+                    ],
                     // Author archive behaviour (Author Archives feature).
                     'author_archives'    => $this->extract_rm_author_archives($titles),
                     // Instant Indexing auto-submit post types (the API key travels
@@ -1075,6 +1219,11 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         '%wc_sku%'        => '%sku%',
         '%wc_shortdesc%'  => '%short_description%',
         '%wc_brand%'      => '%brand%',
+        // Kept live rather than frozen to the year of the migration (#1472).
+        '%currentyear%'   => '%currentyear%',
+        '%currentmonth%'  => '%currentmonth%',
+        '%currentday%'    => '%currentday%',
+        '%currentdate%'   => '%currentdate%',
     ];
 
     /**
@@ -1085,6 +1234,10 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         '%term_description%' => '%excerpt%',
         '%sitename%'         => '%sitename%',
         '%sep%'              => '%sep%',
+        '%currentyear%'      => '%currentyear%',
+        '%currentmonth%'     => '%currentmonth%',
+        '%currentday%'       => '%currentday%',
+        '%currentdate%'      => '%currentdate%',
     ];
 
     /**
@@ -1147,6 +1300,22 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         return trim((string) preg_replace('/\s{2,}/', ' ', $this->convert_template_variables($value)));
     }
 
+    /**
+     * Rank Math's `%customterm(tax)%` as ThinkRank's `%taxonomy(tax)%` (#1468).
+     *
+     * Rank Math prints the first assigned term, ThinkRank every one, joined
+     * by a comma. `%customterm_desc(tax)%` is a term's description, which has
+     * no ThinkRank token, so it is not touched.
+     *
+     * @since 2.21.0
+     *
+     * @param string $value Rank Math value.
+     * @return string
+     */
+    private static function convert_assigned_term_tokens(string $value): string {
+        return (string) preg_replace('/%customterm\(([^\s%()]+)\)%/i', '%taxonomy($1)%', $value);
+    }
+
     protected function convert_template_variables($value, ?int $post_id = null): string {
         // Foreign data first: booleans/arrays in the source plugin's options
         // must degrade to '' here, not fatal the migration (see abstract).
@@ -1155,6 +1324,8 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         if (empty($value) || strpos($value, '%') === false) {
             return $value;
         }
+
+        $value = self::convert_assigned_term_tokens($value);
 
         $replacements = [
             '%sitename%'    => get_bloginfo('name'),
@@ -1209,10 +1380,10 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * values — these templates apply to every post of the type).
      *
      * ThinkRank's Global SEO engine understands: %title%, %sitename%, %sep%,
-     * %excerpt%, %date%, %modified%, %author%, %category%. Rank Math tokens with
-     * a direct equivalent are renamed; tokens ThinkRank cannot resolve (e.g.
-     * %page%, %pt_single%, %currentyear%) are stripped so they never render
-     * literally on the frontend.
+     * %excerpt%, %date%, %modified%, %author%, %category% and the current-date
+     * tokens (%currentyear%…). Rank Math tokens with a direct equivalent are
+     * renamed; tokens ThinkRank cannot resolve (e.g. %page%, %pt_single%) are
+     * stripped so they never render literally on the frontend.
      *
      * @param mixed $template Raw Rank Math template
      * @return string ThinkRank-compatible template
@@ -1225,6 +1396,8 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         if (empty($template) || strpos($template, '%') === false) {
             return $template;
         }
+
+        $template = self::convert_assigned_term_tokens($template);
 
         // Rank Math token => ThinkRank Global SEO token (structure preserved).
         $token_map = [
@@ -1245,6 +1418,8 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             '%title%', '%sitename%', '%sep%', '%excerpt%', '%date%', '%modified%', '%author%', '%category%',
             // Resolved by Pattern_Resolver on a product, empty elsewhere.
             '%price%', '%sale_price%', '%sku%', '%stock_status%', '%short_description%', '%brand%',
+            // Resolved on every request (#1472).
+            '%currentyear%', '%currentmonth%', '%currentday%', '%currentdate%',
         ];
 
         // Strip any token ThinkRank cannot resolve so it does not render literally.
@@ -1727,6 +1902,9 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             return trim($template);
         }
 
+        // Empty where these templates apply, rather than printed: no post.
+        $template = self::convert_assigned_term_tokens($template);
+
         $token_map = [
             '%sitename%'    => '%site_title%',
             '%sitedesc%'    => '%site_description%',
@@ -1743,6 +1921,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             '%site_title%', '%site_description%', '%tagline%', '%sep%', '%separator%',
             '%date%', '%post_title%', '%page_title%', '%category_title%', '%tag_title%',
             '%search_term%', '%archive_title%', '%author_name%',
+            '%currentyear%', '%currentmonth%', '%currentday%', '%currentdate%',
         ];
 
         $template = preg_replace_callback(
@@ -1926,6 +2105,119 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         }
 
         return $settings;
+    }
+
+    /**
+     * Per-taxonomy title and description templates (`tax_{taxonomy}_title`,
+     * `tax_{taxonomy}_description`), in the shape migrate_archive_templates()
+     * consumes (#1425).
+     *
+     * @param array $titles Rank Math titles option
+     * @return array taxonomy => {title_template?, description_template?}
+     */
+    private function extract_rm_taxonomy_settings(array $titles): array {
+        $settings = [];
+
+        foreach (get_taxonomies(['public' => true], 'names') as $taxonomy) {
+            $entry = $this->rm_archive_templates($titles, "tax_{$taxonomy}", self::RM_TERM_TOKENS);
+            if (!empty($entry)) {
+                $settings[$taxonomy] = $entry;
+            }
+        }
+
+        return $settings;
+    }
+
+    /**
+     * Per-post-type archive title and description templates
+     * (`pt_{type}_archive_title`, `pt_{type}_archive_description`), in the
+     * shape migrate_archive_templates() consumes (#1425).
+     *
+     * @param array $titles Rank Math titles option
+     * @return array post_type => {title_template?, description_template?}
+     */
+    private function extract_rm_post_type_archive_settings(array $titles): array {
+        $settings = [];
+
+        foreach (get_post_types(['public' => true], 'names') as $post_type) {
+            $entry = $this->rm_archive_templates($titles, "pt_{$post_type}_archive", self::RM_ARCHIVE_TOKENS);
+            if (!empty($entry)) {
+                $settings[$post_type] = $entry;
+            }
+        }
+
+        return $settings;
+    }
+
+    /**
+     * Rank Math term-archive tokens => ThinkRank tokens. A token mapped to
+     * itself is kept as it is; anything not listed is stripped.
+     */
+    private const RM_TERM_TOKENS = [
+        '%term%'             => '%term_title%',
+        '%title%'            => '%term_title%',
+        '%term_description%' => '%term_description%',
+        '%sitename%'         => '%sitename%',
+        '%sitedesc%'         => '%site_description%',
+        '%sep%'              => '%sep%',
+        '%currentyear%'      => '%currentyear%',
+        '%currentmonth%'     => '%currentmonth%',
+        '%currentday%'       => '%currentday%',
+        '%currentdate%'      => '%currentdate%',
+    ];
+
+    /**
+     * Rank Math post type archive tokens => ThinkRank tokens.
+     */
+    private const RM_ARCHIVE_TOKENS = [
+        '%pt_plural%'    => '%pt_plural%',
+        '%pt_single%'    => '%pt_single%',
+        '%title%'        => '%pt_plural%',
+        '%sitename%'     => '%sitename%',
+        '%sitedesc%'     => '%site_description%',
+        '%sep%'          => '%sep%',
+        '%currentyear%'  => '%currentyear%',
+        '%currentmonth%' => '%currentmonth%',
+        '%currentday%'   => '%currentday%',
+        '%currentdate%'  => '%currentdate%',
+    ];
+
+    /**
+     * The `{prefix}_title` / `{prefix}_description` pair of one archive,
+     * converted with the given token map.
+     *
+     * @param array                $titles Rank Math titles option
+     * @param string               $prefix Option key prefix, e.g. "tax_genre"
+     * @param array<string,string> $tokens Rank Math token => ThinkRank token
+     * @return array{title_template?: string, description_template?: string}
+     */
+    private function rm_archive_templates(array $titles, string $prefix, array $tokens): array {
+        $entry = [];
+
+        foreach (['title', 'description'] as $field) {
+            $raw = $this->stringify_template_value($titles["{$prefix}_{$field}"] ?? '');
+            if ('' === trim($raw)) {
+                continue;
+            }
+
+            // Empty on an archive, rather than printed: no post.
+            $raw = self::convert_assigned_term_tokens($raw);
+
+            $converted = (string) preg_replace_callback(
+                '/%[a-z0-9_]+%/i',
+                static function (array $m) use ($tokens): string {
+                    return $tokens[strtolower($m[0])] ?? '';
+                },
+                $raw
+            );
+            $converted = trim((string) preg_replace('/\s{2,}/', ' ', $converted));
+
+            if ('' !== $converted) {
+                $entry[$field . '_template'] = $converted;
+            }
+        }
+
+        return $entry;
     }
 
     /**

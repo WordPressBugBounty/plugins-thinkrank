@@ -148,6 +148,9 @@ final class Indexability {
         // per-object field, and ThinkRank Pro announces any rule change.
         add_action('thinkrank_object_redirect_saved', [self::class, 'on_object_redirect_saved'], 10, 2);
         add_action('thinkrank_pro_redirects_changed', [self::class, 'bump_generation'], 10, 0);
+
+        // Pro's answer to `thinkrank_post_noindexed` follows its own settings.
+        add_action('thinkrank_pro_indexability_changed', [self::class, 'bump_generation'], 10, 0);
     }
 
     /**
@@ -490,6 +493,7 @@ final class Indexability {
      * noindexed type, exactly as it does in the tag.
      *
      * @since 2.14.1
+     * @since 2.21.0 The result passes through `thinkrank_post_noindexed`.
      *
      * @param \WP_Post $post Post.
      * @return bool
@@ -510,7 +514,23 @@ final class Indexability {
             get_post_meta($post->ID, '_thinkrank_robots_meta', true)
         );
 
-        return !empty($settings['noindex']);
+        /**
+         * Filter whether the robots tag on a post's page says noindex.
+         *
+         * For a plugin that changes the tag through `thinkrank_robots_meta` from
+         * data this class cannot see, so the URL feeds that ask here agree with
+         * the page. ThinkRank Pro's hidden-product noindex does this. Read from
+         * stored data on cron and in REST too, so a callback cannot rely on the
+         * request. It should also make a change to its inputs known, through
+         * {@see self::bump_generation()} or `thinkrank_pro_indexability_changed`,
+         * as the reports keep a stored verdict.
+         *
+         * @since 2.21.0
+         *
+         * @param bool     $noindexed Whether the page says noindex.
+         * @param \WP_Post $post      Post.
+         */
+        return (bool) apply_filters('thinkrank_post_noindexed', !empty($settings['noindex']), $post);
     }
 
     /**

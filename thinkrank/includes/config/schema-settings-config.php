@@ -122,6 +122,7 @@ class Schema_Settings_Config {
             'organization_social_pinterest' => '',
             'organization_social_whatsapp' => '',
             'organization_social_telegram' => '',
+            'organization_social_tiktok' => '',
             'organization_contact_type' => 'customer service',
             'organization_contact_phone' => '',
             'organization_contact_email' => '',

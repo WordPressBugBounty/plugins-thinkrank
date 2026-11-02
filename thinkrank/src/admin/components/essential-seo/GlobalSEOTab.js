@@ -34,6 +34,7 @@ import SectionHeader from '../common/SectionHeader';
 import FormField from '../common/FormField';
 import RobotMetaSettings from './RobotMetaSettings';
 import ContentTypeMatrix from './ContentTypeMatrix';
+import TaxonomyTemplates from './TaxonomyTemplates';
 import AutoAiSection from './AutoAiSection';
 import BulkSnippetsTab from './bulk-snippets/BulkSnippetsTab';
 import ThinContentTab from './thin-content/ThinContentTab';
@@ -75,6 +76,15 @@ const CUSTOM_FIELD_VARIABLE = {
 	value: '%customfield(field-name)%',
 };
 
+/**
+ * The terms an item is assigned in a taxonomy. `taxonomy-slug` is replaced
+ * with the slug (#1468).
+ */
+const TAXONOMY_VARIABLE = {
+	label: __('+ Taxonomy terms', 'thinkrank'),
+	value: '%taxonomy(taxonomy-slug)%',
+};
+
 const truncate = (str, max) => {
 	if (!str) {
 		return '';
@@ -109,6 +119,9 @@ const GlobalSEOTab = ({ activeSubSection }) => {
 	// Thin Content reports across every post type at once and owns its own
 	// data, so it has no per-type settings object to load either (#565).
 	const isThinContent = activeSubSection === 'thin-content';
+	// Every public taxonomy's default title and description, one screen for
+	// all of them (#1425); it reads and writes the matrix rows itself.
+	const isTaxonomies = activeSubSection === 'taxonomies';
 
 	const [settings, setSettings] = useState({});
 	const [isSaving, setIsSaving] = useState(false);
@@ -168,7 +181,13 @@ const GlobalSEOTab = ({ activeSubSection }) => {
 
 		// The matrix and Auto AI screens own their own data; there is no post
 		// type to load.
-		if (isMatrix || isAutoAi || isBulkSnippets || isThinContent) {
+		if (
+			isMatrix ||
+			isAutoAi ||
+			isBulkSnippets ||
+			isThinContent ||
+			isTaxonomies
+		) {
 			return undefined;
 		}
 
@@ -187,7 +206,14 @@ const GlobalSEOTab = ({ activeSubSection }) => {
 			cancelled = true;
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [currentPostType, isMatrix, isAutoAi, isBulkSnippets, isThinContent]);
+	}, [
+		currentPostType,
+		isMatrix,
+		isAutoAi,
+		isBulkSnippets,
+		isThinContent,
+		isTaxonomies,
+	]);
 
 	const loadSettings = async (
 		postType = currentPostType,
@@ -414,12 +440,14 @@ const GlobalSEOTab = ({ activeSubSection }) => {
 	const extraVariables = [
 		...('product' === currentPostType ? PRODUCT_VARIABLES : []),
 		CUSTOM_FIELD_VARIABLE,
+		TAXONOMY_VARIABLE,
 	];
 
 	const titleVariables = [
 		{ label: __('+ Title', 'thinkrank'), value: '%title%' },
 		{ label: __('+ Site Title', 'thinkrank'), value: '%sitename%' },
 		{ label: __('+ Separator', 'thinkrank'), value: '%sep%' },
+		{ label: __('+ Current Year', 'thinkrank'), value: '%currentyear%' },
 		...extraVariables,
 	];
 
@@ -429,6 +457,23 @@ const GlobalSEOTab = ({ activeSubSection }) => {
 		{ label: __('+ Title', 'thinkrank'), value: '%title%' },
 		{ label: __('+ Separator', 'thinkrank'), value: '%sep%' },
 		...extraVariables,
+	];
+
+	// The post type archive's own tokens (#1425).
+	const archiveTitleVariables = [
+		{ label: __('+ Plural name', 'thinkrank'), value: '%pt_plural%' },
+		{ label: __('+ Singular name', 'thinkrank'), value: '%pt_single%' },
+		{ label: __('+ Site Title', 'thinkrank'), value: '%site_title%' },
+		{ label: __('+ Separator', 'thinkrank'), value: '%sep%' },
+	];
+
+	const archiveDescriptionVariables = [
+		{ label: __('+ Plural name', 'thinkrank'), value: '%pt_plural%' },
+		{ label: __('+ Site Title', 'thinkrank'), value: '%site_title%' },
+		{
+			label: __('+ Site Description', 'thinkrank'),
+			value: '%site_description%',
+		},
 	];
 
 	const siteName = window.thinkrankAdmin?.siteName || '';
@@ -450,6 +495,16 @@ const GlobalSEOTab = ({ activeSubSection }) => {
 		sitename: siteName,
 		sep: TITLE_SEPARATOR,
 		excerpt: SAMPLE_EXCERPT,
+		// Worked out on every request on the site (#1472); today's, in the
+		// browser's locale, is close enough for a preview.
+		currentyear: String(new Date().getFullYear()),
+		currentmonth: new Date().toLocaleDateString(undefined, {
+			month: 'long',
+		}),
+		currentday: String(new Date().getDate()),
+		currentdate: new Date().toLocaleDateString(undefined, {
+			dateStyle: 'long',
+		}),
 	};
 
 	const titleTemplate = settings.title || '';
@@ -610,6 +665,68 @@ const GlobalSEOTab = ({ activeSubSection }) => {
 						description={descriptionTemplate}
 					/>
 				</div>
+			</Container>
+		</Card>
+	);
+
+	// Only a post type with an archive page has one to title (#1425).
+	const renderArchiveCard = () => (
+		<Card padding={false}>
+			<SectionHeader
+				title={`${postTypePluralLabel} ${__('Archive', 'thinkrank')}`}
+				description={__(
+					'Title and meta description of the archive page that lists every item of this type.',
+					'thinkrank'
+				)}
+			/>
+			<Container
+				direction="column"
+				gap={6}
+				className="tr-px-6 tr-py-6 tr-divide-y tr-divide-line-2"
+			>
+				<FormField
+					id="tr-gseo-archive-title"
+					label={__('Archive Title Format', 'thinkrank')}
+					help={__(
+						'Empty: the archive uses the Archive Title format under Site Identity.',
+						'thinkrank'
+					)}
+				>
+					<Input
+						id="tr-gseo-archive-title"
+						value={settings.archive_title || ''}
+						onChange={(e) =>
+							updateSetting('archive_title', e.target.value)
+						}
+						placeholder="%pt_plural% %sep% %site_title%"
+					/>
+					{renderVariableHints(
+						'archive_title',
+						archiveTitleVariables
+					)}
+				</FormField>
+
+				<FormField
+					id="tr-gseo-archive-description"
+					label={__('Archive Description Format', 'thinkrank')}
+					help={__(
+						'Empty: the archive uses the post type description, when it has one.',
+						'thinkrank'
+					)}
+					className="tr-pt-6"
+				>
+					<Input
+						id="tr-gseo-archive-description"
+						value={settings.archive_description || ''}
+						onChange={(e) =>
+							updateSetting('archive_description', e.target.value)
+						}
+					/>
+					{renderVariableHints(
+						'archive_description',
+						archiveDescriptionVariables
+					)}
+				</FormField>
 			</Container>
 		</Card>
 	);
@@ -830,6 +947,9 @@ const GlobalSEOTab = ({ activeSubSection }) => {
 	if (isThinContent) {
 		return <ThinContentTab />;
 	}
+	if (isTaxonomies) {
+		return <TaxonomyTemplates />;
+	}
 	if (isAutoAi) {
 		return <AutoAiSection />;
 	}
@@ -886,6 +1006,7 @@ const GlobalSEOTab = ({ activeSubSection }) => {
 
 			<Container direction="column" gap={6}>
 				{renderSeoSettingsCard()}
+				{currentPostTypeData.has_archive && renderArchiveCard()}
 				{renderRobotsMetaCard()}
 				{renderLinkSuggestionsCard()}
 			</Container>

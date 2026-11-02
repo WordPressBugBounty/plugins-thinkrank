@@ -60,6 +60,24 @@ class Pattern_Resolver {
     private const CUSTOM_FIELD_TOKEN = '/%customfield\((' . self::CUSTOM_FIELD_KEY . ')\)%/i';
 
     /**
+     * `%taxonomy(slug)%`, with the taxonomy slug captured. A slug takes the
+     * same characters as a meta key, so a WooCommerce attribute slug that
+     * is not ASCII still reads as one token; get_taxonomy() then decides.
+     *
+     * @since 2.21.0
+     * @var string
+     */
+    private const TAXONOMY_TOKEN = '/%taxonomy\((' . self::CUSTOM_FIELD_KEY . ')\)%/i';
+
+    /**
+     * What separates a post's terms in a `%taxonomy(slug)%` value.
+     *
+     * @since 2.21.0
+     * @var string
+     */
+    private const TAXONOMY_TERM_SEPARATOR = ', ';
+
+    /**
      * Post meta key holding the per-post SEO title.
      */
     private const META_TITLE = '_thinkrank_seo_title';
@@ -96,7 +114,7 @@ class Pattern_Resolver {
         if (strpos($value, '%') === false) {
             return $value;
         }
-        return self::process($value, self::placeholders_for($post_id, $value) + self::custom_field_placeholders($value, 'post', $post_id));
+        return self::process($value, self::placeholders_for($post_id, $value) + self::custom_field_placeholders($value, 'post', $post_id) + self::taxonomy_placeholders($value, $post_id));
     }
 
     /**
@@ -223,7 +241,9 @@ class Pattern_Resolver {
      * Yoast/RankMath/AIOSEO/SEOPress importer — and the importers already
      * substitute their own term tokens (%%term_title%%, %term%) with the term
      * name at export time, so what lands here is either literal text or
-     * ThinkRank's own tags.
+     * ThinkRank's own tags. A `%taxonomy(slug)%` names terms assigned to a
+     * post, which an archive does not have, so the strip in process() removes
+     * it here.
      *
      * @since 2.0.1
      *
@@ -241,7 +261,7 @@ class Pattern_Resolver {
     /**
      * The tokens a Global SEO post-type template resolves on top of the
      * shared ones: the WooCommerce product tokens and any
-     * `%customfield(key)%` the template names.
+     * `%customfield(key)%` or `%taxonomy(slug)%` the template names.
      *
      * SEO_Manager resolves the Bulk SEO Optimization templates on the page
      * with its own placeholder map, which had neither, so a "%title% - Only
@@ -256,7 +276,7 @@ class Pattern_Resolver {
      * @return array<string,string> Token => value.
      */
     public static function template_tokens(string $template, int $post_id): array {
-        return self::product_placeholders($post_id, $template) + self::custom_field_placeholders($template, 'post', $post_id);
+        return self::product_placeholders($post_id, $template) + self::custom_field_placeholders($template, 'post', $post_id) + self::taxonomy_placeholders($template, $post_id);
     }
 
     /**
@@ -350,9 +370,189 @@ class Pattern_Resolver {
         $value = apply_filters('thinkrank_custom_field_variable', $value, $key, $object_id, $meta_type);
         $value = is_scalar($value) ? (string) $value : '';
 
+        return self::plain_variable_value($value);
+    }
+
+    /**
+     * A variable's value as plain text: markup stripped, entities decoded,
+     * whitespace collapsed. It lands in a `<title>` and a meta description,
+     * and is escaped where it is printed.
+     *
+     * @since 2.21.0
+     *
+     * @param string $value Raw value.
+     * @return string
+     */
+    private static function plain_variable_value(string $value): string {
         $value = html_entity_decode(wp_strip_all_tags($value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
         return trim((string) preg_replace('/\s+/u', ' ', $value));
+    }
+
+    /**
+     * Values for the `%taxonomy(slug)%` tokens a template names.
+     *
+     * Each resolves to the names of the terms of that taxonomy assigned to
+     * the post, so one template gives every item its own value (#1468). Keyed
+     * by the token as written, as custom_field_placeholders() does.
+     *
+     * @since 2.21.0
+     *
+     * @param string $template Template being resolved.
+     * @param int    $post_id  Post ID.
+     * @return array<string,string> Token => value.
+     */
+    private static function taxonomy_placeholders(string $template, int $post_id): array {
+        if (false === stripos($template, '%taxonomy(')) {
+            return [];
+        }
+
+        if (!preg_match_all(self::TAXONOMY_TOKEN, $template, $found, PREG_SET_ORDER)) {
+            return [];
+        }
+
+        // Each distinct taxonomy is read once, and only the first
+        // TAXONOMY_LIMIT of them; a token past the limit resolves to ''.
+        $values = [];
+        $map    = [];
+        foreach ($found as $match) {
+            $taxonomy = $match[1];
+
+            if (!array_key_exists($taxonomy, $values)) {
+                $values[$taxonomy] = count($values) < self::TAXONOMY_LIMIT
+                    ? self::taxonomy_value($post_id, $taxonomy)
+                    : '';
+            }
+
+            $map[$match[0]] = $values[$taxonomy];
+        }
+
+        return $map;
+    }
+
+    /**
+     * The names of a post's terms in one taxonomy, or '' when it has none.
+     *
+     * Only public taxonomies: per-post SEO fields are written by anyone who
+     * can edit the post, and a taxonomy registered as not public is where a
+     * plugin keeps what is not meant for the page. An unknown taxonomy is
+     * empty too, and get_the_terms() answering false or a WP_Error reads as
+     * no terms.
+     *
+     * @since 2.21.0
+     *
+     * @param int    $post_id  Post ID.
+     * @param string $taxonomy Taxonomy slug.
+     * @return string
+     */
+    private static function taxonomy_value(int $post_id, string $taxonomy): string {
+        if ($post_id <= 0) {
+            return '';
+        }
+
+        $registered = get_taxonomy($taxonomy);
+        if (!is_object($registered) || empty($registered->public)) {
+            return '';
+        }
+
+        $found = get_the_terms($post_id, $taxonomy);
+        $terms = is_array($found)
+            ? array_values(array_filter($found, static fn ($term): bool => $term instanceof \WP_Term))
+            : [];
+        $names = array_map(static fn (\WP_Term $term): string => self::plain_variable_value((string) $term->name), $terms);
+        $value = implode(self::TAXONOMY_TERM_SEPARATOR, array_filter($names, static fn (string $name): bool => '' !== $name));
+
+        /**
+         * Filter the value a `%taxonomy(slug)%` token resolves to.
+         *
+         * For a site that wants something other than every term joined by a
+         * comma, such as one primary term or another separator. Runs only for
+         * a public taxonomy, also when the post has no terms in it; the
+         * result is reduced to plain text like the term names.
+         *
+         * @since 2.21.0
+         *
+         * @param string     $value    The term names, joined by ", ", in the
+         *                             order get_the_terms() returned them.
+         * @param string     $taxonomy Taxonomy slug.
+         * @param int        $post_id  Post ID.
+         * @param \WP_Term[] $terms    The terms the value was built from.
+         */
+        $value = apply_filters('thinkrank_taxonomy_variable_value', $value, $taxonomy, $post_id, $terms);
+
+        return self::plain_variable_value(is_scalar($value) ? (string) $value : '');
+    }
+
+    /**
+     * The most distinct taxonomies one template, an editor preview map or a
+     * lookup resolves, so a long template costs a bounded number of term
+     * reads and filter calls on every page view. Beyond it a
+     * `%taxonomy(slug)%` resolves to nothing.
+     *
+     * @since 2.21.0
+     * @var int
+     */
+    public const TAXONOMY_LIMIT = 20;
+
+    /**
+     * Assigned term names for the editor's live preview, keyed as the
+     * client-side resolver reads them (`taxonomy(slug)`). Bounded as
+     * custom_field_values() is: only what the templates given name, at most
+     * TAXONOMY_LIMIT taxonomies, each value cut to PREVIEW_VALUE_LENGTH
+     * characters. A slug the author types later is resolved by
+     * `GET /custom-fields`.
+     *
+     * @since 2.21.0
+     *
+     * @param int      $post_id    Post ID.
+     * @param string[] $taxonomies Taxonomy slugs wanted.
+     * @return array<string,string> 'taxonomy(slug)' => value.
+     */
+    public static function taxonomy_values(int $post_id, array $taxonomies): array {
+        if ($post_id <= 0) {
+            return [];
+        }
+
+        $wanted = [];
+        foreach ($taxonomies as $taxonomy) {
+            $taxonomy = is_scalar($taxonomy) ? (string) $taxonomy : '';
+            if (preg_match('/^' . self::CUSTOM_FIELD_KEY . '$/', $taxonomy)) {
+                $wanted[$taxonomy] = true;
+            }
+        }
+
+        $map = [];
+        foreach (array_slice(array_keys($wanted), 0, self::TAXONOMY_LIMIT) as $taxonomy) {
+            $taxonomy = (string) $taxonomy;
+            $value    = self::taxonomy_value($post_id, $taxonomy);
+
+            $map['taxonomy(' . $taxonomy . ')'] = function_exists('mb_substr')
+                ? mb_substr($value, 0, self::PREVIEW_VALUE_LENGTH)
+                : substr($value, 0, self::PREVIEW_VALUE_LENGTH);
+        }
+
+        return $map;
+    }
+
+    /**
+     * The taxonomy slugs the `%taxonomy(slug)%` tokens in some templates name.
+     *
+     * @since 2.21.0
+     *
+     * @param string[] $templates Templates.
+     * @return string[]
+     */
+    public static function taxonomy_slugs(array $templates): array {
+        $slugs = [];
+        foreach ($templates as $template) {
+            if (is_string($template) && preg_match_all(self::TAXONOMY_TOKEN, $template, $found)) {
+                foreach ($found[1] as $slug) {
+                    $slugs[$slug] = true;
+                }
+            }
+        }
+
+        return array_map('strval', array_keys($slugs));
     }
 
     /**
@@ -456,9 +656,10 @@ class Pattern_Resolver {
      */
     private static function placeholders_for_term(int $term_id): array {
         $term = get_term($term_id);
+        $term = $term instanceof \WP_Term ? $term : null;
 
-        $name        = ($term && !is_wp_error($term)) ? $term->name : '';
-        $description = ($term && !is_wp_error($term)) ? (string) $term->description : '';
+        $name        = $term ? (string) $term->name : '';
+        $description = $term ? (string) $term->description : '';
 
         return [
             '%title%'     => $name,
@@ -474,7 +675,85 @@ class Pattern_Resolver {
             '%modified%'  => '',
             '%author%'    => '',
             '%category%'  => '',
+        ] + self::term_archive_placeholders($term) + self::current_date_placeholders();
+    }
+
+    /**
+     * The tokens a taxonomy template names its term with (#1425).
+     *
+     * The per-taxonomy title and description templates are written once for
+     * every term of a taxonomy, in the vocabulary the other SEO plugins use
+     * for theirs, so an imported "%term_title% %sep% %site_title%" resolves
+     * as typed. %term_description% is the whole description as plain text;
+     * the meta description is trimmed where it is printed.
+     *
+     * @since 2.20.1
+     *
+     * @param \WP_Term|null $term Term, or null when it does not exist.
+     * @return array<string,string> Placeholder map.
+     */
+    private static function term_archive_placeholders(?\WP_Term $term): array {
+        $taxonomy = $term ? get_taxonomy((string) $term->taxonomy) : null;
+        $parent   = $term && (int) $term->parent > 0 ? get_term((int) $term->parent) : null;
+
+        return [
+            '%term_title%'       => $term ? (string) $term->name : '',
+            '%term_description%' => $term ? \ThinkRank\Core\Seo_Text::plain_text((string) $term->description) : '',
+            '%taxonomy_name%'    => is_object($taxonomy) ? self::object_label($taxonomy, 'singular_name') : '',
+            '%parent_term%'      => $parent instanceof \WP_Term ? (string) $parent->name : '',
+            '%count%'            => $term ? (string) (int) ($term->count ?? 0) : '',
+            '%site_title%'       => self::site_name(),
+            '%site_description%' => self::site_description(),
         ];
+    }
+
+    /**
+     * Resolve a post type archive template (#1425).
+     *
+     * A post type's archive has no post to take a title from, so the
+     * template names it by the post type: %title%, %archive_title% and
+     * %pt_plural% are the plural label, %pt_single% the singular one.
+     *
+     * @since 2.20.1
+     *
+     * @param string $value     Template.
+     * @param string $post_type Post type slug.
+     * @return string Resolved string.
+     */
+    public static function resolve_post_type_archive_value(string $value, string $post_type): string {
+        if (strpos($value, '%') === false) {
+            return $value;
+        }
+
+        $object = get_post_type_object($post_type);
+        $plural = is_object($object) ? self::object_label($object, 'name') : '';
+        $single = is_object($object) ? self::object_label($object, 'singular_name') : '';
+
+        return self::process($value, [
+            '%title%'            => $plural,
+            '%archive_title%'    => $plural,
+            '%pt_plural%'        => $plural,
+            '%pt_single%'        => $single,
+            '%sitename%'         => self::site_name(),
+            '%site_title%'       => self::site_name(),
+            '%site_description%' => self::site_description(),
+            '%sep%'              => self::separator(),
+        ] + self::current_date_placeholders());
+    }
+
+    /**
+     * One label of a post type or taxonomy object, falling back to its
+     * general label.
+     *
+     * @param object $registered Post type or taxonomy object.
+     * @param string $label      Label key, e.g. 'name' or 'singular_name'.
+     * @return string
+     */
+    private static function object_label(object $registered, string $label): string {
+        $labels = isset($registered->labels) ? (object) $registered->labels : null;
+        $value  = $labels && isset($labels->{$label}) ? (string) $labels->{$label} : '';
+
+        return '' !== $value ? $value : (string) ($registered->label ?? '');
     }
 
     /**
@@ -525,7 +804,9 @@ class Pattern_Resolver {
             $templates[] = (string) get_post_meta($post_id, $meta_key, true);
         }
 
-        return $map + self::custom_field_values('post', $post_id, self::custom_field_keys($templates));
+        return $map
+            + self::custom_field_values('post', $post_id, self::custom_field_keys($templates))
+            + self::taxonomy_values($post_id, self::taxonomy_slugs($templates));
     }
 
     /**
@@ -758,6 +1039,11 @@ class Pattern_Resolver {
                 $placeholders[$token] = $resolve();
             }
         }
+        foreach (self::current_date_placeholders() as $token => $value) {
+            if (self::names_token($template, $token)) {
+                $placeholders[$token] = $value;
+            }
+        }
 
         return array_merge($placeholders, self::product_placeholders($post_id, $template));
     }
@@ -923,24 +1209,36 @@ class Pattern_Resolver {
      * lookup and means the token is not empty on the stores most likely to
      * have used a brand token in the plugin they are leaving.
      *
+     * Delegates to the WooCommerce integration, so the token, Product schema
+     * and Open Graph read the brand taxonomy the store chose and the same
+     * `thinkrank_product_brand` filter (#1478).
+     *
      * @since 2.10.1
+     * @since 2.21.0 Delegates to Woocommerce::brand().
      *
      * @param int $post_id Product ID.
      * @return string
      */
     private static function product_brand(int $post_id): string {
-        foreach (['product_brand', 'pwb-brand', 'yith_product_brand', 'berocket_brand'] as $taxonomy) {
-            if (!taxonomy_exists($taxonomy)) {
-                continue;
-            }
+        return \ThinkRank\Integrations\Woocommerce::brand($post_id);
+    }
 
-            $terms = get_the_terms($post_id, $taxonomy);
-            if (is_array($terms) && !empty($terms)) {
-                return (string) $terms[0]->name;
-            }
-        }
+    /**
+     * The site description %site_description% resolves to: the Site Identity
+     * Site Description, else the WordPress tagline, as the Site Identity
+     * title formats resolve it.
+     *
+     * @since 2.20.1
+     *
+     * @return string Site description.
+     */
+    private static function site_description(): string {
+        $settings = class_exists('\ThinkRank\SEO\Site_Identity_Manager')
+            ? (new Site_Identity_Manager())->get_settings('site')
+            : [];
+        $value = trim((string) ($settings['site_description'] ?? ''));
 
-        return '';
+        return '' !== $value ? $value : (string) get_bloginfo('description');
     }
 
     /**
@@ -956,6 +1254,32 @@ class Pattern_Resolver {
             return Site_Identity_Manager::site_name();
         }
         return (string) get_bloginfo('name');
+    }
+
+    /**
+     * The current-date tokens, worked out on every request.
+     *
+     * A title such as "Best running shoes %currentyear%" is written to stay
+     * current. ThinkRank had no such token, so every importer froze the year
+     * into the text on the day of the migration and the title kept saying
+     * 2026 in 2027 (#1472). They are Rank Math's names (SureRank's too), so
+     * a Rank Math value imports unchanged. In the site's timezone, and the
+     * date in the site's date format, as Rank Math prints them.
+     *
+     * Shared with the Site Identity title formats and the author archive
+     * templates, which build their own placeholder maps.
+     *
+     * @since 2.21.0
+     *
+     * @return array<string,string> Token => value.
+     */
+    public static function current_date_placeholders(): array {
+        return [
+            '%currentyear%'  => (string) wp_date('Y'),
+            '%currentmonth%' => (string) wp_date('F'),
+            '%currentday%'   => (string) wp_date('j'),
+            '%currentdate%'  => (string) wp_date((string) get_option('date_format', 'F j, Y')),
+        ];
     }
 
     /**
@@ -1034,11 +1358,18 @@ class Pattern_Resolver {
      * A bare percent is left alone: "50% off" is ordinary copy, and a guard
      * that ate it would be a worse bug than the one it prevents.
      *
+     * `%taxonomy(...)%` is matched too, with any argument. A context with no
+     * post to take terms from (a term archive, a post type archive, a Site
+     * Identity format) does not put it in its map, and a malformed one such
+     * as `%taxonomy(two words)%` never reaches a map. Each resolves to nothing
+     * rather than printing the token.
+     *
      * Public since 2.18.0 so the Site Identity title formats and the author
      * archive templates, which build their own placeholder maps, apply the
      * same rule (#1330).
      *
      * @since 2.10.1
+     * @since 2.21.0 Also removes an unresolved `%taxonomy(...)%`.
      *
      * @param string                $template     Raw template.
      * @param array<string, string> $placeholders Tokens this resolver can resolve.
@@ -1050,7 +1381,7 @@ class Pattern_Resolver {
         }
 
         $stripped = preg_replace_callback(
-            '/%%[a-z0-9_-]+%%|%[a-z0-9_-]+%/i',
+            '/%%[a-z0-9_-]+%%|%[a-z0-9_-]+%|%taxonomy\([^%()]*\)%/i',
             static function (array $found) use ($placeholders): string {
                 return array_key_exists($found[0], $placeholders) ? $found[0] : '';
             },

@@ -1864,8 +1864,10 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 ? get_search_link()
                 : (self::current_archive_url() ?: $this->get_current_url());
 
+            // A search filtered to a term still has the term as its queried
+            // object, and is not that term's page (#1509).
             $term    = get_queried_object();
-            $term_id = ($term instanceof \WP_Term) ? (int) $term->term_id : 0;
+            $term_id = ($term instanceof \WP_Term && !is_search()) ? (int) $term->term_id : 0;
 
             $og_title_override       = '';
             $og_description_override = '';
@@ -1902,6 +1904,37 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 if ('' !== $term_twitter_image) {
                     $data['twitter_image'] = $term_twitter_image;
                 }
+            }
+
+            // The shop page has its own Social tab, like the static posts page,
+            // but WooCommerce answers it as the product archive (#1501).
+            $shop_page_id = class_exists('\ThinkRank\Frontend\SEO_Manager')
+                ? \ThinkRank\Frontend\SEO_Manager::shop_page_id()
+                : 0;
+            $shop_page    = $shop_page_id > 0 ? get_post($shop_page_id) : null;
+            if ($shop_page instanceof \WP_Post) {
+                $og_title_override = Pattern_Resolver::resolve_value(
+                    (string) get_post_meta($shop_page->ID, '_thinkrank_og_title', true),
+                    $shop_page->ID
+                );
+                $og_description_override = Pattern_Resolver::resolve_value(
+                    (string) get_post_meta($shop_page->ID, '_thinkrank_og_description', true),
+                    $shop_page->ID
+                );
+                $data['twitter_title'] = Pattern_Resolver::resolve_value(
+                    (string) get_post_meta($shop_page->ID, '_thinkrank_twitter_title', true),
+                    $shop_page->ID
+                );
+                $data['twitter_description'] = Pattern_Resolver::resolve_value(
+                    (string) get_post_meta($shop_page->ID, '_thinkrank_twitter_description', true),
+                    $shop_page->ID
+                );
+
+                $og_image_override = Absolute_Url::from((string) get_post_meta($shop_page->ID, '_thinkrank_og_image', true));
+                $data['image'] = '' !== $og_image_override
+                    ? $og_image_override
+                    : $this->get_og_image_for_context($settings, $shop_page);
+                $data['twitter_image'] = $this->get_twitter_image_for_context($settings, $shop_page);
             }
 
             // Date and search archives can have no ThinkRank-managed title to

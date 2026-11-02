@@ -703,7 +703,7 @@ class SEO_Analyzer_Fixer {
         $still_blocked = (new SEO_Analyzer())->blocked_answer_agents();
 
         if (!empty($still_blocked)) {
-            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
             throw new \Exception(
                 sprintf(
                     /* translators: %s: comma-separated crawler names. */
@@ -711,6 +711,7 @@ class SEO_Analyzer_Fixer {
                     implode(', ', $still_blocked)
                 )
             );
+            // phpcs:enable WordPress.Security.EscapeOutput.ExceptionNotEscaped
         }
 
         return [
@@ -766,12 +767,13 @@ class SEO_Analyzer_Fixer {
         if (empty($write['success'])) {
             $reason = (string) ($write['message'] ?? '');
 
-            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
             throw new \Exception(
                 '' !== $reason
                     ? $reason
                     : __('llms.txt could not be written. Check that your site root is writable.', 'thinkrank')
             );
+            // phpcs:enable WordPress.Security.EscapeOutput.ExceptionNotEscaped
         }
 
         return [

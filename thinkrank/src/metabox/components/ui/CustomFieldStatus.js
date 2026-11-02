@@ -1,7 +1,7 @@
 /**
- * What the editor preview is doing with a `%customfield(key)%` it does not
- * have a value for yet (#1277 review): looking it up, or failed to. Nothing
- * when every field the fields name is known.
+ * What the editor preview is doing with a `%customfield(key)%` or
+ * `%taxonomy(slug)%` it does not have a value for yet (#1277 review, #1468):
+ * looking it up, or failed to. Nothing when every one the fields name is known.
  *
  * @package
  * @since 2.19.0
@@ -26,7 +26,7 @@ const CustomFieldStatus = ({ status, error, onRetry }) => {
 				data-testid="custom-field-status"
 			>
 				{__(
-					'Looking up the custom field values for the preview…',
+					'Looking up the custom field and taxonomy values for the preview…',
 					'thinkrank'
 				)}
 			</p>
@@ -42,7 +42,7 @@ const CustomFieldStatus = ({ status, error, onRetry }) => {
 				<p className="tr-m-0 tr-text-xs tr-text-danger" role="alert">
 					{error}{' '}
 					{__(
-						'The preview shows those fields as typed; the page still uses their values.',
+						'The preview shows those variables as typed; the page still uses their values.',
 						'thinkrank'
 					)}
 				</p>

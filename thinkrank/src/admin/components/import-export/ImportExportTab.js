@@ -19,6 +19,7 @@ import notify from '../../utils/notify';
 import { purgeApiCache } from '../../utils/apiCache';
 import PluginImportCard from './PluginImportCard';
 import NativeExportCard from './NativeExportCard';
+import DateVariableRepairCard from './DateVariableRepairCard';
 import { SUPPORTED_PLATFORMS } from './platformLogos';
 
 /**
@@ -95,6 +96,7 @@ const ImportExportTab = ({ section = 'export' }) => {
 	const [detected, setDetected] = useState({});
 	const [native, setNative] = useState(null);
 	const [snapshots, setSnapshots] = useState({});
+	const [dateRepairSources, setDateRepairSources] = useState([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState(null);
 	// The re-import caution is informational; let the user dismiss it once read.
@@ -126,6 +128,7 @@ const ImportExportTab = ({ section = 'export' }) => {
 			setDetected(nextDetected);
 			setNative(result.native || null);
 			setSnapshots(nextSnapshots);
+			setDateRepairSources(result.date_repair_sources || []);
 			return { detected: nextDetected, snapshots: nextSnapshots };
 		} catch (err) {
 			setError(
@@ -282,7 +285,7 @@ const ImportExportTab = ({ section = 'export' }) => {
 							onDismiss={() => setShowCaution(false)}
 						>
 							{__(
-								'Re-running a migration may overwrite existing ThinkRank settings and metadata where applicable. Fields still at their defaults are filled from the imported data, while values you have already customized are preserved. We recommend creating a database backup before re-importing.',
+								'Re-running a migration only fills ThinkRank settings and metadata that are still empty or at their defaults. Values you have already customized are preserved. We recommend creating a database backup first.',
 								'thinkrank'
 							)}
 						</Alert>
@@ -366,6 +369,10 @@ const ImportExportTab = ({ section = 'export' }) => {
 								/>
 							))}
 						</div>
+					)}
+
+					{dateRepairSources.length > 0 && (
+						<DateVariableRepairCard sources={dateRepairSources} />
 					)}
 				</>
 			)}

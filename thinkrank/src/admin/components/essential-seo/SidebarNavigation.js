@@ -38,6 +38,9 @@ const getGlobalSEOItems = () => {
 			id: `${pt.slug}-seo`,
 			title: pt.plural_name || pt.label,
 		})),
+		// Every public taxonomy's title and description templates, beside the
+		// post types they classify (#1425).
+		{ id: 'taxonomies', title: __('Taxonomies', 'thinkrank') },
 		// Every post's snippet in one table, filtered by problem — the
 		// per-post-type screens above set the templates, this is where the
 		// posts that need their own values get them (#727).
@@ -126,6 +129,7 @@ const ADVANCED_ENTRIES = {
 	],
 	'crawling-ai-indexing': [
 		'global-robot-meta',
+		'permalinks',
 		'robots-management',
 		'publisher-sitemaps',
 		'llms-ai-indexing',
@@ -344,9 +348,10 @@ const getBaseStructure = () => [
 		title: __('WooCommerce', 'thinkrank'),
 		items: [
 			{
+				// Free since the store settings and product URLs moved in
+				// (#1476, #1478); Pro adds its panel below them.
 				id: 'woocommerce-settings',
 				title: __('Product SEO', 'thinkrank'),
-				pro: true,
 			},
 		],
 	},
@@ -381,6 +386,10 @@ const getBaseStructure = () => [
 			{
 				id: 'robots-management',
 				title: __('Robots.txt', 'thinkrank'),
+			},
+			{
+				id: 'permalinks',
+				title: __('Permalinks', 'thinkrank'),
 			},
 			{ id: 'xml-sitemap', title: __('XML Sitemap', 'thinkrank') },
 			{

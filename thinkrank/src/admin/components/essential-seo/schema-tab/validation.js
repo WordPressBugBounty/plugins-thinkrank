@@ -126,6 +126,7 @@ export const getSectionValidationData = (section, settings) => {
 					settings.organization_social_instagram,
 				organization_social_youtube:
 					settings.organization_social_youtube,
+				organization_social_tiktok: settings.organization_social_tiktok,
 				// Organization contact hours for business hours display
 				organization_contact_hours: settings.organization_contact_hours,
 			};

@@ -1282,13 +1282,13 @@ class Slim_SEO_Exporter extends Abstract_Plugin_Exporter {
 
     /**
      * Per-taxonomy contexts: `noindex` (applied through the Content Type
-     * Matrix) plus any template or image the user wrote, kept in Slim SEO's
-     * own syntax. The category and tag titles are already in title_formats,
+     * Matrix), any template the user wrote, converted for ThinkRank, and any
+     * image. The category and tag titles are already in title_formats,
      * and a template equal to Slim SEO's default is dropped — ThinkRank
      * renders the same thing without it.
      *
      * @param array $option `slim_seo` option value
-     * @return array taxonomy => {noindex?, title?, description?, facebook_image?, twitter_image?}
+     * @return array taxonomy => {noindex?, title_template?, description_template?, facebook_image?, twitter_image?}
      */
     private function extract_taxonomy_settings(array $option): array {
         $kept = [];
@@ -1302,6 +1302,7 @@ class Slim_SEO_Exporter extends Abstract_Plugin_Exporter {
             if (in_array($key, ['category', 'post_tag'], true)) {
                 unset($entry['title']);
             }
+            $entry = $this->with_archive_templates($entry);
             if (!empty($value['noindex'])) {
                 $entry = ['noindex' => true] + $entry;
             }
@@ -1315,10 +1316,10 @@ class Slim_SEO_Exporter extends Abstract_Plugin_Exporter {
 
     /**
      * `{post_type}_archive` contexts, keyed by post type: `noindex` plus any
-     * non-default template or image, in Slim SEO's own syntax.
+     * non-default template, converted for ThinkRank, or image.
      *
      * @param array $option `slim_seo` option value
-     * @return array post_type => {noindex?, title?, description?, facebook_image?, twitter_image?}
+     * @return array post_type => {noindex?, title_template?, description_template?, facebook_image?, twitter_image?}
      */
     private function extract_post_type_archive_settings(array $option): array {
         $kept = [];
@@ -1333,6 +1334,7 @@ class Slim_SEO_Exporter extends Abstract_Plugin_Exporter {
             }
 
             $entry = $this->non_default_context($value, self::DEFAULT_TEMPLATES['post_archive']);
+            $entry = $this->with_archive_templates($entry);
             if (!empty($value['noindex'])) {
                 $entry = ['noindex' => true] + $entry;
             }
@@ -1342,6 +1344,40 @@ class Slim_SEO_Exporter extends Abstract_Plugin_Exporter {
         }
 
         return $kept;
+    }
+
+    /**
+     * Move a context's title and description into the templates ThinkRank can
+     * apply, leaving its images preserved (#1471).
+     *
+     * @param array $entry Context entry, in Slim SEO's syntax.
+     * @return array Entry with title_template and description_template.
+     */
+    private function with_archive_templates(array $entry): array {
+        foreach (['title', 'description'] as $field) {
+            if (!isset($entry[$field])) {
+                continue;
+            }
+
+            $template = $this->convert_to_tokens((string) $entry[$field], [
+                'site.title'              => '%site_title%',
+                'site.description'        => '%site_description%',
+                'sep'                     => '%sep%',
+                'term.name'               => '%term_title%',
+                'term.description'        => '%term_description%',
+                'term.auto_description'   => '%term_description%',
+                'post_type.labels.plural' => '%pt_plural%',
+                'post_type.labels.singular' => '%pt_single%',
+                'current.year'            => '%currentyear%',
+            ], '%sep%');
+
+            unset($entry[$field]);
+            if ('' !== trim($template)) {
+                $entry[$field . '_template'] = $template;
+            }
+        }
+
+        return $entry;
     }
 
     /**
@@ -1481,6 +1517,9 @@ class Slim_SEO_Exporter extends Abstract_Plugin_Exporter {
         'post.date'             => '%date%',
         'post.modified_date'    => '%modified%',
         'author.display_name'   => '%author%',
+        // Kept live rather than frozen to the year of the migration (#1472).
+        // current.month is a number, which no ThinkRank token prints.
+        'current.year'          => '%currentyear%',
     ];
 
     /**
@@ -1492,6 +1531,7 @@ class Slim_SEO_Exporter extends Abstract_Plugin_Exporter {
         'term.auto_description' => '%excerpt%',
         'site.title'            => '%sitename%',
         'sep'                   => '%sep%',
+        'current.year'          => '%currentyear%',
     ];
 
     /**
@@ -1506,9 +1546,48 @@ class Slim_SEO_Exporter extends Abstract_Plugin_Exporter {
     private function convert_post_value(string $value, int $post_id): string {
         return $this->tokenize_object_template(
             $value,
-            self::brace_token_patterns(self::POST_TOKENS),
+            self::brace_token_patterns($this->assigned_term_paths($value) + self::POST_TOKENS),
             fn(string $rest): string => $this->render_template($rest, $this->has_variables($rest) ? $this->post_context($post_id) : [])
         );
+    }
+
+    /**
+     * Slim SEO path => `%taxonomy(slug)%` for the `{{ post.tax.<tax> }}` a
+     * template holds (#1468). Slim SEO prints these as ThinkRank does: every
+     * assigned term, joined by a comma.
+     *
+     * Slim SEO writes the slug with its hyphens as underscores
+     * (SlimSEO\MetaTags\Data\Post::normalize()), so the taxonomy is found
+     * among the registered ones. Slim SEO also offers taxonomies that are not
+     * public, such as WooCommerce attributes without archives. `%taxonomy()%`
+     * is empty for those, so they keep what they do without this: a per-post
+     * value renders the names at import, a template drops them.
+     *
+     * @since 2.21.0
+     *
+     * @param string $template Raw Slim SEO template.
+     * @return array<string,string> Slim path => ThinkRank tag.
+     */
+    private function assigned_term_paths(string $template): array {
+        if (!preg_match_all('/\{\{\s*post\.tax\.([^}\s]+?)\s*\}\}/', $template, $found)) {
+            return [];
+        }
+
+        $public = [];
+        foreach ((array) get_taxonomies(['public' => true], 'objects') as $slug => $taxonomy) {
+            if (is_object($taxonomy) && !empty($taxonomy->public)) {
+                $public[str_replace('-', '_', (string) $slug)] = (string) $slug;
+            }
+        }
+
+        $paths = [];
+        foreach ($found[1] as $name) {
+            if (isset($public[$name])) {
+                $paths['post.tax.' . $name] = '%taxonomy(' . $public[$name] . ')%';
+            }
+        }
+
+        return $paths;
     }
 
     /**
@@ -1794,6 +1873,8 @@ class Slim_SEO_Exporter extends Abstract_Plugin_Exporter {
             'author.display_name' => '%author_name%',
             'post.categories'     => '%category_title%',
             'post.tags'           => '%tag_title%',
+            // Resolved on every request (#1472).
+            'current.year'        => '%currentyear%',
         ];
         if ($context_token !== '') {
             $map['post.title'] = $context_token;
@@ -1820,9 +1901,11 @@ class Slim_SEO_Exporter extends Abstract_Plugin_Exporter {
             'post.date'             => '%date%',
             'author.display_name'   => '%author%',
             'post.categories'       => '%category%',
+            // Resolved on every request (#1472).
+            'current.year'          => '%currentyear%',
         ];
 
-        return $this->convert_to_tokens($template, $map, '%sep%');
+        return $this->convert_to_tokens($template, $map + $this->assigned_term_paths($template), '%sep%');
     }
 
     /**

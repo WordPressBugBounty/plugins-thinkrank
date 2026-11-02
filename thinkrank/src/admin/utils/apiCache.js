@@ -90,6 +90,16 @@ const TTL_RULES = [
 	// A custom field the author typed into an editor preview: the value is
 	// edited out-of-band, in the field plugin's own box (#1277).
 	['/thinkrank/v1/custom-fields', 0],
+	// The WooCommerce card shows itself only when the answer says WooCommerce
+	// is active, and lists the product taxonomies a brand can come from. Both
+	// change on the Plugins screen, and the settings through MCP, with no
+	// browser write here to purge a cached copy. The read is local (#1478).
+	['/thinkrank/v1/woocommerce/', 0],
+	// The same goes for the Product URLs card and for Pro's WooCommerce panel,
+	// which read whether WooCommerce is active from these answers. The switches
+	// also change through MCP. Both reads are local (#1488).
+	['/thinkrank/v1/permalinks/', 0],
+	['/thinkrank-pro/v1/woocommerce/', 0],
 	['/thinkrank/v1/seo-analytics/', HOUR],
 	['/thinkrank/v1/performance/history', 30 * MINUTE],
 	['/thinkrank/v1/performance/', 10 * MINUTE],
