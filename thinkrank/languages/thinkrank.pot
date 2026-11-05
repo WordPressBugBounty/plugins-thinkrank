@@ -2,14 +2,14 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 2.21.0\n"
+"Project-Id-Version: ThinkRank 2.21.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-02T10:14:52+00:00\n"
+"POT-Creation-Date: 2026-11-05T05:41:32+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
@@ -1323,12 +1323,12 @@ msgstr ""
 msgid "Data types to import. Defaults to all of them. Omit content_blocks to leave post content untouched."
 msgstr ""
 
-#: includes/abilities/import/class-run-seo-import.php:230
+#: includes/abilities/import/class-run-seo-import.php:233
 msgid "types must be a non-empty list of data types."
 msgstr ""
 
 #. translators: 1: unknown type slugs, 2: allowed type slugs.
-#: includes/abilities/import/class-run-seo-import.php:243
+#: includes/abilities/import/class-run-seo-import.php:246
 #, php-format
 msgid "Unknown import types: %1$s. Allowed: %2$s."
 msgstr ""
@@ -2970,12 +2970,12 @@ msgid "ThinkRank SEO"
 msgstr ""
 
 #: includes/admin/class-bricks-metabox.php:239
-#: includes/admin/class-metabox-manager.php:1745
+#: includes/admin/class-metabox-manager.php:1752
 msgid "Security check failed"
 msgstr ""
 
 #: includes/admin/class-bricks-metabox.php:244
-#: includes/admin/class-metabox-manager.php:1750
+#: includes/admin/class-metabox-manager.php:1757
 msgid "Insufficient permissions"
 msgstr ""
 
@@ -2993,7 +2993,7 @@ msgid "Security check failed. Please refresh the page and try again."
 msgstr ""
 
 #: includes/admin/class-focus-keyword-ajax.php:86
-#: includes/api/class-setup-wizard-endpoint.php:696
+#: includes/api/class-setup-wizard-endpoint.php:752
 #: includes/api/traits/trait-csrf-protection.php:91
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:227
 msgid "You do not have permission to perform this action."
@@ -3167,7 +3167,7 @@ msgid "An error occurred"
 msgstr ""
 
 #: includes/admin/class-manager.php:919
-#: includes/admin/class-metabox-manager.php:1152
+#: includes/admin/class-metabox-manager.php:1159
 msgid "Success!"
 msgstr ""
 
@@ -3230,54 +3230,54 @@ msgid "Optimize this content for search & AI with ThinkRank."
 msgstr ""
 
 #: includes/admin/class-metabox-manager.php:498
-#: src/metabox/components/MetaboxApp.js:1736
+#: src/metabox/components/MetaboxApp.js:1741
 #: src/metabox/components/MetaboxDrawer.js:169
 msgid "Open ThinkRank SEO"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1149
+#: includes/admin/class-metabox-manager.php:1156
 msgid "Generating..."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1150
+#: includes/admin/class-metabox-manager.php:1157
 msgid "Analyzing..."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1151
+#: includes/admin/class-metabox-manager.php:1158
 msgid "Error occurred"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1153
+#: includes/admin/class-metabox-manager.php:1160
 msgid "Metadata generated successfully"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1154
+#: includes/admin/class-metabox-manager.php:1161
 msgid "Please add some content before generating SEO metadata."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1155
+#: includes/admin/class-metabox-manager.php:1162
 msgid "Failed to connect to AI service. Please check your API settings."
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1409
+#: includes/admin/class-metabox-manager.php:1416
 #: includes/admin/class-term-seo-fields.php:229
-#: includes/seo/class-object-redirect.php:140
+#: includes/seo/class-object-redirect.php:228
 msgid "Redirects require ThinkRank Pro with the Redirections feature active."
 msgstr ""
 
 #. translators: %s: reason the redirect was not saved.
-#: includes/admin/class-metabox-manager.php:1479
+#: includes/admin/class-metabox-manager.php:1486
 #, php-format
 msgid "ThinkRank could not save the redirect: %s"
 msgstr ""
 
 #. translators: %s: reason the redirect was not saved.
-#: includes/admin/class-metabox-manager.php:1764
+#: includes/admin/class-metabox-manager.php:1771
 #, php-format
 msgid "Saved, except the redirect: %s"
 msgstr ""
 
-#: includes/admin/class-metabox-manager.php:1771
+#: includes/admin/class-metabox-manager.php:1778
 #: src/metabox/utils/persistSeoFields.js:144
 msgid "SEO settings saved successfully!"
 msgstr ""
@@ -3484,16 +3484,16 @@ msgstr ""
 msgid "SEO fields updated."
 msgstr ""
 
-#: includes/admin/class-setup-wizard.php:201
-#: includes/admin/class-setup-wizard.php:202
+#: includes/admin/class-setup-wizard.php:211
+#: includes/admin/class-setup-wizard.php:212
 msgid "Setup Wizard"
 msgstr ""
 
-#: includes/admin/class-setup-wizard.php:271
+#: includes/admin/class-setup-wizard.php:281
 msgid "You do not have permission to access this page."
 msgstr ""
 
-#: includes/admin/class-setup-wizard.php:282
+#: includes/admin/class-setup-wizard.php:292
 msgid "Loading Setup Wizard…"
 msgstr ""
 
@@ -3596,47 +3596,47 @@ msgstr ""
 msgid "No completed ThinkRank export is available. Run the export first."
 msgstr ""
 
-#: includes/admin/importers/class-export-controller.php:210
+#: includes/admin/importers/class-export-controller.php:212
 msgid "No file was uploaded. Attach the export file as the \"file\" field."
 msgstr ""
 
-#: includes/admin/importers/class-export-controller.php:218
+#: includes/admin/importers/class-export-controller.php:220
 msgid "The file could not be uploaded. It may be larger than this server allows."
 msgstr ""
 
 #. translators: %s: maximum upload size this server accepts, e.g. "64 MB".
-#: includes/admin/importers/class-export-controller.php:242
+#: includes/admin/importers/class-export-controller.php:244
 #, php-format
 msgid "The export file is larger than the %s this server accepts. Raise the PHP upload_max_filesize and post_max_size limits, or export fewer data types at a time."
 msgstr ""
 
-#: includes/admin/importers/class-export-controller.php:254
+#: includes/admin/importers/class-export-controller.php:256
 msgid "The export file could not be read."
 msgstr ""
 
-#: includes/admin/importers/class-export-controller.php:298
+#: includes/admin/importers/class-export-controller.php:300
 msgid "The file is not valid JSON. Restore expects the .json export, not the CSV view."
 msgstr ""
 
-#: includes/admin/importers/class-export-controller.php:306
+#: includes/admin/importers/class-export-controller.php:308
 msgid "This is not a ThinkRank export file."
 msgstr ""
 
 #. translators: 1: file's schema version, 2: highest supported version.
-#: includes/admin/importers/class-export-controller.php:317
+#: includes/admin/importers/class-export-controller.php:319
 #, php-format
 msgid "This export file uses format version %1$d, but this version of ThinkRank only reads up to version %2$d. Update ThinkRank and try again."
 msgstr ""
 
-#: includes/admin/importers/class-export-controller.php:331
+#: includes/admin/importers/class-export-controller.php:333
 msgid "The export file contains no data."
 msgstr ""
 
-#: includes/admin/importers/class-export-controller.php:398
+#: includes/admin/importers/class-export-controller.php:400
 msgid "The export file carries no records this version can read. It may have been produced by a newer ThinkRank, or edited by hand."
 msgstr ""
 
-#: includes/admin/importers/class-export-controller.php:408
+#: includes/admin/importers/class-export-controller.php:410
 msgid "Export file loaded. Ready to restore."
 msgstr ""
 
@@ -3670,7 +3670,7 @@ msgstr ""
 msgid "The snapshot still holds data ThinkRank has not applied yet: %s. It stays preserved in the snapshot (cleanup never deletes the snapshot), but the source plugin's copy will be removed. Pass force=true to proceed."
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3681
+#: includes/admin/importers/class-snapshot-migrator.php:3816
 #: includes/core/class-capability-manager.php:122
 #: src/admin/components/essential-seo/SidebarNavigation.js:326
 #: src/admin/components/import-export/ExportProgress.js:17
@@ -3680,114 +3680,114 @@ msgstr ""
 msgid "Redirections"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3690
+#: includes/admin/importers/class-snapshot-migrator.php:3825
 #: src/admin/components/import-export/ExportProgress.js:18
 #: src/admin/components/import-export/PluginImportCard.js:40
 #: src/admin/components/import-export/SnapshotInfo.js:21
 msgid "404 Logs"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3862
+#: includes/admin/importers/class-snapshot-migrator.php:4023
 msgid "Header, body and footer code"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3863
+#: includes/admin/importers/class-snapshot-migrator.php:4024
 msgid "Redirect behaviour settings"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3864
+#: includes/admin/importers/class-snapshot-migrator.php:4025
 msgid "Taxonomy templates and images"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3865
+#: includes/admin/importers/class-snapshot-migrator.php:4026
 msgid "Post type archive templates and images"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3866
+#: includes/admin/importers/class-snapshot-migrator.php:4027
 msgid "Removing /category/ from category URLs"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3867
+#: includes/admin/importers/class-snapshot-migrator.php:4028
 msgid "Webmaster tools verification codes"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3868
+#: includes/admin/importers/class-snapshot-migrator.php:4029
 msgid "Role access settings"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3869
+#: includes/admin/importers/class-snapshot-migrator.php:4030
 msgid "Homepage social title"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3870
+#: includes/admin/importers/class-snapshot-migrator.php:4031
 msgid "Homepage social description"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3871
+#: includes/admin/importers/class-snapshot-migrator.php:4032
 msgid "Homepage social image"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3872
+#: includes/admin/importers/class-snapshot-migrator.php:4033
 msgid "Custom schemas (need ThinkRank Pro)"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3873
+#: includes/admin/importers/class-snapshot-migrator.php:4034
 msgid "Schema templates with no ThinkRank equivalent"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3875
+#: includes/admin/importers/class-snapshot-migrator.php:4036
 msgid "Post schema types with no ThinkRank equivalent"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3876
+#: includes/admin/importers/class-snapshot-migrator.php:4037
 msgid "Extra schemas on a post (ThinkRank keeps one per post)"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3877
+#: includes/admin/importers/class-snapshot-migrator.php:4038
 msgid "Default schema types per post type"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3879
+#: includes/admin/importers/class-snapshot-migrator.php:4040
 msgid "Nofollow and noarchive rules for taxonomies"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3880
+#: includes/admin/importers/class-snapshot-migrator.php:4041
 msgid "Description template for term and author archives"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3881
+#: includes/admin/importers/class-snapshot-migrator.php:4042
 msgid "Date archives redirected to the homepage"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3882
+#: includes/admin/importers/class-snapshot-migrator.php:4043
 msgid "Homepage social titles, descriptions and images"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3883
+#: includes/admin/importers/class-snapshot-migrator.php:4044
 msgid "Noindex rules for paginated pages"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3884
+#: includes/admin/importers/class-snapshot-migrator.php:4045
 msgid "Removed RSS feeds"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3885
+#: includes/admin/importers/class-snapshot-migrator.php:4046
 msgid "Social tags switched off"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3886
+#: includes/admin/importers/class-snapshot-migrator.php:4047
 msgid "Attachment pages redirected to their parent post"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3887
+#: includes/admin/importers/class-snapshot-migrator.php:4048
 msgid "Other settings with no ThinkRank equivalent"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3888
+#: includes/admin/importers/class-snapshot-migrator.php:4049
 msgid "Schema changes on individual pages"
 msgstr ""
 
-#: includes/admin/importers/class-snapshot-migrator.php:3889
+#: includes/admin/importers/class-snapshot-migrator.php:4050
 msgid "Robots, canonical and social settings of individual authors"
 msgstr ""
 
@@ -4213,9 +4213,9 @@ msgid "Insufficient permissions."
 msgstr ""
 
 #: includes/api/class-email-report-endpoint.php:196
-#: includes/api/class-setup-wizard-endpoint.php:629
-#: includes/api/class-setup-wizard-endpoint.php:657
-#: includes/api/class-setup-wizard-endpoint.php:704
+#: includes/api/class-setup-wizard-endpoint.php:685
+#: includes/api/class-setup-wizard-endpoint.php:713
+#: includes/api/class-setup-wizard-endpoint.php:760
 #: includes/api/class-sitemap-endpoint.php:819
 #: includes/api/traits/trait-csrf-protection.php:100
 #: includes/api/traits/trait-csrf-protection.php:142
@@ -4278,7 +4278,7 @@ msgid "You must be logged in to access this endpoint."
 msgstr ""
 
 #: includes/api/class-manager.php:793
-#: includes/api/class-setup-wizard-endpoint.php:674
+#: includes/api/class-setup-wizard-endpoint.php:730
 msgid "You do not have permission to access this endpoint."
 msgstr ""
 
@@ -4633,27 +4633,27 @@ msgstr ""
 msgid "No existing SEO analysis found"
 msgstr ""
 
-#: includes/api/class-setup-wizard-endpoint.php:359
+#: includes/api/class-setup-wizard-endpoint.php:415
 msgid "The plugin could not be deactivated automatically."
 msgstr ""
 
-#: includes/api/class-setup-wizard-endpoint.php:548
+#: includes/api/class-setup-wizard-endpoint.php:604
 msgid "Plugin not found on WordPress.org."
 msgstr ""
 
-#: includes/api/class-setup-wizard-endpoint.php:567
+#: includes/api/class-setup-wizard-endpoint.php:623
 msgid "Plugin could not be installed (filesystem permissions?)."
 msgstr ""
 
-#: includes/api/class-setup-wizard-endpoint.php:575
+#: includes/api/class-setup-wizard-endpoint.php:631
 msgid "Could not locate the installed plugin."
 msgstr ""
 
-#: includes/api/class-setup-wizard-endpoint.php:621
+#: includes/api/class-setup-wizard-endpoint.php:677
 msgid "You do not have permission to install plugins."
 msgstr ""
 
-#: includes/api/class-setup-wizard-endpoint.php:649
+#: includes/api/class-setup-wizard-endpoint.php:705
 msgid "You do not have permission to deactivate plugins."
 msgstr ""
 
@@ -4684,7 +4684,7 @@ msgstr ""
 #: src/blocks/faq-block/edit.js:92
 #: src/blocks/howto-block/edit.js:96
 #: src/blocks/toc-block/edit.js:103
-#: src/metabox/components/MetaboxApp.js:431
+#: src/metabox/components/MetaboxApp.js:436
 #: src/metabox/components/panels/GeneralPanel.js:126
 #: src/term-seo/components/TermSeoPanel.js:107
 msgid "General"
@@ -5238,7 +5238,7 @@ msgstr ""
 #: includes/editor/elementor/class-howto-widget.php:126
 #: src/admin/components/content-brief/ContentStructure.js:1497
 #: src/admin/components/essential-seo/ContentTypeMatrix.js:68
-#: src/metabox/components/MetaboxApp.js:435
+#: src/metabox/components/MetaboxApp.js:440
 msgid "Schema"
 msgstr ""
 
@@ -5525,7 +5525,7 @@ msgstr ""
 msgid "Guide"
 msgstr ""
 
-#: includes/frontend/class-global-seo-schema-output.php:306
+#: includes/frontend/class-global-seo-schema-output.php:315
 #: src/admin/components/essential-seo/crawling-ai-indexing/LLMsAIIndexing.js:51
 #: src/admin/components/essential-seo/SocialMediaTab.js:1220
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:31
@@ -5533,13 +5533,13 @@ msgid "Blog"
 msgstr ""
 
 #. translators: %d: page number.
-#: includes/frontend/class-seo-manager.php:1099
+#: includes/frontend/class-seo-manager.php:1111
 #, php-format
 msgid "Page %d"
 msgstr ""
 
 #. translators: %s: search query.
-#: includes/frontend/class-seo-manager.php:5537
+#: includes/frontend/class-seo-manager.php:5613
 #, php-format
 msgid "Search results for \"%s\""
 msgstr ""
@@ -6733,34 +6733,34 @@ msgstr ""
 msgid "You do not have permission to use Instant Indexing."
 msgstr ""
 
-#: includes/seo/class-instant-indexing-manager.php:389
+#: includes/seo/class-instant-indexing-manager.php:392
 msgid "Instant Indexing: Submit Page"
 msgstr ""
 
-#: includes/seo/class-instant-indexing-manager.php:715
+#: includes/seo/class-instant-indexing-manager.php:718
 msgid "IndexNow submissions are paused because this site is not marked as production. A staging, local or development copy does not notify search engines."
 msgstr ""
 
-#: includes/seo/class-instant-indexing-manager.php:717
+#: includes/seo/class-instant-indexing-manager.php:720
 msgid "IndexNow submissions are paused because \"Discourage search engines from indexing this site\" is ticked under Settings → Reading."
 msgstr ""
 
-#: includes/seo/class-instant-indexing-manager.php:744
+#: includes/seo/class-instant-indexing-manager.php:747
 msgid "Instant Indexing is turned off, so no URLs were sent to IndexNow. Turn it on under Instant Indexing settings first."
 msgstr ""
 
 #. translators: %s: public URL of the IndexNow key file.
-#: includes/seo/class-instant-indexing-manager.php:900
+#: includes/seo/class-instant-indexing-manager.php:903
 #, php-format
 msgid "Key file could not be verified. Search engines must be able to read your key at %s. Open it in a browser: it should show the key and nothing else."
 msgstr ""
 
-#: includes/seo/class-instant-indexing-manager.php:1160
+#: includes/seo/class-instant-indexing-manager.php:1170
 msgid "Nothing was submitted to IndexNow. Only published, indexable posts you can edit are submitted, and only while Instant Indexing is on."
 msgstr ""
 
 #. translators: %s is the number of URLs queued for IndexNow submission.
-#: includes/seo/class-instant-indexing-manager.php:1164
+#: includes/seo/class-instant-indexing-manager.php:1174
 #, php-format
 msgid "%s URL queued for submission to IndexNow."
 msgid_plural "%s URLs queued for submission to IndexNow."
@@ -6768,34 +6768,34 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s is the number of URLs submitted to IndexNow.
-#: includes/seo/class-instant-indexing-manager.php:1169
+#: includes/seo/class-instant-indexing-manager.php:1179
 #, php-format
 msgid "%s URL submitted to IndexNow successfully."
 msgid_plural "%s URLs submitted to IndexNow successfully."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/seo/class-instant-indexing-manager.php:1170
+#: includes/seo/class-instant-indexing-manager.php:1180
 msgid "Failed to submit URLs to IndexNow."
 msgstr ""
 
-#: includes/seo/class-object-redirect.php:194
+#: includes/seo/class-object-redirect.php:282
 msgid "The redirect could not be stored."
 msgstr ""
 
-#: includes/seo/class-object-redirect.php:235
+#: includes/seo/class-object-redirect.php:325
 msgid "Enter a full URL starting with http:// or https://, or a path starting with /."
 msgstr ""
 
-#: includes/seo/class-pattern-resolver.php:1147
+#: includes/seo/class-pattern-resolver.php:1156
 msgid "In stock"
 msgstr ""
 
-#: includes/seo/class-pattern-resolver.php:1148
+#: includes/seo/class-pattern-resolver.php:1157
 msgid "Out of stock"
 msgstr ""
 
-#: includes/seo/class-pattern-resolver.php:1149
+#: includes/seo/class-pattern-resolver.php:1158
 msgid "On backorder"
 msgstr ""
 
@@ -7094,101 +7094,105 @@ msgstr ""
 msgid "Search engine access was turned on, but the setting did not stick. Another plugin may be changing it back."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:372
+#: includes/seo/class-seo-analyzer-fixer.php:373
+msgid "Search engines are allowed in your settings, but ThinkRank's site-wide robots meta default is still set to No Index. Tick Index under Essential SEO → Crawling and AI Indexing → Global Robot Meta, then save."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:376
 msgid "Search engines are allowed in your settings, but your custom robots.txt content still blocks them. Remove the \"Disallow: /\" rule under Essential SEO → Crawling and AI Indexing → Robots.txt."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:411
+#: includes/seo/class-seo-analyzer-fixer.php:415
 msgid "The sitemap setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
 #. translators: %s: URL of WordPress core's sitemap index.
-#: includes/seo/class-seo-analyzer-fixer.php:417
+#: includes/seo/class-seo-analyzer-fixer.php:421
 #, php-format
 msgid "Your XML sitemap is now enabled. It replaces WordPress core's sitemap at %s, which ThinkRank switches off while its own is on."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:420
+#: includes/seo/class-seo-analyzer-fixer.php:424
 msgid "Your XML sitemap is now enabled."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:438
+#: includes/seo/class-seo-analyzer-fixer.php:442
 msgid "The schema module is unavailable."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:468
+#: includes/seo/class-seo-analyzer-fixer.php:472
 msgid "The schema setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:473
+#: includes/seo/class-seo-analyzer-fixer.php:477
 msgid "Automatic structured data is now enabled."
 msgstr ""
 
 #. translators: %d: images left without descriptive alt text.
-#: includes/seo/class-seo-analyzer-fixer.php:523
+#: includes/seo/class-seo-analyzer-fixer.php:527
 #, php-format
 msgid "%d image was left without descriptive alt text because your alt text format would only give it filler: a number, a word like \"image\", or a default name such as \"IMG_1234\" or \"Screenshot\". Add it by hand, or switch the alt text source to AI."
 msgid_plural "%d images were left without descriptive alt text because your alt text format would only give them filler: a number, a word like \"image\", or a default name such as \"IMG_1234\" or \"Screenshot\". Add them by hand, or switch the alt text source to AI."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:561
+#: includes/seo/class-seo-analyzer-fixer.php:565
 msgid "Every image in your media library already has alt text."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:597
+#: includes/seo/class-seo-analyzer-fixer.php:601
 msgid "No images could be filled automatically. Check your alt text format under Essential SEO → Image SEO, or add alt text manually in the Media Library."
 msgstr ""
 
 #. translators: 1: images updated in this batch, 2: images still to process.
-#: includes/seo/class-seo-analyzer-fixer.php:609
+#: includes/seo/class-seo-analyzer-fixer.php:613
 #, php-format
 msgid "Added alt text to %1$d images. %2$d still to go. Run the fix again to continue."
 msgstr ""
 
 #. translators: %d: number of images updated.
-#: includes/seo/class-seo-analyzer-fixer.php:615
+#: includes/seo/class-seo-analyzer-fixer.php:619
 #, php-format
 msgid "Added alt text to %d images. Your media library is done."
 msgstr ""
 
 #. translators: 1: number of images, 2: the AI provider's error message.
-#: includes/seo/class-seo-analyzer-fixer.php:625
+#: includes/seo/class-seo-analyzer-fixer.php:629
 #, php-format
 msgid "The AI could not describe %1$d of them: %2$s"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:689
+#: includes/seo/class-seo-analyzer-fixer.php:693
 msgid "The AI crawler rules could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer-fixer.php:710
+#: includes/seo/class-seo-analyzer-fixer.php:714
 #, php-format
 msgid "The crawler rules were saved, but your robots.txt still blocks %s. That block comes from your own robots.txt content, a robots.txt file in your site root, or the site-wide search-engine setting. Edit it under Essential SEO → Crawling and AI Indexing."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:719
+#: includes/seo/class-seo-analyzer-fixer.php:723
 msgid "AI answer engines can now crawl and cite your site."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:740
+#: includes/seo/class-seo-analyzer-fixer.php:744
 msgid "The llms.txt module is unavailable."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:750
+#: includes/seo/class-seo-analyzer-fixer.php:754
 msgid "llms.txt is turned off in ThinkRank. Turn it on under Essential SEO → Crawling and AI Indexing → LLMs.txt first if you want it published."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:761
+#: includes/seo/class-seo-analyzer-fixer.php:765
 msgid "llms.txt could not be published because its settings are incomplete. Fill in Website Description, Key Features and Target Audience under Essential SEO → Crawling and AI Indexing → LLMs.txt, then try again."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:774
+#: includes/seo/class-seo-analyzer-fixer.php:778
 msgid "llms.txt could not be written. Check that your site root is writable."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:781
+#: includes/seo/class-seo-analyzer-fixer.php:785
 msgid "Your llms.txt is now published at /llms.txt."
 msgstr ""
 
@@ -7246,284 +7250,292 @@ msgstr ""
 msgid "Your tagline is set and ready to describe your site."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:621
+#: includes/seo/class-seo-analyzer.php:623
 msgid "Site is visible to search engines"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:628
+#: includes/seo/class-seo-analyzer.php:630
 msgid "Your site allows search engines to index it."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:636
+#: includes/seo/class-seo-analyzer.php:638
 msgid "Your site is telling search engines not to index it, so it will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:637
+#: includes/seo/class-seo-analyzer.php:639
 msgid "Untick \"Discourage search engines from indexing this site\" under Settings → Reading."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:641
+#: includes/seo/class-seo-analyzer.php:643
 msgid "ThinkRank's Allow Search Engines setting is off, so your robots.txt blocks every crawler and your site will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:642
+#: includes/seo/class-seo-analyzer.php:644
 msgid "Turn on Allow Search Engines under Essential SEO → Crawling and AI Indexing → Robots.txt."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:651
+#: includes/seo/class-seo-analyzer.php:653
 #, php-format
 msgid "The robots.txt file ThinkRank wrote in your site root is out of date and still blocks %s from the whole site, so your pages will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:652
+#: includes/seo/class-seo-analyzer.php:654
 msgid "Use Fix, or save the Robots.txt settings under Essential SEO → Crawling and AI Indexing → Robots.txt, to rewrite the file from your current settings."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:657
+#: includes/seo/class-seo-analyzer.php:659
 #, php-format
 msgid "The robots.txt file in your site root blocks %s from the whole site, so your pages will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:658
+#: includes/seo/class-seo-analyzer.php:660
 msgid "Edit or remove the robots.txt file in your site root. Your web server serves that file directly, so ThinkRank's robots.txt settings do not apply while it is there."
 msgstr ""
 
+#: includes/seo/class-seo-analyzer.php:664
+msgid "ThinkRank's site-wide robots meta default is set to No Index, so your pages tell search engines not to index them and will not appear in search results."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:665
+msgid "Tick Index (and untick No Index) under Essential SEO → Crawling and AI Indexing → Global Robot Meta, then save."
+msgstr ""
+
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:663
+#: includes/seo/class-seo-analyzer.php:670
 #, php-format
 msgid "Your custom robots.txt content blocks %s from the whole site, so your pages will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:664
+#: includes/seo/class-seo-analyzer.php:671
 msgid "Remove the \"Disallow: /\" rule from your robots.txt content under Essential SEO → Crawling and AI Indexing → Robots.txt."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:827
+#: includes/seo/class-seo-analyzer.php:865
 msgid "every crawler (User-agent: *)"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:849
-#: includes/seo/class-seo-analyzer.php:857
+#: includes/seo/class-seo-analyzer.php:887
+#: includes/seo/class-seo-analyzer.php:895
 msgid "Search-friendly permalinks"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:851
+#: includes/seo/class-seo-analyzer.php:889
 msgid "Your site uses plain, numeric URLs (e.g. ?p=123). Descriptive URLs are easier for search engines and users."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:852
+#: includes/seo/class-seo-analyzer.php:890
 msgid "Choose a pretty permalink structure (e.g. Post name) under Settings → Permalinks."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:859
+#: includes/seo/class-seo-analyzer.php:897
 msgid "Your permalinks are search-friendly."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:896
-#: includes/seo/class-seo-analyzer.php:907
-#: includes/seo/class-seo-analyzer.php:915
+#: includes/seo/class-seo-analyzer.php:934
+#: includes/seo/class-seo-analyzer.php:945
+#: includes/seo/class-seo-analyzer.php:953
 msgid "XML sitemap is enabled"
 msgstr ""
 
 #. translators: %s: URL of WordPress core's sitemap index.
-#: includes/seo/class-seo-analyzer.php:900
+#: includes/seo/class-seo-analyzer.php:938
 #, php-format
 msgid "ThinkRank's XML sitemap is off, and WordPress core's sitemap is served at %s, so search engines still have one."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:909
+#: includes/seo/class-seo-analyzer.php:947
 msgid "No XML sitemap is served. ThinkRank's sitemap is off and WordPress core's is not served either. Search engines rely on a sitemap to discover new pages quickly."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:910
+#: includes/seo/class-seo-analyzer.php:948
 msgid "Enable the XML sitemap under Essential SEO → Crawling & AI Indexing → XML Sitemap."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:917
+#: includes/seo/class-seo-analyzer.php:955
 msgid "Your XML sitemap is enabled and pointing crawlers to your content."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:956
+#: includes/seo/class-seo-analyzer.php:994
 msgid "Structured data configured"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:962
+#: includes/seo/class-seo-analyzer.php:1000
 msgid "Structured data is configured for your content."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:973
+#: includes/seo/class-seo-analyzer.php:1011
 msgid "Structured data is running on ThinkRank's built-in defaults. Reviewing the schema type for each post type gives you control over how rich results appear."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:974
+#: includes/seo/class-seo-analyzer.php:1012
 msgid "Choose a schema type for each post type under Essential SEO → Bulk SEO Optimization."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:981
+#: includes/seo/class-seo-analyzer.php:1019
 msgid "No schema/structured data is configured or emitted. Schema powers rich results in search."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:982
+#: includes/seo/class-seo-analyzer.php:1020
 msgid "Turn on automatic structured data, or choose a schema type for each post type under Essential SEO → Bulk SEO Optimization."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1141
-msgid "Posts have meta descriptions"
+#: includes/seo/class-seo-analyzer.php:1200
+msgid "Content has meta descriptions"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1150
-#: includes/seo/class-seo-analyzer.php:2976
-#: includes/seo/class-seo-analyzer.php:3063
-#: includes/seo/class-seo-analyzer.php:3120
-#: includes/seo/class-seo-analyzer.php:3141
-#: includes/seo/class-seo-analyzer.php:3164
-msgid "No published content to check yet."
+#: includes/seo/class-seo-analyzer.php:1209
+#: includes/seo/class-seo-analyzer.php:3139
+#: includes/seo/class-seo-analyzer.php:3226
+#: includes/seo/class-seo-analyzer.php:3283
+#: includes/seo/class-seo-analyzer.php:3304
+#: includes/seo/class-seo-analyzer.php:3327
+msgid "No published, indexable content to check yet."
 msgstr ""
 
-#. translators: 1: posts with meta description, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:1187
+#. translators: 1: items with a meta description, 2: sampled items.
+#: includes/seo/class-seo-analyzer.php:1246
 #, php-format
-msgid "%1$d of your %2$d most recent posts have a meta description."
+msgid "%1$d of your %2$d most recent indexable items have a meta description."
 msgstr ""
 
-#. translators: 1: posts missing a meta description, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:1196
+#. translators: 1: items missing a meta description, 2: sampled items.
+#: includes/seo/class-seo-analyzer.php:1255
 #, php-format
-msgid "%1$d of your %2$d most recent posts are missing a meta description. Search engines fall back to arbitrary page text for their snippets."
+msgid "%1$d of your %2$d most recent indexable items are missing a meta description. Search engines fall back to arbitrary page text for their snippets."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1197
-msgid "Add meta descriptions in the ThinkRank SEO panel when editing a post, or use Bulk SEO Optimization to generate them with AI."
+#: includes/seo/class-seo-analyzer.php:1256
+msgid "Add meta descriptions in the ThinkRank SEO panel when editing each item, or use Bulk SEO Optimization to generate them with AI."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1210
+#: includes/seo/class-seo-analyzer.php:1269
 msgid "Images have alt text"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1225
+#: includes/seo/class-seo-analyzer.php:1284
 msgid "No images in your media library to check yet."
 msgstr ""
 
 #. translators: 1: images with alt text, 2: total images.
-#: includes/seo/class-seo-analyzer.php:1243
+#: includes/seo/class-seo-analyzer.php:1302
 #, php-format
 msgid "%1$d of your %2$d images have alt text."
 msgstr ""
 
 #. translators: 1: images missing alt text, 2: total images.
-#: includes/seo/class-seo-analyzer.php:1252
+#: includes/seo/class-seo-analyzer.php:1311
 #, php-format
 msgid "%1$d of your %2$d images are missing alt text or have alt text that describes nothing, such as a number or \"image\". Alt text drives image search rankings and is an accessibility requirement."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1253
+#: includes/seo/class-seo-analyzer.php:1312
 msgid "Under Essential SEO → Image SEO, turn on \"Save alt text to the Media Library\" and run \"Fill missing alt text\" to populate them from your format, or add alt text manually in the Media Library."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1293
-#: includes/seo/class-seo-analyzer.php:1303
+#: includes/seo/class-seo-analyzer.php:1352
+#: includes/seo/class-seo-analyzer.php:1362
 msgid "Supported PHP version"
 msgstr ""
 
 #. translators: %s: current PHP version.
-#: includes/seo/class-seo-analyzer.php:1296
+#: includes/seo/class-seo-analyzer.php:1355
 #, php-format
 msgid "You are running PHP %s, which no longer receives active support. Newer PHP is faster and more secure."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1297
+#: includes/seo/class-seo-analyzer.php:1356
 msgid "Ask your host to upgrade to PHP 8.1 or newer."
 msgstr ""
 
 #. translators: %s: current PHP version.
-#: includes/seo/class-seo-analyzer.php:1306
+#: includes/seo/class-seo-analyzer.php:1365
 #, php-format
 msgid "You are running a supported PHP version (%s)."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1320
-#: includes/seo/class-seo-analyzer.php:1327
+#: includes/seo/class-seo-analyzer.php:1379
+#: includes/seo/class-seo-analyzer.php:1386
 msgid "Persistent object cache"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1322
+#: includes/seo/class-seo-analyzer.php:1381
 msgid "A persistent object cache is active, reducing database load."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1329
+#: includes/seo/class-seo-analyzer.php:1388
 msgid "No persistent object cache is active. On busier sites this means more database queries per request."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1330
+#: includes/seo/class-seo-analyzer.php:1389
 msgid "Enable a persistent object cache (e.g. Redis or Memcached) via your host or a caching plugin."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1354
-#: includes/seo/class-seo-analyzer.php:1362
+#: includes/seo/class-seo-analyzer.php:1413
+#: includes/seo/class-seo-analyzer.php:1421
 msgid "Site uses HTTPS (SSL)"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1356
+#: includes/seo/class-seo-analyzer.php:1415
 msgid "Your site URL is not served over HTTPS. HTTPS is a confirmed ranking signal and required for user trust."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1357
+#: includes/seo/class-seo-analyzer.php:1416
 msgid "Install an SSL certificate and set your WordPress Address / Site Address to https:// under Settings → General."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1364
+#: includes/seo/class-seo-analyzer.php:1423
 msgid "Your site is served securely over HTTPS."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1377
-#: includes/seo/class-seo-analyzer.php:1384
+#: includes/seo/class-seo-analyzer.php:1436
+#: includes/seo/class-seo-analyzer.php:1443
 msgid "File editing disabled"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1379
+#: includes/seo/class-seo-analyzer.php:1438
 msgid "The dashboard plugin/theme file editor is disabled, reducing your attack surface."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1386
+#: includes/seo/class-seo-analyzer.php:1445
 msgid "The built-in file editor is enabled. If an admin account is compromised, an attacker could edit your PHP files from wp-admin."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1387
+#: includes/seo/class-seo-analyzer.php:1446
 msgid "Add define('DISALLOW_FILE_EDIT', true); to your wp-config.php."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1406
-#: includes/seo/class-seo-analyzer.php:1414
+#: includes/seo/class-seo-analyzer.php:1465
+#: includes/seo/class-seo-analyzer.php:1473
 msgid "Errors not shown publicly"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1408
+#: includes/seo/class-seo-analyzer.php:1467
 msgid "Debug output is displayed on the front end. Visible PHP errors can leak server paths and internals."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1409
+#: includes/seo/class-seo-analyzer.php:1468
 msgid "Set define('WP_DEBUG_DISPLAY', false); (or turn off WP_DEBUG) in wp-config.php on production."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1416
+#: includes/seo/class-seo-analyzer.php:1475
 msgid "PHP errors are not displayed to visitors."
 msgstr ""
 
 #. translators: %d: number of sampled pages.
-#: includes/seo/class-seo-analyzer.php:1744
+#: includes/seo/class-seo-analyzer.php:1907
 #, php-format
 msgid "ThinkRank found no readable text on the %d page it sampled, so this could not be checked."
 msgid_plural "ThinkRank found no readable text on any of the %d pages it sampled, so this could not be checked."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/seo/class-seo-analyzer.php:1752
+#: includes/seo/class-seo-analyzer.php:1915
 msgid "Pages built only from shortcodes, or with a page builder ThinkRank does not support, have no text it can read. Publish pages with written content, or check that your page builder is supported."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1827
+#: includes/seo/class-seo-analyzer.php:1990
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1374
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1438
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1463
@@ -7531,205 +7543,205 @@ msgstr ""
 msgid "(no title)"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1924
+#: includes/seo/class-seo-analyzer.php:2087
 msgid "AI answer engines can crawl your site"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1930
+#: includes/seo/class-seo-analyzer.php:2093
 msgid "ChatGPT, Claude, Perplexity, Le Chat and Google Search with its AI Overviews can all reach your content and cite it."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1958
+#: includes/seo/class-seo-analyzer.php:2121
 msgid "Your robots.txt blocks Googlebot, which removes your site from Google Search and from Google AI Overviews and AI Mode."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:1961
+#: includes/seo/class-seo-analyzer.php:2124
 #, php-format
 msgid "Your robots.txt blocks Googlebot, which removes your site from Google Search and from Google AI Overviews and AI Mode. It also blocks these AI answer engines: %s."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1964
+#: includes/seo/class-seo-analyzer.php:2127
 msgid "Remove the \"Disallow: /\" rule that applies to Googlebot (or to every crawler, under \"User-agent: *\") from your robots.txt. Check the robots.txt content and the \"Allow Search Engines\" switch under Essential SEO → Crawling & AI Indexing → Robots.txt, \"Search engine visibility\" under Settings → Reading, and any robots.txt file in your site root. If this is a staging site, the block is intended."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:1992
+#: includes/seo/class-seo-analyzer.php:2155
 #, php-format
 msgid "Your robots.txt blocks every AI answer engine (%s), so your pages cannot be cited in AI answers at all."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:1994
+#: includes/seo/class-seo-analyzer.php:2157
 #, php-format
 msgid "Your robots.txt blocks these AI answer engines: %s. Their assistants cannot read or cite your pages."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2114
+#: includes/seo/class-seo-analyzer.php:2277
 msgid "The robots.txt file in your site root blocks them. Your web server serves that file directly, so ThinkRank's crawler rules do not apply while it is there. Edit or remove it."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2117
+#: includes/seo/class-seo-analyzer.php:2280
 msgid "Your site is set to discourage search engines, so robots.txt blocks every crawler. Untick \"Discourage search engines from indexing this site\" under Settings → Reading."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2120
+#: includes/seo/class-seo-analyzer.php:2283
 msgid "ThinkRank's Allow Search Engines setting is off, so robots.txt blocks every crawler. Turn it on under Essential SEO → Crawling and AI Indexing → Robots.txt."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2123
+#: includes/seo/class-seo-analyzer.php:2286
 msgid "Your robots.txt content blocks them outside the AI crawler rules, for example with a \"User-agent: *\" group that disallows \"/\". Remove that rule under Essential SEO → Crawling and AI Indexing → Robots.txt."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2126
+#: includes/seo/class-seo-analyzer.php:2289
 msgid "Under Essential SEO → Crawling & AI Indexing → Robots.txt, set the answer-engine crawlers to Allow. Blocking the training-only crawlers (GPTBot, ClaudeBot, CCBot, Google-Extended) is a separate choice and does not cost you citations."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2334
+#: includes/seo/class-seo-analyzer.php:2497
 msgid "llms.txt is published"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2340
+#: includes/seo/class-seo-analyzer.php:2503
 msgid "The llms.txt module is unavailable, so this could not be checked."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2354
+#: includes/seo/class-seo-analyzer.php:2517
 msgid "llms.txt is turned off in ThinkRank, so this check is not scored."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2362
+#: includes/seo/class-seo-analyzer.php:2525
 msgid "Your llms.txt is published, so AI assistants have a summary of your site and its key pages."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2370
+#: includes/seo/class-seo-analyzer.php:2533
 msgid "No llms.txt is published. It is the file AI assistants read to learn what your site is about and which pages matter."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2371
+#: includes/seo/class-seo-analyzer.php:2534
 msgid "Fill in the fields under Essential SEO → Crawling & AI Indexing → LLMs.txt and publish it."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2404
+#: includes/seo/class-seo-analyzer.php:2567
 msgid "Answer-ready structured data"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2410
+#: includes/seo/class-seo-analyzer.php:2573
 msgid "Your site publishes FAQ, How-To or Q&A structured data, which AI answers can quote question-and-answer pairs from directly."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2422
+#: includes/seo/class-seo-analyzer.php:2585
 msgid "Add a ThinkRank FAQ or How-To block, widget or element to the pages that answer questions, or enable the FAQPage / HowTo schema types under Essential SEO → Schema."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2423
+#: includes/seo/class-seo-analyzer.php:2586
 msgid "Only mark up question-and-answer content you already publish. If this site does not answer discrete questions, answer-shaped schema does not apply and there is nothing to fix here."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2431
+#: includes/seo/class-seo-analyzer.php:2594
 msgid "Your pages publish Article or WebPage structured data, but no FAQ, How-To or Q&A schema. Those are the types AI answers quote from."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2439
+#: includes/seo/class-seo-analyzer.php:2602
 msgid "Your pages publish no structured data at all, so an AI assistant has to infer what each page is from its prose."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2965
+#: includes/seo/class-seo-analyzer.php:3128
 msgid "Pages open with a direct answer"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:2972
+#: includes/seo/class-seo-analyzer.php:3135
 #, php-format
 msgid "%1$d of your %2$d most recent pages open with a concise, quotable answer."
 msgstr ""
 
 #. translators: 1: posts without one, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:2974
+#: includes/seo/class-seo-analyzer.php:3137
 #, php-format
 msgid "%1$d of your %2$d most recent pages do not open with a concise answer. AI assistants quote the first self-contained passage they find, and a long preamble gives them nothing to lift."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2975
+#: includes/seo/class-seo-analyzer.php:3138
 msgid "Open each page with a 40–60 word paragraph that answers its title directly, before any background or introduction."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3054
+#: includes/seo/class-seo-analyzer.php:3217
 msgid "Headings phrased as questions"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3059
+#: includes/seo/class-seo-analyzer.php:3222
 #, php-format
 msgid "%1$d of your %2$d most recent pages use question-style headings."
 msgstr ""
 
 #. translators: 1: posts without one, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3061
+#: includes/seo/class-seo-analyzer.php:3224
 #, php-format
 msgid "%1$d of your %2$d most recent pages have no question-style heading. Assistants match a user's question against your headings first."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3062
+#: includes/seo/class-seo-analyzer.php:3225
 msgid "Phrase at least one H2 or H3 per page as the question it answers: \"How does X work?\" rather than \"Overview\"."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3111
+#: includes/seo/class-seo-analyzer.php:3274
 msgid "Content uses lists or tables"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3116
+#: includes/seo/class-seo-analyzer.php:3279
 #, php-format
 msgid "%1$d of your %2$d most recent pages present information in lists or tables."
 msgstr ""
 
 #. translators: 1: posts without one, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3118
+#: includes/seo/class-seo-analyzer.php:3281
 #, php-format
 msgid "%1$d of your %2$d most recent pages are unbroken prose. Steps, comparisons and specifications are extracted far more reliably from a list or table."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3119
+#: includes/seo/class-seo-analyzer.php:3282
 msgid "Break steps, comparisons and specifications out of the paragraphs into list or table blocks."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3132
+#: includes/seo/class-seo-analyzer.php:3295
 msgid "Pages have enough depth to cite"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3137
+#: includes/seo/class-seo-analyzer.php:3300
 #, php-format
 msgid "%1$d of your %2$d most recent pages have enough substance for an assistant to cite."
 msgstr ""
 
 #. translators: 1: thin posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3139
+#: includes/seo/class-seo-analyzer.php:3302
 #, php-format
 msgid "%1$d of your %2$d most recent pages are under 300 words. An assistant with a choice of sources rarely quotes the thinnest one."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3140
+#: includes/seo/class-seo-analyzer.php:3303
 msgid "Expand thin pages so each one answers its topic completely, or merge them into a page that does."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3155
+#: includes/seo/class-seo-analyzer.php:3318
 msgid "Content has been updated recently"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3160
+#: includes/seo/class-seo-analyzer.php:3323
 #, php-format
 msgid "%1$d of your %2$d most recent pages were revised within the last year."
 msgstr ""
 
 #. translators: 1: stale posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3162
+#: includes/seo/class-seo-analyzer.php:3325
 #, php-format
 msgid "%1$d of your %2$d most recent pages have not been revised in over a year. AI answers favour sources that look current."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3163
+#: includes/seo/class-seo-analyzer.php:3326
 msgid "Review your most important pages, update what has changed, and save them so their modified date reflects the revision."
 msgstr ""
 
@@ -7749,35 +7761,35 @@ msgstr ""
 msgid "Business type is selected for proper schema markup."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:2758
+#: includes/seo/class-sitemap-generator.php:2782
 msgid "The previous automatic sitemap rebuild stopped before it finished, most likely because PHP ran out of memory or time. It is retried with a growing delay. If this keeps happening, raise the PHP memory_limit or max_execution_time, or run WP-Cron from a system cron."
 msgstr ""
 
 #. translators: 1: memory in use, 2: PHP memory limit.
-#: includes/seo/class-sitemap-generator.php:3183
+#: includes/seo/class-sitemap-generator.php:3207
 #, php-format
 msgid "The sitemap rebuild was stopped at %1$s of the %2$s PHP memory limit, before PHP would have run out of memory. It will be retried by a process with more memory (WP-CLI or a system cron). To let it finish in the admin, raise the PHP memory_limit."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3712
+#: includes/seo/class-sitemap-generator.php:3736
 #, php-format
 msgid "The sitemap is disabled, but these files are still in the site root and your web server is still serving them: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3720
+#: includes/seo/class-sitemap-generator.php:3744
 #, php-format
 msgid "The sitemap is being served from WordPress, but these files are still in the site root and your web server will keep serving them instead: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: %s: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3742
+#: includes/seo/class-sitemap-generator.php:3766
 #, php-format
 msgid "The sitemap could not be written because the folder %s is not writable by PHP. Ask your host to make the WordPress root writable, or set Sitemap Delivery to Dynamic to serve the sitemap without writing files."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:3747
+#: includes/seo/class-sitemap-generator.php:3771
 msgid "The sitemap files could not be written to the site root."
 msgstr ""
 
@@ -8646,7 +8658,7 @@ msgstr ""
 
 #: src/admin/components/common/ModeSwitch.js:39
 #: src/admin/components/essential-seo/schema/forms/SchemaHowToForm.js:53
-#: src/metabox/components/MetaboxApp.js:439
+#: src/metabox/components/MetaboxApp.js:444
 #: src/metabox/components/panels/AdvancedPanel.js:33
 #: src/term-seo/components/TermSeoPanel.js:109
 msgid "Advanced"
@@ -9295,7 +9307,7 @@ msgid "Outline"
 msgstr ""
 
 #: src/admin/components/content-brief/ContentStructure.js:1492
-#: src/metabox/components/MetaboxApp.js:436
+#: src/metabox/components/MetaboxApp.js:441
 #: src/term-seo/components/TermSeoPanel.js:108
 msgid "Social"
 msgstr ""
@@ -10721,7 +10733,7 @@ msgstr[1] ""
 #: src/admin/components/import-export/ImportExportTab.js:208
 #: src/admin/components/pages/MCPHubConnect.js:262
 #: src/admin/dashboard-widget/components/ErrorState.js:164
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:269
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:440
 #: src/metabox/components/ui/CustomFieldStatus.js:56
 msgid "Try again"
 msgstr ""
@@ -13042,7 +13054,7 @@ msgid "Focus Pages"
 msgstr ""
 
 #: src/admin/components/essential-seo/FocusPagesTab.js:24
-msgid "ThinkRank can tell you a page scores 62. It cannot yet tell you why that page is not ranking the answer is spread across the SEO score, Search Console, Analytics, your tracked keywords and the index report. Focus Pages joins them, per page, on one screen."
+msgid "ThinkRank can tell you a page scores 62. It cannot yet tell you why that page is not ranking. The answer is spread across the SEO score, Search Console, Analytics, your tracked keywords and the index report. Focus Pages joins them, per page, on one screen."
 msgstr ""
 
 #: src/admin/components/essential-seo/FocusPagesTab.js:29
@@ -14364,7 +14376,7 @@ msgstr ""
 
 #: src/admin/components/essential-seo/KeywordsTab.js:320
 #: src/admin/components/import-export/ExportProgress.js:78
-#: src/admin/components/import-export/MigrateProgress.js:74
+#: src/admin/components/import-export/MigrateProgress.js:86
 #: src/admin/components/pages/UsageBreakdown.js:136
 msgid "of"
 msgstr ""
@@ -14437,7 +14449,7 @@ msgstr ""
 #: src/admin/components/essential-seo/performance/HistoricalSection.js:171
 #: src/admin/components/essential-seo/performance/OpportunitiesSection.js:262
 #: src/admin/components/essential-seo/performance/PerformanceErrorNotice.js:89
-#: src/admin/components/import-export/PluginImportCard.js:378
+#: src/admin/components/import-export/PluginImportCard.js:399
 #: src/admin/components/ui/SettingsLoadError.js:48
 #: src/bricks/panel-status.js:91
 msgid "Retry"
@@ -19115,27 +19127,35 @@ msgstr ""
 msgid "FAQ & HowTo blocks"
 msgstr ""
 
-#: src/admin/components/import-export/MigrateProgress.js:39
+#: src/admin/components/import-export/MigrateProgress.js:41
 msgid "Processed"
 msgstr ""
 
-#: src/admin/components/import-export/MigrateProgress.js:43
+#: src/admin/components/import-export/MigrateProgress.js:45
 msgid "Skipped"
 msgstr ""
 
-#: src/admin/components/import-export/MigrateProgress.js:48
+#: src/admin/components/import-export/MigrateProgress.js:50
 msgid "Left unchanged"
 msgstr ""
 
-#: src/admin/components/import-export/MigrateProgress.js:53
+#: src/admin/components/import-export/MigrateProgress.js:55
 msgid "Pro-only keywords"
 msgstr ""
 
-#: src/admin/components/import-export/MigrateProgress.js:61
-msgid "Restoring"
+#: src/admin/components/import-export/MigrateProgress.js:60
+msgid "Needs ThinkRank Pro"
+msgstr ""
+
+#: src/admin/components/import-export/MigrateProgress.js:65
+msgid "Not imported"
 msgstr ""
 
 #: src/admin/components/import-export/MigrateProgress.js:73
+msgid "Restoring"
+msgstr ""
+
+#: src/admin/components/import-export/MigrateProgress.js:85
 msgid "Chunk"
 msgstr ""
 
@@ -19393,87 +19413,115 @@ msgid_plural "Migration complete, but the FAQ & HowTo blocks in %d posts have br
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/admin/components/import-export/PluginImportCard.js:174
+#: src/admin/components/import-export/PluginImportCard.js:178
+msgid "Migration complete, but some items were not imported. See the details on the card."
+msgstr ""
+
+#: src/admin/components/import-export/PluginImportCard.js:188
 msgid "Migration complete. ThinkRank is now using the imported data."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:184
+#: src/admin/components/import-export/PluginImportCard.js:198
 msgid "The import operation failed."
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:230
+#: src/admin/components/import-export/PluginImportCard.js:251
 #, js-format
 msgid "%s data removed from the database."
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:238
+#: src/admin/components/import-export/PluginImportCard.js:259
 #, js-format
 msgid "Couldn’t remove %s data."
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:296
+#: src/admin/components/import-export/PluginImportCard.js:317
 #, js-format
 msgid "%s snapshot deleted."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:302
+#: src/admin/components/import-export/PluginImportCard.js:323
 msgid "Couldn’t delete the snapshot."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:326
+#: src/admin/components/import-export/PluginImportCard.js:347
 msgid "Snapshot available"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:369
+#: src/admin/components/import-export/PluginImportCard.js:390
 msgid "Import failed"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:386
+#: src/admin/components/import-export/PluginImportCard.js:407
 msgid "Migration complete"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:388
+#: src/admin/components/import-export/PluginImportCard.js:409
 msgid "ThinkRank is now using the imported SEO data."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:400
+#: src/admin/components/import-export/PluginImportCard.js:421
+msgid "Some items need ThinkRank Pro"
+msgstr ""
+
+#. translators: %s: number of items not imported.
+#: src/admin/components/import-export/PluginImportCard.js:428
+#, js-format
+msgid "%s item (a redirect, custom schema or similar) was not imported because ThinkRank Pro is not active. It stays in the snapshot. Run the migration again after activating ThinkRank Pro, and keep the source plugin until then."
+msgid_plural "%s items (redirects, custom schemas or similar) were not imported because ThinkRank Pro is not active. They stay in the snapshot. Run the migration again after activating ThinkRank Pro, and keep the source plugin until then."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/import-export/PluginImportCard.js:447
+msgid "Some items could not be imported"
+msgstr ""
+
+#. translators: %s: number of items refused.
+#: src/admin/components/import-export/PluginImportCard.js:455
+#, js-format
+msgid "%s item was refused and not imported. The source plugin and the snapshot still hold it."
+msgid_plural "%s items were refused and not imported. The source plugin and the snapshot still hold them."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/import-export/PluginImportCard.js:486
 msgid "Some schema was not imported"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:408
+#: src/admin/components/import-export/PluginImportCard.js:494
 msgid "Not imported, and still only in the source plugin:"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:437
+#: src/admin/components/import-export/PluginImportCard.js:523
 msgid "Export snapshot"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:465
+#: src/admin/components/import-export/PluginImportCard.js:551
 msgid "Export selected data"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:481
+#: src/admin/components/import-export/PluginImportCard.js:567
 msgid "Restore to ThinkRank"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:494
+#: src/admin/components/import-export/PluginImportCard.js:580
 msgid "Complete step 1 first to enable restore."
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:508
+#: src/admin/components/import-export/PluginImportCard.js:594
 msgid "Start migration"
 msgstr ""
 
 #. translators: %s: source plugin name.
-#: src/admin/components/import-export/PluginImportCard.js:527
+#: src/admin/components/import-export/PluginImportCard.js:613
 #, js-format
 msgid "Clean up %s data"
 msgstr ""
 
-#: src/admin/components/import-export/PluginImportCard.js:537
+#: src/admin/components/import-export/PluginImportCard.js:623
 msgid "Delete snapshot"
 msgstr ""
 
@@ -19490,7 +19538,7 @@ msgid "Post schema types with no ThinkRank equivalent: %s"
 msgstr ""
 
 #. translators: %d: number of posts.
-#: src/admin/components/import-export/schemaReport.js:108
+#: src/admin/components/import-export/schemaReport.js:135
 #, js-format
 msgid "%d post got its schema type and fields in the editor. Open the Schema tab on that post and deploy it to publish the schema."
 msgid_plural "%d posts got their schema type and fields in the editor. Open the Schema tab on each post and deploy it to publish the schema."
@@ -22369,56 +22417,116 @@ msgstr ""
 msgid "Something went wrong while saving. Please try again."
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:54
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:58
 msgid "Not detected"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:61
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:65
 msgid "SEO data detected"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:216
+#. translators: %s: number of items.
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:120
+#, js-format
+msgid "%s item (a redirect, custom schema or similar) needs ThinkRank Pro and stays in the snapshot."
+msgid_plural "%s items (redirects, custom schemas or similar) need ThinkRank Pro and stay in the snapshot."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: number of items.
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:134
+#, js-format
+msgid "%s item was refused and not imported."
+msgid_plural "%s items were refused and not imported."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: number of posts.
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:148
+#, js-format
+msgid "%s post with FAQ or HowTo blocks could not be converted and was left as it was."
+msgid_plural "%s posts with FAQ or HowTo blocks could not be converted and were left as they were."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: number of data types.
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:162
+#, js-format
+msgid "%s type of data could not be restored on this site."
+msgid_plural "%s types of data could not be restored on this site."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: number of schema items.
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:176
+#, js-format
+msgid "%s schema item has no ThinkRank equivalent and was not imported."
+msgid_plural "%s schema items have no ThinkRank equivalent and were not imported."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:380
 msgid "Creating migration snapshot"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:221
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:385
 msgid "Restoring imported data"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:228
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:392
+msgid "Migration finished, but some items were not imported"
+msgstr ""
+
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:397
 msgid "Migration completed successfully"
 msgstr ""
 
 #. translators: %1$d: overall progress percentage.
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:232
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:401
 #, js-format
 msgid "Step 2 of 2: Restoring imported data… %1$d%%"
 msgstr ""
 
 #. translators: %1$d: overall progress percentage.
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:238
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:407
 #, js-format
 msgid "Step 1 of 2: Creating migration snapshot… %1$d%%"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:245
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:414
 msgid "Imported"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:247
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:416
 msgid "Imported, deactivating…"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:249
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:418
 msgid "Imported & deactivated"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:281
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:420
+msgid "Partly imported"
+msgstr ""
+
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:452
 #: src/metabox/components/metabox-schema-tab/ImportSection.js:186
 msgid "Import"
 msgstr ""
 
-#: src/admin/setup-wizard/steps/MigrationPluginRow.js:359
+#. translators: %s: source SEO plugin name.
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:537
+#, js-format
+msgid "%s was left active so what it still provides keeps working. Keep it until the remaining items are migrated, or deactivate it now."
+msgstr ""
+
+#. translators: %s: source SEO plugin name.
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:551
+#, js-format
+msgid "Deactivate %s anyway"
+msgstr ""
+
+#: src/admin/setup-wizard/steps/MigrationPluginRow.js:561
 msgid "Import failed. Please try again."
 msgstr ""
 
@@ -23868,39 +23976,39 @@ msgstr ""
 msgid "Article is recommended for most blog posts and pages."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:434
+#: src/metabox/components/MetaboxApp.js:439
 msgid "Analysis"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1709
+#: src/metabox/components/MetaboxApp.js:1714
 msgid "Optimize this content for search & AI"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1715
+#: src/metabox/components/MetaboxApp.js:1720
 msgid "Titles, meta description, focus keywords, schema and social previews."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1725
+#: src/metabox/components/MetaboxApp.js:1730
 msgid "Current SEO score"
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1805
+#: src/metabox/components/MetaboxApp.js:1810
 msgid "The General tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1832
+#: src/metabox/components/MetaboxApp.js:1837
 msgid "The Analysis tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1860
+#: src/metabox/components/MetaboxApp.js:1865
 msgid "The Schema tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1877
+#: src/metabox/components/MetaboxApp.js:1882
 msgid "The Social tab encountered an error."
 msgstr ""
 
-#: src/metabox/components/MetaboxApp.js:1898
+#: src/metabox/components/MetaboxApp.js:1903
 msgid "The Advanced tab encountered an error."
 msgstr ""
 

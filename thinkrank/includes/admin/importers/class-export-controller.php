@@ -164,12 +164,14 @@ class Export_Controller extends \WP_REST_Controller {
         // rest_pre_serve_request is the documented way to send something else,
         // and it keeps the route inside the REST permission/nonce plumbing
         // instead of bolting the download onto admin-post.php.
+        // $served is untyped: an earlier callback on this public filter can
+        // return null, which core reads as "not served" (#1455).
         add_filter(
             'rest_pre_serve_request',
-            function (bool $served, $result, $req, $server) use ($manifest, $format, $filename, $request): bool {
+            function ($served, $result, $req, $server) use ($manifest, $format, $filename, $request): bool {
                 // Another route's response passing through the same filter.
                 if ($req !== $request) {
-                    return $served;
+                    return (bool) $served;
                 }
 
                 $this->send_download_headers($format, $filename);

@@ -475,11 +475,15 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // The files list each URL as it was when they were written, so moving
         // the URLs has to rewrite them. Nothing else fires for a permalink
         // switch: the REST route, the ability, a migration and a restore all
-        // only write this option (#1485).
-        foreach (['update_option_', 'add_option_'] as $option_hook) {
-            add_action($option_hook . Permalinks::OPTION, static function (): void {
-                self::listener()->schedule_regeneration();
-            }, 20, 0);
+        // only write this option (#1485). WordPress's own permalink structure,
+        // its category and tag bases, WooCommerce's bases and the static front
+        // page move URLs the same way and were never heard either (#1551).
+        foreach (self::URL_STRUCTURE_OPTIONS as $option) {
+            foreach (['update_option_', 'add_option_'] as $option_hook) {
+                add_action($option_hook . $option, static function (): void {
+                    self::listener()->schedule_regeneration();
+                }, 20, 0);
+            }
         }
 
         add_action('thinkrank_object_redirect_saved', static function (): void {
@@ -536,6 +540,26 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     private const ROBOTS_SETTINGS_OPTIONS = [
         'thinkrank_global_seo_settings',
         'thinkrank_global_robot_meta_settings',
+    ];
+
+    /**
+     * Options that decide the URL the files list for an entry.
+     *
+     * A change to any of them moves URLs that are already written, so the
+     * files are rebuilt. The front page options swap which page the bare home
+     * URL stands for.
+     *
+     * @since 2.21.1
+     * @var string[]
+     */
+    private const URL_STRUCTURE_OPTIONS = [
+        Permalinks::OPTION,
+        'permalink_structure',
+        'category_base',
+        'tag_base',
+        'woocommerce_permalinks',
+        'show_on_front',
+        'page_on_front',
     ];
 
     /**
@@ -5224,11 +5248,35 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 'url_count' => $url_count,
             ];
             $results['total_urls'] += $url_count;
-            $index_children[] = ['url' => $url];
+            $index_children[] = ['url' => $url, 'lastmod' => self::newest_lastmod($xml)];
         } else {
             $results['errors'][] = "Failed to save sitemap: {$filename}";
             $results['success'] = false;
         }
+    }
+
+    /**
+     * The newest `<lastmod>` among a page's own entries, or '' when none has one.
+     *
+     * The index used to stamp every child with the build time, so a rebuild
+     * caused by one post told crawlers that every child had changed (#1553).
+     * Each entry's lastmod is already its real modified time, and entries
+     * with no known time (terms, the local business URL) carry none, so the
+     * page's newest entry is its own modified time.
+     *
+     * @since 2.21.1
+     *
+     * @param string $xml Sitemap page XML.
+     * @return string ISO 8601 time, or '' when unknown.
+     */
+    private static function newest_lastmod(string $xml): string {
+        if (!preg_match_all('#<lastmod>([^<]+)</lastmod>#', $xml, $matches)) {
+            return '';
+        }
+
+        $times = array_filter(array_map('strtotime', $matches[1]));
+
+        return empty($times) ? '' : gmdate('c', max($times));
     }
 
     /**
@@ -5376,7 +5424,8 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * URL).
      *
      * @since 1.0.0 (signature updated 1.14.0)
-     * @param array $children Array of ['url' => string] child sitemap entries
+     * @since 2.21.1 A child's lastmod is its newest entry's, or absent.
+     * @param array $children Array of ['url' => string, 'lastmod' => string] child sitemap entries
      * @param array $settings Sitemap settings
      * @return string Sitemap index XML
      */
@@ -5397,7 +5446,13 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
 
             $xml .= "  <sitemap>\n";
             $xml .= "    <loc>" . esc_url(Url_Scheme::apply($sitemap_url)) . "</loc>\n";
-            $xml .= "    <lastmod>" . gmdate('c') . "</lastmod>\n";
+            // Only a child whose own entries carry a time gets one: the local
+            // business file, term sitemaps and other plugins' sitemaps have no
+            // real modification time here, and an absent lastmod is valid.
+            $lastmod = (string) ($child['lastmod'] ?? '');
+            if ($lastmod !== '') {
+                $xml .= "    <lastmod>" . self::xml_text($lastmod) . "</lastmod>\n";
+            }
             $xml .= "  </sitemap>\n";
         }
 

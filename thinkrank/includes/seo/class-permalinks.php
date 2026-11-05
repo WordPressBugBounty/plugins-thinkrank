@@ -817,11 +817,11 @@ class Permalinks {
             return $query_vars;
         }
 
-        // A page below a category path is only read as a product by the rule the
-        // category's real products need (#1537).
-        $page_vars = self::page_behind_product_rule($query_vars, $path);
-        if (null !== $page_vars) {
-            return $page_vars;
+        // A page or post below a category path is only read as a product by the
+        // rule the category's real products need (#1537, #1548).
+        $content_vars = self::content_behind_product_rule($query_vars, $path);
+        if (null !== $content_vars) {
+            return $content_vars;
         }
 
         // A product, taxonomy, author, date or search request is already
@@ -860,33 +860,78 @@ class Permalinks {
     }
 
     /**
-     * The query for a page when a `%product_cat%` product rule matched its path
-     * and no such product exists, or null.
+     * The query for a page or post when a `%product_cat%` product rule matched
+     * its path and no such product exists, or null.
      *
      * `/clothing/([^/]+)/` is what publishes `/clothing/blue-shirt/`, so it also
-     * takes `/clothing/size-guide/`, the child of a `clothing` page. Leaving the
+     * takes `/clothing/size-guide/`, the child of a `clothing` page, and under
+     * `/%category%/%postname%/` every post in a post category named like a
+     * product category, `uncategorized` first of all (#1548). Leaving the
      * category's path out of the rules would lose its products. A product and a
-     * page at the same path stay the product's, as that link is the product's.
+     * page or post at the same path stay the product's, as that link is the
+     * product's.
      *
      * @since 2.21.0
+     * @since 2.21.1 Also falls back to a post.
      *
      * @param array<string, mixed> $query_vars Parsed query.
      * @param string               $path       Request path.
      * @return array<string, mixed>|null
      */
-    private static function page_behind_product_rule(array $query_vars, string $path): ?array {
+    private static function content_behind_product_rule(array $query_vars, string $path): ?array {
         if (empty($query_vars['product']) || !function_exists('get_page_by_path') || !function_exists('wc_get_permalink_structure')
             || false === strpos((string) (wc_get_permalink_structure()['product_rewrite_slug'] ?? ''), '%product_cat%')
             || null !== self::find_product_by_slug((string) $query_vars['product'])) {
             return null;
         }
 
+        $rest = array_diff_key($query_vars, array_flip(['product', 'name', 'post_type']));
         $page_path = (string) preg_replace('#/comment-page-[0-9]+$#', '', $path);
-        if (null === get_page_by_path($page_path)) {
+        if (null !== get_page_by_path($page_path)) {
+            return ['pagename' => $page_path] + $rest;
+        }
+
+        $post = self::post_behind_product_rule($page_path, (string) $query_vars['product']);
+
+        return null === $post ? null : $post + $rest;
+    }
+
+    /**
+     * The query core gives a category path and slug, when the permalink
+     * structure is `/%category%/%postname%/` and a published post has that
+     * slug; null otherwise.
+     *
+     * Core finds a single post by its slug alone and leaves a wrong category in
+     * the path to redirect_canonical(), which sends it to the post's own URL.
+     * The same happens here, as it does with the product base kept.
+     *
+     * @since 2.21.1
+     *
+     * @param string $path Request path without the comment page.
+     * @param string $slug The slug the product rule read.
+     * @return array{category_name: string, name: string}|null
+     */
+    private static function post_behind_product_rule(string $path, string $slug): ?array {
+        if ('%category%/%postname%' !== trim((string) get_option('permalink_structure'), '/')) {
             return null;
         }
 
-        return ['pagename' => $page_path] + array_diff_key($query_vars, array_flip(['product', 'name', 'post_type']));
+        $segments = explode('/', trim($path, '/'));
+        array_pop($segments);
+        $category = implode('/', $segments);
+        if ('' === $category) {
+            return null;
+        }
+
+        $posts = get_posts([
+            'name'        => $slug,
+            'post_type'   => 'post',
+            'post_status' => 'publish',
+            'numberposts' => 1,
+            'fields'      => 'ids',
+        ]);
+
+        return empty($posts) ? null : ['category_name' => $category, 'name' => $slug];
     }
 
     /**
@@ -1187,9 +1232,9 @@ class Permalinks {
                 $current = self::with_content_page($current, (int) get_query_var('page'));
             }
         } elseif (($settings['remove_product_category_base'] || $settings['remove_product_category_parents'])
-            && function_exists('is_product_category') && is_product_category()) {
+            && function_exists('is_product_category') && is_product_category() && self::request_asks_for_term_alone(['product_cat'])) {
             $current = get_term_link(get_queried_object());
-        } elseif ($settings['remove_category_base'] && is_category()) {
+        } elseif ($settings['remove_category_base'] && is_category() && self::request_asks_for_term_alone(['category_name', 'cat'])) {
             $current = get_term_link(get_queried_object());
         }
 
@@ -1198,6 +1243,51 @@ class Permalinks {
         }
 
         return self::redirect_if_moved($request, $current);
+    }
+
+    /**
+     * Whether the request is the term's archive and nothing more.
+     *
+     * is_category() and is_product_category() also hold for a date, author,
+     * shop or search request filtered by a term (`/2026/?cat=1`,
+     * `/shop/?product_cat=hoodies`). Sending those to the term's URL dropped the
+     * archive they asked for (#1549).
+     *
+     * @since 2.21.1
+     *
+     * @param array<int, string> $term_vars Query vars that name the term.
+     * @return bool
+     */
+    private static function request_asks_for_term_alone(array $term_vars): bool {
+        foreach (['is_search', 'is_date', 'is_author', 'is_post_type_archive'] as $conditional) {
+            if (function_exists($conditional) && $conditional()) {
+                return false;
+            }
+        }
+
+        global $wp;
+
+        return self::matched_term_alone(is_object($wp) && isset($wp->matched_query) ? (string) $wp->matched_query : '', $term_vars);
+    }
+
+    /**
+     * Whether the rewrite rule a request matched names the term and nothing
+     * but its page. No rule (the home URL with `?cat=1`) names nothing else.
+     *
+     * The query string is not read: `?orderby=price` on an old based URL is
+     * still that term's archive, and keeps its 301.
+     *
+     * @since 2.21.1
+     *
+     * @param string             $matched_query The matched rule's query, e.g. `year=2026`.
+     * @param array<int, string> $term_vars     Query vars that name the term.
+     * @return bool
+     */
+    public static function matched_term_alone(string $matched_query, array $term_vars): bool {
+        $matched = [];
+        parse_str($matched_query, $matched);
+
+        return [] === array_diff(array_keys($matched), $term_vars, ['paged', self::CATEGORY_REDIRECT_VAR]);
     }
 
     /**

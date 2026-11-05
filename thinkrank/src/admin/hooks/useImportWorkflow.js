@@ -243,6 +243,9 @@ const useImportWorkflow = (plugin, initialSnapshot = null) => {
 				let totalMissing = 0;
 				let totalFailed = 0;
 				let totalKeywordsTruncated = 0;
+				let totalProRequired = 0;
+				const rejectedSample = [];
+				let totalRejected = 0;
 				let schemaTotals = EMPTY_SCHEMA_TOTALS;
 				const unrestoredTypes = [];
 
@@ -301,6 +304,17 @@ const useImportWorkflow = (plugin, initialSnapshot = null) => {
 						totalFailed += result.failed || 0;
 						totalKeywordsTruncated +=
 							result.keywords_truncated || 0;
+						// Items with no home without ThinkRank Pro (per-post
+						// redirects, custom schemas, focus pages), kept in the
+						// snapshot, and items Pro refused. Neither is
+						// "skipped", so they are counted on their own.
+						totalProRequired += result.pro_required || 0;
+						totalRejected += result.rejected || 0;
+						(result.rejected_sample || []).forEach((reason) => {
+							if (rejectedSample.length < 10) {
+								rejectedSample.push(reason);
+							}
+						});
 						// Schema left behind or staged in the editor (#1286).
 						schemaTotals = addSchemaResult(schemaTotals, result);
 
@@ -326,6 +340,9 @@ const useImportWorkflow = (plugin, initialSnapshot = null) => {
 							missing: totalMissing,
 							failed: totalFailed,
 							keywordsTruncated: totalKeywordsTruncated,
+							proRequired: totalProRequired,
+							rejected: totalRejected,
+							rejectedSample: [...rejectedSample],
 							schema: schemaTotals,
 							percentage,
 						});

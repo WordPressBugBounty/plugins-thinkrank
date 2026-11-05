@@ -488,11 +488,14 @@ final class Mcp_Server {
 			);
 		}
 
+		// Compact, not pretty-printed: the text block carries the whole answer a
+		// second time beside structuredContent, and the Hub refuses a site answer
+		// past 512 KB whole (#1422). Indentation is pure weight for a model.
 		$payload = [
 			'content' => [
 				[
 					'type' => 'text',
-					'text' => wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ),
+					'text' => wp_json_encode( $result, JSON_UNESCAPED_SLASHES ),
 				],
 			],
 			'isError' => false,

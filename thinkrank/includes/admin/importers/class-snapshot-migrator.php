@@ -282,6 +282,9 @@ class Snapshot_Migrator {
         $sitemap_excluded = [];
         // Focus keyword overflow: posts whose source had more than MAX keywords.
         $truncations = [];
+        // Items a record carried that could not be written: ones that need
+        // ThinkRank Pro, and ones Pro refused. See new_unwritten().
+        $unwritten = self::new_unwritten();
         // Posts given a schema type (and possibly its fields) in the editor,
         // and posts whose source schema had no ThinkRank equivalent (#1286).
         $schema_staged = 0;
@@ -315,6 +318,7 @@ class Snapshot_Migrator {
             }
 
             $record_had_writes = false;
+            $unwritten_before = self::unwritten_total($unwritten);
 
             // Collect focus keywords (primary + secondary) to seed the Pro
             // Rank Tracker watch-list once the chunk is processed.
@@ -453,7 +457,7 @@ class Snapshot_Migrator {
             // The post's own schemas as ThinkRank Pro Custom Schema entries
             // scoped to it (extended.custom_schemas, #886).
             if ($object_type === 'post' && !empty($record['extended']['custom_schemas']) && is_array($record['extended']['custom_schemas'])
-                && $this->migrate_custom_schemas($source_plugin, $record['extended']['custom_schemas']) > 0) {
+                && $this->migrate_custom_schemas($source_plugin, $record['extended']['custom_schemas'], $unwritten) > 0) {
                 $record_had_writes = true;
             }
 
@@ -462,10 +466,11 @@ class Snapshot_Migrator {
             // per-post redirects were exported into extended.redirect_* and
             // then dropped for want of anywhere to put them. They have a home
             // now: Object_Redirect writes through to Pro's rules table, and
-            // returns a WP_Error (which we skip) when Pro is inactive, leaving
-            // the value in the snapshot for a later run.
+            // returns a WP_Error when Pro is inactive, leaving the value in
+            // the snapshot for a later run. That case is counted as needing
+            // Pro rather than folded into `skipped` (#925).
             if (in_array($object_type, ['post', 'term'], true)
-                && $this->migrate_object_redirect($object_type, $object_id, $record)) {
+                && $this->migrate_object_redirect($object_type, $object_id, $record, $unwritten)) {
                 $record_had_writes = true;
             }
 
@@ -496,7 +501,10 @@ class Snapshot_Migrator {
                     update_user_meta($object_id, '_thinkrank_imported_from', $source_plugin);
                 }
                 $processed++;
-            } else {
+            } elseif (self::unwritten_total($unwritten) === $unwritten_before) {
+                // `skipped` means "nothing to do". A record whose only content
+                // needs Pro, or was refused by it, had something to do and is
+                // reported under those counts instead (#925).
                 $skipped++;
             }
         }
@@ -526,9 +534,10 @@ class Snapshot_Migrator {
             Metadata_Pending::clear_bulk();
         }
 
-        return [
+        return array_merge([
             'status'          => $has_more ? 'processing' : 'complete',
-            'message'         => sprintf('Migrated %d records, skipped %d (page %d)', $processed, $skipped, $page),
+            'message'         => sprintf('Migrated %d records, skipped %d (page %d)', $processed, $skipped, $page)
+                . self::describe_unwritten($unwritten),
             'has_more'        => $has_more,
             'page'            => $page,
             'total_chunks'    => $total_chunks,
@@ -546,7 +555,85 @@ class Snapshot_Migrator {
             // can say so, alongside the types it could not take at all.
             'schema_staged'      => $schema_staged,
             'schema_unsupported' => $schema_unsupported,
+        ], self::unwritten_fields($unwritten));
+    }
+
+    /**
+     * A fresh tally of items a migration pass could not write.
+     *
+     * `pro_required` counts items with no home without ThinkRank Pro (a
+     * per-object redirect, a custom schema, a focus page list). They stay in
+     * the snapshot, so a run after activating Pro picks them up. `rejected`
+     * holds one short reason per item Pro was asked to store and refused.
+     *
+     * Kept apart from `skipped`, which the import screen reads as "nothing to
+     * do": both of these are data the user still has only in the source
+     * plugin and the snapshot.
+     *
+     * @since 2.15.0
+     *
+     * @return array{pro_required:int, rejected:string[]}
+     */
+    private static function new_unwritten(): array {
+        return ['pro_required' => 0, 'rejected' => []];
+    }
+
+    /**
+     * How many items a tally holds, of either kind.
+     *
+     * @since 2.15.0
+     *
+     * @param array $unwritten Tally from new_unwritten().
+     * @return int
+     */
+    private static function unwritten_total(array $unwritten): int {
+        return (int) $unwritten['pro_required'] + count($unwritten['rejected']);
+    }
+
+    /**
+     * The result keys a tally adds to a chunk result.
+     *
+     * @since 2.15.0
+     *
+     * @param array $unwritten Tally from new_unwritten().
+     * @return array{pro_required:int, rejected:int, rejected_sample:string[]}
+     */
+    private static function unwritten_fields(array $unwritten): array {
+        return [
+            'pro_required'    => (int) $unwritten['pro_required'],
+            'rejected'        => count($unwritten['rejected']),
+            'rejected_sample' => array_slice($unwritten['rejected'], 0, 10),
         ];
+    }
+
+    /**
+     * A sentence for the chunk message naming what was not written, or ''.
+     *
+     * Uses the rules-table path's wording for the Pro-required part, so every
+     * place that leaves data for Pro says it the same way.
+     *
+     * @since 2.15.0
+     *
+     * @param array $unwritten Tally from new_unwritten().
+     * @return string
+     */
+    private static function describe_unwritten(array $unwritten): string {
+        $parts = [];
+        if ($unwritten['pro_required'] > 0) {
+            $parts[] = sprintf(
+                '%d items need ThinkRank Pro and were not imported. They stay in the snapshot.',
+                $unwritten['pro_required']
+            );
+        }
+        if (!empty($unwritten['rejected'])) {
+            $parts[] = sprintf(
+                '%d items could not be imported: %s',
+                count($unwritten['rejected']),
+                implode('; ', array_slice($unwritten['rejected'], 0, 3))
+            );
+        }
+
+        return $parts === [] ? '' : ' ' . implode(' ', $parts);
     }
 
 
@@ -1576,10 +1663,17 @@ class Snapshot_Migrator {
      *
      * @param string $object_type 'post' or 'term'.
      * @param int    $object_id   Object ID.
-     * @param array  $record      Full snapshot record.
+     * A redirect that could not be written is recorded in `$unwritten`: as
+     * needing Pro when the Redirections feature is not there to take it, as
+     * rejected (with Object_Redirect's reason) when it refused the value.
+     *
+     * @param string     $object_type 'post' or 'term'.
+     * @param int        $object_id   Object ID.
+     * @param array      $record      Full snapshot record.
+     * @param array|null $unwritten   Tally from new_unwritten(), by reference.
      * @return bool Whether a redirect was written.
      */
-    private function migrate_object_redirect(string $object_type, int $object_id, array $record): bool {
+    private function migrate_object_redirect(string $object_type, int $object_id, array $record, ?array &$unwritten = null): bool {
         $extended = $record['extended'] ?? [];
 
         if (!is_array($extended) || empty($extended['redirect_url'])) {
@@ -1603,7 +1697,24 @@ class Snapshot_Migrator {
             $extended['redirect_type'] ?? Object_Redirect::DEFAULT_TYPE
         );
 
-        return !is_wp_error($result);
+        if (!is_wp_error($result)) {
+            return true;
+        }
+
+        if ($unwritten !== null) {
+            if ($result->get_error_code() === 'thinkrank_redirect_unsupported') {
+                $unwritten['pro_required']++;
+            } else {
+                $unwritten['rejected'][] = sprintf(
+                    'Redirect on %s %d: %s',
+                    $object_type,
+                    $object_id,
+                    $result->get_error_message()
+                );
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1716,18 +1827,23 @@ class Snapshot_Migrator {
      * (Settings::MAX_PAGES). Two rules follow from that: never touch a
      * selection the user has already made here, and never import more than
      * the cap. Without Pro the ids stay in the snapshot for a later run, the
-     * same way per-object redirects wait for Pro's rules table.
+     * same way per-object redirects wait for Pro's rules table, and are
+     * counted in `$unwritten` as needing Pro.
      *
-     * @param array $extended Extended settings payload.
+     * @param array      $extended  Extended settings payload.
+     * @param array|null $unwritten Tally from new_unwritten(), by reference.
      * @return bool True when at least one page was added.
      */
-    private function migrate_focus_pages(array $extended): bool {
+    private function migrate_focus_pages(array $extended, ?array &$unwritten = null): bool {
         $ids = $extended['focus_pages'] ?? [];
         if (!is_array($ids) || $ids === []) {
             return false;
         }
 
         if (!class_exists('ThinkRank\\Pro\\Focus_Pages\\Settings')) {
+            if ($unwritten !== null) {
+                $unwritten['pro_required'] += count($ids);
+            }
             return false;
         }
 
@@ -2075,6 +2191,8 @@ class Snapshot_Migrator {
         $data = $settings_record['data'] ?? [];
         $extended = $settings_record['extended'] ?? [];
         $processed = 0;
+        // Settings groups that need ThinkRank Pro or that Pro refused (#925).
+        $unwritten = self::new_unwritten();
 
         // Map settings to ThinkRank options
         if (!empty($data['separator'])) {
@@ -2192,10 +2310,10 @@ class Snapshot_Migrator {
 
         // Site-wide custom schemas and Markdown for AI, both ThinkRank Pro.
         $global_schemas = $extended['custom_schemas']['entries'] ?? [];
-        if (is_array($global_schemas) && $this->migrate_custom_schemas($plugin, $global_schemas) > 0) {
+        if (is_array($global_schemas) && $this->migrate_custom_schemas($plugin, $global_schemas, $unwritten) > 0) {
             $processed++;
         }
-        if ($this->migrate_markdown_for_ai($extended)) {
+        if ($this->migrate_markdown_for_ai($extended, $unwritten)) {
             $processed++;
         }
 
@@ -2213,7 +2331,7 @@ class Snapshot_Migrator {
         }
 
         // The pages the source had under active watch.
-        if ($this->migrate_focus_pages($extended)) {
+        if ($this->migrate_focus_pages($extended, $unwritten)) {
             $processed++;
         }
 
@@ -2253,13 +2371,13 @@ class Snapshot_Migrator {
         }
 
         // News/Video sitemap post types into Pro's Publisher Sitemaps.
-        if ($this->migrate_publisher_sitemaps($extended)) {
+        if ($this->migrate_publisher_sitemaps($extended, $unwritten)) {
             $processed++;
         }
 
-        return [
+        return array_merge([
             'status'    => 'complete',
-            'message'   => sprintf('Migrated %d settings groups', $processed),
+            'message'   => sprintf('Migrated %d settings groups', $processed) . self::describe_unwritten($unwritten),
             'has_more'  => false,
             'processed' => $processed,
             'skipped'   => 0,
@@ -2268,7 +2386,7 @@ class Snapshot_Migrator {
             'schema_not_imported' => $this->schema_not_imported($extended),
             // Caches still answering the old URLs, which only the admin can clear.
             'cache_warnings'      => $this->cache_warnings,
-        ];
+        ], self::unwritten_fields($unwritten));
     }
 
     /**
@@ -2418,9 +2536,18 @@ class Snapshot_Migrator {
         }
 
         // Per-context title formats (Post/Page/Category/Tag/Search/Archive).
-        foreach (['post_title', 'page_title', 'category_title', 'tag_title', 'search_title', 'archive_title'] as $key) {
+        foreach (['post_title', 'page_title', 'category_title', 'tag_title', 'search_title'] as $key) {
             $set($key, $title_formats[$key] ?? '');
         }
+
+        // Rank Math, AIOSEO, SEOPress and Yoast fill archive_title from their
+        // date-archive template, which names the archive only by %date%. The
+        // format also titles custom taxonomy and post type archives, so it is
+        // stored with %archive_title% in place of a lone %date% (#1424).
+        $set(
+            'archive_title',
+            \ThinkRank\Frontend\SEO_Manager::archive_title_template((string) ($title_formats['archive_title'] ?? ''))
+        );
 
         // The author-archive title has two readers: site identity's `author_title`
         // (the front-end title renderer's 'author' context) and the Author Archives
@@ -3440,15 +3567,23 @@ class Snapshot_Migrator {
      *
      * Pro-gated via string class names so the free plugin never hard-depends on
      * Pro, and non-destructive: a list is written only while Pro still holds its
-     * default for it.
+     * default for it. Without Pro, a source that had either list set is
+     * counted in `$unwritten` as needing Pro.
      *
-     * @param array $extended Canonical settings `extended` payload
+     * @param array      $extended  Canonical settings `extended` payload
+     * @param array|null $unwritten Tally from new_unwritten(), by reference.
      * @return bool True if any list was written
      */
-    private function migrate_publisher_sitemaps(array $extended): bool {
+    private function migrate_publisher_sitemaps(array $extended, ?array &$unwritten = null): bool {
         $source = $extended['publisher_sitemaps'] ?? [];
-        if (!is_array($source) || empty($source)
-            || !class_exists('ThinkRank\\Pro\\Sitemaps\\Settings')) {
+        if (!is_array($source) || empty($source)) {
+            return false;
+        }
+
+        if (!class_exists('ThinkRank\\Pro\\Sitemaps\\Settings')) {
+            if ($unwritten !== null && (!empty($source['video_post_types']) || !empty($source['news_post_types']))) {
+                $unwritten['pro_required']++;
+            }
             return false;
         }
 
@@ -3770,16 +3905,26 @@ class Snapshot_Migrator {
      * Each entry's id is derived from the source and its `key`, so running
      * the migration again finds the entry it wrote and leaves it — including
      * any edit made since. An entry the Repository refuses (an invalid
-     * condition, an oversized document) is skipped; the source still holds
-     * it, and the snapshot keeps the rendered JSON.
+     * condition, an oversized document) is not written; the source still
+     * holds it, and the snapshot keeps the rendered JSON. It is recorded in
+     * `$unwritten` with the Repository's reason, as are entries that wait for
+     * Pro to be activated, so the run does not report itself clean (#925).
      *
-     * @param string $plugin  Source plugin slug
-     * @param array  $entries Canonical entries {key, title, enabled, json, conditions}
+     * @param string     $plugin    Source plugin slug
+     * @param array      $entries   Canonical entries {key, title, enabled, json, conditions}
+     * @param array|null $unwritten Tally from new_unwritten(), by reference.
      * @return int Entries written
      */
-    private function migrate_custom_schemas(string $plugin, array $entries): int {
+    private function migrate_custom_schemas(string $plugin, array $entries, ?array &$unwritten = null): int {
         $repository = $this->create_custom_schema_repository();
         if ($repository === null) {
+            if ($unwritten !== null) {
+                foreach ($entries as $entry) {
+                    if (is_array($entry) && trim((string) ($entry['json'] ?? '')) !== '') {
+                        $unwritten['pro_required']++;
+                    }
+                }
+            }
             return 0;
         }
 
@@ -3803,7 +3948,14 @@ class Snapshot_Migrator {
                 ]);
                 $written++;
             } catch (\Throwable $e) {
-                continue;
+                if ($unwritten !== null) {
+                    $title = trim((string) ($entry['title'] ?? ''));
+                    $unwritten['rejected'][] = sprintf(
+                        'Custom schema "%s": %s',
+                        $title !== '' ? $title : (string) ($entry['key'] ?? $id),
+                        $e->getMessage()
+                    );
+                }
             }
         }
 
@@ -3823,12 +3975,21 @@ class Snapshot_Migrator {
      * Turn on ThinkRank Pro's Markdown for AI with the source's post types
      * (extended.markdown_for_ai), while its settings were never saved.
      *
-     * @param array $extended Canonical settings `extended` payload
+     * Without Pro an enabled source is counted in `$unwritten` as needing it.
+     *
+     * @param array      $extended  Canonical settings `extended` payload
+     * @param array|null $unwritten Tally from new_unwritten(), by reference.
      * @return bool True if written
      */
-    private function migrate_markdown_for_ai(array $extended): bool {
+    private function migrate_markdown_for_ai(array $extended, ?array &$unwritten = null): bool {
         $markdown = $extended['markdown_for_ai'] ?? [];
-        if (!is_array($markdown) || empty($markdown['enabled']) || !class_exists('ThinkRank\\Pro\\Markdown_For_AI\\Settings')) {
+        if (!is_array($markdown) || empty($markdown['enabled'])) {
+            return false;
+        }
+        if (!class_exists('ThinkRank\\Pro\\Markdown_For_AI\\Settings')) {
+            if ($unwritten !== null) {
+                $unwritten['pro_required']++;
+            }
             return false;
         }
         if (get_option('thinkrank_pro_markdown_for_ai', null) !== null) {

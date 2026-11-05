@@ -376,11 +376,14 @@ class Instant_Indexing_Manager {
      * Add Bulk Action Item to Dropdown
      *
      * @since 1.1.0
-     * @param array  $actions   Existing thinkrank actions.
-     * @param string $post_type Current post type.
+     * @param array $actions   Existing thinkrank actions.
+     * @param mixed $post_type Current post type, normally a string. Untyped so
+     *                         a public filter cannot fatal on it (#1455).
      * @return array Modified actions.
      */
-    public function add_bulk_action_item(array $actions, string $post_type): array {
+    public function add_bulk_action_item(array $actions, $post_type): array {
+        $post_type = is_scalar($post_type) ? (string) $post_type : '';
+
         // Check if enabled and post type is supported
         if (!$this->is_enabled() || !$this->is_post_type_supported($post_type) || !$this->user_can_submit()) {
             return $actions;
@@ -1072,13 +1075,20 @@ class Instant_Indexing_Manager {
     /**
      * Handle Bulk Action Submission
      *
+     * handle_bulk_actions-{$screen} is a public filter, so an earlier callback
+     * can hand over null or another non-string as the redirect. The scalar
+     * arguments are untyped and read as strings so that cannot fatal (#1455).
+     *
      * @since 1.1.0
-     * @param string $redirect_to Redirect URL.
-     * @param string $action      Action name.
-     * @param array  $post_ids    Selected post IDs.
+     * @param mixed $redirect_to Redirect URL, normally a string.
+     * @param mixed $action      Action name.
+     * @param array $post_ids    Selected post IDs.
      * @return string Modified redirect URL.
      */
-    public function handle_bulk_action_submit(string $redirect_to, string $action, array $post_ids): string {
+    public function handle_bulk_action_submit($redirect_to, $action, array $post_ids): string {
+        $redirect_to = is_scalar($redirect_to) ? (string) $redirect_to : '';
+        $action      = is_scalar($action) ? (string) $action : '';
+
         if ($action !== 'thinkrank_instant_index') {
             return $redirect_to;
         }

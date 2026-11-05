@@ -63,6 +63,16 @@ class Setup_Wizard {
     public const OPT_MIGRATED_PLUGINS = 'thinkrank_setup_wizard_migrated_plugins';
 
     /**
+     * Option: per source-plugin slug, what a wizard migration left in that
+     * plugin (items needing Pro, refused items, schema not imported...), as
+     * counters. Only partial runs have an entry. Lets the Migration step keep
+     * warning, and keep the source plugin active, after a refresh.
+     *
+     * @var string
+     */
+    public const OPT_PARTIAL_MIGRATIONS = 'thinkrank_setup_wizard_partial_migrations';
+
+    /**
      * Option flag: the user clicked "Allow & Continue" on the Start step,
      * opting in to usage tracking.
      *
@@ -326,10 +336,15 @@ class Setup_Wizard {
     /**
      * Add a body class on the wizard page so styles can take over the screen.
      *
-     * @param string $classes Existing body classes.
+     * admin_body_class is a public filter, so an earlier callback can hand over
+     * null or another non-string. That is read as '' so it cannot fatal (#1455).
+     *
+     * @param mixed $classes Existing body classes, normally a string.
      * @return string
      */
-    public function add_body_class(string $classes): string {
+    public function add_body_class($classes): string {
+        $classes = is_scalar($classes) ? (string) $classes : '';
+
         if ($this->is_wizard_screen()) {
             $classes .= ' thinkrank-setup-wizard-active';
         }
@@ -386,6 +401,10 @@ class Setup_Wizard {
         $migrated_plugins = get_option(self::OPT_MIGRATED_PLUGINS, []);
         $migrated_plugins = is_array($migrated_plugins) ? array_values($migrated_plugins) : [];
 
+        // What each partial wizard migration left in its source plugin.
+        $partial_migrations = get_option(self::OPT_PARTIAL_MIGRATIONS, []);
+        $partial_migrations = is_array($partial_migrations) ? $partial_migrations : [];
+
         wp_set_script_translations('thinkrank-setup-wizard', 'thinkrank');
         wp_localize_script('thinkrank-setup-wizard', 'thinkrankWizard', [
             'apiUrl'         => rest_url('thinkrank/v1/'),
@@ -394,6 +413,7 @@ class Setup_Wizard {
             'started'        => $started,
             'migrationAvailable' => $migration_available,
             'migratedPlugins'    => $migrated_plugins,
+            'migrationLeftBehind' => (object) $partial_migrations,
             'totalSteps'     => self::TOTAL_STEPS,
             'steps'          => self::STEPS,
             'completed'      => $this->is_completed(),

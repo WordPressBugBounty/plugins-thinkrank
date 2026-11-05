@@ -166,10 +166,13 @@ class Deactivator {
             )
         );
         
-        // Clear object cache if available
-        if (function_exists('wp_cache_flush_group')) {
-            wp_cache_flush_group('thinkrank');
-        }
+        // Every object-cache group the plugin writes to, not just `thinkrank`
+        // (#1328). No full-flush fallback here: the settings are kept on
+        // deactivation, so nothing stale is served, and emptying every other
+        // plugin's cache for it would be out of proportion.
+        require_once THINKRANK_PLUGIN_DIR . 'includes/cleanup-cache.php';
+        $manifest = require THINKRANK_PLUGIN_DIR . 'includes/cleanup-manifest.php';
+        thinkrank_flush_cache_groups($manifest['cache_groups'], false);
     }
     
     /**

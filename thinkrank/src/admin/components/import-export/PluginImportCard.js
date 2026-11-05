@@ -168,6 +168,20 @@ const PluginImportCard = ({ plugin, snapshot, onRefresh }) => {
 			);
 		} else if (
 			prev === STATES.MIGRATING &&
+			state === STATES.MIGRATION_COMPLETE &&
+			(progress.proRequired > 0 || progress.rejected > 0)
+		) {
+			// Some items were not written (they need Pro, or Pro refused
+			// them). The card spells out which; the toast must not call the
+			// run clean.
+			notify.warning(
+				__(
+					'Migration complete, but some items were not imported. See the details on the card.',
+					'thinkrank'
+				)
+			);
+		} else if (
+			prev === STATES.MIGRATING &&
 			state === STATES.MIGRATION_COMPLETE
 		) {
 			notify.success(
@@ -184,7 +198,14 @@ const PluginImportCard = ({ plugin, snapshot, onRefresh }) => {
 				error || __('The import operation failed.', 'thinkrank')
 			);
 		}
-	}, [state, error, pluginName, progress.failed]);
+	}, [
+		state,
+		error,
+		pluginName,
+		progress.failed,
+		progress.proRequired,
+		progress.rejected,
+	]);
 
 	const handleTypeToggle = useCallback((type) => {
 		setSelectedTypes((prev) => ({ ...prev, [type]: !prev[type] }));
@@ -391,6 +412,71 @@ const PluginImportCard = ({ plugin, snapshot, onRefresh }) => {
 							)}
 						</Alert>
 					)}
+					{!error &&
+						state === STATES.MIGRATION_COMPLETE &&
+						progress.proRequired > 0 && (
+							<div className="tr-mt-3">
+								<Alert
+									variant="warning"
+									title={__(
+										'Some items need ThinkRank Pro',
+										'thinkrank'
+									)}
+								>
+									{sprintf(
+										/* translators: %s: number of items not imported. */
+										_n(
+											'%s item (a redirect, custom schema or similar) was not imported because ThinkRank Pro is not active. It stays in the snapshot. Run the migration again after activating ThinkRank Pro, and keep the source plugin until then.',
+											'%s items (redirects, custom schemas or similar) were not imported because ThinkRank Pro is not active. They stay in the snapshot. Run the migration again after activating ThinkRank Pro, and keep the source plugin until then.',
+											progress.proRequired,
+											'thinkrank'
+										),
+										Number(
+											progress.proRequired
+										).toLocaleString()
+									)}
+								</Alert>
+							</div>
+						)}
+					{!error &&
+						state === STATES.MIGRATION_COMPLETE &&
+						progress.rejected > 0 && (
+							<div className="tr-mt-3">
+								<Alert
+									variant="warning"
+									title={__(
+										'Some items could not be imported',
+										'thinkrank'
+									)}
+								>
+									<p>
+										{sprintf(
+											/* translators: %s: number of items refused. */
+											_n(
+												'%s item was refused and not imported. The source plugin and the snapshot still hold it.',
+												'%s items were refused and not imported. The source plugin and the snapshot still hold them.',
+												progress.rejected,
+												'thinkrank'
+											),
+											Number(
+												progress.rejected
+											).toLocaleString()
+										)}
+									</p>
+									{progress.rejectedSample?.length > 0 && (
+										<ul className="tr-list-disc tr-pl-5 tr-mt-1">
+											{progress.rejectedSample.map(
+												(reason, index) => (
+													<li key={index}>
+														{reason}
+													</li>
+												)
+											)}
+										</ul>
+									)}
+								</Alert>
+							</div>
+						)}
 					{!error &&
 						state === STATES.MIGRATION_COMPLETE &&
 						(schemaLines.length > 0 || schemaNote) && (

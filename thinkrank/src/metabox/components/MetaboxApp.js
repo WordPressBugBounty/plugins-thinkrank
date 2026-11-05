@@ -46,6 +46,7 @@ import AdvancedPanel from './panels/AdvancedPanel';
 import {
 	clearDraft,
 	draftableFields,
+	draftScope,
 	newDraftOwner,
 	readDraft,
 	resolveDraft,
@@ -228,6 +229,10 @@ const MetaboxApp = ({
 
 	const metaboxConfig =
 		typeof window !== 'undefined' ? window.thinkrankMetabox || {} : {};
+	// The local draft names the site as well as the post: localStorage is
+	// shared by every site on one origin, so a bare post ID restored one
+	// site's draft into another site's post with that ID (#1558).
+	const draftId = draftScope(postId, metaboxConfig.draftSite || '');
 	// Focus keywords the input accepts; matches Focus_Keywords::MAX in PHP. An
 	// extension that stores more (ThinkRank Pro) raises it; 0 = no cap.
 	const focusKeywordsMax = applyFilters(
@@ -1103,7 +1108,7 @@ const MetaboxApp = ({
 
 		if (
 			writeDraft(
-				postId,
+				draftId,
 				formData,
 				draftBaselineRef.current,
 				draftOwnerRef.current
@@ -1114,10 +1119,10 @@ const MetaboxApp = ({
 			setLastSaved(new Date());
 		} else if (hasDraftRef.current) {
 			// Every edit was reverted: the draft no longer holds anything.
-			clearDraft(postId, ownedDraftRef.current);
+			clearDraft(draftId, ownedDraftRef.current);
 			hasDraftRef.current = false;
 		}
-	}, [formData, postId]);
+	}, [formData, postId, draftId]);
 
 	/**
 	 * Record a successful save: the saved values are the new baseline and the
@@ -1130,7 +1135,7 @@ const MetaboxApp = ({
 			if (!postId) return;
 			draftBaselineRef.current = draftableFields(savedData);
 			if (hasDraftRef.current) {
-				clearDraft(postId, ownedDraftRef.current);
+				clearDraft(draftId, ownedDraftRef.current);
 			}
 			hasDraftRef.current = false;
 			// The server now holds these, so they are what a later blank
@@ -1142,7 +1147,7 @@ const MetaboxApp = ({
 			};
 			bumpSyncedSeo();
 		},
-		[postId]
+		[postId, draftId]
 	);
 
 	// Block editor: the hidden inputs below ride along on the editor's own
@@ -1343,23 +1348,23 @@ const MetaboxApp = ({
 	const loadSavedData = useCallback(() => {
 		if (!postId) return;
 
-		const draft = readDraft(postId);
+		const draft = readDraft(draftId);
 		if (!draft) return;
 
 		const { restore, discard } = resolveDraft(
 			draft,
 			draftBaselineRef.current,
-			postId
+			draftId
 		);
 		if (discard) {
-			clearDraft(postId, draft.owner);
+			clearDraft(draftId, draft.owner);
 			return;
 		}
 		hasDraftRef.current = true;
 		ownedDraftRef.current = draft.owner ?? null;
 		setFormData((prev) => ({ ...prev, ...restore }));
 		setLastSaved(new Date(draft.timestamp));
-	}, [postId]);
+	}, [postId, draftId]);
 
 	/**
 	 * Simple API cache helper

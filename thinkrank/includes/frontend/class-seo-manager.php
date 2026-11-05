@@ -643,11 +643,17 @@ class SEO_Manager {
     /**
      * Filter content to inject image SEO attributes
      *
+     * the_content, post_thumbnail_html and the WooCommerce gallery filter are
+     * public, so an earlier callback can hand over null or another non-string.
+     * That is read as '' so it cannot fatal before the body runs (#1455).
+     *
      * @since 1.0.0
-     * @param string $content Content to filter
+     * @param mixed $content Content to filter, normally a string.
      * @return string Filtered content
      */
-    public function filter_content_images(string $content, $post_id = null): string {
+    public function filter_content_images($content, $post_id = null): string {
+        $content = is_scalar($content) ? (string) $content : '';
+
         if (!$this->image_seo_manager) {
             return $content;
         }
@@ -950,10 +956,16 @@ class SEO_Manager {
      * Override WordPress document title (HIGH PRIORITY)
      * Priority: Post-specific metadata > Global SEO templates > Site Identity templates
      *
-     * @param string $title Original title
+     * pre_get_document_title is a public filter, so an earlier callback can
+     * hand over null or another non-string. That is read as '' (core does the
+     * same) so the string return type cannot fatal on the pass-through (#1437).
+     *
+     * @param mixed $title Title from earlier callbacks, normally a string.
      * @return string Modified title
      */
     public function override_document_title($title): string {
+        $title = is_scalar($title) ? (string) $title : '';
+
         // A content type with metas switched off keeps whatever title the theme
         // and WordPress produce (#660).
         if (!$this->metas_enabled()) {
@@ -1105,11 +1117,18 @@ class SEO_Manager {
      * Override WordPress wp_title (HIGH PRIORITY)
      * Priority: Post-specific metadata > Global SEO templates > Site Identity templates
      *
-     * @param string $title Original title
-     * @param string $sep Title separator
+     * wp_title is a public filter, so an earlier callback can hand over null
+     * or another non-string. Both arguments are untyped and read as strings
+     * here so that cannot fatal (#1437).
+     *
+     * @param mixed $title Title from earlier callbacks, normally a string.
+     * @param mixed $sep   Title separator.
      * @return string Modified title
      */
-    public function override_wp_title(string $title, string $sep = ''): string {
+    public function override_wp_title($title, $sep = ''): string {
+        $title = is_scalar($title) ? (string) $title : '';
+        $sep   = is_scalar($sep) ? (string) $sep : '';
+
         if (!$this->metas_enabled()) {
             return $title;
         }
@@ -3109,10 +3128,49 @@ class SEO_Manager {
             case 'search':
                 return $settings['search_title'] ?? null;
             case 'archive':
-                return $settings['archive_title'] ?? null;
+                return isset($settings['archive_title'])
+                    ? self::archive_title_template((string) $settings['archive_title'])
+                    : null;
             default:
                 return null;
         }
+    }
+
+    /**
+     * The Archive Title format as a template every archive can use.
+     *
+     * One format covers date, post type and custom taxonomy archives. The
+     * Rank Math, AIOSEO, SEOPress and Yoast importers fill it from the
+     * source's date-archive template ("%date% %sep% %site_title%"), which
+     * names the archive only by its date. On a custom taxonomy or post type
+     * archive there is no date, so the term or post type name was lost:
+     * "October 2026 | Site" while %date% was the current month, "Site" once
+     * it was page-relative (#1424).
+     *
+     * A format with %date% and no subject token gets %archive_title% in place
+     * of %date%. On a date archive the two resolve to the same period, so the
+     * date archive prints what it did; every other archive gets its own name.
+     * Applied when the format is read, so a site imported before this fix is
+     * corrected without a migration, and by the importer, so a new import
+     * stores the corrected format.
+     *
+     * @since 2.20.1
+     *
+     * @param string $template Archive Title format.
+     * @return string Format with a subject every archive resolves.
+     */
+    public static function archive_title_template(string $template): string {
+        if (false === stripos($template, '%date%')) {
+            return $template;
+        }
+
+        foreach (['%archive_title%', '%title%', '%term%'] as $subject) {
+            if (false !== stripos($template, $subject)) {
+                return $template;
+            }
+        }
+
+        return (string) str_ireplace('%date%', '%archive_title%', $template);
     }
 
     /**
@@ -3408,6 +3466,9 @@ class SEO_Manager {
         if (!empty($settings['enabled'] ?? true)) {
             $context  = self::term_archive_context($term);
             $template = (string) ($settings[$context . '_title'] ?? '');
+            if ('archive' === $context) {
+                $template = self::archive_title_template($template);
+            }
 
             if ('' !== trim($template)) {
                 $title = self::process_title_template(
@@ -3905,6 +3966,14 @@ class SEO_Manager {
                 $context_post = get_post($context_id);
 
                 foreach ($page_specific_schemas as $schema_type => $schema_info) {
+                    // A deployed Product is a snapshot of the SKU, prices and
+                    // stock the password hides; behind the form the page keeps
+                    // the automatic WebPage instead (#1555).
+                    if (in_array((string) $schema_type, ['Product', 'ProductGroup'], true)
+                        && \ThinkRank\Integrations\Commerce::is_password_hidden((int) $context_id)) {
+                        continue;
+                    }
+
                     $node = $schema_info['data'];
 
                     if ($this->global_seo_schema && $context_post instanceof \WP_Post) {
@@ -4864,11 +4933,18 @@ class SEO_Manager {
     /**
      * Filter WordPress robots.txt output
      *
-     * @param string $output The default robots.txt output
-     * @param string $is_public Whether the site is public
+     * robots_txt is a public filter, so an earlier callback can hand over null
+     * or another non-string. Both arguments are untyped and read as strings
+     * here so that cannot fatal (#1455).
+     *
+     * @param mixed $output    The robots.txt output so far, normally a string.
+     * @param mixed $is_public Whether the site is public.
      * @return string Modified robots.txt content
      */
-    public function filter_robots_txt(string $output, string $is_public): string {
+    public function filter_robots_txt($output, $is_public): string {
+        $output    = is_scalar($output) ? (string) $output : '';
+        $is_public = is_scalar($is_public) ? (string) $is_public : '';
+
         // Only override if Site Identity is enabled and robots.txt management is enabled
         if (!$this->site_identity_data || !$this->site_identity_data['enabled']) {
             return $this->advertise_own_sitemaps($output, $is_public);

@@ -614,6 +614,8 @@ class SEO_Analyzer {
      *  - The robots.txt actually served: a physical file in the web root or a
      *    custom robots.txt body that disallows the whole site for every
      *    crawler, Googlebot or Bingbot.
+     *  - ThinkRank's own site-wide robots meta default, which prints
+     *    `noindex` on every page that does not override it (#1566).
      *
      * @return array
      */
@@ -656,6 +658,11 @@ class SEO_Analyzer {
                 /* translators: %s: comma-separated crawler names. */
                 $message    = sprintf(__('The robots.txt file in your site root blocks %s from the whole site, so your pages will not appear in search results.', 'thinkrank'), $agents);
                 $how_to_fix = __('Edit or remove the robots.txt file in your site root. Your web server serves that file directly, so ThinkRank\'s robots.txt settings do not apply while it is there.', 'thinkrank');
+                break;
+
+            case 'robots_meta':
+                $message    = __('ThinkRank\'s site-wide robots meta default is set to No Index, so your pages tell search engines not to index them and will not appear in search results.', 'thinkrank');
+                $how_to_fix = __('Tick Index (and untick No Index) under Essential SEO → Crawling and AI Indexing → Global Robot Meta, then save.', 'thinkrank');
                 break;
 
             default:
@@ -704,6 +711,11 @@ class SEO_Analyzer {
             case 'file':
                 return !empty($block['thinkrank_file']);
 
+            // A site-wide noindex is a deliberate setting more often than
+            // a stale one (a site kept out of search while it is built), and
+            // the fix only lifts the switches that exist to hide a whole
+            // site. It is reported with where to change it instead (#1566).
+            case 'robots_meta':
             default:
                 return false;
         }
@@ -714,7 +726,8 @@ class SEO_Analyzer {
      *
      * Ordered by what the site owner has to change: the WordPress setting
      * first (it also sends a noindex robots meta tag), then ThinkRank's switch,
-     * then the robots.txt that is actually served. The served file is read
+     * then the robots.txt that is actually served, then ThinkRank's own
+     * site-wide robots meta default (#1566). The served file is read
      * through get_effective_robots_txt() and parse_robots_disallow_all(), the
      * same pair the AI crawler check uses, so the two checks never disagree on
      * what a robots.txt says.
@@ -726,7 +739,7 @@ class SEO_Analyzer {
      * @return array{source?: string, agents?: string[], thinkrank_file?: bool}
      *         Empty when search engines can crawl the site. Otherwise
      *         `source` is `blog_public`, `allow_search_engines`, `file`,
-     *         `custom` or `generated`, and `agents` names the crawlers the
+     *         `custom`, `generated` or `robots_meta`, and `agents` names the crawlers the
      *         served robots.txt shuts out. For `file`, `thinkrank_file` says
      *         whether ThinkRank wrote the file while it manages robots.txt
      *         and a sync from the current settings would lift the block. A
@@ -739,7 +752,7 @@ class SEO_Analyzer {
         }
 
         if (!class_exists('ThinkRank\\SEO\\Site_Identity_Manager')) {
-            return [];
+            return self::robots_meta_block();
         }
 
         $manager  = new Site_Identity_Manager();
@@ -762,7 +775,7 @@ class SEO_Analyzer {
         $agents    = $this->search_engines_blocked_by($groups);
 
         if (empty($agents)) {
-            return [];
+            return self::robots_meta_block();
         }
 
         $source = (string) ($effective['source'] ?? 'custom');
@@ -806,6 +819,31 @@ class SEO_Analyzer {
         }
 
         return $block;
+    }
+
+    /**
+     * The block ThinkRank's own site-wide robots meta default puts on the
+     * site, if any.
+     *
+     * The default is the base every page's robots tag is built from
+     * (SEO_Manager::get_robots_meta_content()), and only its `noindex` flag
+     * decides between `noindex` and `index` there, so the same flag is read
+     * here. With it on, every page that does not override it prints
+     * `noindex` and the site drops out of search while robots.txt and the
+     * WordPress setting both allow it, which this check passed (#1566).
+     *
+     * @since 2.21.1
+     * @return array{source?: string, agents?: string[]} Empty when the default
+     *         lets pages be indexed.
+     */
+    private static function robots_meta_block(): array {
+        $settings = get_option('thinkrank_global_robot_meta_settings', []);
+
+        if (is_array($settings) && !empty($settings['noindex'])) {
+            return ['source' => 'robots_meta', 'agents' => []];
+        }
+
+        return [];
     }
 
     /**
@@ -1109,9 +1147,29 @@ class SEO_Analyzer {
     // ─────────────────────────────────────────────────────────────────────
 
     /**
-     * How many recent published posts/pages the content checks sample.
+     * How many recent published, indexable items the content checks sample.
      */
     private const CONTENT_SAMPLE_SIZE = 100;
+
+    /**
+     * Candidates fetched per query while filling the content sample.
+     *
+     * @since 2.15.0
+     */
+    private const SAMPLE_BATCH_SIZE = 100;
+
+    /**
+     * Most candidate queries one analysis runs to fill the content sample.
+     *
+     * Noindexed, password-protected and redirected items are skipped after the
+     * fetch, so a site with many of them needs more than one batch. The cap
+     * keeps the cost bounded on a site where nearly everything is excluded:
+     * at most SAMPLE_BATCH_SIZE * SAMPLE_MAX_BATCHES candidates are read, and
+     * the sample is whatever indexable items they held.
+     *
+     * @since 2.15.0
+     */
+    private const SAMPLE_MAX_BATCHES = 5;
 
     /**
      * Coverage thresholds shared by the content checks: at or above the first
@@ -1130,15 +1188,16 @@ class SEO_Analyzer {
     private const AFFECTED_LIMIT = 100;
 
     /**
-     * Recent published posts/pages should have meta descriptions.
+     * Recent published, indexable content should have meta descriptions.
      *
-     * Samples the most recent CONTENT_SAMPLE_SIZE published posts/pages so the
-     * check stays fast on large sites.
+     * Samples the most recent CONTENT_SAMPLE_SIZE indexable items across the
+     * public post types (see sample_post_ids()) so the check stays fast on
+     * large sites.
      *
      * @return array
      */
     public function check_meta_descriptions(): array {
-        $label = __('Posts have meta descriptions', 'thinkrank');
+        $label = __('Content has meta descriptions', 'thinkrank');
 
         $post_ids = $this->sample_post_ids();
 
@@ -1147,7 +1206,7 @@ class SEO_Analyzer {
             return [
                 'label'   => $label,
                 'status'  => self::PASSED,
-                'message' => __('No published content to check yet.', 'thinkrank'),
+                'message' => __('No published, indexable content to check yet.', 'thinkrank'),
             ];
         }
 
@@ -1183,8 +1242,8 @@ class SEO_Analyzer {
             return [
                 'label'   => $label,
                 'status'  => self::PASSED,
-                /* translators: 1: posts with meta description, 2: sampled posts. */
-                'message' => sprintf(__('%1$d of your %2$d most recent posts have a meta description.', 'thinkrank'), $with_description, $total),
+                /* translators: 1: items with a meta description, 2: sampled items. */
+                'message' => sprintf(__('%1$d of your %2$d most recent indexable items have a meta description.', 'thinkrank'), $with_description, $total),
                 'value'   => $value,
             ];
         }
@@ -1192,9 +1251,9 @@ class SEO_Analyzer {
         return [
             'label'      => $label,
             'status'     => $coverage >= self::COVERAGE_WARN ? self::WARNING : self::FAILED,
-            /* translators: 1: posts missing a meta description, 2: sampled posts. */
-            'message'    => sprintf(__('%1$d of your %2$d most recent posts are missing a meta description. Search engines fall back to arbitrary page text for their snippets.', 'thinkrank'), $missing, $total),
-            'how_to_fix'     => __('Add meta descriptions in the ThinkRank SEO panel when editing a post, or use Bulk SEO Optimization to generate them with AI.', 'thinkrank'),
+            /* translators: 1: items missing a meta description, 2: sampled items. */
+            'message'    => sprintf(__('%1$d of your %2$d most recent indexable items are missing a meta description. Search engines fall back to arbitrary page text for their snippets.', 'thinkrank'), $missing, $total),
+            'how_to_fix'     => __('Add meta descriptions in the ThinkRank SEO panel when editing each item, or use Bulk SEO Optimization to generate them with AI.', 'thinkrank'),
             'value'          => $value,
             'affected_posts' => $this->affected_posts($without),
         ];
@@ -1521,10 +1580,10 @@ class SEO_Analyzer {
     private $sample_word_counts = null;
 
     /**
-     * The sampled post ids, memoized so the Content and GEO categories run one
-     * query between them rather than one each over the same CONTENT_SAMPLE_SIZE
-     * posts. Both want the same slice — the most recent published posts and
-     * pages — so two queries only guaranteed they could disagree after a
+     * The sampled post ids, memoized so the Content and GEO categories share
+     * one sample rather than querying each over the same CONTENT_SAMPLE_SIZE
+     * items. Both want the same slice, the most recent published indexable
+     * items, so separate queries only guaranteed they could disagree after a
      * publish mid-analysis.
      *
      * @since 2.5.0
@@ -1544,6 +1603,20 @@ class SEO_Analyzer {
      * The sampled post ids, fetched once and shared by every check that reads
      * the same slice.
      *
+     * The most recent CONTENT_SAMPLE_SIZE published items a search engine is
+     * asked to index, across every public post type ThinkRank writes metas for
+     * (sample_post_types()). It used to be posts and pages only, noindexed ones
+     * included, so a store's products were never graded while a deliberately
+     * hidden thank-you page was listed as a page to fix (#968).
+     *
+     * Indexability is decided by Indexability::is_indexable_post(), the same
+     * resolution the sitemap and IndexNow use: the robots cascade (site, then
+     * content type, then the item's own override), a password, or a redirect.
+     * That cannot be expressed in the query, so candidates are fetched newest
+     * first in batches and filtered here, up to SAMPLE_MAX_BATCHES queries.
+     * Each batch's meta and redirects are loaded together before it is
+     * filtered, so a redirect provider is asked once per batch.
+     *
      * @since 2.5.0
      * @return int[]
      */
@@ -1552,22 +1625,112 @@ class SEO_Analyzer {
             return $this->sample_post_ids;
         }
 
-        $this->sample_post_ids = get_posts([
-            'post_type'        => ['post', 'page'],
-            'post_status'      => 'publish',
-            'posts_per_page'   => self::CONTENT_SAMPLE_SIZE,
-            'orderby'          => 'date',
-            'order'            => 'DESC',
-            'fields'           => 'ids',
-            'no_found_rows'    => true,
-            'suppress_filters' => false,
-        ]);
+        $post_types = $this->sample_post_types();
+        $sample     = [];
 
-        return $this->sample_post_ids;
+        if ([] === $post_types) {
+            $this->sample_post_ids = $sample;
+
+            return $sample;
+        }
+
+        $seen   = [];
+        $offset = 0;
+
+        for ($batch = 0; $batch < self::SAMPLE_MAX_BATCHES; $batch++) {
+            $candidates = get_posts([
+                'post_type'        => $post_types,
+                'post_status'      => 'publish',
+                'posts_per_page'   => self::SAMPLE_BATCH_SIZE,
+                'offset'           => $offset,
+                'orderby'          => 'date',
+                'order'            => 'DESC',
+                'fields'           => 'ids',
+                'no_found_rows'    => true,
+                'suppress_filters' => false,
+            ]);
+
+            $candidates = array_map('intval', is_array($candidates) ? $candidates : []);
+            $offset    += count($candidates);
+
+            // Unseen ids only: a post published between two batches shifts
+            // the offset by one and would otherwise be read twice.
+            $fresh = array_values(array_diff($candidates, array_keys($seen)));
+            if ([] === $fresh) {
+                break;
+            }
+
+            // The robots override and the canonical are post meta.
+            if (function_exists('_prime_post_caches')) {
+                _prime_post_caches($fresh, false, true);
+            }
+
+            // The per-item redirect lives with the redirect provider: one
+            // lookup for the batch, not one per candidate.
+            Object_Redirect::prime('post', $fresh);
+
+            foreach ($fresh as $post_id) {
+                $seen[$post_id] = true;
+
+                $post = get_post($post_id);
+                if (!$post instanceof \WP_Post || !Indexability::is_indexable_post($post)) {
+                    continue;
+                }
+
+                $sample[] = $post_id;
+                if (count($sample) >= self::CONTENT_SAMPLE_SIZE) {
+                    break 2;
+                }
+            }
+
+            // A short batch was the last one there is.
+            if (count($candidates) < self::SAMPLE_BATCH_SIZE) {
+                break;
+            }
+        }
+
+        Object_Redirect::flush_primed();
+
+        $this->sample_post_ids = $sample;
+
+        return $sample;
     }
 
     /**
-     * The most recent published posts/pages, as raw content, its plain-text
+     * The post types the content sample draws from.
+     *
+     * Every public type with a front-end page ThinkRank manages
+     * (Global_SEO_Post_Types::is_allowed(), which drops builder template types
+     * and non-rendering attachment pages), minus attachments, which the image
+     * check covers, and minus any type whose metas are switched off in the
+     * content type matrix: ThinkRank prints no description there, so grading
+     * one would ask for something the site has chosen not to output.
+     *
+     * @since 2.15.0
+     * @return string[]
+     */
+    private function sample_post_types(): array {
+        $post_types = [];
+
+        foreach (get_post_types(['public' => true], 'names') as $post_type) {
+            $post_type = (string) $post_type;
+
+            if ('attachment' === $post_type || !Global_SEO_Post_Types::is_allowed($post_type)) {
+                continue;
+            }
+
+            if (!Content_Type_Settings::is_enabled(Content_Type_Settings::FEATURE_META, $post_type, true)) {
+                continue;
+            }
+
+            $post_types[] = $post_type;
+        }
+
+        return $post_types;
+    }
+
+    /**
+     * The sampled items, as raw content, its plain-text
      * rendering and the modified time.
      *
      * Raw `post_content` on purpose: running `the_content` over 100 posts in a
@@ -2471,8 +2634,8 @@ class SEO_Analyzer {
      * Q&A markers in stored content or builder trees, site-wide.
      *
      * Two bounded queries rather than a walk over the content sample: the
-     * sample is the 100 most recent posts and pages, so a site whose only FAQ
-     * lives in a custom post type, or further back than that, answered "no
+     * sample is the 100 most recent indexable items, so a site whose only FAQ
+     * lives further back than that, or on a noindexed page, answered "no
      * answer content" while publishing exactly that (#686).
      *
      * @since 2.7.0
@@ -2630,10 +2793,10 @@ class SEO_Analyzer {
             }
         }
 
-        // ...and again beyond the sample, which is the 100 most recent posts
-        // and pages. A site whose only FAQ lives in a custom post type, or
-        // simply further back than that, reported no answer schema while
-        // ThinkRank was publishing exactly that (#686). Added alongside the
+        // ...and again beyond the sample, which is the 100 most recent
+        // indexable items. A site whose only FAQ lived outside the sample
+        // reported no answer schema while ThinkRank was publishing exactly
+        // that (#686). Added alongside the
         // walk above rather than replacing it: the sample is already loaded and
         // resolves Bricks trees, so it stays the primary source and this only
         // extends the reach.
@@ -2973,7 +3136,7 @@ class SEO_Analyzer {
             /* translators: 1: posts without one, 2: sampled posts. */
             __('%1$d of your %2$d most recent pages do not open with a concise answer. AI assistants quote the first self-contained passage they find, and a long preamble gives them nothing to lift.', 'thinkrank'),
             __('Open each page with a 40–60 word paragraph that answers its title directly, before any background or introduction.', 'thinkrank'),
-            __('No published content to check yet.', 'thinkrank')
+            __('No published, indexable content to check yet.', 'thinkrank')
         );
     }
 
@@ -3060,7 +3223,7 @@ class SEO_Analyzer {
             /* translators: 1: posts without one, 2: sampled posts. */
             __('%1$d of your %2$d most recent pages have no question-style heading. Assistants match a user\'s question against your headings first.', 'thinkrank'),
             __('Phrase at least one H2 or H3 per page as the question it answers: "How does X work?" rather than "Overview".', 'thinkrank'),
-            __('No published content to check yet.', 'thinkrank')
+            __('No published, indexable content to check yet.', 'thinkrank')
         );
     }
 
@@ -3117,7 +3280,7 @@ class SEO_Analyzer {
             /* translators: 1: posts without one, 2: sampled posts. */
             __('%1$d of your %2$d most recent pages are unbroken prose. Steps, comparisons and specifications are extracted far more reliably from a list or table.', 'thinkrank'),
             __('Break steps, comparisons and specifications out of the paragraphs into list or table blocks.', 'thinkrank'),
-            __('No published content to check yet.', 'thinkrank')
+            __('No published, indexable content to check yet.', 'thinkrank')
         );
     }
 
@@ -3138,7 +3301,7 @@ class SEO_Analyzer {
             /* translators: 1: thin posts, 2: sampled posts. */
             __('%1$d of your %2$d most recent pages are under 300 words. An assistant with a choice of sources rarely quotes the thinnest one.', 'thinkrank'),
             __('Expand thin pages so each one answers its topic completely, or merge them into a page that does.', 'thinkrank'),
-            __('No published content to check yet.', 'thinkrank')
+            __('No published, indexable content to check yet.', 'thinkrank')
         );
     }
 
@@ -3161,7 +3324,7 @@ class SEO_Analyzer {
             /* translators: 1: stale posts, 2: sampled posts. */
             __('%1$d of your %2$d most recent pages have not been revised in over a year. AI answers favour sources that look current.', 'thinkrank'),
             __('Review your most important pages, update what has changed, and save them so their modified date reflects the revision.', 'thinkrank'),
-            __('No published content to check yet.', 'thinkrank')
+            __('No published, indexable content to check yet.', 'thinkrank')
         );
     }
 }

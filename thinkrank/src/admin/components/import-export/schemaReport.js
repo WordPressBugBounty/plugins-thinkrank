@@ -92,6 +92,33 @@ export const schemaNotImportedLines = (totals) => {
 };
 
 /**
+ * How many schema items an import left behind, the total behind
+ * {@link schemaNotImportedLines}.
+ *
+ * @param {Object} totals Schema totals.
+ * @return {number} Count; 0 when nothing was left behind.
+ */
+export const schemaNotImportedCount = (totals) => {
+	const buckets = totals?.notImported || [];
+	let count = buckets.reduce(
+		(sum, bucket) => sum + (Number(bucket.count) || 0),
+		0
+	);
+
+	const hasSiteWideTypes = buckets.some(
+		(bucket) => bucket.key === 'unsupported_post_schemas'
+	);
+	if (!hasSiteWideTypes) {
+		count += Object.values(totals?.unsupported || {}).reduce(
+			(sum, n) => sum + (Number(n) || 0),
+			0
+		);
+	}
+
+	return count;
+};
+
+/**
  * The sentence about schema staged in the editor, or '' when there is none.
  *
  * @param {Object} totals Schema totals.

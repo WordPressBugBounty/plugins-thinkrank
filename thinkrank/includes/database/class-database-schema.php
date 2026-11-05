@@ -133,9 +133,9 @@ class Database_Schema {
      * and stored the new version, so on a busy site several requests used to
      * start the upgrade at once. For a table that did not exist yet each one
      * sent its own CREATE TABLE, and every request but the first logged
-     * "Table ... already exists" (#1133). add_option() is atomic, since
-     * option_name is a unique key, so exactly one request gets the lock and
-     * the rest skip the upgrade.
+     * "Table ... already exists" (#1133). The lock row is taken with an
+     * INSERT IGNORE on the unique option_name key, so exactly one request
+     * gets it and the rest skip the upgrade (#1547).
      *
      * @since 2.15.1
      * @var string
@@ -395,11 +395,18 @@ class Database_Schema {
     /**
      * Take the schema upgrade lock.
      *
-     * add_option() only inserts when the row is absent, so one concurrent
-     * request wins it. A lock older than UPGRADE_LOCK_TTL belongs to a request
-     * that died, and is taken over with a compare-and-swap on the stored time:
-     * of several requests that find the same stale lock, only the one whose
-     * UPDATE still matches the old value gets it.
+     * The row is inserted with INSERT IGNORE, and only the request whose
+     * insert added it holds the lock: option_name is a unique key, so of
+     * several concurrent requests exactly one gets an affected row.
+     * add_option() is not that test-and-set. It checks for the row and then
+     * writes INSERT ... ON DUPLICATE KEY UPDATE, so a request that passed the
+     * check just before another inserted the row overwrote that row and still
+     * answered true, and both ran the upgrade (#1547).
+     *
+     * A lock older than UPGRADE_LOCK_TTL belongs to a request that died, and
+     * is taken over with a compare-and-swap on the stored time: of several
+     * requests that find the same stale lock, only the one whose UPDATE still
+     * matches the old value gets it.
      *
      * @since 2.15.1
      *
@@ -411,15 +418,41 @@ class Database_Schema {
         $now   = $this->upgrade_lock_clock();
         $token = bin2hex(random_bytes(16));
         $value = $now . ':' . $token;
+        $wpdb  = $this->wpdb;
 
-        if (add_option(self::UPGRADE_LOCK_OPTION, $value, '', false)) {
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- atomic insert of the lock row; the options API has no test-and-set. The options cache entry is dropped below.
+        $inserted = $wpdb->query(
+            $wpdb->prepare(
+                "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'off')",
+                self::UPGRADE_LOCK_OPTION,
+                $value
+            )
+        );
+
+        wp_cache_delete(self::UPGRADE_LOCK_OPTION, 'options');
+
+        if (1 === (int) $inserted) {
             $this->upgrade_lock = $value;
             return true;
         }
 
-        // Read the row as stored, not a copy an object cache kept from earlier.
-        wp_cache_delete(self::UPGRADE_LOCK_OPTION, 'options');
-        $held = (string) get_option(self::UPGRADE_LOCK_OPTION, '');
+        // Read the row as stored, not a copy an object cache, or this
+        // request's own "not an option" note, kept from earlier.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the committed lock value, which a cached read would hide.
+        $held = $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s",
+                self::UPGRADE_LOCK_OPTION
+            )
+        );
+
+        if (null === $held) {
+            // Released between the insert and this read. The next request
+            // takes it; skipping once is the safe side.
+            return false;
+        }
+
+        $held = (string) $held;
 
         if (self::lock_time($held) > $now - self::UPGRADE_LOCK_TTL) {
             return false;

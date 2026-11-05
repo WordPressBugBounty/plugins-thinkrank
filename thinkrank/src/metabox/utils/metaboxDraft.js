@@ -19,6 +19,12 @@
  * same post share one key, so a tab removes the stored draft only while it
  * still holds that tab's own name, never one another tab wrote since.
  *
+ * localStorage is shared by every site on one origin: the sites of a
+ * subdirectory multisite, or two installs under one domain. A post ID alone
+ * named the same draft on each of them, so one site's unsaved title came
+ * back into another site's post with that ID (#1558). Drafts are therefore
+ * stored under draftScope(), the post ID together with the site.
+ *
  * @package
  * @since 2.15.0
  */
@@ -37,9 +43,24 @@ export const DRAFT_VERSION = 2;
 export const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * The ID a draft is stored and checked under: the post ID, prefixed with the
+ * site it belongs to.
+ *
+ * Every draft helper below takes this in place of a bare post ID, so the
+ * storage key and the `postId` kept in the draft both name the site.
+ *
+ * @since 2.21.1
+ * @param {number|string} postId Post ID.
+ * @param {string}        site   Site identity (`thinkrankMetabox.draftSite`).
+ * @return {number|string} The scoped ID, or the post ID when no site is known.
+ */
+export const draftScope = (postId, site = '') =>
+	site ? `${site}:${postId}` : postId;
+
+/**
  * localStorage key for a post's draft.
  *
- * @param {number|string} postId Post ID.
+ * @param {number|string} postId Post ID, scoped with draftScope().
  * @return {string} Storage key.
  */
 export const draftKey = (postId) => `thinkrank_metabox_${postId}`;

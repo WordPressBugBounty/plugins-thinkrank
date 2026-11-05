@@ -81,7 +81,33 @@ class Get_Seo_Analyzer extends Ability_Base {
 	public function execute( $input ) {
 		$analyzer = new SEO_Analyzer();
 
-		return $analyzer->run( false );
+		return $this->without_category_checks( $analyzer->run( false ) );
+	}
+
+	/**
+	 * Drop each category's copy of its checks from the audit.
+	 *
+	 * The analyzer lists every check twice: under its category for the admin
+	 * audit tabs, and again in the top-level `checks`, each with its `category`.
+	 * An agent needs the list once, and the second copy roughly doubles an answer
+	 * that the Hub refuses whole past 512 KB (#1422). Categories keep their id,
+	 * label, score and counts.
+	 *
+	 * @param array<string, mixed> $audit Audit payload from SEO_Analyzer::run().
+	 * @return array<string, mixed>
+	 */
+	protected function without_category_checks( $audit ) {
+		if ( ! isset( $audit['categories'] ) || ! is_array( $audit['categories'] ) ) {
+			return $audit;
+		}
+
+		foreach ( $audit['categories'] as $index => $category ) {
+			if ( is_array( $category ) ) {
+				unset( $audit['categories'][ $index ]['checks'] );
+			}
+		}
+
+		return $audit;
 	}
 
 	/**

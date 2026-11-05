@@ -20,14 +20,16 @@
  * eating the inner `%x%` out of it would leave a stray percent at each end. A
  * bare percent is not a token, so "50% off" is left alone. `%customfield(key)%`
  * is one token, whose map key is `customfield(key)` (#1277), and so is
- * `%taxonomy(slug)%`, keyed `taxonomy(slug)` (#1468). Any argument counts for
- * the latter, because Pattern_Resolver::strip_unresolved_tokens() removes a
- * malformed one rather than printing it.
+ * `%taxonomy(slug)%`, keyed `taxonomy(slug)` (#1468). Any other token with an
+ * argument, a malformed `%taxonomy(two words)%` or a Rank Math
+ * `%customterm_desc(x)%` an import left behind, is one token that no map
+ * holds, so it is removed as Pattern_Resolver::strip_unresolved_tokens()
+ * removes it (#1556).
  *
  * @type {RegExp}
  */
 const TOKEN =
-	/%%[a-z0-9_-]+%%|%(customfield\([^\s%()]+\)|taxonomy\([^%()]*\)|[a-z0-9_-]+)%/gi;
+	/%%[a-z0-9_-]+%%|%(customfield\([^\s%()]+\)|[a-z0-9_-]+(?:\([^%()]*\))?)%/gi;
 
 /**
  * The map key for a token: `%CustomField(x)%` resolves like

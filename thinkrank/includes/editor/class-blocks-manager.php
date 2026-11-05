@@ -158,11 +158,17 @@ class Blocks_Manager {
      * Done server-side (not in the blocks' save output) so the schema is not
      * stripped by KSES for users without unfiltered_html.
      *
-     * @param string $block_content Rendered block HTML.
-     * @param array  $block         Parsed block (name + attrs).
+     * render_block is a public filter, so an earlier callback can hand over
+     * null or another non-string as the block HTML. That is read as '' so it
+     * cannot fatal before the body runs (#1455).
+     *
+     * @param mixed $block_content Rendered block HTML, normally a string.
+     * @param array $block         Parsed block (name + attrs).
      * @return string
      */
-    public function inject_block_schema(string $block_content, array $block): string {
+    public function inject_block_schema($block_content, array $block): string {
+        $block_content = is_scalar($block_content) ? (string) $block_content : '';
+
         $name  = $block['blockName'] ?? '';
         $attrs = is_array($block['attrs'] ?? null) ? $block['attrs'] : [];
 

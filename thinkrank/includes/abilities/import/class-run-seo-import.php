@@ -204,6 +204,9 @@ class Run_Seo_Import extends Ability_Base {
 				'failed'          => $migrated['failed'],
 				'analyzed'        => $migrated['analyzed'],
 				'keywords_seeded' => $migrated['keywords_seeded'],
+				'pro_required'    => $migrated['pro_required'],
+				'rejected'        => $migrated['rejected'],
+				'rejected_sample' => $migrated['rejected_sample'],
 			],
 			'errors'   => $migrated['errors'],
 		];
@@ -323,6 +326,9 @@ class Run_Seo_Import extends Ability_Base {
 			'failed'          => 0,
 			'analyzed'        => 0,
 			'keywords_seeded' => 0,
+			'pro_required'    => 0,
+			'rejected'        => 0,
+			'rejected_sample' => [],
 			'errors'          => [],
 		];
 
@@ -346,6 +352,17 @@ class Run_Seo_Import extends Ability_Base {
 				$totals['analyzed']        += (int) ( $result['analyzed'] ?? 0 );
 				$totals['keywords_seeded'] += (int) ( $result['keywords_seeded'] ?? 0 );
 				$totals['failed']          += (int) ( $result['failed'] ?? 0 );
+
+				// Items left in the snapshot for want of ThinkRank Pro, and
+				// items Pro refused. Neither is "skipped" (nothing to do), so
+				// they are reported on their own (#925).
+				$totals['pro_required'] += (int) ( $result['pro_required'] ?? 0 );
+				$totals['rejected']     += (int) ( $result['rejected'] ?? 0 );
+				foreach ( (array) ( $result['rejected_sample'] ?? [] ) as $reason ) {
+					if ( count( $totals['rejected_sample'] ) < 10 ) {
+						$totals['rejected_sample'][] = (string) $reason;
+					}
+				}
 
 				// Per-post failures (content_blocks: a post whose block markup
 				// could not be converted safely and was left as it was). The

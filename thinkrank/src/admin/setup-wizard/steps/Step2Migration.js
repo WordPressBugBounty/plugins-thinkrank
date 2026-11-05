@@ -180,6 +180,9 @@ export default function Step2Migration({
 						logo={plugin.logo}
 						detection={detected[plugin.slug] || null}
 						alreadyMigrated={migratedSlugs.has(plugin.slug)}
+						savedLeftBehind={
+							config?.migrationLeftBehind?.[plugin.slug] || null
+						}
 						onImportStart={() => setActiveSlug(plugin.slug)}
 						onImportComplete={() =>
 							handlePluginMigrated(plugin.slug)

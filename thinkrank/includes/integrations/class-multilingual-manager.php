@@ -798,12 +798,18 @@ class Multilingual_Manager {
      * get_permalink() applies regardless of suppress_filters — and
      * TranslatePress translates rendered output without duplicating posts.
      *
+     * thinkrank_sitemap_post_permalink is public, so an earlier callback can
+     * hand over null or another non-string. That is read as '' so it cannot
+     * fatal before the body runs (#1455).
+     *
      * @since 2.0.1
-     * @param string   $url  Permalink as WordPress resolved it.
+     * @param mixed    $url  Permalink as WordPress resolved it, normally a string.
      * @param \WP_Post $post Post the entry describes.
      * @return string
      */
-    public function localize_sitemap_permalink(string $url, \WP_Post $post): string {
+    public function localize_sitemap_permalink($url, \WP_Post $post): string {
+        $url = is_scalar($url) ? (string) $url : '';
+
         if ($this->provider !== 'wpml') {
             return $url;
         }

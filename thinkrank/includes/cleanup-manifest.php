@@ -2,11 +2,11 @@
 /**
  * What removing ThinkRank has to clean up.
  *
- * Deactivation and uninstall both need the cron-hook and capability lists, and
- * uninstall runs with no autoloader — `WP_UNINSTALL_PLUGIN` loads `uninstall.php`
- * on its own, without the plugin. So the lists live here as a plain array this
- * file returns, which both paths `require`, rather than as three hand-maintained
- * copies that drift (#389, #399).
+ * Deactivation and uninstall both need the cron-hook, capability and cache-group
+ * lists, and uninstall runs with no autoloader — `WP_UNINSTALL_PLUGIN` loads
+ * `uninstall.php` on its own, without the plugin. So the lists live here as a
+ * plain array this file returns, which both paths `require`, rather than as
+ * three hand-maintained copies that drift (#389, #399, #1328).
  *
  * Deliberately nothing in the `thinkrank_pro_` namespace: ThinkRank Pro creates
  * those hooks and ships its own uninstaller, and removing only the free plugin
@@ -97,5 +97,25 @@ return [
         'thinkrank_view_analytics',
         'thinkrank_manage_credits',
         'thinkrank_use_ai_features',
+    ],
+
+    /*
+     * Every object-cache group the plugin writes to. Uninstall flushed only
+     * `thinkrank`, so on Redis or Memcached the SEO module settings (cached in
+     * `thinkrank_seo` with no expiry), the bulk settings and the schema/AI
+     * caches outlived a delete-data uninstall, and a reinstall served the old
+     * settings back (#1328).
+     *
+     * Keep in sync with the wp_cache_*() call sites; CleanupManifestTest fails
+     * when a new group appears.
+     */
+    'cache_groups' => [
+        'thinkrank',
+        'thinkrank_seo',
+        'thinkrank_settings',
+        'thinkrank_ai',
+        'thinkrank_schema',
+        'thinkrank_traffic',
+        'thinkrank_ai_beacon',
     ],
 ];

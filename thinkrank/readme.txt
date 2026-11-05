@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.21.0
+Stable tag: 2.21.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -219,15 +219,15 @@ Optional. If you choose the "Custom endpoint" AI provider and enter a base URL, 
 
 = ThinkRank Google connection (api.thinkrank.ai) =
 
-Clicking Connect Google (Search Console, GA4) signs in through api.thinkrank.ai, which holds ThinkRank's Google app credentials. It receives your site URL and a one-time sign-in code on connect, and your Google refresh token whenever the access token is renewed. [Terms](https://thinkrank.ai/terms-and-conditions/), [Privacy](https://thinkrank.ai/privacy-policy/)
+Clicking Connect Google (Search Console, plus GA4 with ThinkRank Pro) signs in through api.thinkrank.ai, which holds ThinkRank's Google app credentials. It receives your site URL and a one-time sign-in code on connect, and your Google refresh token whenever the access token is renewed. [Terms](https://thinkrank.ai/terms-and-conditions/), [Privacy](https://thinkrank.ai/privacy-policy/)
 
 = ThinkRank Hub (hub.thinkrank.ai, optional) =
 
 Only if you click Connect to ThinkRank Hub under ThinkRank > AI Tools > ThinkRank Hub, or on the Setup Wizard's ThinkRank Hub step. Connecting turns on MCP access and sends your browser to hub.thinkrank.ai with this site's address and a one-time ticket. You then approve the hub on this site's own approval page, the way any AI client is approved, choosing for each area whether the hub can read only or also make changes it can undo. At the approval the site tells the hub its address, its blog ID, the ThinkRank (and ThinkRank Pro) versions and its public WordPress site icon URL. MCP initialization repeats these public facts so the hub can refresh them without another connection, which means every MCP client you have approved also receives them.
 
-Under that approval, within the areas you approve, the hub and the AI assistants you connect to the hub can read over MCP: SEO Analyzer reports, settings, posts' and pages' content and SEO fields, Search Console, Google Analytics and PageSpeed data, indexing history and the MCP activity log. The hub keeps the reports and figures it reads, never your posts' content. With changes allowed, they make only the changes the approval and ThinkRank allow, each recorded in the MCP activity log where it can be reverted. The hub also checks this site's public pages from outside (the home page, robots.txt, the sitemap and llms.txt) to report uptime and crawlability. No license key, AI provider key or Google token travels. Connecting is optional: every feature works without the hub, and you can end its access at any time with Disconnect on the same screen. [Terms](https://thinkrank.ai/terms-and-conditions/), [Privacy](https://thinkrank.ai/privacy-policy/)
+Under that approval, within the areas you approve, the hub and the AI assistants you connect to the hub can read over MCP: SEO Analyzer reports, settings, posts' and pages' content and SEO fields, Search Console and PageSpeed data (plus Google Analytics with ThinkRank Pro), indexing history and the MCP activity log. The hub keeps the reports and figures it reads, never your posts' content. With changes allowed, they make only the changes the approval and ThinkRank allow, each recorded in the MCP activity log where it can be reverted. The hub also checks this site's public pages from outside (the home page, robots.txt, the sitemap and llms.txt) to report uptime and crawlability. No license key, AI provider key or Google token travels. Connecting is optional: every feature works without the hub, and you can end its access at any time with Disconnect on the same screen. [Terms](https://thinkrank.ai/terms-and-conditions/), [Privacy](https://thinkrank.ai/privacy-policy/)
 
-= Google APIs: Search Console, Analytics Data, PageSpeed Insights, OAuth =
+= Google APIs: Search Console, PageSpeed Insights, OAuth, and Analytics Data with ThinkRank Pro =
 
 After you connect Google or add a PageSpeed Insights key, ThinkRank sends your access token or API key, your Search Console property, and page URLs to test, to www.googleapis.com - when you open analytics or performance screens or the dashboard widget, and when scheduled reports or checks run. Disconnecting sends the token to oauth2.googleapis.com to revoke it. [Terms](https://developers.google.com/terms), [Privacy](https://policies.google.com/privacy)
 
@@ -262,6 +262,20 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 9. AI Content Brief Generator with competitor analysis and content gaps.
 
 == Changelog ==
+
+= 2.21.1 =
+Release Date: 2026-11-05
+
+- Improved: The SEO Analyzer grades indexable content of every public post type, not just recent posts
+- Improved: SEO Analyzer answers over MCP are about half the size
+- Fixed: The search visibility check fails when the site-wide robots meta is set to No Index
+- Fixed: The Setup Wizard keeps the old SEO plugin active when a migration leaves items behind
+- Fixed: Imports flag items that need ThinkRank Pro and convert Rank Math variables with arguments
+- Fixed: Each sitemap in the index carries its own date, and sitemaps rebuild after permalink changes
+- Fixed: Removing the category base no longer redirects filtered date, author, shop or search pages
+- Fixed: An AI visit that passes through a redirect is counted once
+- Fixed: Unsaved SEO drafts no longer carry over between sites sharing one domain
+- Fixed: Minor archive title, import, shop schema, permalink and plugin compatibility issues
 
 = 2.21.0 =
 Release Date: 2026-11-02
@@ -319,26 +333,12 @@ Release Date: 2026-10-27
 - Fixed: Your Site Identity Site Name now appears everywhere the site is named
 - Fixed: Minor schema, sitemap, robots.txt, image alt, title, WooCommerce sharing, MCP and AI issues
 
-= 2.18.1 =
-Release Date: 2026-10-26
-
-- Improved: The SEO Analyzer does not score llms.txt while it is off, and credits WordPress's sitemap
-- Changed: Focus keywords are no longer printed as a meta keywords tag
-- Fixed: Search charts mark days Google is still processing and leave gaps for days with no data
-- Fixed: A static posts page uses its own SEO title, description and social tags
-- Fixed: Descriptions keep spaces between blocks and use the excerpt before the body
-- Fixed: FAQ schema reads question headings, and HowTo and TOC schema stay off archives and search
-- Fixed: Sitemaps leave out a noindexed homepage and pages canonicalised to another URL
-- Fixed: Article author links point to a working URL when author archives are off
-- Fixed: Minor robots.txt, word count, WPML sitemap, schema, MCP and Claude AI issues
-- Removed: The Exclude Private Posts sitemap setting, which never had an effect
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.21.1 =
+The SEO Analyzer now grades indexable content of every post type, and the Setup Wizard keeps your old SEO plugin active after a partial migration. Also fixes sitemap dates and permalink redirects. Recommended for all sites.
+
 = 2.21.0 =
 Adds taxonomy and archive title templates, URL base removal with 301 redirects, live date variables and WooCommerce store settings. The shop page now uses its own SEO values. Recommended for all sites.
-
-= 2.20.1 =
-Sitemaps keep their styled view once Chrome drops XSLT, AI visits on cached pages are counted, and WooCommerce Product schema starts from the product. Recommended for all sites.

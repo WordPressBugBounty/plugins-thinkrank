@@ -143,10 +143,16 @@ class Author_Archives_Manager {
      * Modify document title for author archives
      *
      * @since 1.0.0
-     * @param string $title Original title
+     * pre_get_document_title is a public filter, so an earlier callback can
+     * hand over null or another non-string. Core treats that like '' (no
+     * short-circuit); the parameter is untyped so it does not fatal here (#1437).
+     *
+     * @param mixed $title Title from earlier callbacks, normally a string.
      * @return string Modified title
      */
-    public function modify_document_title(string $title): string {
+    public function modify_document_title($title): string {
+        $title = is_scalar($title) ? (string) $title : '';
+
         if (!is_author() || !self::metas_enabled()) {
             return $title;
         }

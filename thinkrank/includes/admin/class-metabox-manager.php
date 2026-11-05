@@ -1142,6 +1142,13 @@ JS;
             'restUrl' => rest_url('thinkrank/v1/'),
             'restNonce' => wp_create_nonce('wp_rest'),
             'homeUrl' => home_url(),
+            // Names this site in the SEO drawer's local draft key. Every
+            // site on one origin (a subdirectory multisite, two installs
+            // under one domain) shares localStorage, and a bare post ID
+            // restored one site's draft into another's post (#1558). The
+            // install URL is distinct for each of them, and unlike home_url()
+            // a multilingual plugin does not rewrite it per language.
+            'draftSite' => substr(md5(site_url()), 0, 12),
             'siteName' => get_bloginfo('name'),
             'faviconUrl' => $this->get_site_favicon_url(),
             'featuredImageUrl' => $this->get_post_featured_image_url($post_id),

@@ -139,7 +139,7 @@ class ThinkRank_Uninstaller {
      * the plugin — so the cron-hook and capability lists come from a plain
      * array file that the deactivator reads too.
      *
-     * @return array{cron_hooks: string[], capabilities: string[]}
+     * @return array{cron_hooks: string[], capabilities: string[], cache_groups: string[]}
      */
     private static function manifest(): array {
         return require __DIR__ . '/includes/cleanup-manifest.php';
@@ -356,10 +356,20 @@ class ThinkRank_Uninstaller {
      * @return void
      */
     private static function clear_caches(): void {
-        // Clear ThinkRank-specific object cache group
-        if (function_exists('wp_cache_flush_group')) {
-            wp_cache_flush_group('thinkrank');
+        // Every group from the manifest, not just `thinkrank`: the SEO module
+        // settings sit in `thinkrank_seo` with no expiry, so on Redis or
+        // Memcached a delete-data uninstall followed by a reinstall served the
+        // old settings back (#1328). Falls back to a full flush where the cache
+        // cannot flush one group, since leaving them is the defect.
+        $shared = __DIR__ . '/includes/cleanup-cache.php';
+
+        if (!is_readable($shared)) {
+            return;
         }
+
+        require_once $shared;
+
+        thinkrank_flush_cache_groups(self::manifest()['cache_groups'], true);
     }
     
     /**

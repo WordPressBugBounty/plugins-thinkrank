@@ -1112,6 +1112,7 @@ class Pattern_Resolver {
      *
      * @since 2.10.1
      * @since 2.15.0 `$template` limits the map to the tokens it names.
+     * @since 2.21.1 Empty while the product's password has not been entered.
      *
      * @param int         $post_id  Post ID.
      * @param string|null $template Template being resolved; null for every token.
@@ -1130,6 +1131,14 @@ class Pattern_Resolver {
         $empty = array_fill_keys($wanted, '');
 
         if (!function_exists('wc_get_product') || 'product' !== get_post_type($post_id)) {
+            return $empty;
+        }
+
+        // The shop hides these with the rest of the product until the
+        // password is entered, so a title or description does not print them
+        // first (#1555).
+        $post = get_post($post_id);
+        if ($post instanceof \WP_Post && self::is_password_required($post)) {
             return $empty;
         }
 
@@ -1358,11 +1367,14 @@ class Pattern_Resolver {
      * A bare percent is left alone: "50% off" is ordinary copy, and a guard
      * that ate it would be a worse bug than the one it prevents.
      *
-     * `%taxonomy(...)%` is matched too, with any argument. A context with no
-     * post to take terms from (a term archive, a post type archive, a Site
-     * Identity format) does not put it in its map, and a malformed one such
-     * as `%taxonomy(two words)%` never reaches a map. Each resolves to nothing
-     * rather than printing the token.
+     * A token with an argument, `%name(args)%`, is matched too. A
+     * `%taxonomy(...)%` or `%customfield(...)%` the context resolves is in its
+     * map and stays. One in a context with no post to take terms from (a term
+     * archive, a post type archive, a Site Identity format), a malformed one
+     * such as `%taxonomy(two words)%`, and a variable another plugin left in
+     * the value, such as Rank Math's `%customterm_desc(x)%`, `%count(x)%` or
+     * `%date(F jS, Y)%`, never reaches a map. Each resolves to nothing rather
+     * than printing the token (#1556).
      *
      * Public since 2.18.0 so the Site Identity title formats and the author
      * archive templates, which build their own placeholder maps, apply the
@@ -1370,6 +1382,7 @@ class Pattern_Resolver {
      *
      * @since 2.10.1
      * @since 2.21.0 Also removes an unresolved `%taxonomy(...)%`.
+     * @since 2.21.1 Also removes any other unresolved token with an argument.
      *
      * @param string                $template     Raw template.
      * @param array<string, string> $placeholders Tokens this resolver can resolve.
@@ -1381,7 +1394,7 @@ class Pattern_Resolver {
         }
 
         $stripped = preg_replace_callback(
-            '/%%[a-z0-9_-]+%%|%[a-z0-9_-]+%|%taxonomy\([^%()]*\)%/i',
+            '/%%[a-z0-9_-]+%%|%[a-z0-9_-]+(?:\([^%()]*\))?%/i',
             static function (array $found) use ($placeholders): string {
                 return array_key_exists($found[0], $placeholders) ? $found[0] : '';
             },

@@ -84,8 +84,10 @@ class Date_Variable_Repair {
     /**
      * The pattern a frozen copy of a value would match.
      *
-     * The separator, site name and post title are accepted in either form:
-     * older imports rendered those too, newer ones keep them as tags. A
+     * The separator, site name and object title are accepted in either form:
+     * older imports rendered those too, newer ones keep them as tags. The
+     * object title stands for `%title%` and, on a term, for the `%term%` or
+     * `%term_title%` the exporters now give term values (#1557). A
      * `%taxonomy(x)%` is accepted as itself or as the `%customterm(x)%` an older
      * Rank Math import left in the value (#1468). A `%%ct_x%%`, `%%_ct_x%%` or
      * `#tax_name-x` an older import dropped, or a `{{ post.tax.x }}` it rendered,
@@ -93,7 +95,7 @@ class Date_Variable_Repair {
      *
      * @param string $live       The value as the exporter gives it today.
      * @param string $site_name  Site name.
-     * @param string $post_title Title of the object the value belongs to.
+     * @param string $post_title Title of the object the value belongs to: the post title or the term name.
      * @param int    $earliest_year The first year the value could have been frozen.
      * @return string|null Regular expression, or null when the value has no date variable.
      */
@@ -107,6 +109,8 @@ class Date_Variable_Repair {
             '%sitename%'   => self::either('%sitename%', $site_name),
             '%site_title%' => self::either('%site_title%', $site_name),
             '%title%'      => self::either('%title%', $post_title),
+            '%term%'       => self::either('%term%', $post_title),
+            '%term_title%' => self::either('%term_title%', $post_title),
         ];
 
         $tokens  = implode('|', array_map(static fn(string $token): string => preg_quote($token, '/'), array_keys($alternatives)));

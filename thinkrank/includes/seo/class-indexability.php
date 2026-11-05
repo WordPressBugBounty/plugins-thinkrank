@@ -575,6 +575,7 @@ final class Indexability {
      * override.
      *
      * @since 2.14.1
+     * @since 2.21.1 The result passes through `thinkrank_term_noindexed`.
      *
      * @param \WP_Term $term Term.
      * @return bool
@@ -591,7 +592,23 @@ final class Indexability {
             get_term_meta($term->term_id, '_thinkrank_robots_meta', true)
         );
 
-        return !empty($settings['noindex']);
+        /**
+         * Filter whether the robots tag on a term's archive says noindex.
+         *
+         * The term counterpart of `thinkrank_post_noindexed`, for a plugin that
+         * changes the tag from data this class cannot see. ThinkRank Pro's
+         * empty product category noindex does this. Without it the exclusion
+         * reason read the same before and after a term override was written,
+         * so `thinkrank_term_indexability_changed` never fired and the sitemap
+         * kept the old answer (#1552). Read from stored data on cron and in
+         * REST too, so a callback cannot rely on the request.
+         *
+         * @since 2.21.1
+         *
+         * @param bool     $noindexed Whether the archive says noindex.
+         * @param \WP_Term $term      Term.
+         */
+        return (bool) apply_filters('thinkrank_term_noindexed', !empty($settings['noindex']), $term);
     }
 
     /**

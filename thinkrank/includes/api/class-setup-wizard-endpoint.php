@@ -86,6 +86,16 @@ class Setup_Wizard_Endpoint extends WP_REST_Controller {
     const MIGRATABLE_PLUGINS = ['yoast', 'rankmath', 'seopress', 'aioseo', 'squirrly', 'slimseo', 'surerank'];
 
     /**
+     * Counters a wizard migration can report as left in the source plugin:
+     * items that need ThinkRank Pro or that Pro refused, posts whose FAQ/HowTo
+     * blocks did not convert, types the site could not restore, schema with
+     * no ThinkRank home and schema staged in the editor but not deployed.
+     *
+     * @var string[]
+     */
+    const LEFT_BEHIND_COUNTERS = ['pro_required', 'rejected', 'failed', 'unrestored_types', 'schema_not_imported', 'schema_staged'];
+
+    /**
      * Register API routes.
      *
      * @return void
@@ -129,6 +139,10 @@ class Setup_Wizard_Endpoint extends WP_REST_Controller {
                             'type'              => 'string',
                             'enum'              => self::MIGRATABLE_PLUGINS,
                             'sanitize_callback' => 'sanitize_key',
+                        ],
+                        'left_behind' => [
+                            'required' => false,
+                            'type'     => 'object',
                         ],
                     ],
                 ],
@@ -300,10 +314,52 @@ class Setup_Wizard_Endpoint extends WP_REST_Controller {
             update_option(Setup_Wizard::OPT_MIGRATED_PLUGINS, array_values($migrated));
         }
 
+        // A partial run is recorded with what it left behind, so after a
+        // refresh the row still says so instead of reading as a clean import.
+        // A clean run clears any earlier entry.
+        $left_behind = self::sanitize_left_behind($request->get_param('left_behind'));
+
+        $partial = get_option(Setup_Wizard::OPT_PARTIAL_MIGRATIONS, []);
+        $partial = is_array($partial) ? $partial : [];
+        $had     = isset($partial[$plugin]);
+
+        if (!empty($left_behind)) {
+            $partial[$plugin] = $left_behind;
+        } else {
+            unset($partial[$plugin]);
+        }
+
+        if (!empty($left_behind) || $had) {
+            update_option(Setup_Wizard::OPT_PARTIAL_MIGRATIONS, $partial);
+        }
+
         return new WP_REST_Response([
             'success'          => true,
             'migrated_plugins' => array_values($migrated),
+            'left_behind'      => (object) $left_behind,
         ], 200);
+    }
+
+    /**
+     * Keep only the known left-behind counters, as positive integers.
+     *
+     * @param mixed $raw Request value.
+     * @return array<string, int> Non-zero counters; [] for a clean run.
+     */
+    public static function sanitize_left_behind($raw): array {
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $counts = [];
+        foreach (self::LEFT_BEHIND_COUNTERS as $key) {
+            $value = isset($raw[$key]) && is_numeric($raw[$key]) ? (int) $raw[$key] : 0;
+            if ($value > 0) {
+                $counts[$key] = $value;
+            }
+        }
+
+        return $counts;
     }
 
     /**

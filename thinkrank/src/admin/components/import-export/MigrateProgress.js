@@ -33,6 +33,8 @@ const MigrateProgress = ({ progress }) => {
 		skipped,
 		failed,
 		keywordsTruncated,
+		proRequired,
+		rejected,
 	} = progress;
 
 	const stats = [
@@ -51,6 +53,16 @@ const MigrateProgress = ({ progress }) => {
 	if (keywordsTruncated > 0) {
 		stats.push(
 			`${__('Pro-only keywords', 'thinkrank')}: ${keywordsTruncated.toLocaleString()}`
+		);
+	}
+	if (proRequired > 0) {
+		stats.push(
+			`${__('Needs ThinkRank Pro', 'thinkrank')}: ${proRequired.toLocaleString()}`
+		);
+	}
+	if (rejected > 0) {
+		stats.push(
+			`${__('Not imported', 'thinkrank')}: ${rejected.toLocaleString()}`
 		);
 	}
 

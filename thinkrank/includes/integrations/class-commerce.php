@@ -169,6 +169,28 @@ class Commerce {
     }
 
     /**
+     * Whether a product's shop data is behind a password the visitor has not
+     * entered.
+     *
+     * The shop hides the price, stock and SKU with the rest of the product
+     * until the password is given, so the head and the schema graph must not
+     * publish them either: the Product node, the `product:*` Open Graph tags
+     * and the product template variables all ask this (#1555).
+     *
+     * @since 2.21.1
+     *
+     * @param int $post_id Post holding the product.
+     * @return bool
+     */
+    public static function is_password_hidden(int $post_id): bool {
+        $post = $post_id > 0 ? get_post($post_id) : null;
+
+        return $post instanceof \WP_Post
+            && function_exists('post_password_required')
+            && post_password_required($post);
+    }
+
+    /**
      * The sources, in the order they are asked.
      *
      * @since 2.19.0
@@ -300,10 +322,18 @@ class Commerce {
      *
      * @since 2.19.0
      *
+     * @since 2.21.1 Empty while the product's password has not been entered.
+     *
      * @param int $post_id Post holding the product.
      * @return array<string,string> Tag name => value, empty when nothing is known.
      */
     public static function open_graph_tags(int $post_id): array {
+        // Behind the password form the shop shows no price, stock or SKU, so
+        // they are not shared either (#1555).
+        if (self::is_password_hidden($post_id)) {
+            return [];
+        }
+
         $data = self::product_data($post_id);
         $tags = [];
 

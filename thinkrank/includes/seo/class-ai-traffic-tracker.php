@@ -84,6 +84,34 @@ class Ai_Traffic_Tracker {
     private const RETENTION_DAYS = 180;
 
     /**
+     * `template_redirect` priority record() runs at: after core's
+     * redirect_canonical() and wp_old_slug_redirect() (10), WooCommerce's
+     * product canonical redirect (5), ThinkRank's permalink and author
+     * redirects and Pro's redirections, so a request that redirects is never
+     * counted and the page it lands on is, once (#1546).
+     *
+     * @since 2.21.1
+     */
+    public const RECORD_PRIORITY = PHP_INT_MAX;
+
+    /**
+     * Whether this request reached `template_redirect` priority 1, where
+     * record() used to run. A handler that serves its own response and exits
+     * after that (llms.txt, sitemaps, Markdown for AI) is still counted, on
+     * shutdown, as it always was.
+     *
+     * @var bool
+     */
+    private bool $armed = false;
+
+    /**
+     * Whether record() has run for this request.
+     *
+     * @var bool
+     */
+    private bool $recorded = false;
+
+    /**
      * Referrer host fragments → platform slug. Checked with substring match
      * against the referrer host, so subdomains are covered.
      *
@@ -137,8 +165,11 @@ class Ai_Traffic_Tracker {
      * @return void
      */
     public function init(): void {
-        // Priority 1: record before any template logic can redirect/exit.
-        add_action('template_redirect', [$this, 'record'], 1);
+        // Record last, once every redirect on this hook has had its turn: a
+        // canonical redirect used to be counted, and then its target again.
+        add_action('template_redirect', [$this, 'arm'], 1);
+        add_action('template_redirect', [$this, 'record'], self::RECORD_PRIORITY);
+        add_action('shutdown', [$this, 'record_early_exit'], 0);
 
         // Cache hits never reach record(); the beacon reports those (#966).
         (new Ai_Referral_Beacon($this))->init();
@@ -344,11 +375,70 @@ class Ai_Traffic_Tracker {
     }
 
     /**
+     * Note that this request reached the point record() used to run at.
+     *
+     * @since 2.21.1
+     *
+     * @return void
+     */
+    public function arm(): void {
+        $this->armed = true;
+    }
+
+    /**
+     * Record a request that ended before record()'s own priority.
+     *
+     * A handler after priority 1 that serves a response and exits (llms.txt,
+     * a sitemap, Markdown for AI) was counted when record() ran at priority 1,
+     * and still is. One that redirected was counted too, and the page it led
+     * to again; that one is skipped now, and the target page counts it.
+     *
+     * @since 2.21.1
+     *
+     * @return void
+     */
+    public function record_early_exit(): void {
+        if (!$this->armed || $this->recorded || self::response_is_redirect()) {
+            return;
+        }
+
+        $this->record();
+    }
+
+    /**
+     * Whether this response is a redirect.
+     *
+     * @return bool
+     */
+    private static function response_is_redirect(): bool {
+        $status = http_response_code();
+        if (is_int($status) && $status >= 300 && $status < 400) {
+            return true;
+        }
+
+        foreach (headers_list() as $header) {
+            if (0 === stripos($header, 'location:')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Record the current front-end request into the daily aggregates.
+     *
+     * Runs once per request, at RECORD_PRIORITY on `template_redirect`, or on
+     * shutdown for a request that exited earlier without redirecting.
      *
      * @return void
      */
     public function record(): void {
+        if ($this->recorded) {
+            return;
+        }
+        $this->recorded = true;
+
         if (is_admin() || wp_doing_ajax() || wp_doing_cron()) {
             return;
         }

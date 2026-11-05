@@ -50,6 +50,13 @@ class Object_Redirect {
     public const DEFAULT_TYPE = 301;
 
     /**
+     * Lookups answered in bulk by prime(), keyed "type:id".
+     *
+     * @var array<string, array{url:string,type:int}>
+     */
+    private static array $primed = [];
+
+    /**
      * Whether a redirect provider is active.
      *
      * @return bool
@@ -83,6 +90,11 @@ class Object_Redirect {
             return $empty;
         }
 
+        $primed = self::$primed[$object_type . ':' . $object_id] ?? null;
+        if (null !== $primed) {
+            return $primed;
+        }
+
         /**
          * Filter the stored redirect for an object.
          *
@@ -102,6 +114,82 @@ class Object_Redirect {
             'url'  => (string) $redirect['url'],
             'type' => self::normalize_type($redirect['type'] ?? self::DEFAULT_TYPE),
         ];
+    }
+
+    /**
+     * Look up the redirects of many objects at once, for get() to answer from.
+     *
+     * A caller that is about to ask get() about a whole batch (the SEO
+     * Analyzer's content sample) primes the batch first, so the provider runs
+     * one query for it rather than one per object. A provider that does not
+     * answer the bulk filter leaves nothing primed, and get() asks it per
+     * object as before. Call flush_primed() when the batch is done: primed
+     * answers are not refreshed if the provider's store changes elsewhere.
+     *
+     * @since 2.19.1
+     *
+     * @param string $object_type 'post' or 'term'.
+     * @param int[]  $object_ids  Object IDs.
+     * @return void
+     */
+    public static function prime(string $object_type, array $object_ids): void {
+        if (!self::is_supported()) {
+            return;
+        }
+
+        $ids = [];
+        foreach ($object_ids as $object_id) {
+            $object_id = (int) $object_id;
+            if ($object_id > 0 && !isset(self::$primed[$object_type . ':' . $object_id])) {
+                $ids[$object_id] = $object_id;
+            }
+        }
+
+        if ([] === $ids) {
+            return;
+        }
+
+        /**
+         * Filter the stored redirects of many objects at once.
+         *
+         * Return an array keyed by object ID holding {url, type} for each
+         * object that has a redirect; objects left out have none. Return null
+         * (the default) when the provider cannot answer in bulk, and each
+         * object is then read through `thinkrank_object_redirect`.
+         *
+         * @since 2.19.1
+         *
+         * @param array|null $redirects   Redirects by object ID, or null.
+         * @param string     $object_type 'post' or 'term'.
+         * @param int[]      $object_ids  Object IDs.
+         */
+        $found = apply_filters('thinkrank_object_redirects', null, $object_type, array_values($ids));
+
+        if (!is_array($found)) {
+            return;
+        }
+
+        foreach ($ids as $object_id) {
+            $redirect = $found[$object_id] ?? null;
+
+            self::$primed[$object_type . ':' . $object_id] = is_array($redirect) && !empty($redirect['url'])
+                ? [
+                    'url'  => (string) $redirect['url'],
+                    'type' => self::normalize_type($redirect['type'] ?? self::DEFAULT_TYPE),
+                ]
+                : ['url' => '', 'type' => self::DEFAULT_TYPE];
+        }
+    }
+
+    /**
+     * Forget every lookup prime() answered.
+     *
+     * @since 2.19.1
+     *
+     * @return void
+     */
+    public static function flush_primed(): void {
+        self::$primed = [];
     }
 
     /**
@@ -207,6 +295,8 @@ class Object_Redirect {
          * @param int    $object_id   Object ID.
          * @param string $url         Destination; '' when the redirect was cleared.
          */
+        unset(self::$primed[$object_type . ':' . $object_id]);
+
         do_action('thinkrank_object_redirect_saved', $object_type, $object_id, $url);
 
         return true;

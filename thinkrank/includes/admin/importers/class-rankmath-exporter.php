@@ -273,6 +273,32 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
     }
 
     /**
+     * The URL bases Rank Math removed, as ThinkRank's permalink switches.
+     *
+     * Strip Category Base is a general Links setting. The three product
+     * switches are applied only by Rank Math's WooCommerce module: with the
+     * module off the store serves based URLs whatever they say, so they export
+     * as off rather than moving every product URL on import (#1550).
+     *
+     * @since 2.21.1
+     *
+     * @param array $general rank-math-options-general
+     * @return array<string, bool>
+     */
+    private function extract_rm_permalinks(array $general): array {
+        $modules = get_option('rank_math_modules', []);
+        $woocommerce = is_array($modules) && in_array('woocommerce', $modules, true);
+        $on = static fn(string $key): bool => ($general[$key] ?? 'off') === 'on';
+
+        return [
+            'remove_category_base'            => $on('strip_category_base'),
+            'remove_product_base'             => $woocommerce && $on('wc_remove_product_base'),
+            'remove_product_category_base'    => $woocommerce && $on('wc_remove_category_base'),
+            'remove_product_category_parents' => $woocommerce && $on('wc_remove_category_parent_slugs'),
+        ];
+    }
+
+    /**
      * Rank Math Pro's WooCommerce settings in ThinkRank Pro's vocabulary
      * (`thinkrank_pro_woocommerce`). Only keys Rank Math stored are returned.
      *
@@ -695,12 +721,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                     // Rank Math Pro's WooCommerce switches, for ThinkRank Pro
                     // (thinkrank-pro#481).
                     'pro_woocommerce'    => $this->extract_rm_pro_woocommerce($general),
-                    'permalinks'         => [
-                        'remove_category_base'            => ($general['strip_category_base'] ?? 'off') === 'on',
-                        'remove_product_base'             => ($general['wc_remove_product_base'] ?? 'off') === 'on',
-                        'remove_product_category_base'    => ($general['wc_remove_category_base'] ?? 'off') === 'on',
-                        'remove_product_category_parents' => ($general['wc_remove_category_parent_slugs'] ?? 'off') === 'on',
-                    ],
+                    'permalinks'         => $this->extract_rm_permalinks($general),
                     // Author archive behaviour (Author Archives feature).
                     'author_archives'    => $this->extract_rm_author_archives($titles),
                     // Instant Indexing auto-submit post types (the API key travels
@@ -1248,8 +1269,10 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * @return string
      */
     private function convert_post_value($value, int $post_id): string {
+        // Before the tags are picked out, so a %date(format)% is kept as the
+        // live %date% tag rather than frozen into text (#1556).
         return $this->tokenize_object_template(
-            $this->stringify_template_value($value),
+            self::convert_argument_tokens($this->stringify_template_value($value)),
             self::literal_token_patterns(self::POST_TOKENS),
             fn(string $rest): string => $this->convert_template_variables($rest, $post_id)
         );
@@ -1264,7 +1287,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      */
     private function convert_term_value($value, int $term_id): string {
         return $this->tokenize_object_template(
-            $this->stringify_template_value($value),
+            self::convert_argument_tokens($this->stringify_template_value($value)),
             self::literal_token_patterns(self::TERM_TOKENS),
             fn(string $rest): string => $this->convert_term_template_variables($rest, $term_id)
         );
@@ -1305,7 +1328,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      *
      * Rank Math prints the first assigned term, ThinkRank every one, joined
      * by a comma. `%customterm_desc(tax)%` is a term's description, which has
-     * no ThinkRank token, so it is not touched.
+     * no ThinkRank token; convert_argument_tokens() removes it.
      *
      * @since 2.21.0
      *
@@ -1314,6 +1337,45 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      */
     private static function convert_assigned_term_tokens(string $value): string {
         return (string) preg_replace('/%customterm\(([^\s%()]+)\)%/i', '%taxonomy($1)%', $value);
+    }
+
+    /**
+     * Rank Math's variables that take an argument, in ThinkRank's terms (#1556).
+     *
+     * `%customterm(tax)%` becomes `%taxonomy(tax)%` (#1468), and
+     * `%customfield(key)%` is ThinkRank's own token, so both stay.
+     * `%date(format)%` and `%modified(format)%` become `%date%` and
+     * `%modified%`: ThinkRank prints a date in the site's own format, so the
+     * date is kept and Rank Math's format is not. Every other one, such as
+     * `%customterm_desc(tax)%` or `%count(tax)%`, has no ThinkRank equivalent
+     * and is removed. The `%name%` strips below never matched a token with an
+     * argument, so these reached the page as written.
+     *
+     * @since 2.21.1
+     *
+     * @param string $value Rank Math value.
+     * @return string
+     */
+    private static function convert_argument_tokens(string $value): string {
+        if (false === strpos($value, '(')) {
+            return $value;
+        }
+
+        $value = self::convert_assigned_term_tokens($value);
+
+        return (string) preg_replace_callback(
+            '/%([a-z0-9_]+)\([^%()]*\)%/i',
+            static function (array $m): string {
+                $name = strtolower($m[1]);
+
+                if ('date' === $name || 'modified' === $name) {
+                    return '%' . $name . '%';
+                }
+
+                return 'taxonomy' === $name || 'customfield' === $name ? $m[0] : '';
+            },
+            $value
+        );
     }
 
     protected function convert_template_variables($value, ?int $post_id = null): string {
@@ -1325,7 +1387,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             return $value;
         }
 
-        $value = self::convert_assigned_term_tokens($value);
+        $value = self::convert_argument_tokens($value);
 
         $replacements = [
             '%sitename%'    => get_bloginfo('name'),
@@ -1397,7 +1459,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             return $template;
         }
 
-        $template = self::convert_assigned_term_tokens($template);
+        $template = self::convert_argument_tokens($template);
 
         // Rank Math token => ThinkRank Global SEO token (structure preserved).
         $token_map = [
@@ -1461,6 +1523,8 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         // Rank Math counter tokens carry a parenthesised argument, e.g. %count(alt)%.
         $format = preg_replace('/%count\([a-z]+\)%/i', '%count%', $format);
         $format = str_replace('%name%', '', (string) $format);
+        // No other variable with an argument means anything to an image (#1556).
+        $format = (string) preg_replace('/%[a-z0-9_]+\([^%()]*\)%/i', '', $format);
 
         $supported = ['%title%', '%sitename%', '%site_title%', '%sep%', '%separator%', '%count%', '%filename%', '%image_title%', '%image_caption%'];
         $format = preg_replace_callback(
@@ -1903,7 +1967,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         }
 
         // Empty where these templates apply, rather than printed: no post.
-        $template = self::convert_assigned_term_tokens($template);
+        $template = self::convert_argument_tokens($template);
 
         $token_map = [
             '%sitename%'    => '%site_title%',
@@ -2201,7 +2265,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
             }
 
             // Empty on an archive, rather than printed: no post.
-            $raw = self::convert_assigned_term_tokens($raw);
+            $raw = self::convert_argument_tokens($raw);
 
             $converted = (string) preg_replace_callback(
                 '/%[a-z0-9_]+%/i',

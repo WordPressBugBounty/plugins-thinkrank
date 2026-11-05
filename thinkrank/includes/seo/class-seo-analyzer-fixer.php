@@ -368,6 +368,10 @@ class SEO_Analyzer_Fixer {
             case 'allow_search_engines':
                 return __('Search engine access was turned on, but the setting did not stick. Another plugin may be changing it back.', 'thinkrank');
 
+            case 'robots_meta':
+                // Not something this fix changes (#1566): name where to.
+                return __('Search engines are allowed in your settings, but ThinkRank\'s site-wide robots meta default is still set to No Index. Tick Index under Essential SEO → Crawling and AI Indexing → Global Robot Meta, then save.', 'thinkrank');
+
             default:
                 return __('Search engines are allowed in your settings, but your custom robots.txt content still blocks them. Remove the "Disallow: /" rule under Essential SEO → Crawling and AI Indexing → Robots.txt.', 'thinkrank');
         }

@@ -106,14 +106,18 @@ export function getMigratedSiteData() {
  * wizard-only — the standalone Migration page never calls it and always allows
  * a deliberate re-run.
  *
- * @param {string} plugin Source-plugin slug (yoast|rankmath|aioseo|seopress|squirrly|slimseo|surerank).
+ * A partial run also sends what it left in the source plugin, so the step can
+ * keep saying so after a refresh; a clean run sends no counters and clears it.
+ *
+ * @param {string} plugin     Source-plugin slug (yoast|rankmath|aioseo|seopress|squirrly|slimseo|surerank).
+ * @param {Object} leftBehind Non-zero left-behind counters (see leftBehindSummary).
  * @return {Promise<Object>} Response with the updated `migrated_plugins` list.
  */
-export function markWizardPluginMigrated(plugin) {
+export function markWizardPluginMigrated(plugin, leftBehind = {}) {
 	return apiFetch({
 		path: '/thinkrank/v1/setup-wizard/migrated-plugins',
 		method: 'POST',
-		data: { plugin },
+		data: { plugin, left_behind: leftBehind },
 	});
 }
 

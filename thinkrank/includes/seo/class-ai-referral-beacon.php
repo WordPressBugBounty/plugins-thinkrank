@@ -706,27 +706,43 @@ class Ai_Referral_Beacon {
     /**
      * Who the per-client limit counts against.
      *
-     * The connecting address plus the client address a CDN or proxy reports.
-     * Behind Cloudflare or a load balancer every visitor shares one connecting
-     * address, so without the forwarded value they would share one bucket and
-     * real referrals would be refused. A client that forges the header only
-     * gets a fresh per-client bucket, which the site-wide limit still caps.
-     * Hashed before it is stored; never kept raw.
+     * The connecting address. Forwarded headers (CF-Connecting-IP,
+     * X-Forwarded-For, X-Real-IP) are sent by the client, so trusting them by
+     * default lets one caller mint a fresh bucket per request and spend the
+     * whole site-wide budget alone (#1544). They count only when the site
+     * lists them in `thinkrank_trusted_ip_headers`, the same opt-in the REST
+     * rate limiter uses, because a trusted proxy or CDN sits in front and
+     * overwrites them. Hashed before it is stored; never kept raw.
      *
      * @return string
      */
     private static function client_key(): string {
-        $parts = [];
+        /**
+         * Filters the `$_SERVER` keys of forwarded client-IP headers to trust,
+         * e.g. `['HTTP_CF_CONNECTING_IP']` behind Cloudflare. Shared with the
+         * REST rate limiter. Default none: only REMOTE_ADDR is used.
+         *
+         * @since 2.21.1 Also used by the AI referral beacon.
+         *
+         * @param string[] $headers `$_SERVER` keys, checked in order.
+         */
+        $trusted = apply_filters('thinkrank_trusted_ip_headers', []);
 
-        foreach (['REMOTE_ADDR', 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP'] as $header) {
-            if (empty($_SERVER[$header]) || !is_string($_SERVER[$header])) {
+        foreach ((array) $trusted as $header) {
+            if (!is_string($header) || empty($_SERVER[$header]) || !is_string($_SERVER[$header])) {
                 continue;
             }
 
-            $value   = sanitize_text_field(wp_unslash($_SERVER[$header]));
-            $parts[] = trim(explode(',', $value)[0]);
+            // X-Forwarded-For can carry a chain; the first entry is the client.
+            $ip = trim(explode(',', sanitize_text_field(wp_unslash($_SERVER[$header])))[0]);
+
+            if (false !== filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return $ip;
+            }
         }
 
-        return implode('|', $parts);
+        return isset($_SERVER['REMOTE_ADDR']) && is_string($_SERVER['REMOTE_ADDR'])
+            ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']))
+            : '';
     }
 }

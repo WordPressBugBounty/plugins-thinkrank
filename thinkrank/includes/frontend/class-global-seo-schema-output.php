@@ -240,6 +240,15 @@ class Global_SEO_Schema_Output {
         $article_type = $settings['article_type'] ?? '';
         $media_type = $settings['media_type'] ?? '';
 
+        // A password-protected product keeps a bare WebPage until the password
+        // is entered: its SKU, prices and stock are what the password hides,
+        // and the shop prints none of them behind the form (#1555).
+        if ('Product' === $schema_type && \ThinkRank\Integrations\Commerce::is_password_hidden((int) $post->ID)) {
+            $schema_type  = 'WebPage';
+            $article_type = '';
+            $media_type   = '';
+        }
+
         // Generate schema markup
         $schema = $this->generate_schema($schema_type, $article_type, $media_type, $post);
 
@@ -515,7 +524,9 @@ class Global_SEO_Schema_Output {
      * Product with the name, URL, image and offer the product's own page
      * publishes; the offer comes from the same builder, so a list and a
      * product page cannot disagree about a price. The product's `@id` is the
-     * one its own page gives the node, so the two describe one entity.
+     * one its own page gives the node, so the two describe one entity; where
+     * that cannot be known here the entry has no `@id` and is matched by its
+     * `url` ({@see product_list_item_id()}).
      *
      * Empty without WooCommerce, with the "Product list on shop archives"
      * setting off, and on a page with no products. The schema master switch
@@ -559,12 +570,15 @@ class Global_SEO_Schema_Output {
                 continue;
             }
 
-            $product = [
-                '@type' => 'Product',
-                '@id'   => $url . '#product',
-                'name'  => self::normalize_name(get_the_title($post)),
-                'url'   => $url,
-            ];
+            $product = ['@type' => 'Product'];
+
+            $id = $this->product_list_item_id($post, $url);
+            if ('' !== $id) {
+                $product['@id'] = $id;
+            }
+
+            $product['name'] = self::normalize_name(get_the_title($post));
+            $product['url']  = $url;
 
             $image = $this->get_product_image($post);
             if (!empty($image)) {
@@ -592,6 +606,45 @@ class Global_SEO_Schema_Output {
             'numberOfItems'   => count($items),
             'itemListElement' => $items,
         ];
+    }
+
+    /**
+     * The `@id` a product's own page gives its node, for the archive ItemList.
+     *
+     * A simple product's page publishes `{url}#product`. A variable product's
+     * page may not: Pro publishes it as a ProductGroup (`{url}#productgroup`)
+     * when its switch is on and the product qualifies, which only Pro can
+     * tell. An entry naming an `@id` no page defines describes a second,
+     * unrelated entity, so a variable product's entry has none unless the
+     * filter names the node (#1554). The `url` still ties it to its page.
+     *
+     * @since 2.21.1
+     *
+     * @param \WP_Post $post Product post.
+     * @param string   $url  The product's permalink.
+     * @return string The node's `@id`, or '' to leave it out.
+     */
+    private function product_list_item_id(\WP_Post $post, string $url): string {
+        $product  = $this->woocommerce_product($post);
+        $variable = null !== $product && method_exists($product, 'is_type') && $product->is_type('variable');
+
+        /**
+         * Filter the `@id` of a product's entry in an archive's ItemList.
+         *
+         * Return the `@id` the product's own page gives its node, so the list
+         * and the page describe one entity, or '' to leave it out. The default
+         * is `{url}#product`, and '' for a variable product, whose page node
+         * a ProductGroup may replace.
+         *
+         * @since 2.21.1
+         *
+         * @param string   $id   The entry's `@id`, or ''.
+         * @param \WP_Post $post Product post.
+         * @param string   $url  The product's permalink.
+         */
+        $id = apply_filters('thinkrank_product_list_item_id', $variable ? '' : $url . '#product', $post, $url);
+
+        return is_string($id) ? $id : '';
     }
 
     /**

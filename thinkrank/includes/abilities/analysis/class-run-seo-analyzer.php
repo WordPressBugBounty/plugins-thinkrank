@@ -57,6 +57,6 @@ class Run_Seo_Analyzer extends Get_Seo_Analyzer {
 	public function execute( $input ) {
 		$analyzer = new SEO_Analyzer();
 
-		return $analyzer->run( true );
+		return $this->without_category_checks( $analyzer->run( true ) );
 	}
 }

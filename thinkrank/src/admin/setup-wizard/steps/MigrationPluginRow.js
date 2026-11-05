@@ -15,7 +15,7 @@
 
 import { useEffect, useCallback, useRef, useState } from '@wordpress/element';
 import { Button } from '@wordpress/components';
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 
 import useImportWorkflow, { STATES } from '../../hooks/useImportWorkflow';
 import { markWizardPluginMigrated, deactivateMigratedPlugin } from '../api';
@@ -23,6 +23,10 @@ import {
 	EXPORT_TYPES,
 	describeCounts,
 } from '../../components/import-export/importTypes';
+import {
+	schemaNotImportedCount,
+	schemaStagedNote,
+} from '../../components/import-export/schemaReport';
 import logger from '../../../shared/utils/logger';
 
 const CheckIcon = () => (
@@ -61,12 +65,138 @@ function buildDetail(detection) {
 		: __('SEO data detected', 'thinkrank');
 }
 
+/**
+ * Count what a finished migration did not write, by kind.
+ *
+ * Each of these is still provided by the source plugin only: a redirect or
+ * custom schema that needs ThinkRank Pro, an item Pro refused, a post whose
+ * FAQ/HowTo blocks could not be converted, a whole type the site could not
+ * take, schema with no ThinkRank equivalent, or schema staged in the editor
+ * that is not published until it is deployed. Deactivating the source plugin
+ * would switch them off.
+ *
+ * The same shape is persisted with the wizard's migration record, so the
+ * warning survives a refresh.
+ *
+ * @param {Object} progress Final migration progress from useImportWorkflow.
+ * @return {Object} Non-zero counters keyed like the REST `left_behind` arg;
+ *                  {} when everything was written.
+ */
+export function leftBehindSummary(progress) {
+	const counts = {
+		pro_required: Number(progress?.proRequired) || 0,
+		rejected: Number(progress?.rejected) || 0,
+		failed: Number(progress?.failed) || 0,
+		unrestored_types: progress?.unrestoredTypes?.length || 0,
+		schema_not_imported: schemaNotImportedCount(progress?.schema),
+		schema_staged: Number(progress?.schema?.staged) || 0,
+	};
+
+	return Object.fromEntries(
+		Object.entries(counts).filter(([, count]) => count > 0)
+	);
+}
+
+/**
+ * One line per kind of item a migration left behind.
+ *
+ * @param {Object} summary Counters from {@link leftBehindSummary}, live or
+ *                         persisted.
+ * @return {string[]} Lines; [] when everything was written.
+ */
+export function leftBehindLines(summary) {
+	const lines = [];
+	const proRequired = Number(summary?.pro_required) || 0;
+	const rejected = Number(summary?.rejected) || 0;
+	const failed = Number(summary?.failed) || 0;
+	const unrestored = Number(summary?.unrestored_types) || 0;
+	const schemaLeft = Number(summary?.schema_not_imported) || 0;
+	const schemaStaged = Number(summary?.schema_staged) || 0;
+
+	if (proRequired > 0) {
+		lines.push(
+			sprintf(
+				/* translators: %s: number of items. */
+				_n(
+					'%s item (a redirect, custom schema or similar) needs ThinkRank Pro and stays in the snapshot.',
+					'%s items (redirects, custom schemas or similar) need ThinkRank Pro and stay in the snapshot.',
+					proRequired,
+					'thinkrank'
+				),
+				proRequired.toLocaleString()
+			)
+		);
+	}
+	if (rejected > 0) {
+		lines.push(
+			sprintf(
+				/* translators: %s: number of items. */
+				_n(
+					'%s item was refused and not imported.',
+					'%s items were refused and not imported.',
+					rejected,
+					'thinkrank'
+				),
+				rejected.toLocaleString()
+			)
+		);
+	}
+	if (failed > 0) {
+		lines.push(
+			sprintf(
+				/* translators: %s: number of posts. */
+				_n(
+					'%s post with FAQ or HowTo blocks could not be converted and was left as it was.',
+					'%s posts with FAQ or HowTo blocks could not be converted and were left as they were.',
+					failed,
+					'thinkrank'
+				),
+				failed.toLocaleString()
+			)
+		);
+	}
+	if (unrestored > 0) {
+		lines.push(
+			sprintf(
+				/* translators: %s: number of data types. */
+				_n(
+					'%s type of data could not be restored on this site.',
+					'%s types of data could not be restored on this site.',
+					unrestored,
+					'thinkrank'
+				),
+				unrestored.toLocaleString()
+			)
+		);
+	}
+	if (schemaLeft > 0) {
+		lines.push(
+			sprintf(
+				/* translators: %s: number of schema items. */
+				_n(
+					'%s schema item has no ThinkRank equivalent and was not imported.',
+					'%s schema items have no ThinkRank equivalent and were not imported.',
+					schemaLeft,
+					'thinkrank'
+				),
+				schemaLeft.toLocaleString()
+			)
+		);
+	}
+	if (schemaStaged > 0) {
+		lines.push(schemaStagedNote({ staged: schemaStaged }));
+	}
+
+	return lines;
+}
+
 export default function MigrationPluginRow({
 	slug,
 	name,
 	logo,
 	detection,
 	alreadyMigrated = false,
+	savedLeftBehind = null,
 	onImportStart,
 	onImportComplete,
 	onDeactivated,
@@ -82,7 +212,19 @@ export default function MigrationPluginRow({
 	//   'busy'   – deactivation request in flight
 	//   'done'   – plugin deactivated (or was already inactive)
 	//   'failed' – migration succeeded but the plugin could not be deactivated
-	const [deactivation, setDeactivation] = useState(null);
+	//   'kept'   – the migration left items behind, so the plugin stays active
+	//              until the user deactivates it on purpose
+	//
+	// `leftBehind` holds the lines naming what the migration did not write; []
+	// when the run was clean. A partial migration recorded on an earlier visit
+	// starts with its lines and as 'kept', so a refresh never turns it into a
+	// clean "Imported".
+	const [leftBehind, setLeftBehind] = useState(() =>
+		alreadyMigrated ? leftBehindLines(savedLeftBehind) : []
+	);
+	const [deactivation, setDeactivation] = useState(() =>
+		leftBehind.length > 0 ? 'kept' : null
+	);
 
 	// True from the moment Import is clicked until the whole flow settles, so
 	// the SNAPSHOT_READY hand-off only triggers an auto-migration for an import
@@ -99,24 +241,9 @@ export default function MigrationPluginRow({
 		}
 	}, [state, startMigration]);
 
-	// Migration finished → (1) persist the completion so the Import button stays
-	// disabled after a refresh, (2) tell the wizard to refresh the Site Setup
-	// step with the values just written, and (3) immediately deactivate the
-	// source plugin so two SEO plugins never run at once. Clear the flag so this
-	// fires once. All three are best-effort and wizard-only — the standalone
-	// Migration page never mounts this row and is unaffected. A failed
+	// Deactivate the source plugin and report the outcome up. A failed
 	// deactivation is surfaced but never un-marks the successful migration.
-	useEffect(() => {
-		if (!importingRef.current || state !== STATES.MIGRATION_COMPLETE) {
-			return;
-		}
-		importingRef.current = false;
-
-		markWizardPluginMigrated(slug).catch((e) =>
-			logger.error('Failed to persist wizard migration state', e)
-		);
-		onImportComplete?.();
-
+	const deactivateSource = useCallback(() => {
 		setDeactivation('busy');
 		deactivateMigratedPlugin(slug)
 			.then((res) => {
@@ -141,7 +268,42 @@ export default function MigrationPluginRow({
 				setDeactivation('failed');
 				onDeactivated?.(slug, { ok: false, name });
 			});
-	}, [state, slug, name, onImportComplete, onDeactivated]);
+	}, [slug, name, onDeactivated]);
+
+	// Migration finished → (1) persist the completion so the Import button stays
+	// disabled after a refresh, (2) tell the wizard to refresh the Site Setup
+	// step with the values just written, and (3) deactivate the source plugin
+	// so two SEO plugins never run at once. Clear the flag so this fires once.
+	// All three are best-effort and wizard-only; the standalone Migration page
+	// never mounts this row and is unaffected.
+	//
+	// When the run left items behind (they need Pro, Pro refused them, a post
+	// failed to convert, a type could not be restored), the source plugin is
+	// the only thing still providing them, so it stays active and the row says
+	// why. The user can still deactivate it from the warning.
+	useEffect(() => {
+		if (!importingRef.current || state !== STATES.MIGRATION_COMPLETE) {
+			return;
+		}
+		importingRef.current = false;
+
+		// Record what was left behind with the completion, so a refresh
+		// still shows this as a partial import.
+		const summary = leftBehindSummary(progress);
+		markWizardPluginMigrated(slug, summary).catch((e) =>
+			logger.error('Failed to persist wizard migration state', e)
+		);
+		onImportComplete?.();
+
+		const lines = leftBehindLines(summary);
+		setLeftBehind(lines);
+		if (lines.length > 0) {
+			setDeactivation('kept');
+			return;
+		}
+
+		deactivateSource();
+	}, [state, slug, progress, onImportComplete, deactivateSource]);
 
 	const handleImport = useCallback(() => {
 		importingRef.current = true;
@@ -158,6 +320,8 @@ export default function MigrationPluginRow({
 	// refresh / return keeps the plugin shown as imported with Import disabled.
 	const done = state === STATES.MIGRATION_COMPLETE || alreadyMigrated;
 	const failed = state === STATES.ERROR;
+	// A migration that finished but left items in the source plugin.
+	const partial = done && leftBehind.length > 0;
 
 	// Migration is two sequential server phases: create a snapshot (export) then
 	// restore it into ThinkRank (migrate). Map both onto ONE continuous 0–100 bar
@@ -224,7 +388,12 @@ export default function MigrationPluginRow({
 	];
 
 	let progressTitle;
-	if (done) {
+	if (partial) {
+		progressTitle = __(
+			'Migration finished, but some items were not imported',
+			'thinkrank'
+		);
+	} else if (done) {
 		progressTitle = __('Migration completed successfully', 'thinkrank');
 	} else if (migrating || handingOff) {
 		progressTitle = sprintf(
@@ -247,6 +416,8 @@ export default function MigrationPluginRow({
 		doneLabel = __('Imported, deactivating…', 'thinkrank');
 	} else if (deactivation === 'done') {
 		doneLabel = __('Imported & deactivated', 'thinkrank');
+	} else if (deactivation === 'kept') {
+		doneLabel = __('Partly imported', 'thinkrank');
 	}
 
 	let action;
@@ -350,6 +521,37 @@ export default function MigrationPluginRow({
 							</li>
 						))}
 					</ul>
+				</div>
+			)}
+
+			{partial && deactivation === 'kept' && (
+				<div className="tr-wizard__import-warning" role="status">
+					<ul className="tr-wizard__import-warning-list">
+						{leftBehind.map((line) => (
+							<li key={line}>{line}</li>
+						))}
+					</ul>
+					<p className="tr-wizard__import-warning-text">
+						{sprintf(
+							/* translators: %s: source SEO plugin name. */
+							__(
+								'%s was left active so what it still provides keeps working. Keep it until the remaining items are migrated, or deactivate it now.',
+								'thinkrank'
+							),
+							name
+						)}
+					</p>
+					<Button
+						variant="secondary"
+						className="tr-wizard__import-warning-btn"
+						onClick={deactivateSource}
+					>
+						{sprintf(
+							/* translators: %s: source SEO plugin name. */
+							__('Deactivate %s anyway', 'thinkrank'),
+							name
+						)}
+					</Button>
 				</div>
 			)}
 

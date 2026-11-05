@@ -22,7 +22,7 @@ const FocusPagesTab = () => (
 					illustration={<FocusPagesIllustration />}
 					title={__('Focus Pages', 'thinkrank')}
 					description={__(
-						'ThinkRank can tell you a page scores 62. It cannot yet tell you why that page is not ranking the answer is spread across the SEO score, Search Console, Analytics, your tracked keywords and the index report. Focus Pages joins them, per page, on one screen.',
+						'ThinkRank can tell you a page scores 62. It cannot yet tell you why that page is not ranking. The answer is spread across the SEO score, Search Console, Analytics, your tracked keywords and the index report. Focus Pages joins them, per page, on one screen.',
 						'thinkrank'
 					)}
 					features={[
