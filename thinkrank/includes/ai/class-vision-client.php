@@ -53,6 +53,42 @@ class Vision_Client {
     private const PREFERRED_SIZES = ['medium_large', 'large', 'medium'];
 
     /**
+     * Fields describe_attachment_fields() can write besides alt text.
+     *
+     * The caption is the attachment's `post_excerpt`, which themes and
+     * galleries print under the image; the description is its `post_content`,
+     * shown on the attachment page (#1058).
+     *
+     * @since 2.21.2
+     * @var string[]
+     */
+    public const FIELDS = ['caption', 'description'];
+
+    /**
+     * Longest caption kept, in characters. A caption sits under the image on
+     * the page, so it stays one sentence.
+     *
+     * @since 2.21.2
+     */
+    public const CAPTION_MAX = 160;
+
+    /**
+     * Longest description kept, in characters.
+     *
+     * @since 2.21.2
+     */
+    public const DESCRIPTION_MAX = 500;
+
+    /**
+     * Output cap for an OpenAI-compatible endpoint answering with several
+     * fields. Alt text alone fits in 300 tokens; a description and the JSON
+     * around it do not.
+     *
+     * @since 2.21.2
+     */
+    private const FIELDS_COMPATIBLE_MAX_TOKENS = 1000;
+
+    /**
      * Settings accessor.
      *
      * @var Settings
@@ -142,6 +178,52 @@ class Vision_Client {
      * @throws \Exception When the provider is unusable, the call fails, or the answer is empty.
      */
     public function describe_attachment(int $attachment_id, string $context = ''): string {
+        return $this->finish($this->ask($attachment_id, $this->build_prompt($context)));
+    }
+
+    /**
+     * Write alt text plus a caption and/or a description in one request.
+     *
+     * One vision call per image whatever is asked for, so turning on captions
+     * does not double the bill (#1058). The model answers with a JSON object
+     * and each field is cleaned and capped on its own: the 125-character cut
+     * stays on alt text only.
+     *
+     * @since 2.21.2
+     *
+     * @param int      $attachment_id Attachment to describe.
+     * @param string   $context       Optional context (post title) to disambiguate.
+     * @param string[] $fields        Fields wanted besides alt text: any of FIELDS.
+     * @return array{alt: string, caption: string, description: string} Alt text is
+     *         never empty; a field not asked for, or one the model left out, is ''.
+     * @throws \Exception When the provider is unusable, the call fails, the reply is
+     *                    not the JSON object asked for, or it holds no alt text.
+     */
+    public function describe_attachment_fields(int $attachment_id, string $context, array $fields): array {
+        $fields = array_values(array_intersect(self::FIELDS, $fields));
+
+        if ([] === $fields) {
+            return ['alt' => $this->describe_attachment($attachment_id, $context), 'caption' => '', 'description' => ''];
+        }
+
+        return $this->parse_fields(
+            $this->ask($attachment_id, $this->build_fields_prompt($context, $fields), self::FIELDS_COMPATIBLE_MAX_TOKENS),
+            $fields
+        );
+    }
+
+    /**
+     * Send one image and an instruction to the configured provider.
+     *
+     * @since 2.21.2 Split out of describe_attachment().
+     *
+     * @param int    $attachment_id         Attachment to describe.
+     * @param string $prompt                Instruction.
+     * @param int    $compatible_max_tokens Output cap for an OpenAI-compatible endpoint.
+     * @return string The provider's raw answer.
+     * @throws \Exception When the provider is unusable or the call fails.
+     */
+    private function ask(int $attachment_id, string $prompt, int $compatible_max_tokens = 300): string {
         $provider = (string) $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
         $models   = self::capable_providers();
 
@@ -167,13 +249,14 @@ class Vision_Client {
                 throw new \Exception(esc_html__('The image file could not be read, or is larger than the provider allows.', 'thinkrank'));
             }
 
-            return $this->finish($this->call_openai(
+            return $this->call_openai(
                 (string) $this->settings->get('openai_compatible_api_key', ''),
                 trim((string) $this->settings->get('openai_compatible_model', '')),
-                $this->build_prompt($context),
+                $prompt,
                 $image,
-                (string) $this->settings->get('openai_compatible_base_url', '')
-            ));
+                (string) $this->settings->get('openai_compatible_base_url', ''),
+                $compatible_max_tokens
+            );
         }
 
         if (!isset($models[$provider])) {
@@ -194,22 +277,16 @@ class Vision_Client {
             throw new \Exception(esc_html__('The image file could not be read, or is larger than the provider allows.', 'thinkrank'));
         }
 
-        $model  = (string) $this->settings->get('ai_vision_model', $models[$provider]);
-        $prompt = $this->build_prompt($context);
+        $model = (string) $this->settings->get('ai_vision_model', $models[$provider]);
 
         switch ($provider) {
             case 'openai':
-                $text = $this->call_openai($api_key, $model, $prompt, $image);
-                break;
+                return $this->call_openai($api_key, $model, $prompt, $image);
             case 'claude':
-                $text = $this->call_claude($api_key, $model, $prompt, $image);
-                break;
+                return $this->call_claude($api_key, $model, $prompt, $image);
             default:
-                $text = $this->call_gemini($api_key, $model, $prompt, $image);
-                break;
+                return $this->call_gemini($api_key, $model, $prompt, $image);
         }
-
-        return $this->finish($text);
     }
 
     /**
@@ -258,6 +335,130 @@ class Vision_Client {
         }
 
         return $prompt;
+    }
+
+    /**
+     * The instruction for alt text plus a caption and/or a description.
+     *
+     * Asks for one JSON object so a single reply carries every field. Alt
+     * text keeps the rules of build_prompt(); the caption is written for
+     * readers of the page, and the description for the attachment page.
+     *
+     * @since 2.21.2
+     *
+     * @param string   $context Surrounding context, if any.
+     * @param string[] $fields  Fields wanted besides alt text.
+     * @return string
+     */
+    private function build_fields_prompt(string $context, array $fields): string {
+        $keys  = ['"alt"'];
+        $lines = [
+            '- "alt": alt text for screen readers. One sentence, under 125 characters. '
+                . 'Describe what is visibly in the image, factually. Do NOT start with "image of", '
+                . '"picture of" or "photo of". No trailing period.',
+        ];
+
+        if (in_array('caption', $fields, true)) {
+            $keys[]  = '"caption"';
+            $lines[] = '- "caption": a caption printed under the image for readers of the page. '
+                . 'One sentence, under ' . self::CAPTION_MAX . ' characters. Do not repeat the alt text word for word.';
+        }
+
+        if (in_array('description', $fields, true)) {
+            $keys[]  = '"description"';
+            $lines[] = '- "description": a fuller description of the image for its attachment page. '
+                . 'Two or three sentences, under ' . self::DESCRIPTION_MAX . ' characters.';
+        }
+
+        $prompt = "Describe this image for a website's media library.\n\n"
+            . 'Reply with one JSON object and nothing else, with the keys ' . implode(', ', $keys) . ":\n"
+            . implode("\n", $lines) . "\n\n"
+            . "Rules for every value:\n"
+            . "- Plain text: no markdown, no HTML, no surrounding quotes.\n"
+            . "- Describe only what is in the image; do not invent names, places or brands.\n"
+            . '- If the image contains meaningful text, include it.';
+
+        if ('' !== $context) {
+            $prompt .= "\n\nThe image appears in content about: " . $context;
+        }
+
+        return $prompt;
+    }
+
+    /**
+     * Read the JSON reply of build_fields_prompt() into cleaned fields.
+     *
+     * A reply that is not the object asked for is a failure rather than alt
+     * text: writing a JSON fragment, or a whole paragraph, as alt text would
+     * be worse than the template fallback the caller has.
+     *
+     * @since 2.21.2
+     *
+     * @param string   $text   Raw provider text.
+     * @param string[] $fields Fields asked for besides alt text.
+     * @return array{alt: string, caption: string, description: string}
+     * @throws \Exception When the reply is not a JSON object, or holds no alt text.
+     */
+    private function parse_fields(string $text, array $fields): array {
+        $decoded = Ai_Json::decode_object($text);
+
+        if (null === $decoded) {
+            throw new \Exception(esc_html__('The AI reply was not in the expected format, so nothing was written for this image.', 'thinkrank'));
+        }
+
+        $value = static function (string $key) use ($decoded): string {
+            return is_string($decoded[$key] ?? null) ? $decoded[$key] : '';
+        };
+
+        return [
+            'alt'         => $this->finish($value('alt')),
+            'caption'     => in_array('caption', $fields, true) ? $this->clean_field($value('caption'), self::CAPTION_MAX) : '',
+            'description' => in_array('description', $fields, true) ? $this->clean_field($value('description'), self::DESCRIPTION_MAX) : '',
+        ];
+    }
+
+    /**
+     * Normalize a caption or description, cut on a word boundary at $max.
+     *
+     * Same clean-up as clean(), minus what is specific to alt text: the
+     * closing period stays, since a caption or a description is prose, and
+     * the length cap is the field's own.
+     *
+     * @since 2.21.2
+     *
+     * @param string $text Raw value.
+     * @param int    $max  Longest value kept, in characters.
+     * @return string
+     */
+    private function clean_field(string $text, int $max): string {
+        $text = trim(wp_strip_all_tags(Ai_Json::strip_reasoning($text)));
+        $text = trim($text, "\"' \t\n\r");
+        $text = (string) preg_replace('/^(an?\s+)?(image|picture|photo|photograph|screenshot)\s+(of|showing|depicting)\s+/i', '', $text);
+        $text = trim((string) preg_replace('/\s+/', ' ', $text));
+
+        if ('' === $text) {
+            return '';
+        }
+
+        if (mb_strlen($text) > $max) {
+            $cut = mb_substr($text, 0, $max);
+
+            // Prefer ending on a whole sentence, then on a whole word.
+            $stop = max((int) mb_strrpos($cut, '. '), (int) mb_strrpos($cut, '! '), (int) mb_strrpos($cut, '? '));
+            if ($stop > (int) ($max / 2)) {
+                $cut = mb_substr($cut, 0, $stop + 1);
+            } else {
+                $space = mb_strrpos($cut, ' ');
+                if (false !== $space && $space > (int) ($max / 2)) {
+                    $cut = mb_substr($cut, 0, $space);
+                }
+                $cut = rtrim($cut, ' ,;:-');
+            }
+
+            $text = $cut;
+        }
+
+        return mb_strtoupper(mb_substr($text, 0, 1)) . mb_substr($text, 1);
     }
 
     /**
@@ -329,10 +530,11 @@ class Vision_Client {
      * @param string $prompt  Instruction.
      * @param array  $image    ['data' => base64, 'mime' => string].
      * @param string $base_url Base URL, for an OpenAI-compatible endpoint that is not OpenAI's.
+     * @param int    $compatible_max_tokens Output cap for an endpoint that is not OpenAI's.
      * @return string
      * @throws \Exception On API failure.
      */
-    private function call_openai(string $api_key, string $model, string $prompt, array $image, string $base_url = OpenAI_Client::API_BASE_URL): string {
+    private function call_openai(string $api_key, string $model, string $prompt, array $image, string $base_url = OpenAI_Client::API_BASE_URL, int $compatible_max_tokens = 300): string {
         $body = [
             'model'    => $model,
             'messages' => [[
@@ -365,7 +567,7 @@ class Vision_Client {
         // plain max_tokens.
         if (OpenAI_Client::API_BASE_URL !== $base_url) {
             unset($body['max_completion_tokens'], $body['reasoning_effort']);
-            $body['max_tokens'] = 300;
+            $body['max_tokens'] = $compatible_max_tokens;
         }
 
         $headers = ['Content-Type' => 'application/json'];

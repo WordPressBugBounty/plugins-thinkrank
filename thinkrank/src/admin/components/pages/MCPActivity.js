@@ -114,6 +114,15 @@ const resultBadge = (row) => {
 	if (row.result === 'error') {
 		return { variant: 'poor', label: __('Failed', 'thinkrank') };
 	}
+	if (row.kind === 'plan') {
+		return { variant: 'neutral', label: __('Planned only', 'thinkrank') };
+	}
+	if (row.kind === 'repeat') {
+		return {
+			variant: 'neutral',
+			label: __('Already applied', 'thinkrank'),
+		};
+	}
 	if (row.reverted_by) {
 		return { variant: 'neutral', label: __('Undone', 'thinkrank') };
 	}
@@ -252,6 +261,22 @@ const ActivityRow = ({ row, onRevert, stale = false }) => {
 								)}
 							</p>
 						)}
+					{row.kind === 'plan' && (
+						<p className="tr-m-0 tr-text-xs tr-text-tertiary">
+							{__(
+								'The assistant asked for a plan and nothing was changed. If the person agreed, the confirmed edit is its own entry.',
+								'thinkrank'
+							)}
+						</p>
+					)}
+					{row.kind === 'repeat' && (
+						<p className="tr-m-0 tr-text-xs tr-text-tertiary">
+							{__(
+								'The assistant sent a confirmed edit again after it was already saved, so nothing was changed. The edit itself is its own entry.',
+								'thinkrank'
+							)}
+						</p>
+					)}
 					<div>
 						<span className="tr-block tr-text-xs tr-text-tertiary">
 							{__('Sent by the assistant', 'thinkrank')}
@@ -602,7 +627,7 @@ const MCPActivity = ({
 					/>
 					<Button
 						variant="secondary"
-						size="sm"
+						size="md"
 						icon={IconDownload}
 						onClick={exportCsv}
 						disabled={!rows.length}

@@ -113,6 +113,24 @@ class SEO_Analyzer {
     public const NOT_APPLICABLE = 'not_applicable';
 
     /**
+     * Option holding the checks a site owner chose not to count (#1289).
+     *
+     * A map of check id to `['reason' => string, 'ignored_at' => string]`.
+     * An ignored check still runs and is still listed with its real status,
+     * but like a not-applicable one it is left out of every score and count.
+     *
+     * @since 2.21.2
+     */
+    public const IGNORED_OPTION = 'thinkrank_analyzer_ignored_checks';
+
+    /**
+     * Longest reason kept for an ignored check, in characters.
+     *
+     * @since 2.21.2
+     */
+    private const IGNORE_REASON_MAX = 200;
+
+    /**
      * Human-readable labels for each category id.
      *
      * @return array<string,string>
@@ -146,6 +164,9 @@ class SEO_Analyzer {
         // GEO check, and it is written as an option rather than through the
         // settings manager, so the settings-saved hook never sees it.
         'thinkrank_llms_txt_content',
+        // The checks left out of the score (#1289). set_ignored() re-scores
+        // the cached run itself; this covers any other writer.
+        self::IGNORED_OPTION,
     ];
 
     /**
@@ -187,10 +208,27 @@ class SEO_Analyzer {
             }
         }
 
-        $result = $this->analyze();
-        set_transient(self::CACHE_KEY, $result, self::CACHE_TTL);
+        // The checks run unlocked: a full audit is slow, and its results do
+        // not depend on which checks are ignored. Scoring and caching do, so
+        // they run under the ignored-check lock with the committed map, as
+        // set_ignored() does. Otherwise a run that read the map before an
+        // ignore landed would cache an analysis that counts the check again
+        // (re-review on #1591).
+        $checks = $this->run_checks();
 
-        return $result;
+        return \ThinkRank\Core\Shared_State::locked(
+            'option|' . self::IGNORED_OPTION,
+            function (bool $locked) use ($checks): array {
+                $ignored = $locked
+                    ? self::normalize_ignored(\ThinkRank\Core\Shared_State::fresh_option(self::IGNORED_OPTION, []))
+                    : $this->get_ignored();
+
+                $result = $this->complete($checks, $ignored);
+                set_transient(self::CACHE_KEY, $result, self::CACHE_TTL);
+
+                return $result;
+            }
+        );
     }
 
     /**
@@ -219,75 +257,19 @@ class SEO_Analyzer {
      * }
      */
     public function analyze(): array {
-        $checks         = $this->run_checks();
-        $category_labels = $this->get_category_labels();
+        return $this->complete($this->run_checks());
+    }
 
-        $fraction = [
-            self::PASSED  => 1.0,
-            self::WARNING => 0.5,
-            self::FAILED  => 0.0,
-        ];
-
-        $total_weight = 0.0;
-        $earned       = 0.0;
-        $summary      = [self::PASSED => 0, self::WARNING => 0, self::FAILED => 0, 'total' => 0];
-        $categories   = [];
-
-        foreach ($checks as $check) {
-            $status = $check['status'];
-            $scored = self::NOT_APPLICABLE !== $status;
-            // A check that does not apply is shown, never scored: it neither
-            // earns nor costs anything, in the overall score or its category.
-            $weight = $scored ? (float) $check['weight'] : 0.0;
-            $frac   = $fraction[$status] ?? 0.0;
-
-            $total_weight += $weight;
-            $earned       += $weight * $frac;
-
-            $summary[$status] = ($summary[$status] ?? 0) + 1;
-            if ($scored) {
-                $summary['total']++;
-            }
-
-            $cat = $check['category'];
-            if (!isset($categories[$cat])) {
-                $categories[$cat] = [
-                    'id'     => $cat,
-                    'label'  => $category_labels[$cat] ?? ucfirst($cat),
-                    'score'  => 0,
-                    'weight' => 0.0,
-                    'earned' => 0.0,
-                    self::PASSED  => 0,
-                    self::WARNING => 0,
-                    self::FAILED  => 0,
-                    'checks' => [],
-                ];
-            }
-            $categories[$cat]['weight']  += $weight;
-            $categories[$cat]['earned']  += $weight * $frac;
-            $categories[$cat][$status]    = ($categories[$cat][$status] ?? 0) + 1;
-            $categories[$cat]['checks'][] = $check;
-        }
-
-        // Finalize per-category scores and drop the internal accumulators.
-        foreach ($categories as $cat => &$data) {
-            $data['score'] = $data['weight'] > 0
-                ? (int) round(($data['earned'] / $data['weight']) * 100)
-                : 0;
-            unset($data['weight'], $data['earned']);
-        }
-        unset($data);
-
-        $overall = $total_weight > 0 ? (int) round(($earned / $total_weight) * 100) : 0;
-
-        $result = [
-            'overall_score' => $overall,
-            'grade'         => $this->score_to_grade($overall),
-            'summary'       => $summary,
-            'categories'    => array_values($categories),
-            'checks'        => $checks,
-            'generated_at'  => gmdate('c'),
-        ];
+    /**
+     * Score a set of check results and announce the completed run.
+     *
+     * @since 2.21.2
+     * @param array<int,array>                                            $checks  Normalized check results.
+     * @param array<string,array{reason:string,ignored_at:string}>|null $ignored The ignored map to score with; null reads the option.
+     * @return array The analysis payload (see analyze()).
+     */
+    private function complete(array $checks, ?array $ignored = null): array {
+        $result = $this->score($checks, $ignored);
 
         /**
          * Fires after a site audit has been computed.
@@ -308,6 +290,233 @@ class SEO_Analyzer {
         do_action('thinkrank_seo_analysis_completed', $result);
 
         return $result;
+    }
+
+    /**
+     * Aggregate check results into the scored analysis payload.
+     *
+     * Kept apart from running the checks so that ignoring or including a
+     * check can re-score the last run without running every check again, and
+     * without recording a new run (#1289).
+     *
+     * @since 2.21.2
+     * @param array<int,array> $checks Normalized check results.
+     * @param array<string,array{reason:string,ignored_at:string}>|null $ignored The ignored map to score with; null reads the option.
+     * @return array The analysis payload (see analyze()).
+     */
+    private function score(array $checks, ?array $ignored = null): array {
+        $category_labels = $this->get_category_labels();
+        $ignored_map     = $ignored ?? $this->get_ignored();
+
+        $fraction = [
+            self::PASSED  => 1.0,
+            self::WARNING => 0.5,
+            self::FAILED  => 0.0,
+        ];
+
+        $total_weight = 0.0;
+        $earned       = 0.0;
+        $summary      = [self::PASSED => 0, self::WARNING => 0, self::FAILED => 0, 'total' => 0];
+        $categories   = [];
+
+        foreach ($checks as &$check) {
+            // Re-derived on every scoring, so a cached run re-scored after a
+            // check was included again carries no stale flag.
+            unset($check['ignored'], $check['ignore_reason']);
+
+            $status  = $check['status'];
+            $ignored = isset($ignored_map[$check['id']]);
+            if ($ignored) {
+                $check['ignored']       = true;
+                $check['ignore_reason'] = $ignored_map[$check['id']]['reason'];
+            }
+
+            $scored = self::NOT_APPLICABLE !== $status && !$ignored;
+            // A check that does not apply, or that the site owner chose not to
+            // count, is shown, never scored: it neither earns nor costs
+            // anything, in the overall score or its category. It is counted
+            // under its own key, not as passed, warning or failed.
+            $weight = $scored ? (float) $check['weight'] : 0.0;
+            $frac   = $fraction[$status] ?? 0.0;
+            $bucket = $ignored ? 'ignored' : $status;
+
+            $total_weight += $weight;
+            $earned       += $weight * $frac;
+
+            $summary[$bucket] = ($summary[$bucket] ?? 0) + 1;
+            if ($scored) {
+                $summary['total']++;
+            }
+
+            $cat = $check['category'];
+            if (!isset($categories[$cat])) {
+                $categories[$cat] = [
+                    'id'     => $cat,
+                    'label'  => $category_labels[$cat] ?? ucfirst($cat),
+                    'score'  => 0,
+                    'weight' => 0.0,
+                    'earned' => 0.0,
+                    self::PASSED  => 0,
+                    self::WARNING => 0,
+                    self::FAILED  => 0,
+                    'checks' => [],
+                ];
+            }
+            $categories[$cat]['weight']  += $weight;
+            $categories[$cat]['earned']  += $weight * $frac;
+            $categories[$cat][$bucket]    = ($categories[$cat][$bucket] ?? 0) + 1;
+            $categories[$cat]['checks'][] = $check;
+        }
+        unset($check);
+
+        // Finalize per-category scores and drop the internal accumulators.
+        foreach ($categories as $cat => &$data) {
+            $data['score'] = $data['weight'] > 0
+                ? (int) round(($data['earned'] / $data['weight']) * 100)
+                : 0;
+            unset($data['weight'], $data['earned']);
+        }
+        unset($data);
+
+        $overall = $total_weight > 0 ? (int) round(($earned / $total_weight) * 100) : 0;
+
+        return [
+            'overall_score' => $overall,
+            'grade'         => $this->score_to_grade($overall),
+            'summary'       => $summary,
+            'categories'    => array_values($categories),
+            'checks'        => $checks,
+            'generated_at'  => gmdate('c'),
+        ];
+    }
+
+    /**
+     * The checks the site owner chose not to count, by id.
+     *
+     * @since 2.21.2
+     * @return array<string,array{reason:string,ignored_at:string}>
+     */
+    public function get_ignored(): array {
+        return self::normalize_ignored(get_option(self::IGNORED_OPTION, []));
+    }
+
+    /**
+     * A stored ignored-check map, with unusable rows dropped.
+     *
+     * @since 2.21.2
+     * @param mixed $stored The option's value.
+     * @return array<string,array{reason:string,ignored_at:string}>
+     */
+    private static function normalize_ignored($stored): array {
+        if (!is_array($stored)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($stored as $id => $entry) {
+            $id = sanitize_key((string) $id);
+            if ('' === $id) {
+                continue;
+            }
+            $entry    = is_array($entry) ? $entry : [];
+            $out[$id] = [
+                'reason'     => (string) ($entry['reason'] ?? ''),
+                'ignored_at' => (string) ($entry['ignored_at'] ?? ''),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Ids of every registered check, in registry order.
+     *
+     * @since 2.21.2
+     * @return string[]
+     */
+    public function get_check_ids(): array {
+        $ids = [];
+        foreach ($this->get_check_definitions() as $def) {
+            $id = is_array($def) ? (string) ($def['id'] ?? '') : '';
+            if ('' !== $id) {
+                $ids[] = $id;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Ignore a check, or count it again, and return the re-scored analysis.
+     *
+     * The last run is re-scored rather than re-run: the checks' results have
+     * not changed, only which of them count, so running every check again
+     * would cost a full audit and record a run in ThinkRank Pro's history for
+     * what is a scoring choice. With no cached run, a fresh one is computed.
+     *
+     * @since 2.21.2
+     * @param string $check_id A registered check id.
+     * @param bool   $ignore   True to leave the check out of the score, false to count it again.
+     * @param string $reason   Optional note on why it does not apply.
+     * @return array The analysis payload (see analyze()).
+     * @throws \InvalidArgumentException When the check id is not registered.
+     */
+    public function set_ignored(string $check_id, bool $ignore, string $reason = ''): array {
+        $check_id = sanitize_key($check_id);
+        if (!in_array($check_id, $this->get_check_ids(), true)) {
+            throw new \InvalidArgumentException(
+                esc_html__('That check does not exist.', 'thinkrank')
+            );
+        }
+
+        $reason = trim(sanitize_text_field($reason));
+        $reason = function_exists('mb_substr')
+            ? mb_substr($reason, 0, self::IGNORE_REASON_MAX)
+            : substr($reason, 0, self::IGNORE_REASON_MAX);
+
+        // One check changes, starting from the committed map, so two admins
+        // ignoring different checks at once both keep theirs. The re-score
+        // runs under the same lock, so the cached analysis is always built
+        // from the map that is now stored rather than from one a concurrent
+        // request has since replaced (review on #1591).
+        return \ThinkRank\Core\Shared_State::locked(
+            'option|' . self::IGNORED_OPTION,
+            function (bool $locked) use ($check_id, $ignore, $reason): array {
+                // Read before the option write: the write flushes the cache.
+                // Fresh, so a run cached by another request since this one
+                // started is the one re-scored.
+                $cached = \ThinkRank\Core\Shared_State::read_transient(self::CACHE_KEY, $locked);
+
+                $stored = \ThinkRank\Core\Shared_State::update_option(
+                    self::IGNORED_OPTION,
+                    static function ($current) use ($check_id, $ignore, $reason) {
+                        $ignored = self::normalize_ignored($current);
+                        if ($ignore) {
+                            $ignored[$check_id] = [
+                                'reason'     => $reason,
+                                'ignored_at' => gmdate('c'),
+                            ];
+                        } else {
+                            unset($ignored[$check_id]);
+                        }
+
+                        return $ignored ?: \ThinkRank\Core\Shared_State::DELETE;
+                    },
+                    false,
+                    []
+                );
+
+                if (!is_array($cached) || !isset($cached['overall_score']) || !is_array($cached['checks'] ?? null)) {
+                    return $this->run(true);
+                }
+
+                $result                 = $this->score($cached['checks'], self::normalize_ignored($stored));
+                $result['generated_at'] = (string) ($cached['generated_at'] ?? $result['generated_at']);
+                set_transient(self::CACHE_KEY, $result, self::CACHE_TTL);
+
+                return $result;
+            }
+        );
     }
 
     /**

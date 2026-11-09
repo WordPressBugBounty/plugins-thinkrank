@@ -698,6 +698,11 @@ const Analytics = () => {
 						    tab was never opened. */}
 						<UsageBreakdown
 							period={period}
+							periodLabel={
+								PERIOD_OPTIONS.find(
+									(option) => option.value === period
+								)?.label || ''
+							}
 							isActive={activeTab === 'usage-breakdown'}
 						/>
 					</TabPanel>

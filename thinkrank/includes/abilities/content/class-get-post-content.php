@@ -137,6 +137,14 @@ class Get_Post_Content extends Ability_Base {
 					'description' => __( 'Whether update-post-content can edit this body. When false, editable_reason says why.', 'thinkrank' ),
 				],
 				'editable_reason' => [ 'type' => 'string' ],
+				'edit_lock'       => [
+					'type'        => [ 'object', 'null' ],
+					'description' => __( 'The user who has the post open in the editor right now, or null. While set, update-post-content, update-post-slug and restore-post-content refuse to save unless override_edit_lock is sent, because that user\'s next save there can replace the change.', 'thinkrank' ),
+					'properties'  => [
+						'user_id'   => [ 'type' => 'integer' ],
+						'user_name' => [ 'type' => 'string' ],
+					],
+				],
 				'blocks'          => [
 					'type'        => 'array',
 					'description' => __( 'Top-level blocks of post_content, in order, for update-post-content operations. Empty when the body cannot be edited. Text between blocks is listed as core/freeform. A protected block holds a ThinkRank FAQ block, which only update-faq changes.', 'thinkrank' ),
@@ -249,6 +257,7 @@ class Get_Post_Content extends Ability_Base {
 			'version'         => Post_Content_Editor::version( $post ),
 			'editable'        => ! is_wp_error( $editable ),
 			'editable_reason' => $reason,
+			'edit_lock'       => Post_Content_Editor::edit_lock( $post ),
 			'blocks'          => $blocks['blocks'] ?? [],
 			'blocks_total'    => (int) ( $blocks['total'] ?? 0 ),
 		];

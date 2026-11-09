@@ -125,6 +125,7 @@ final class Mcp_Scopes {
 		'update-woocommerce-settings'      => 'settings',
 		'get-content-type-matrix'          => 'settings',
 		'update-content-type-matrix'       => 'settings',
+		'get-thin-content-settings'        => 'settings',
 		'update-thin-content-settings'     => 'settings',
 		'get-ai-budget'                    => 'settings',
 		'update-ai-budget'                 => 'settings',
@@ -165,6 +166,7 @@ final class Mcp_Scopes {
 		'get-integrations-status'          => 'analytics',
 		'get-post-seo-checks'              => 'analytics',
 		'get-term-seo-checks'              => 'analytics',
+		'get-seo-score-history'            => 'analytics',
 		'get-mcp-activity'                 => 'analytics',
 	];
 

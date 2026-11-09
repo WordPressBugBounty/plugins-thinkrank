@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import {
 	SkeletonCard,
 	Card,
@@ -53,6 +53,8 @@ const ImageSEOTab = () => {
 		save_alt_to_media: false,
 		auto_fill_on_upload: false,
 		media_alt_overwrite: false,
+		media_ai_caption: false,
+		media_ai_description: false,
 	});
 	const [hasChanges, setHasChanges] = useState(false);
 
@@ -185,11 +187,20 @@ const ImageSEOTab = () => {
 		// Overwrite mode replaces alt text on every image, including hand-written
 		// values, so require an explicit confirmation before starting.
 		if (settings.media_alt_overwrite) {
+			const fieldsOn =
+				'ai' === (settings.alt_source || 'template') &&
+				(!!settings.media_ai_caption ||
+					!!settings.media_ai_description);
 			const proceed = confirm(
-				__(
-					'Overwrite is on. This will replace the alt text on every image in your Media Library, including any you wrote by hand, using the Alt attribute format above. This cannot be undone. Continue?',
-					'thinkrank'
-				)
+				fieldsOn
+					? __(
+							'Overwrite is on. This will replace the alt text, and the captions and descriptions you chose, on every image in your Media Library, including any you wrote by hand. This cannot be undone. Continue?',
+							'thinkrank'
+						)
+					: __(
+							'Overwrite is on. This will replace the alt text on every image in your Media Library, including any you wrote by hand, using the Alt attribute format above. This cannot be undone. Continue?',
+							'thinkrank'
+						)
 			);
 			if (!proceed) {
 				return;
@@ -204,6 +215,9 @@ const ImageSEOTab = () => {
 		// reason, so a run that fell back to the template says so (#1039).
 		let aiFailed = 0;
 		let aiError = '';
+		// AI captions and descriptions written alongside the alt text (#1058).
+		let captionsWritten = 0;
+		let descriptionsWritten = 0;
 		let completed = false;
 		// Pages left serving the old alt text, gathered from every batch and
 		// shown once at the end so a stale cache never reads as success (#926).
@@ -227,6 +241,8 @@ const ImageSEOTab = () => {
 				cacheWarnings = collectCacheWarnings(cacheWarnings, res);
 				totalLowQuality += res.skipped_low_quality || 0;
 				aiFailed += res.ai_failed || 0;
+				captionsWritten += res.captions_written || 0;
+				descriptionsWritten += res.descriptions_written || 0;
 				if (!aiError && res.ai_error) {
 					aiError = res.ai_error;
 				}
@@ -275,6 +291,35 @@ const ImageSEOTab = () => {
 						)
 					: '';
 
+			const fieldsNote =
+				captionsWritten > 0 || descriptionsWritten > 0
+					? ' ' +
+						sprintf(
+							/* translators: 1: "%d caption(s)" phrase, 2: "%d description(s)" phrase */
+							__('AI also wrote %1$s and %2$s.', 'thinkrank'),
+							sprintf(
+								/* translators: %d: number of captions written */
+								_n(
+									'%d caption',
+									'%d captions',
+									captionsWritten,
+									'thinkrank'
+								),
+								captionsWritten
+							),
+							sprintf(
+								/* translators: %d: number of descriptions written */
+								_n(
+									'%d description',
+									'%d descriptions',
+									descriptionsWritten,
+									'thinkrank'
+								),
+								descriptionsWritten
+							)
+						)
+					: '';
+
 			if (aiFailed > 0) {
 				setNotice({
 					status: 'error',
@@ -288,7 +333,9 @@ const ImageSEOTab = () => {
 							totalUpdated,
 							aiFailed,
 							aiError
-						) + lowQualityNote,
+						) +
+						fieldsNote +
+						lowQualityNote,
 					details: cacheWarnings,
 				});
 				await loadMediaStats();
@@ -305,7 +352,9 @@ const ImageSEOTab = () => {
 							'thinkrank'
 						),
 						totalUpdated
-					) + lowQualityNote,
+					) +
+					fieldsNote +
+					lowQualityNote,
 				details: cacheWarnings,
 			});
 			await loadMediaStats();
@@ -464,6 +513,11 @@ const ImageSEOTab = () => {
 	const aiUnavailable = mediaStats ? mediaStats.ai_unavailable : undefined;
 	const aiReady = Boolean(mediaStats) && !aiUnavailable;
 	const altSource = settings.alt_source || 'template';
+	// AI captions and descriptions ride on the AI alt text request, so they
+	// only run with the AI source (#1058).
+	const aiFieldsOn =
+		'ai' === altSource &&
+		(!!settings.media_ai_caption || !!settings.media_ai_description);
 	const altSourceOptions = [
 		{
 			value: 'template',
@@ -513,6 +567,8 @@ const ImageSEOTab = () => {
 				save_alt_to_media: false,
 				auto_fill_on_upload: false,
 				media_alt_overwrite: false,
+				media_ai_caption: false,
+				media_ai_description: false,
 				alt_source: 'template',
 			};
 			setSettings(defaultSettings);
@@ -672,7 +728,10 @@ const ImageSEOTab = () => {
 	const nothingToFill =
 		!!mediaStats &&
 		(mediaStats.total === 0 ||
-			(mediaStats.missing === 0 && !settings.media_alt_overwrite));
+			(mediaStats.missing === 0 &&
+				!settings.media_alt_overwrite &&
+				// Images with alt text can still be missing a caption.
+				!aiFieldsOn));
 
 	return (
 		<div className="tab-content">
@@ -1016,6 +1075,71 @@ const ImageSEOTab = () => {
 																)
 													)
 												}
+											/>
+										</div>
+									</FormField>
+
+									<FormField
+										id="tr-is-ai-fields"
+										label={__(
+											'AI captions and descriptions',
+											'thinkrank'
+										)}
+										description={
+											'ai' === altSource
+												? __(
+														'Written from the same AI request as the alt text, so they add no extra requests. Captions and descriptions already set are kept unless Overwrite is on.',
+														'thinkrank'
+													)
+												: __(
+														'Available when Alt text source is AI description.',
+														'thinkrank'
+													)
+										}
+										className="tr-pt-6"
+									>
+										<div className="tr-flex tr-flex-col tr-gap-3">
+											<Toggle
+												id="tr-is-ai-caption"
+												checked={
+													!!settings.media_ai_caption
+												}
+												disabled={'ai' !== altSource}
+												onChange={(val) =>
+													handleSettingChange(
+														'media_ai_caption',
+														val
+													)
+												}
+												label={__(
+													'Also write a caption',
+													'thinkrank'
+												)}
+												description={__(
+													'Themes and galleries show the caption under the image, so it is public.',
+													'thinkrank'
+												)}
+											/>
+											<Toggle
+												id="tr-is-ai-description"
+												checked={
+													!!settings.media_ai_description
+												}
+												disabled={'ai' !== altSource}
+												onChange={(val) =>
+													handleSettingChange(
+														'media_ai_description',
+														val
+													)
+												}
+												label={__(
+													'Also write a description',
+													'thinkrank'
+												)}
+												description={__(
+													'The description is shown on the image attachment page.',
+													'thinkrank'
+												)}
 											/>
 										</div>
 									</FormField>

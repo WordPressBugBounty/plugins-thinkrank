@@ -56,6 +56,15 @@ class Instant_Indexing_Manager {
     public const MAX_URLS_PER_SUBMISSION = 100;
 
     /**
+     * Where the stored IndexNow key came from (`api_key_source`), so a
+     * migration can tell ThinkRank's own placeholder from a key the admin
+     * chose (#1559).
+     */
+    public const KEY_SOURCE_GENERATED = 'generated';
+    public const KEY_SOURCE_USER      = 'user';
+    public const KEY_SOURCE_MIGRATED  = 'migrated';
+
+    /**
      * Posts that transitioned to publish in this request and await the end of
      * their save, keyed by ID, with what was true of them before it.
      *
@@ -174,6 +183,84 @@ class Instant_Indexing_Manager {
         // Matches the scheme the submitted URLs go out with, so IndexNow is
         // never told to verify ownership at an address on the other scheme.
         return Url_Scheme::apply(home_url('/' . $api_key . '.txt'));
+    }
+
+    /**
+     * Whether a key is a plain hex token, the only shape ever used as a
+     * filename under ABSPATH or served at `/<key>.txt`.
+     *
+     * @since 2.21.2
+     * @param string $api_key Candidate key.
+     * @return bool
+     */
+    public static function is_valid_key(string $api_key): bool {
+        return (bool) preg_match('/^[a-f0-9]{8,64}$/', $api_key);
+    }
+
+    /**
+     * Whether the stored key may be replaced by one carried over from another
+     * plugin (#1559).
+     *
+     * A key ThinkRank minted itself (`api_key_source` = generated) is a
+     * placeholder: activation creates one on every install, so a "never
+     * overwrite" rule meant a migrated key was never applied. A key from
+     * before the marker existed is treated the same way while Instant Indexing
+     * has never been switched on, because a switched-off key was never sent to
+     * a search engine. A key the admin regenerated or set, or one already
+     * migrated, is kept.
+     *
+     * @since 2.21.2
+     * @param array $settings Stored thinkrank_instant_indexing_settings.
+     * @return bool
+     */
+    public static function is_replaceable_key(array $settings): bool {
+        if (empty($settings['api_key'])) {
+            return true;
+        }
+
+        $source = $settings['api_key_source'] ?? null;
+        if ($source === self::KEY_SOURCE_GENERATED) {
+            return true;
+        }
+
+        return $source === null && empty($settings['enabled']);
+    }
+
+    /**
+     * Write `<new_key>.txt` to the web root and delete `<old_key>.txt`.
+     *
+     * Best effort: on a read-only root nothing is written, and
+     * maybe_serve_key_file() answers the request instead.
+     *
+     * @since 2.21.2 Moved here from the REST endpoint so the migrator shares it.
+     * @param string      $new_key New key.
+     * @param string|null $old_key Key being replaced, whose file is removed.
+     * @return void
+     */
+    public static function write_key_file(string $new_key, ?string $old_key = null): void {
+        global $wp_filesystem;
+        if (!function_exists('WP_Filesystem')) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+        }
+        WP_Filesystem();
+
+        if (!$wp_filesystem) {
+            return;
+        }
+
+        // Defense-in-depth: the key becomes a filename under ABSPATH, so never
+        // touch the filesystem with anything that isn't a plain hex token. Guards
+        // against a traversal payload (e.g. ../../ads) reaching put_contents/delete.
+        if ($new_key !== '' && self::is_valid_key($new_key) && $wp_filesystem->is_writable(ABSPATH)) {
+            $wp_filesystem->put_contents(ABSPATH . $new_key . '.txt', $new_key, FS_CHMOD_FILE);
+        }
+
+        if (!empty($old_key) && $old_key !== $new_key && self::is_valid_key($old_key)) {
+            $old_file_path = ABSPATH . $old_key . '.txt';
+            if ($wp_filesystem->exists($old_file_path)) {
+                $wp_filesystem->delete($old_file_path);
+            }
+        }
     }
 
     /**

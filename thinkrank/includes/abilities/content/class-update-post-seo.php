@@ -11,6 +11,7 @@ namespace ThinkRank\Abilities\Content;
 
 use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\Admin\Metabox_Manager;
+use ThinkRank\Frontend\Schema_Graph;
 use ThinkRank\SEO\Object_Redirect;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -83,6 +84,14 @@ class Update_Post_Seo extends Ability_Base {
 						'twitter_title'        => [ 'type' => 'string' ],
 						'twitter_description'  => [ 'type' => 'string' ],
 						'twitter_image'        => [ 'type' => 'string' ],
+						'schema_suppression'   => [
+							'type'        => [ 'string', 'array' ],
+							'items'       => [
+								'type'    => 'string',
+								'pattern' => '^[A-Za-z][A-Za-z0-9_]*$',
+							],
+							'description' => __( 'Stop ThinkRank emitting schema on this post. "all" withholds every schema type; an array of schema.org @type names (for example ["FAQPage", "BreadcrumbList"]) withholds only those; an empty string or empty array clears it. Deployed schema is kept and comes back when cleared.', 'thinkrank' ),
+						],
 					],
 				],
 			],
@@ -102,6 +111,10 @@ class Update_Post_Seo extends Ability_Base {
 				'success' => [ 'type' => 'boolean' ],
 				'message' => [ 'type' => 'string' ],
 				'post_id' => [ 'type' => 'integer' ],
+				'schema_suppression' => [
+					'type'        => [ 'string', 'array' ],
+					'description' => __( 'The stored schema suppression, when it was part of the update: "all", the @type names kept, or an empty array when cleared.', 'thinkrank' ),
+				],
 			],
 		];
 	}
@@ -140,9 +153,10 @@ class Update_Post_Seo extends Ability_Base {
 			);
 		}
 
-		$fields = $this->map_fields( $settings, $post_id );
+		$fields          = $this->map_fields( $settings, $post_id );
+		$has_suppression = array_key_exists( 'schema_suppression', $settings );
 
-		if ( empty( $fields ) ) {
+		if ( empty( $fields ) && ! $has_suppression ) {
 			return new \WP_Error(
 				'thinkrank_no_valid_post_meta_keys',
 				__( 'No valid ThinkRank post SEO keys were provided.', 'thinkrank' ),
@@ -151,7 +165,10 @@ class Update_Post_Seo extends Ability_Base {
 		}
 
 		$manager = new Metabox_Manager();
-		$manager->save_seo_fields( $post_id, $fields );
+
+		if ( ! empty( $fields ) ) {
+			$manager->save_seo_fields( $post_id, $fields );
+		}
 
 		// Everything else is stored unconditionally; the redirect can be
 		// refused (no Pro, plain permalinks, a destination that is this post's
@@ -166,11 +183,43 @@ class Update_Post_Seo extends Ability_Base {
 			);
 		}
 
-		return [
+		$result = [
 			'success' => true,
 			'message' => __( 'Post SEO metadata updated.', 'thinkrank' ),
 			'post_id' => $post_id,
 		];
+
+		// Stored through the sanitizer the editor's meta goes through, and
+		// reported back as stored: a type name the sanitizer rejects is dropped,
+		// and a caller must see that rather than its own input echoed.
+		if ( $has_suppression ) {
+			$result['schema_suppression'] = $this->save_schema_suppression( $manager, $post_id, $settings['schema_suppression'] );
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Store the per-post schema suppression and return what was stored.
+	 *
+	 * @since 2.21.2
+	 *
+	 * @param Metabox_Manager $manager Metabox manager, which owns the sanitizer.
+	 * @param int             $post_id Target post ID.
+	 * @param mixed           $value   'all', a list of @type names, or empty to clear.
+	 * @return string|string[] 'all', the stored type names, or [] when cleared.
+	 */
+	private function save_schema_suppression( Metabox_Manager $manager, $post_id, $value ) {
+		$value  = is_array( $value ) ? (string) wp_json_encode( array_values( $value ) ) : (string) $value;
+		$stored = $manager->sanitize_schema_suppression( $value );
+
+		if ( '' === $stored ) {
+			delete_post_meta( $post_id, Schema_Graph::SUPPRESSION_META_KEY );
+		} else {
+			update_post_meta( $post_id, Schema_Graph::SUPPRESSION_META_KEY, $stored );
+		}
+
+		return Get_Post_Seo::read_schema_suppression( $post_id );
 	}
 
 	/**

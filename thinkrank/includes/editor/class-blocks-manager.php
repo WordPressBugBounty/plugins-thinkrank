@@ -232,6 +232,19 @@ class Blocks_Manager {
             return $block_content;
         }
 
+        // A post that suppresses this block's type keeps the block and loses
+        // its script. The graph drops suppressed nodes, but this one never
+        // passes through it (#821).
+        $schema_types = [
+            self::FAQ_BLOCK   => 'FAQPage',
+            self::HOWTO_BLOCK => 'HowTo',
+            self::TOC_BLOCK   => 'SiteNavigationElement',
+        ];
+        if (isset($schema_types[$name])
+            && !\ThinkRank\Frontend\Schema_Graph::output_allowed_for_type($schema_types[$name])) {
+            return $block_content;
+        }
+
         switch ($name) {
             case self::FAQ_BLOCK:
                 // The request's schema graph already merged this block's questions

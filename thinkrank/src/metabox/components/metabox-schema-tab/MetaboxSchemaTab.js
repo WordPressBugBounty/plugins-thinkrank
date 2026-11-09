@@ -8,7 +8,7 @@
  * @since 1.0.0 (refactored 1.11.0)
  */
 
-import { useState, useEffect, useRef } from '@wordpress/element';
+import { useState, useEffect, useRef, useReducer } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { applyFilters } from '@wordpress/hooks';
 
@@ -19,6 +19,11 @@ import SavedSchemasSection from './SavedSchemasSection';
 import DeploymentSection from './DeploymentSection';
 import PreviewSection from './PreviewSection';
 import singleActiveReducer from './activationReducer';
+import createLatestValueWriter from './latestValueWriter';
+import {
+	initialSuppressionState,
+	suppressionReducer,
+} from './suppressionState';
 
 // API functions
 import {
@@ -27,6 +32,8 @@ import {
 	saveSchemaFormData,
 	saveSchemaFormDataOnUnload,
 	saveAdditionalSchemas,
+	saveSchemaSuppression,
+	loadSchemaSuppression,
 	generateSchema,
 	deploySchema,
 	importSchemaFromUrl,
@@ -119,6 +126,18 @@ const MetaboxSchemaTab = ({
 
 	// Multi-schema state
 	const [savedSchemas, setSavedSchemas] = useState([]);
+
+	// Per-post schema suppression: '' (emit normally), 'all' (emit nothing), or
+	// an array of @type names to drop (#821). Tracked with its own load state,
+	// because its value arrives with the metadata GET and not with the
+	// deployments request that ends the tab's loading screen.
+	const [suppression, dispatchSuppression] = useReducer(
+		suppressionReducer,
+		initialSuppressionState
+	);
+	const schemaSuppression = suppression.value;
+	const suppressionReady = 'ready' === suppression.status;
+	const suppressionLoadRef = useRef(0);
 	const [editingSchemaIndex, setEditingSchemaIndex] = useState(null);
 
 	// Config from localized data
@@ -222,6 +241,89 @@ const MetaboxSchemaTab = ({
 	/**
 	 * Build API context
 	 */
+	/**
+	 * Change what this post emits: everything, nothing, or all but some types.
+	 *
+	 * Saved immediately rather than on a debounce. This is a visibility decision
+	 * about what search engines see, so "I clicked it and left" has to be enough.
+	 *
+	 * The box can be clicked again while a save is in flight, so writes go
+	 * through a serialising writer: they never overlap, the newest waiting
+	 * value is the one written next, and the box settles on what the server
+	 * last accepted. Two concurrent POSTs could otherwise land out of order and
+	 * leave the stored setting opposite to the box.
+	 *
+	 * @param {string|string[]} next 'all', a list of @type names, or ''.
+	 */
+	const suppressionContextRef = useRef(null);
+	const suppressionWriterRef = useRef(null);
+
+	if (!suppressionWriterRef.current) {
+		suppressionWriterRef.current = createLatestValueWriter({
+			write: (value) =>
+				saveSchemaSuppression(suppressionContextRef.current, value),
+			onSettled: ({ ok, value }) => {
+				dispatchSuppression({ type: 'settled', value });
+
+				if (!ok) {
+					return;
+				}
+
+				suppressionContextRef.current?.showNotice?.(
+					'all' === value
+						? __(
+								'This page will emit no structured data.',
+								'thinkrank'
+							)
+						: __('Structured data settings saved.', 'thinkrank'),
+					'success'
+				);
+			},
+		});
+	}
+
+	const handleSuppressionChange = (next) => {
+		// Until the stored value has loaded there is nothing true to fall back
+		// to, and a late load answer would replace this change.
+		if (!suppressionReady) {
+			return;
+		}
+
+		const shown = schemaSuppression;
+
+		suppressionContextRef.current = getApiContext();
+		dispatchSuppression({ type: 'change', value: next });
+		suppressionWriterRef.current.request(next, shown);
+	};
+
+	/**
+	 * Start a load of the stored suppression value and return the callbacks
+	 * that report its answer. Only the latest load's answer is applied.
+	 */
+	const beginSuppressionLoad = () => {
+		suppressionLoadRef.current += 1;
+		const load = suppressionLoadRef.current;
+
+		dispatchSuppression({ type: 'load', load });
+
+		return {
+			onSuppressionLoaded: (stored) =>
+				dispatchSuppression({ type: 'loaded', load, stored }),
+			onSuppressionLoadFailed: () =>
+				dispatchSuppression({ type: 'failed', load }),
+		};
+	};
+
+	const retrySuppressionLoad = () => {
+		const { onSuppressionLoaded, onSuppressionLoadFailed } =
+			beginSuppressionLoad();
+
+		loadSchemaSuppression(getApiContext()).then(
+			onSuppressionLoaded,
+			onSuppressionLoadFailed
+		);
+	};
+
 	const getApiContext = () => ({
 		postId,
 		postTitle,
@@ -392,7 +494,7 @@ const MetaboxSchemaTab = ({
 	useEffect(() => {
 		const ctx = getApiContext();
 		loadDeployedSchemas(ctx, true);
-		loadSchemaFormData(ctx);
+		loadSchemaFormData({ ...ctx, ...beginSuppressionLoad() });
 	}, [postId]);
 
 	// Persist schema edits shortly after they stop, so leaving the page is never
@@ -470,6 +572,65 @@ const MetaboxSchemaTab = ({
 					{__('Updating schema data…', 'thinkrank')}
 				</div>
 			)}
+
+			{/* What this page emits at all (#821). Above the type picker,
+			    because choosing a type is pointless once the answer here is
+			    "nothing", and the control that overrides everything else should
+			    not be buried under the thing it overrides. */}
+			<div className="tr-w-full tr-bg-white tr-rounded-lg tr-border tr-border-secondary tr-p-4">
+				<div className="tr-flex tr-flex-wrap tr-items-start tr-justify-between tr-gap-3">
+					<div className="tr-min-w-0">
+						<h3 className="tr-text-sm tr-font-semibold tr-text-primary tr-m-0">
+							{__('Structured data on this page', 'thinkrank')}
+						</h3>
+						<p className="tr-text-xs tr-text-tertiary tr-m-0 tr-mt-1">
+							{'all' === schemaSuppression
+								? __(
+										'Nothing is emitted for this page. The content type default and any schema saved here are both suppressed. Saved schema stays stored and comes back when you turn this off.',
+										'thinkrank'
+									)
+								: __(
+										'This page emits the default for its content type plus anything saved below. Turn it off for a page that should carry no markup at all, such as a legal page.',
+										'thinkrank'
+									)}
+						</p>
+					</div>
+					<label
+						className={`tr-flex tr-items-center tr-gap-2 tr-text-sm tr-text-secondary tr-shrink-0 ${
+							suppressionReady
+								? 'tr-cursor-pointer'
+								: 'tr-opacity-50 tr-cursor-not-allowed'
+						}`}
+					>
+						<input
+							type="checkbox"
+							checked={'all' === schemaSuppression}
+							disabled={!suppressionReady}
+							onChange={(event) =>
+								handleSuppressionChange(
+									event.target.checked ? 'all' : ''
+								)
+							}
+						/>
+						{__('Emit no structured data', 'thinkrank')}
+					</label>
+				</div>
+				{'error' === suppression.status && (
+					<p className="tr-text-xs tr-text-danger tr-m-0 tr-mt-2">
+						{__(
+							'This setting could not be loaded, so it cannot be changed yet.',
+							'thinkrank'
+						)}{' '}
+						<button
+							type="button"
+							className="tr-underline tr-cursor-pointer tr-bg-transparent tr-border-0 tr-p-0 tr-text-xs tr-text-danger"
+							onClick={retrySuppressionLoad}
+						>
+							{__('Try again', 'thinkrank')}
+						</button>
+					</p>
+				)}
+			</div>
 
 			{/* Schema Type + Import — side by side, equal height */}
 			<div className="tr-flex tr-flex-col md:tr-flex-row tr-gap-4 md:tr-items-stretch">

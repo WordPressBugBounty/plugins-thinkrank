@@ -1383,6 +1383,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-border-t{
   border-top-width: 1px;
 }
+.tr-root .tr-border-t-2{
+  border-top-width: 2px;
+}
 .tr-root .tr-border-solid{
   border-style: solid;
 }

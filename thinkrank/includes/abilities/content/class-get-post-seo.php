@@ -13,6 +13,7 @@ use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\Admin\Metabox_Manager;
 use ThinkRank\AI\SEOScoreCalculator;
 use ThinkRank\Core\Database;
+use ThinkRank\Frontend\Schema_Graph;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -111,6 +112,7 @@ class Get_Post_Seo extends Ability_Base {
 
 		$data['robots_meta']          = $this->decode_json_field( $data['robots_meta'] ?? '' );
 		$data['advanced_robots_meta'] = $this->decode_json_field( $data['advanced_robots_meta'] ?? '' );
+		$data['schema_suppression']   = self::read_schema_suppression( $post_id );
 
 		// Report the score from the scores table, which is where every scoring
 		// run persists. The `_thinkrank_seo_score` meta the metabox reads is
@@ -128,6 +130,27 @@ class Get_Post_Seo extends Ability_Base {
 			'post_type' => (string) $post->post_type,
 			'data'      => $data,
 		];
+	}
+
+	/**
+	 * The post's schema suppression as an agent should read it.
+	 *
+	 * @since 2.21.2
+	 *
+	 * @param int $post_id Post ID.
+	 * @return string|string[] 'all', the suppressed @type names, or [] for none.
+	 */
+	public static function read_schema_suppression( $post_id ) {
+		$stored = get_post_meta( (int) $post_id, Schema_Graph::SUPPRESSION_META_KEY, true );
+		$stored = ( new Metabox_Manager() )->sanitize_schema_suppression( is_string( $stored ) ? $stored : '' );
+
+		if ( 'all' === $stored ) {
+			return 'all';
+		}
+
+		$types = '' === $stored ? [] : json_decode( $stored, true );
+
+		return is_array( $types ) ? array_values( $types ) : [];
 	}
 
 	/**

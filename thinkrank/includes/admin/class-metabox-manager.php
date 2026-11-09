@@ -45,6 +45,20 @@ class Metabox_Manager {
     private Settings $settings;
 
     /**
+     * The main-column "ThinkRank SEO" box: React root, save nonce, SEO fields.
+     *
+     * @since 2.21.2
+     */
+    public const MAIN_BOX_ID = 'thinkrank-seo-metabox';
+
+    /**
+     * The classic-screen sidebar launcher box.
+     *
+     * @since 2.21.2
+     */
+    public const SIDEBAR_BOX_ID = 'thinkrank-seo-sidebar';
+
+    /**
      * SEO Score Calculator instance
      *
      * @var SEOScoreCalculator
@@ -76,6 +90,7 @@ class Metabox_Manager {
         add_action('admin_enqueue_scripts', [$this, 'enqueue_metabox_scripts']);
         add_action('admin_notices', [$this, 'render_redirect_notice']);
         add_action('init', [$this, 'register_meta_fields']);
+        add_filter('hidden_meta_boxes', [$this, 'hide_main_box_for_sidebar_launcher'], 10, 2);
 
         // Full metabox save used by editors that don't submit the #post form
         // (e.g. the Elementor editor). Persists every metabox field at once.
@@ -116,6 +131,24 @@ class Metabox_Manager {
             'type' => 'string',
             'sanitize_callback' => [$this, 'sanitize_json_ld_field'],
             'auth_callback' => function() {
+                return current_user_can('edit_posts') || current_user_can('edit_pages');
+            }
+        ]);
+
+        // Per-post schema suppression (#821). A string so one key can carry both
+        // 'all' and a JSON list of @type names; the reader accepts either and
+        // Schema_Graph owns the key name.
+        //
+        // An output decision only: Schema_Graph::output_allowed() withholds the
+        // deployed rows with everything else, so they stay active in the table
+        // and clearing the setting brings them back as they were. Deactivating
+        // them on write made the switch one-way.
+        register_post_meta('', \ThinkRank\Frontend\Schema_Graph::SUPPRESSION_META_KEY, [
+            'show_in_rest' => true,
+            'single' => true,
+            'type' => 'string',
+            'sanitize_callback' => [$this, 'sanitize_schema_suppression'],
+            'auth_callback' => function () {
                 return current_user_can('edit_posts') || current_user_can('edit_pages');
             }
         ]);
@@ -240,6 +273,52 @@ class Metabox_Manager {
                 return current_user_can('edit_posts') || current_user_can('edit_pages');
             }
         ]);
+    }
+
+    /**
+     * Sanitize the per-post schema suppression value.
+     *
+     * Accepts the literal 'all' or a JSON array of @type names, and rejects
+     * anything else by storing ''. Type names are restricted to the characters
+     * schema.org actually uses, so this cannot become a way to write arbitrary
+     * strings into a key the front end reads (#821).
+     *
+     * @since 2.21.2
+     *
+     * @param mixed $value Submitted value.
+     * @return string Stored value.
+     */
+    public function sanitize_schema_suppression($value): string {
+        if (is_string($value) && 'all' === strtolower(trim($value))) {
+            return 'all';
+        }
+
+        $types = is_string($value) ? json_decode($value, true) : $value;
+
+        if (!is_array($types)) {
+            return '';
+        }
+
+        $clean = [];
+        foreach ($types as $type) {
+            if (!is_string($type)) {
+                continue;
+            }
+
+            $type = trim($type);
+
+            if ('' === $type || !preg_match('/^[A-Za-z][A-Za-z0-9_]*$/', $type)) {
+                continue;
+            }
+
+            $clean[] = $type;
+        }
+
+        if (empty($clean)) {
+            return '';
+        }
+
+        return (string) wp_json_encode(array_values(array_unique($clean)));
     }
 
     /**
@@ -441,9 +520,15 @@ class Metabox_Manager {
 
         $is_block_editor = $this->is_block_editor_screen();
 
+        // The sidebar box is only a second launcher, so the "Main column" choice
+        // drops it. The main box is registered in every mode: it hosts the
+        // React root, the save nonce and every SEO field (#985).
+        $show_sidebar_box = !$is_block_editor
+            && Settings::CLASSIC_LAUNCHER_MAIN !== $this->classic_launcher_position();
+
         foreach ($post_types as $post_type) {
             add_meta_box(
-                'thinkrank-seo-metabox',
+                self::MAIN_BOX_ID,
                 __('ThinkRank SEO', 'thinkrank'),
                 [$this, 'render_seo_metabox'],
                 $post_type,
@@ -453,10 +538,11 @@ class Metabox_Manager {
 
             // Classic Editor sidebar quick-access widget (mirrors SureRank's
             // "Manage your SEO" sidebar box). Skipped in the Block Editor, which
-            // surfaces the full panel below the content instead.
-            if (!$is_block_editor) {
+            // surfaces the full panel below the content instead, and when the
+            // site chose the main column as its only launcher.
+            if ($show_sidebar_box) {
                 add_meta_box(
-                    'thinkrank-seo-sidebar',
+                    self::SIDEBAR_BOX_ID,
                     __('ThinkRank', 'thinkrank'),
                     [$this, 'render_sidebar_meta_box'],
                     $post_type,
@@ -465,6 +551,71 @@ class Metabox_Manager {
                 );
             }
         }
+    }
+
+    /**
+     * Where the classic edit screen shows the launcher, from Settings.
+     *
+     * @since 2.21.2
+     *
+     * @return string One of Settings::CLASSIC_LAUNCHER_POSITIONS.
+     */
+    private function classic_launcher_position(): string {
+        $position = (string) $this->settings->get('classic_launcher_position', Settings::CLASSIC_LAUNCHER_BOTH);
+
+        return in_array($position, Settings::CLASSIC_LAUNCHER_POSITIONS, true)
+            ? $position
+            : Settings::CLASSIC_LAUNCHER_BOTH;
+    }
+
+    /**
+     * Whether the sidebar box is the only launcher on this classic screen.
+     *
+     * @since 2.21.2
+     *
+     * @param mixed $screen Screen to ask about.
+     * @return bool
+     */
+    private function is_sidebar_only_screen($screen): bool {
+        if (!$screen instanceof \WP_Screen || 'post' !== $screen->base) {
+            return false;
+        }
+
+        if (method_exists($screen, 'is_block_editor') && $screen->is_block_editor()) {
+            return false;
+        }
+
+        if (Settings::CLASSIC_LAUNCHER_SIDEBAR !== $this->classic_launcher_position()) {
+            return false;
+        }
+
+        return in_array((string) $screen->post_type, $this->get_supported_post_types(), true);
+    }
+
+    /**
+     * Hide the main "ThinkRank SEO" box when the sidebar is the only launcher.
+     *
+     * Hidden, not removed. Core still prints a hidden box (with `hide-if-js`),
+     * and this one carries the React root that owns the drawer, the save nonce
+     * and every SEO field. Without it the sidebar button opens nothing and the
+     * SEO fields never save (#985).
+     *
+     * @since 2.21.2
+     *
+     * @param mixed $hidden Box ids hidden on this screen.
+     * @param mixed $screen Current screen.
+     * @return mixed
+     */
+    public function hide_main_box_for_sidebar_launcher($hidden, $screen = null) {
+        if (!is_array($hidden) || !$this->is_sidebar_only_screen($screen)) {
+            return $hidden;
+        }
+
+        if (!in_array(self::MAIN_BOX_ID, $hidden, true)) {
+            $hidden[] = self::MAIN_BOX_ID;
+        }
+
+        return $hidden;
     }
 
     /**
@@ -496,9 +647,21 @@ class Metabox_Manager {
     public function render_sidebar_meta_box(\WP_Post $post): void {
         $box_title = apply_filters('thinkrank_seo_sidebar_box_title', __('Optimize this content for search & AI with ThinkRank.', 'thinkrank'), $post);
         $cta_label = apply_filters('thinkrank_seo_sidebar_cta_label', __('Open ThinkRank SEO', 'thinkrank'), $post);
+
+        // With the main card hidden, this box is the only place the score
+        // shows outside the drawer. The React app updates it once it mounts.
+        $show_score = Settings::CLASSIC_LAUNCHER_SIDEBAR === $this->classic_launcher_position();
+        $score      = $show_score ? $this->get_persisted_seo_score($post->ID) : null;
+        $has_score  = null !== $score && $score > 0;
         ?>
         <div class="thinkrank-classic-sidebar-box">
             <p class="thinkrank-classic-sidebar-box-title"><?php echo esc_html($box_title); ?></p>
+            <?php if ($show_score) : ?>
+            <p class="thinkrank-classic-sidebar-box-score"<?php echo $has_score ? '' : ' hidden'; ?>>
+                <span><?php esc_html_e('SEO score', 'thinkrank'); ?></span>
+                <strong><span class="thinkrank-classic-sidebar-box-score-value"><?php echo $has_score ? (int) $score : ''; ?></span><small>/100</small></strong>
+            </p>
+            <?php endif; ?>
             <button
                 type="button"
                 class="button button-primary thinkrank-classic-sidebar-box-cta"
@@ -1084,8 +1247,22 @@ class Metabox_Manager {
         $sidebar_css = <<<'CSS'
 .thinkrank-classic-sidebar-box-title{margin:0 0 12px;font-size:13px;line-height:1.5;color:#1e1e1e;}
 .thinkrank-classic-sidebar-box-cta{width:100%;text-align:center;justify-content:center;}
+.thinkrank-classic-sidebar-box-score{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 12px;font-size:13px;color:#646970;}
+.thinkrank-classic-sidebar-box-score[hidden]{display:none;}
+.thinkrank-classic-sidebar-box-score strong{font-size:15px;font-weight:600;line-height:1;color:#1e1e1e;}
+.thinkrank-classic-sidebar-box-score small{font-size:11px;font-weight:400;color:#646970;}
 CSS;
         wp_add_inline_style('thinkrank-metabox', $sidebar_css);
+
+        // The main box is hidden on purpose when the sidebar is the only
+        // launcher (see hide_main_box_for_sidebar_launcher()), so do not offer
+        // a Screen Options switch that would be undone on the next load.
+        if ($this->is_sidebar_only_screen(get_current_screen())) {
+            wp_add_inline_style(
+                'thinkrank-metabox',
+                '#screen-options-wrap label[for="' . self::MAIN_BOX_ID . '-hide"]{display:none;}'
+            );
+        }
 
         $sidebar_js = <<<'JS'
 (function(){
@@ -1095,6 +1272,17 @@ CSS;
         e.preventDefault();
         // Open the ThinkRank SEO drawer mounted by the React metabox app.
         window.dispatchEvent(new CustomEvent('thinkrank:toggle-seo-drawer'));
+    });
+    // Mirror the live score into the sidebar box, which only renders a score
+    // row when the sidebar is the only launcher.
+    window.addEventListener('thinkrank:score-updated', function(e){
+        var row = document.querySelector('.thinkrank-classic-sidebar-box-score');
+        if(!row){return;}
+        var score = e.detail ? Number(e.detail.score) : NaN;
+        var known = isFinite(score) && score > 0;
+        row.hidden = !known;
+        var value = row.querySelector('.thinkrank-classic-sidebar-box-score-value');
+        if(value){value.textContent = known ? String(Math.round(score)) : '';}
     });
 })();
 JS;

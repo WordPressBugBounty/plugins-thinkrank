@@ -274,6 +274,11 @@ class Manager {
                     'type' => 'boolean',
                     'sanitize_callback' => 'rest_sanitize_boolean',
                 ],
+                'classic_launcher_position' => [
+                    'type' => 'string',
+                    'enum' => \ThinkRank\Core\Settings::CLASSIC_LAUNCHER_POSITIONS,
+                    'validate_callback' => 'rest_validate_request_arg',
+                ],
                 // AI spend controls (#448). `max_requests_per_minute` is not
                 // new, but it was never reachable: registered since 1.0 and
                 // rendered nowhere, so no user could see the throttle that was
@@ -1052,6 +1057,7 @@ class Manager {
             'keep_data_on_uninstall' => (bool) $settings_instance->get('keep_data_on_uninstall', true),
             'enable_migration_tools' => (bool) $settings_instance->get('enable_migration_tools', false),
             'enable_import_export' => (bool) $settings_instance->get('enable_import_export', false),
+            'classic_launcher_position' => (string) $settings_instance->get('classic_launcher_position', \ThinkRank\Core\Settings::CLASSIC_LAUNCHER_BOTH),
             'google_account_connected' => (bool) $settings_instance->get('google_account_connected', false),
             'enable_mcp' => (bool) $settings_instance->get('enable_mcp', false),
             'max_requests_per_minute' => (int) $settings_instance->get('max_requests_per_minute', 0),
@@ -1256,6 +1262,7 @@ class Manager {
             'enable_mcp' => 'enable_mcp',
             'enable_migration_tools' => 'enable_migration_tools',
             'enable_import_export' => 'enable_import_export',
+            'classic_launcher_position' => 'classic_launcher_position',
             'max_requests_per_minute' => 'max_requests_per_minute',
             'ai_daily_request_limit' => 'ai_daily_request_limit',
             'ai_paused' => 'ai_paused',

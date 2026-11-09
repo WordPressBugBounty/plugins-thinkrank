@@ -490,7 +490,9 @@ class Ai_Traffic_Tracker {
      * @since 2.15.0
      *
      * @param string $platform Platform slug from classify_visit().
-     * @param string $path     Landing path.
+     * @param string $path     Landing path, or '' to count the visit for its
+     *                         platform without a landing page (since 2.21.2,
+     *                         for a path that is not a public page, #1545).
      * @return void
      */
     public function record_referral(string $platform, string $path): void {
@@ -500,7 +502,7 @@ class Ai_Traffic_Tracker {
         }
 
         $this->bump('baseline', 'all');
-        $this->bump('referral', $platform, substr('' !== $path ? $path : '/', 0, 191));
+        $this->bump('referral', $platform, substr($path, 0, 191));
     }
 
     /**

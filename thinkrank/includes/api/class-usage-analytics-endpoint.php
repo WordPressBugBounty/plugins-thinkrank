@@ -311,6 +311,13 @@ class Usage_Analytics_Endpoint {
                     'minimum' => 10,
                     'maximum' => 100,
                     'sanitize_callback' => 'absint'
+                ],
+                // The period totals do not change with the page, so a client
+                // that already holds them can page without asking again.
+                'include_totals' => [
+                    'default' => true,
+                    'type' => 'boolean',
+                    'sanitize_callback' => 'rest_sanitize_boolean'
                 ]
             ]
         ]);
@@ -943,19 +950,30 @@ class Usage_Analytics_Endpoint {
             $usage_data = $this->get_detailed_usage_breakdown($user_id, $date_condition, $per_page, $offset);
             $total_records = $this->get_usage_breakdown_count($user_id, $date_condition);
 
+            $data = [
+                'usage_records' => $usage_data,
+                'pagination' => [
+                    'page' => $page,
+                    'per_page' => $per_page,
+                    'total_records' => $total_records,
+                    // (int) so it serialises as 2, not 2.0.
+                    'total_pages' => $per_page > 0 ? (int) ceil($total_records / $per_page) : 0
+                ],
+                'period' => $period,
+            ];
+
+            // Whole-period, not this page. The tab's job is to answer "what
+            // did the period cost", and a subtotal that changes as the reader
+            // pages answers a question nobody asked. The same figure on every
+            // page, so a page change that already has it can skip the query.
+            $include_totals = $request->get_param('include_totals');
+            if (null === $include_totals || rest_sanitize_boolean($include_totals)) {
+                $data['totals'] = $this->get_usage_breakdown_totals($user_id, $date_condition);
+            }
+
             return new WP_REST_Response([
                 'success' => true,
-                'data' => [
-                    'usage_records' => $usage_data,
-                    'pagination' => [
-                        'page' => $page,
-                        'per_page' => $per_page,
-                        'total_records' => $total_records,
-                        // (int) so it serialises as 2, not 2.0.
-                        'total_pages' => $per_page > 0 ? (int) ceil($total_records / $per_page) : 0
-                    ],
-                    'period' => $period
-                ]
+                'data' => $data,
             ], 200);
 
         } catch (\Exception $e) {
@@ -1164,6 +1182,131 @@ class Usage_Analytics_Endpoint {
         );
 
         return (int) $count;
+    }
+
+    /**
+     * Period-wide totals for the Usage Breakdown tab.
+     *
+     * Deliberately its own query rather than a sum of the rows already
+     * fetched: `get_detailed_usage_breakdown()` is paginated, so summing it
+     * would produce a per-page subtotal sitting directly beneath a paginated
+     * table, which reads as a period total and is not one. This runs once per
+     * request, beside the count query that has always aggregated the same way.
+     *
+     * Costed through `calculate_costs()` rather than by a sum of its own, so
+     * this total and the Overview tab's `Estimated AI Cost` card cannot drift:
+     * that function was already corrected once to price each row at
+     * `metadata.actual_model`, precisely so the two screens would agree.
+     *
+     * @since 2.21.2
+     *
+     * @param int    $user_id        User whose usage is being totalled.
+     * @param string $date_condition SQL date condition for the period.
+     * @return array{total_cost: float, total_tokens: int, uncosted_records: int, currency: string}
+     */
+    private function get_usage_breakdown_totals(int $user_id, string $date_condition): array {
+        global $wpdb;
+
+        $table_name = esc_sql($this->database->get_table('ai_usage'));
+
+        // Aggregated by the database, one row per provider and model. The
+        // period can be the site's whole history, and `metadata` can hold a
+        // raw AI response, so selecting it row by row grew with every request
+        // ever made. Only the model is cut out of the JSON here, with plain
+        // string functions rather than JSON_EXTRACT(), which older MySQL lacks
+        // and which fails the whole query on one malformed row. The search
+        // text is the key as wp_json_encode() writes it; the same text inside
+        // a stored raw response is escaped (\"actual_model\") and never
+        // matches. A row without the key groups under '' and is priced at the
+        // provider default, exactly as calculate_costs() prices it.
+        $sql = "
+            SELECT provider,
+                CASE WHEN LOCATE('\"actual_model\":\"', metadata) > 0
+                    THEN SUBSTRING_INDEX(SUBSTRING(metadata, LOCATE('\"actual_model\":\"', metadata) + 16), '\"', 1)
+                    ELSE ''
+                END AS actual_model,
+                COUNT(*) AS records,
+                SUM(tokens_used) AS tokens
+            FROM `{$table_name}`
+            WHERE user_id = %d
+            {$date_condition}
+            GROUP BY provider, actual_model
+        ";
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Analytics data is real-time, table name and date condition are validated internally
+        $groups = $wpdb->get_results(
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- SQL is properly prepared with placeholders
+            $wpdb->prepare($sql, $user_id),
+            ARRAY_A
+        );
+
+        $groups = is_array($groups) ? $groups : [];
+
+        $total_cost   = 0.0;
+        $total_tokens = 0;
+        $uncosted     = 0;
+
+        foreach ($groups as $group) {
+            $provider = (string) ($group['provider'] ?? '');
+            $tokens   = (int) ($group['tokens'] ?? 0);
+            $records  = (int) ($group['records'] ?? 0);
+
+            // Tokens are known whether or not a price is. Leaving an unpriced
+            // row out of the token total too would understate the traffic as
+            // well as the spend.
+            $total_tokens += $tokens;
+
+            // Still JSON-escaped (a slash in an OpenRouter id is "\/"), so it
+            // is decoded the way calculate_costs() decodes the whole column.
+            $raw   = (string) ($group['actual_model'] ?? '');
+            $model = '' !== $raw ? json_decode('"' . $raw . '"') : '';
+            $model = is_string($model) && '' !== $model ? $model : $this->get_default_model($provider);
+
+            if (!$this->model_is_costed($provider, $model)) {
+                $uncosted += $records;
+                continue;
+            }
+
+            // Pricing is linear in tokens, so a group priced once equals its
+            // rows priced one by one through calculate_costs(), which is what
+            // the Overview tab's Estimated AI Cost card shows.
+            $total_cost += $this->calculate_record_cost($provider, $tokens, $model);
+        }
+
+        return [
+            'total_cost' => round($total_cost, 4),
+            'total_tokens' => $total_tokens,
+            // A row with no price is not a free row. Counting it lets the tab
+            // say the total covers only part of the period, instead of a site
+            // on a local model reading a figure that silently omits most of
+            // its traffic.
+            'uncosted_records' => $uncosted,
+            // Every pricing table in this class is USD per 1M tokens, and the
+            // admin-entered openai_compatible rate is read the same way. No
+            // conversion is attempted, so the unit is stated rather than
+            // guessed at by the client.
+            'currency' => 'USD',
+        ];
+    }
+
+    /**
+     * Whether calculate_costs() puts a price on a provider and model.
+     *
+     * @since 2.21.2
+     *
+     * @param string $provider AI provider.
+     * @param string $model    Model the row was priced at.
+     * @return bool
+     */
+    private function model_is_costed(string $provider, string $model): bool {
+        // The providers calculate_costs() knows how to accumulate. Anything
+        // else it skips, so counting it as costed here would promise a total
+        // that does not include it.
+        if (!in_array($provider, ['openai', 'claude', 'gemini', 'openrouter', 'openai_compatible'], true)) {
+            return false;
+        }
+
+        return $this->get_model_pricing($provider, $model) !== null;
     }
 
     /**

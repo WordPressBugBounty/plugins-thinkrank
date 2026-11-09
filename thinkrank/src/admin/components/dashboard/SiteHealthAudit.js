@@ -7,10 +7,10 @@
  * GET /thinkrank/v1/seo-analyzer (cached) and POST /thinkrank/v1/seo-analyzer/run
  * (force a fresh run). No Google connection required.
  */
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { SkeletonCard } from '../ui';
+import { Input, SkeletonCard } from '../ui';
 import { navigate, getPageUrl, isPlainLeftClick } from '../../utils/router';
 import notify from '../../utils/notify';
 
@@ -106,6 +106,14 @@ const STATUS_STYLES = {
 	// (#1288), so it reads as neutral rather than as a warning.
 	not_applicable: {
 		label: __('Not scored', 'thinkrank'),
+		bg: '#f3f4f6',
+		fg: '#4b5563',
+		border: '#e5e7eb',
+	},
+	// A check the site owner chose not to count (#1289). Its real status is
+	// kept on the check, but the row is shown as left out of the score.
+	ignored: {
+		label: __('Ignored', 'thinkrank'),
 		bg: '#f3f4f6',
 		fg: '#4b5563',
 		border: '#e5e7eb',
@@ -271,6 +279,22 @@ const pagerButtonStyle = (disabled) => ({
 	cursor: disabled ? 'default' : 'pointer',
 });
 
+// Small secondary action on a check row (Ignore, Include again, Cancel).
+const textButtonStyle = (disabled) => ({
+	background: 'none',
+	border: 'none',
+	padding: '4px 6px',
+	font: 'inherit',
+	fontSize: '12px',
+	fontWeight: 600,
+	color: disabled ? '#9ca3af' : '#6b7280',
+	cursor: disabled ? 'default' : 'pointer',
+	whiteSpace: 'nowrap',
+});
+
+// Keep a click or key press on a control inside a row from toggling the row.
+const stopRowToggle = (event) => event.stopPropagation();
+
 // A count ("7 of your 8 pages…") leaves the user to guess which pages it
 // means. Name them, ten at a time, each linking to its editor. `total` can be
 // larger than the list when the server capped it.
@@ -430,13 +454,38 @@ const AffectedPosts = ({ posts, total }) => {
 
 // ── Check row (expandable when it has a fix) ──────────
 
-const CheckRow = ({ check, last, onFixed }) => {
+const CheckRow = ({ check, last, onFix, onIgnore, busy = false }) => {
 	const [open, setOpen] = useState(false);
 	const [fixing, setFixing] = useState(false);
-	const hasFix = Boolean(check.how_to_fix);
+	// The "why are you ignoring it?" form under the row, and its reason.
+	const [confirming, setConfirming] = useState(false);
+	const [reason, setReason] = useState('');
+	const [saving, setSaving] = useState(false);
+	// Any change to the analysis in flight, from any row or Re-analyze, holds
+	// every row's actions (review on #1591).
+	const ignoreLocked = saving || busy;
+	const ignored = Boolean(check.ignored);
+	// An ignored row is not expandable: it is out of the score, so a fix or a
+	// how-to-fix would read as still being asked to act on it.
+	const hasFix = Boolean(check.how_to_fix) && !ignored;
 	// A check that is not scored has nothing to fix, like a passing one.
 	const passed =
 		check.status === 'passed' || check.status === 'not_applicable';
+	// A check that does not apply is already out of the score.
+	const canIgnore =
+		!ignored &&
+		check.status !== 'not_applicable' &&
+		typeof onIgnore === 'function';
+
+	const changeIgnored = async (ignore) => {
+		setSaving(true);
+		const done = await onIgnore(check.id, ignore, ignore ? reason : '');
+		setSaving(false);
+		if (done && ignore) {
+			setConfirming(false);
+			setReason('');
+		}
+	};
 
 	// The server decides what is safe to auto-apply — the UI never guesses.
 	const canAutoFix = Boolean(check.can_auto_fix);
@@ -445,29 +494,8 @@ const CheckRow = ({ check, last, onFixed }) => {
 		// The row itself is a toggle; don't collapse it out from under the click.
 		event.stopPropagation();
 		setFixing(true);
-		try {
-			const res = await apiFetch({
-				path: '/thinkrank/v1/seo-analyzer/fix',
-				method: 'POST',
-				data: { check_id: check.id },
-			});
-			if (!res.success) {
-				throw new Error(res.message);
-			}
-			notify.success(res.message || __('Fixed.', 'thinkrank'));
-			// The response carries a freshly re-run analysis, so the score and
-			// this row update together — a fix you can't see land is
-			// indistinguishable from one that silently failed.
-			if (res.data?.analysis && onFixed) {
-				onFixed(res.data.analysis);
-			}
-		} catch (err) {
-			notify.error(
-				err.message || __('Could not apply this fix.', 'thinkrank')
-			);
-		} finally {
-			setFixing(false);
-		}
+		await onFix(check.id);
+		setFixing(false);
 	};
 
 	return (
@@ -494,7 +522,7 @@ const CheckRow = ({ check, last, onFixed }) => {
 					cursor: hasFix ? 'pointer' : 'default',
 				}}
 			>
-				<StatusPill status={check.status} />
+				<StatusPill status={ignored ? 'ignored' : check.status} />
 				<div style={{ flex: 1, minWidth: 0 }}>
 					<div
 						style={{
@@ -516,7 +544,54 @@ const CheckRow = ({ check, last, onFixed }) => {
 					>
 						{check.message}
 					</div>
+					{ignored && check.ignore_reason && (
+						<div
+							style={{
+								fontSize: '12px',
+								color: '#6b7280',
+								lineHeight: 1.5,
+								marginTop: '4px',
+								fontStyle: 'italic',
+							}}
+						>
+							{sprintf(
+								/* translators: %s: why the site owner ignored this check. */
+								__('Reason: %s', 'thinkrank'),
+								check.ignore_reason
+							)}
+						</div>
+					)}
 				</div>
+				{canIgnore && !confirming && (
+					<button
+						type="button"
+						onClick={(event) => {
+							stopRowToggle(event);
+							setConfirming(true);
+						}}
+						onKeyDown={stopRowToggle}
+						disabled={busy}
+						style={textButtonStyle(busy)}
+					>
+						{__('Ignore', 'thinkrank')}
+					</button>
+				)}
+				{ignored && (
+					<button
+						type="button"
+						onClick={(event) => {
+							stopRowToggle(event);
+							changeIgnored(false);
+						}}
+						onKeyDown={stopRowToggle}
+						disabled={ignoreLocked}
+						style={textButtonStyle(ignoreLocked)}
+					>
+						{saving
+							? __('Including…', 'thinkrank')
+							: __('Include again', 'thinkrank')}
+					</button>
+				)}
 				{hasFix && !passed && (
 					<span style={{ color: '#9ca3af' }}>
 						<ChevronIcon open={open} />
@@ -565,7 +640,7 @@ const CheckRow = ({ check, last, onFixed }) => {
 							<button
 								type="button"
 								onClick={applyFix}
-								disabled={fixing}
+								disabled={fixing || busy}
 								style={{
 									background: '#4451FF',
 									color: '#fff',
@@ -574,8 +649,9 @@ const CheckRow = ({ check, last, onFixed }) => {
 									padding: '7px 14px',
 									fontSize: '12.5px',
 									fontWeight: 600,
-									cursor: fixing ? 'default' : 'pointer',
-									opacity: fixing ? 0.6 : 1,
+									cursor:
+										fixing || busy ? 'default' : 'pointer',
+									opacity: fixing || busy ? 0.6 : 1,
 								}}
 							>
 								{fixing
@@ -587,22 +663,125 @@ const CheckRow = ({ check, last, onFixed }) => {
 					)}
 				</div>
 			)}
+			{confirming && (
+				<div
+					style={{
+						background: '#f9fafb',
+						border: '1px solid #eef0f4',
+						borderRadius: '8px',
+						padding: '10px 12px',
+						margin: '0 0 12px 0',
+					}}
+				>
+					{/* The help text sits under the whole row, not inside the
+					    Input, so the row's bottom edge is the input's and the
+					    buttons line up with it at any width. */}
+					<div
+						style={{
+							display: 'flex',
+							alignItems: 'flex-end',
+							gap: '10px',
+							flexWrap: 'wrap',
+						}}
+					>
+						<Input
+							label={__('Reason (optional)', 'thinkrank')}
+							aria-describedby={`tr-ignore-help-${check.id}`}
+							value={reason}
+							maxLength={200}
+							onChange={(event) => setReason(event.target.value)}
+							placeholder={__(
+								'e.g. We do not publish llms.txt',
+								'thinkrank'
+							)}
+							className="tr-flex-1"
+							style={{ minWidth: '220px' }}
+							disabled={saving}
+						/>
+						<div
+							style={{
+								display: 'flex',
+								alignItems: 'center',
+								gap: '6px',
+							}}
+						>
+							<button
+								type="button"
+								onClick={() => changeIgnored(true)}
+								disabled={ignoreLocked}
+								style={{
+									background: '#4451FF',
+									color: '#fff',
+									border: 'none',
+									borderRadius: '8px',
+									// Same 40px as the Reason input beside it.
+									height: '40px',
+									boxSizing: 'border-box',
+									padding: '0 14px',
+									fontSize: '12.5px',
+									fontWeight: 600,
+									cursor: ignoreLocked
+										? 'default'
+										: 'pointer',
+									opacity: ignoreLocked ? 0.6 : 1,
+									whiteSpace: 'nowrap',
+								}}
+							>
+								{saving
+									? __('Saving…', 'thinkrank')
+									: __("Don't count this check", 'thinkrank')}
+							</button>
+							<button
+								type="button"
+								onClick={() => {
+									setConfirming(false);
+									setReason('');
+								}}
+								disabled={saving}
+								style={textButtonStyle(saving)}
+							>
+								{__('Cancel', 'thinkrank')}
+							</button>
+						</div>
+					</div>
+					<p
+						id={`tr-ignore-help-${check.id}`}
+						className="tr-text-xs tr-text-tertiary"
+						style={{ margin: '6px 0 0' }}
+					>
+						{__(
+							'An ignored check stays listed but no longer counts towards your score.',
+							'thinkrank'
+						)}
+					</p>
+				</div>
+			)}
 		</div>
 	);
 };
 
 // ── Category tabs (full view) ─────────────────────────
 
+// Whether a category has any check that counts. One whose checks are all
+// ignored or not applicable has no score to show, rather than a red 0.
+const isScored = (category) =>
+	(category.passed || 0) + (category.warning || 0) + (category.failed || 0) >
+	0;
+
 // Worst status in a category → the color of its tab indicator dot.
 const categoryDotColor = (category) => {
 	if (category.failed > 0) return STATUS_STYLES.failed.fg;
 	if (category.warning > 0) return STATUS_STYLES.warning.fg;
+	if (!isScored(category)) return '#9ca3af';
 	return STATUS_STYLES.passed.fg;
 };
 
-const CategoryTabs = ({ categories, onFixed }) => {
+const CategoryTabs = ({ categories, onFix, onIgnore, busy }) => {
 	const [activeId, setActiveId] = useState(categories[0]?.id);
 	const active = categories.find((c) => c.id === activeId) || categories[0];
+	// Ignored checks sit in their own group under the ones that count.
+	const counted = active.checks.filter((check) => !check.ignored);
+	const ignored = active.checks.filter((check) => check.ignored);
 
 	return (
 		<div style={{ marginTop: '20px' }}>
@@ -660,10 +839,12 @@ const CategoryTabs = ({ categories, onFixed }) => {
 								style={{
 									fontSize: '11px',
 									fontWeight: 700,
-									color: scoreColor(cat.score),
+									color: isScored(cat)
+										? scoreColor(cat.score)
+										: '#9ca3af',
 								}}
 							>
-								{cat.score}
+								{isScored(cat) ? cat.score : '–'}
 							</span>
 						</button>
 					);
@@ -672,14 +853,61 @@ const CategoryTabs = ({ categories, onFixed }) => {
 
 			{/* Active panel */}
 			<div role="tabpanel">
-				{active.checks.map((check, i) => (
+				{counted.map((check, i) => (
 					<CheckRow
 						key={check.id || i}
 						check={check}
-						last={i === active.checks.length - 1}
-						onFixed={onFixed}
+						last={i === counted.length - 1}
+						onFix={onFix}
+						onIgnore={onIgnore}
+						busy={busy}
 					/>
 				))}
+				{ignored.length > 0 && (
+					<div style={{ marginTop: counted.length ? '8px' : 0 }}>
+						<div
+							style={{
+								fontSize: '12px',
+								fontWeight: 700,
+								color: '#6b7280',
+								textTransform: 'uppercase',
+								letterSpacing: '0.04em',
+								padding: '12px 0 0',
+								borderTop: counted.length
+									? '1px solid #eef0f4'
+									: 'none',
+							}}
+						>
+							{sprintf(
+								/* translators: %d: number of ignored checks. */
+								__('Ignored (%d)', 'thinkrank'),
+								ignored.length
+							)}
+						</div>
+						<div
+							style={{
+								fontSize: '12px',
+								color: '#6b7280',
+								marginTop: '2px',
+							}}
+						>
+							{__(
+								'These checks still run but do not count towards your score.',
+								'thinkrank'
+							)}
+						</div>
+						{ignored.map((check, i) => (
+							<CheckRow
+								key={check.id || i}
+								check={check}
+								last={i === ignored.length - 1}
+								onFix={onFix}
+								onIgnore={onIgnore}
+								busy={busy}
+							/>
+						))}
+					</div>
+				)}
 			</div>
 		</div>
 	);
@@ -695,6 +923,27 @@ const SiteHealthAudit = ({ onRefresh, compact = true }) => {
 	const [isRefreshing, setIsRefreshing] = useState(false);
 	const [error, setError] = useState(false);
 	const [data, setData] = useState(null);
+	// One change to the analysis at a time (review on #1591). An ignore, an
+	// include, a fix and Re-analyze each answer with the whole analysis, so two
+	// in flight could land out of order and the older one would undo the newer
+	// on screen. Each runs, and applies its answer, inside runExclusive(); the
+	// ref refuses a second call in the same tick, before the state re-renders.
+	const mutationInFlight = useRef(false);
+	const [mutationPending, setMutationPending] = useState(false);
+
+	const runExclusive = async (work) => {
+		if (mutationInFlight.current) {
+			return false;
+		}
+		mutationInFlight.current = true;
+		setMutationPending(true);
+		try {
+			return await work();
+		} finally {
+			mutationInFlight.current = false;
+			setMutationPending(false);
+		}
+	};
 
 	useEffect(() => {
 		let cancelled = false;
@@ -737,19 +986,32 @@ const SiteHealthAudit = ({ onRefresh, compact = true }) => {
 		};
 	}, []);
 
-	const handleReanalyze = async () => {
-		if (isRefreshing) return;
-		setIsRefreshing(true);
-		setError(false);
-		try {
-			const res = await apiFetch({
-				path: '/thinkrank/v1/seo-analyzer/run',
-				method: 'POST',
-			});
-			setData(res?.data || null);
-			if (res?.data) {
-				notify.success(__('Site analysis complete.', 'thinkrank'));
-			} else {
+	const handleReanalyze = () =>
+		runExclusive(async () => {
+			setIsRefreshing(true);
+			setError(false);
+			try {
+				const res = await apiFetch({
+					path: '/thinkrank/v1/seo-analyzer/run',
+					method: 'POST',
+				});
+				setData(res?.data || null);
+				if (res?.data) {
+					notify.success(__('Site analysis complete.', 'thinkrank'));
+				} else {
+					setError(true);
+					notify.error(
+						__(
+							'We could not run the site analysis right now. Please try again.',
+							'thinkrank'
+						)
+					);
+				}
+				// Keep the rest of the dashboard in sync with any settings it caches.
+				if (typeof onRefresh === 'function') {
+					await onRefresh();
+				}
+			} catch (e) {
 				setError(true);
 				notify.error(
 					__(
@@ -757,23 +1019,75 @@ const SiteHealthAudit = ({ onRefresh, compact = true }) => {
 						'thinkrank'
 					)
 				);
+			} finally {
+				setIsRefreshing(false);
 			}
-			// Keep the rest of the dashboard in sync with any settings it caches.
-			if (typeof onRefresh === 'function') {
-				await onRefresh();
+		});
+
+	// Apply a check's automatic fix. The answer carries a freshly re-run
+	// analysis, so the score and the row update together.
+	const handleFix = (checkId) =>
+		runExclusive(async () => {
+			try {
+				const res = await apiFetch({
+					path: '/thinkrank/v1/seo-analyzer/fix',
+					method: 'POST',
+					data: { check_id: checkId },
+				});
+				if (!res.success) {
+					throw new Error(res.message);
+				}
+				notify.success(res.message || __('Fixed.', 'thinkrank'));
+				if (res.data?.analysis) {
+					setData(res.data.analysis);
+				}
+			} catch (err) {
+				notify.error(
+					err.message || __('Could not apply this fix.', 'thinkrank')
+				);
 			}
-		} catch (e) {
-			setError(true);
-			notify.error(
-				__(
-					'We could not run the site analysis right now. Please try again.',
-					'thinkrank'
-				)
-			);
-		} finally {
-			setIsRefreshing(false);
-		}
-	};
+		});
+
+	// Ignore a check, or count it again (#1289). Resolves true when saved, so
+	// the row can close its form only on success.
+	const handleIgnore = (checkId, ignore, reason) =>
+		runExclusive(async () => {
+			try {
+				const res = await apiFetch({
+					path: '/thinkrank/v1/seo-analyzer/ignore',
+					method: 'POST',
+					data: { check_id: checkId, ignore, reason },
+				});
+				if (!res?.success) {
+					throw new Error(res?.message);
+				}
+				if (res.data?.analysis) {
+					setData(res.data.analysis);
+				}
+				notify.success(
+					res.message ||
+						(ignore
+							? __(
+									'This check no longer counts towards your score.',
+									'thinkrank'
+								)
+							: __(
+									'This check counts towards your score again.',
+									'thinkrank'
+								))
+				);
+				return true;
+			} catch (err) {
+				notify.error(
+					err?.message ||
+						__(
+							'Could not update this check. Please try again.',
+							'thinkrank'
+						)
+				);
+				return false;
+			}
+		});
 
 	const summaryText = useMemo(() => {
 		if (!data?.summary) return '';
@@ -782,22 +1096,32 @@ const SiteHealthAudit = ({ onRefresh, compact = true }) => {
 			warning = 0,
 			failed = 0,
 			not_applicable: notScored = 0,
+			ignored = 0,
 		} = data.summary;
-		const text = sprintf(
+		let text = sprintf(
 			/* translators: 1: passed count, 2: warning count, 3: failed count. */
 			__('%1$d passed · %2$d warnings · %3$d failed', 'thinkrank'),
 			passed,
 			warning,
 			failed
 		);
-		return notScored > 0
-			? sprintf(
-					/* translators: 1: the passed/warnings/failed counts, 2: checks not scored. */
-					__('%1$s · %2$d not scored', 'thinkrank'),
-					text,
-					notScored
-				)
-			: text;
+		if (notScored > 0) {
+			text = sprintf(
+				/* translators: 1: the passed/warnings/failed counts, 2: checks not scored. */
+				__('%1$s · %2$d not scored', 'thinkrank'),
+				text,
+				notScored
+			);
+		}
+		if (ignored > 0) {
+			text = sprintf(
+				/* translators: 1: the counts so far, 2: checks the site owner chose not to count. */
+				__('%1$s · %2$d ignored', 'thinkrank'),
+				text,
+				ignored
+			);
+		}
+		return text;
 	}, [data]);
 
 	const detailsHref = getPageUrl('essential-seo', DETAILS_PARAMS);
@@ -886,7 +1210,7 @@ const SiteHealthAudit = ({ onRefresh, compact = true }) => {
 					<button
 						type="button"
 						onClick={handleReanalyze}
-						disabled={isRefreshing}
+						disabled={isRefreshing || mutationPending}
 						style={{
 							display: 'inline-flex',
 							alignItems: 'center',
@@ -970,7 +1294,9 @@ const SiteHealthAudit = ({ onRefresh, compact = true }) => {
 						data.categories.length > 0 && (
 							<CategoryTabs
 								categories={data.categories}
-								onFixed={setData}
+								onFix={handleFix}
+								onIgnore={handleIgnore}
+								busy={mutationPending}
 							/>
 						)}
 

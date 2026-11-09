@@ -55,6 +55,16 @@ abstract class Abstract_Plugin_Exporter {
     protected string $meta_key_prefix;
 
     /**
+     * Post meta keys outside the prefix that the source plugin also owns,
+     * such as a WooCommerce add-on's product identifiers. A post carrying only
+     * one of them is still exported, and so is every product variation, which
+     * keeps its own identifiers.
+     *
+     * @var string[]
+     */
+    protected array $extra_post_meta_keys = [];
+
+    /**
      * WordPress option keys used by the source plugin for settings
      *
      * @var array
@@ -648,6 +658,10 @@ abstract class Abstract_Plugin_Exporter {
 
         $offset = ($page - 1) * $this->chunk_size;
         $post_types = $this->get_exportable_post_types();
+        $extra_keys = $this->extra_post_meta_keys;
+        if (!empty($extra_keys) && post_type_exists('product_variation')) {
+            $post_types[] = 'product_variation';
+        }
 
         // Defensive: a site with no viewable post types has nothing to export.
         if (empty($post_types)) {
@@ -655,6 +669,9 @@ abstract class Abstract_Plugin_Exporter {
         }
 
         $placeholders = implode(', ', array_fill(0, count($post_types), '%s'));
+        $key_clause = empty($extra_keys)
+            ? 'pm.meta_key LIKE %s'
+            : '(pm.meta_key LIKE %s OR pm.meta_key IN (' . implode(', ', array_fill(0, count($extra_keys), '%s')) . '))';
 
         // Restrict to publicly-viewable post types so WordPress-internal objects
         // (oembed_cache, revisions, nav menu items, block/template CPTs, …) never
@@ -666,12 +683,13 @@ abstract class Abstract_Plugin_Exporter {
             "SELECT DISTINCT pm.post_id
              FROM {$wpdb->postmeta} pm
              INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-             WHERE pm.meta_key LIKE %s
+             WHERE {$key_clause}
              AND p.post_type IN ({$placeholders})
              ORDER BY pm.post_id ASC
              LIMIT %d OFFSET %d",
             array_merge(
                 [$wpdb->esc_like($this->meta_key_prefix) . '%'],
+                $extra_keys,
                 $post_types,
                 [$this->chunk_size, $offset]
             )
@@ -783,14 +801,20 @@ abstract class Abstract_Plugin_Exporter {
     protected function get_all_plugin_meta(int $post_id): array {
         global $wpdb;
 
+        $extra_keys = $this->extra_post_meta_keys;
+        $key_clause = empty($extra_keys)
+            ? 'meta_key LIKE %s'
+            : '(meta_key LIKE %s OR meta_key IN (' . implode(', ', array_fill(0, count($extra_keys), '%s')) . '))';
+
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- the clause holds only placeholders, and every value is a replacement.
         $results = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key LIKE %s",
-                $post_id,
-                $wpdb->esc_like($this->meta_key_prefix) . '%'
+                "SELECT meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND {$key_clause}",
+                array_merge([$post_id, $wpdb->esc_like($this->meta_key_prefix) . '%'], $extra_keys)
             ),
             ARRAY_A
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
 
         $meta = [];
         foreach ($results as $row) {

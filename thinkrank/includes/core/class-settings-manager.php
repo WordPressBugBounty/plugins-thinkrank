@@ -129,7 +129,8 @@ class Settings_Manager {
             'keys' => [
                 'show_welcome_message',
                 'dashboard_widgets',
-                'editor_panel_position'
+                'editor_panel_position',
+                'classic_launcher_position'
             ]
         ],
         'basic_integrations' => [

@@ -398,7 +398,14 @@ class Ai_Referral_Beacon {
             return self::result(false, 429);
         }
 
-        $this->tracker->record_referral($platform, $path);
+        // The path is the caller's word, Referer included. A page that does
+        // not exist is still a visit from that platform, but it is counted
+        // without a landing page, so nobody can plant rows in the top pages
+        // or grow the table one made-up path at a time (#1545). A page that
+        // does exist is counted under its own canonical path, without a page
+        // number, so case, encoding and `/page/N/` variants of it add no rows
+        // either. Checked after the limiters, which bound the lookups it costs.
+        $this->tracker->record_referral($platform, self::public_landing_path($path));
 
         /**
          * Fires when the browser reports an AI referral that PHP did not see
@@ -506,6 +513,183 @@ class Ai_Referral_Beacon {
         }
 
         return substr($path, 0, 191);
+    }
+
+    /**
+     * Whether a landing path is a public page on this site.
+     *
+     * @since 2.21.2
+     *
+     * @param string $path Landing path, from landing_path().
+     * @return bool
+     */
+    public static function is_public_path(string $path): bool {
+        return '' !== self::public_landing_path($path);
+    }
+
+    /**
+     * The canonical landing path a reported path stands for, or '' when it is
+     * not a public page on this site.
+     *
+     * Public is the front page, or the canonical link of a published post of
+     * a public type, a term of a public taxonomy, or a public post type's
+     * archive. A trailing `/page/N/`, `/comment-page-N/` or single-post `/N/`
+     * page number is allowed. Each candidate is found by the path's last
+     * segment and kept only when its own link has this path, so the check
+     * follows whatever permalink structure and link filters the site has.
+     *
+     * The path returned is the matched page's own: the home path or the path
+     * of its link, never the reported spelling and never a page number. Any
+     * number, letter case or percent-encoding a caller sends therefore lands
+     * on the same row as the page itself, so the stored landing pages stay
+     * bounded by the site's real pages (#1545). A route allowed only by the
+     * filter below has no link to take a path from and keeps the reported one.
+     *
+     * @since 2.21.2
+     *
+     * @param string $path Landing path, from landing_path().
+     * @return string
+     */
+    public static function public_landing_path(string $path): string {
+        $home     = trailingslashit((string) wp_parse_url(home_url('/'), PHP_URL_PATH));
+        $home_key = self::path_key($home);
+        $want     = self::path_key($path);
+
+        $found = '';
+
+        if (str_starts_with($want . '/', $home_key . '/')) {
+            foreach (self::path_candidates($want) as $candidate) {
+                $found = $home_key === $candidate ? $home : self::object_path($candidate);
+                if ('' !== $found) {
+                    break;
+                }
+            }
+        }
+
+        /**
+         * Filters whether a landing path reported by the AI referral beacon
+         * is a public page.
+         *
+         * A path that is not is still counted for its platform, but without
+         * a landing page. Return true for a route of your own that the
+         * built-in check does not know.
+         *
+         * @since 2.21.2
+         *
+         * @param bool   $public Whether the path resolved.
+         * @param string $path   Landing path.
+         */
+        if (!(bool) apply_filters('thinkrank_ai_referral_beacon_path_is_public', '' !== $found, $path)) {
+            return '';
+        }
+
+        return '' !== $found ? $found : $path;
+    }
+
+    /**
+     * A path as compared: decoded, lower-case, no trailing slash ('' for '/').
+     *
+     * @param string $path Path.
+     * @return string
+     */
+    private static function path_key(string $path): string {
+        return untrailingslashit(mb_strtolower(rawurldecode($path)));
+    }
+
+    /**
+     * The path, then the path without a trailing page number.
+     *
+     * @param string $key Path key.
+     * @return string[]
+     */
+    private static function path_candidates(string $key): array {
+        $base = isset($GLOBALS['wp_rewrite']->pagination_base) && is_string($GLOBALS['wp_rewrite']->pagination_base)
+            ? $GLOBALS['wp_rewrite']->pagination_base
+            : 'page';
+
+        $paged = (string) preg_replace('#/(?:' . preg_quote($base, '#') . '/\d+|comment-page-\d+|\d+)$#', '', $key);
+
+        return array_values(array_unique([$key, $paged]));
+    }
+
+    /**
+     * The path of the published post, term or post type archive whose link
+     * is the given path, or ''.
+     *
+     * @param string $key Path key, not the front page.
+     * @return string The link's own path.
+     */
+    private static function object_path(string $key): string {
+        $slug = substr((string) strrchr($key, '/'), 1);
+        if ('' === $slug) {
+            return '';
+        }
+
+        $post_types = array_values(get_post_types(['public' => true]));
+        $slug_key   = sanitize_title($slug);
+
+        if ([] !== $post_types && '' !== $slug_key) {
+            $ids = get_posts([
+                'name'             => $slug_key,
+                'post_type'        => $post_types,
+                'post_status'      => 'publish',
+                'numberposts'      => 10,
+                'fields'           => 'ids',
+                'no_found_rows'    => true,
+                'suppress_filters' => false,
+            ]);
+
+            foreach ((array) $ids as $id) {
+                $found = self::link_path($key, get_permalink($id));
+                if ('' !== $found) {
+                    return $found;
+                }
+            }
+        }
+
+        $taxonomies = array_values(get_taxonomies(['public' => true]));
+
+        if ([] !== $taxonomies && '' !== $slug_key) {
+            $terms = get_terms([
+                'taxonomy'   => $taxonomies,
+                'slug'       => $slug_key,
+                'hide_empty' => false,
+                'number'     => 10,
+            ]);
+
+            foreach (is_array($terms) ? $terms : [] as $term) {
+                $found = self::link_path($key, get_term_link($term));
+                if ('' !== $found) {
+                    return $found;
+                }
+            }
+        }
+
+        foreach (get_post_types(['public' => true, 'has_archive' => true]) as $type) {
+            $found = self::link_path($key, get_post_type_archive_link($type));
+            if ('' !== $found) {
+                return $found;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * A link's path when it is the given path key, else ''.
+     *
+     * @param string $key  Path key.
+     * @param mixed  $link URL, false or a WP_Error.
+     * @return string
+     */
+    private static function link_path(string $key, $link): string {
+        if (!is_string($link) || '' === $link) {
+            return '';
+        }
+
+        $path = wp_parse_url($link, PHP_URL_PATH);
+
+        return is_string($path) && self::path_key($path) === $key ? $path : '';
     }
 
     /**

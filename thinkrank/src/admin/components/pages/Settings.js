@@ -155,6 +155,27 @@ const IconMigration = () => (
 	</svg>
 );
 
+// Edit-screen layout mark (main column + sidebar) for the Editor hero, in the
+// same line-icon style as the other heroes.
+const IconEditorLayout = () => (
+	<svg
+		width="22"
+		height="22"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		strokeWidth="2"
+		strokeLinecap="round"
+		strokeLinejoin="round"
+		aria-hidden="true"
+	>
+		<rect x="3" y="4" width="18" height="16" rx="2" />
+		<line x1="15" y1="4" x2="15" y2="20" />
+		<line x1="6" y1="9" x2="12" y2="9" />
+		<line x1="6" y1="13" x2="12" y2="13" />
+	</svg>
+);
+
 // Database mark for the Data Management hero, drawn in the same line-icon
 // style as the Migration Tools hero.
 const IconDatabase = () => (
@@ -382,6 +403,8 @@ const GeminiIcon = () => (
 // saves independently (per-tab Save), so switching tabs never loses edits.
 const SETTINGS_TABS = [
 	{ id: 'ai-provider', label: __('AI Provider', 'thinkrank') },
+	// How ThinkRank sits on the post edit screen (#985).
+	{ id: 'editor', label: __('Editor', 'thinkrank') },
 	{ id: 'data-management', label: __('Data Management', 'thinkrank') },
 	// Sits before Migration Tools: this one is about ThinkRank's own data
 	// leaving and coming back, and it is always available. Migration Tools is
@@ -390,6 +413,33 @@ const SETTINGS_TABS = [
 	{ id: 'migration-tools', label: __('Migration Tools', 'thinkrank') },
 ];
 const VALID_SETTINGS_TABS = SETTINGS_TABS.map((t) => t.id);
+
+// Where the classic edit screen shows the ThinkRank launcher (#985). Values
+// match Settings::CLASSIC_LAUNCHER_POSITIONS; 'both' is the stored default.
+const DEFAULT_CLASSIC_LAUNCHER = 'both';
+const CLASSIC_LAUNCHER_OPTIONS = [
+	{
+		value: 'both',
+		label: __('Main column and sidebar', 'thinkrank'),
+	},
+	{ value: 'main', label: __('Main column only', 'thinkrank') },
+	{ value: 'sidebar', label: __('Sidebar only', 'thinkrank') },
+];
+const CLASSIC_LAUNCHER_VALUES = CLASSIC_LAUNCHER_OPTIONS.map((o) => o.value);
+const CLASSIC_LAUNCHER_HINTS = {
+	both: __(
+		'The ThinkRank SEO box in the main column and the ThinkRank box in the sidebar both open the panel.',
+		'thinkrank'
+	),
+	main: __(
+		'Only the ThinkRank SEO box in the main column is shown.',
+		'thinkrank'
+	),
+	sidebar: __(
+		'The ThinkRank SEO box in the main column is hidden, and the sidebar box shows the SEO score.',
+		'thinkrank'
+	),
+};
 
 // Every provider the settings response carries a key for.
 const AI_PROVIDER_IDS = [
@@ -507,6 +557,11 @@ const Settings = () => {
 	// Data Management saves on its own Save button, independent of the AI
 	// Provider tab's `isSaving`.
 	const [isSavingData, setIsSavingData] = useState(false);
+	// Editor tab: one select that saves on change, like the switches.
+	const [classicLauncher, setClassicLauncher] = useState(
+		DEFAULT_CLASSIC_LAUNCHER
+	);
+	const [isSavingLauncher, setIsSavingLauncher] = useState(false);
 
 	// AI spend controls (#448). The pause switch saves on flip, the two limits
 	// share their own Save button, and neither path goes through `handleSave`
@@ -968,6 +1023,14 @@ const Settings = () => {
 				// false, same as Migration Tools. Truthy check because the API
 				// may return '1'/'' strings rather than real booleans.
 				setEnableImportExport(!!settings.enable_import_export);
+				// Absent (an older payload) or unknown means the default.
+				setClassicLauncher(
+					CLASSIC_LAUNCHER_VALUES.includes(
+						settings.classic_launcher_position
+					)
+						? settings.classic_launcher_position
+						: DEFAULT_CLASSIC_LAUNCHER
+				);
 
 				// AI spend controls. Both limits are plain integers where 0
 				// means "no limit", so `|| 0` is the right fallback for a
@@ -1123,6 +1186,44 @@ const Settings = () => {
 			);
 		} finally {
 			setIsSavingMigration(false);
+		}
+	};
+
+	// Same instant-save shape as the switches: show the choice, persist it,
+	// and put the last saved value back if the request fails.
+	const handleClassicLauncherChange = async (next) => {
+		const previous = classicLauncher;
+		if (next === previous) {
+			return;
+		}
+		setClassicLauncher(next);
+		setIsSavingLauncher(true);
+		setNotice(null);
+		try {
+			const response = await apiFetch({
+				path: '/thinkrank/v1/settings',
+				method: 'POST',
+				data: { classic_launcher_position: next },
+			});
+			if (!response?.success) {
+				throw new Error(
+					__('Failed to save the launcher setting.', 'thinkrank')
+				);
+			}
+			notify.success(
+				__(
+					'Launcher setting saved. It applies the next time an edit screen loads.',
+					'thinkrank'
+				)
+			);
+		} catch (e) {
+			setClassicLauncher(previous);
+			notify.error(
+				e?.message ||
+					__('Failed to save the launcher setting.', 'thinkrank')
+			);
+		} finally {
+			setIsSavingLauncher(false);
 		}
 	};
 
@@ -2672,6 +2773,54 @@ const Settings = () => {
 						providerKeyDocs={providerKeyDocs}
 					/>
 				</div>
+			</TabPanel>
+
+			{/* Editor tab */}
+			<TabPanel tabId="editor" activeTab={activeTab}>
+				{/* Same hero shape as Data Management and Migration Tools:
+				    icon badge, title, description, and the control below a
+				    divider. Saves on change. */}
+				<Card padding={false} className="tr-overflow-hidden">
+					<div className="tr-flex tr-items-start tr-gap-4 tr-p-6">
+						<span className="tr-flex tr-items-center tr-justify-center tr-w-11 tr-h-11 tr-rounded-xl tr-bg-brand-bg tr-text-brand tr-shrink-0">
+							<IconEditorLayout />
+						</span>
+						<div className="tr-flex-1 tr-min-w-0">
+							<h2 className="tr-m-0 tr-text-base tr-font-semibold tr-text-primary">
+								{__('Classic edit screen', 'thinkrank')}
+							</h2>
+							<p className="tr-mt-1 tr-mb-0 tr-text-sm tr-text-secondary tr-max-w-2xl">
+								{__(
+									'Choose where the button that opens ThinkRank SEO shows on the classic edit screen, used by the Classic Editor and by post types without the block editor. The block editor is not affected.',
+									'thinkrank'
+								)}
+							</p>
+						</div>
+					</div>
+
+					<div className="tr-border-t tr-border-secondary tr-p-6">
+						<div className="tr-max-w-md">
+							<Select
+								id="thinkrank-classic-launcher-position"
+								label={__('Show the launcher in', 'thinkrank')}
+								value={classicLauncher}
+								options={CLASSIC_LAUNCHER_OPTIONS}
+								onChange={(e) =>
+									handleClassicLauncherChange(e.target.value)
+								}
+								disabled={isSavingLauncher}
+								description={
+									CLASSIC_LAUNCHER_HINTS[classicLauncher]
+								}
+							/>
+							{isSavingLauncher && (
+								<span className="tr-block tr-mt-2 tr-text-xs tr-text-tertiary">
+									{__('Saving…', 'thinkrank')}
+								</span>
+							)}
+						</div>
+					</div>
+				</Card>
 			</TabPanel>
 
 			{/* Data Management tab */}

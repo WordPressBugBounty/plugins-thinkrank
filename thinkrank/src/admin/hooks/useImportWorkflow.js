@@ -247,6 +247,8 @@ const useImportWorkflow = (plugin, initialSnapshot = null) => {
 				const rejectedSample = [];
 				let totalRejected = 0;
 				let schemaTotals = EMPTY_SCHEMA_TOTALS;
+				// Settings the admin still has to act on, by key (#1560).
+				let settingsNotices = [];
 				const unrestoredTypes = [];
 
 				for (
@@ -317,6 +319,16 @@ const useImportWorkflow = (plugin, initialSnapshot = null) => {
 						});
 						// Schema left behind or staged in the editor (#1286).
 						schemaTotals = addSchemaResult(schemaTotals, result);
+						(result.settings_notices || []).forEach((notice) => {
+							if (
+								notice?.message &&
+								!settingsNotices.some(
+									(seen) => seen.key === notice.key
+								)
+							) {
+								settingsNotices = [...settingsNotices, notice];
+							}
+						});
 
 						const percentage = Math.min(
 							Math.round(
@@ -344,6 +356,7 @@ const useImportWorkflow = (plugin, initialSnapshot = null) => {
 							rejected: totalRejected,
 							rejectedSample: [...rejectedSample],
 							schema: schemaTotals,
+							settingsNotices,
 							percentage,
 						});
 					}

@@ -12,6 +12,13 @@
  *   sets a write argument) gets one row with the redacted arguments and,
  *   where the write has a read counterpart, the before/after of the keys it
  *   changed. See Mcp_Audit_Snapshot for how that is captured.
+ * - A write tool that answered with a plan instead of writing (the first,
+ *   unconfirmed call of update-post-content or update-post-slug) is stored
+ *   as kind `plan`, without snapshots or Revert, so it is not counted as a
+ *   change and the row of the confirmed call stays the one that changed
+ *   the post. A confirmed call sent again after its edit was saved, which
+ *   answers `already_applied`, is stored as kind `repeat` the same way, so a
+ *   client retry does not count the edit twice.
  * - A refused call (scope, read-only credential, failed permission check)
  *   gets one row with result `denied`, read or write.
  * - Reads are counted, not logged: one row per client per day whose `calls`
@@ -202,11 +209,19 @@ final class Mcp_Audit {
 		$result = $run();
 
 		try {
-			$status = self::is_denial( $result ) ? 'denied' : ( is_wp_error( $result ) ? 'error' : 'ok' );
-			$row    = self::base_row( 'write', $status, $tool, $args, $started, $result );
+			$status  = self::is_denial( $result ) ? 'denied' : ( is_wp_error( $result ) ? 'error' : 'ok' );
+			$kind      = 'ok' === $status ? self::unchanged_kind( $result ) : null;
+			$unchanged = null !== $kind;
+			$row       = self::base_row( $kind ?? 'write', $status, $tool, $args, $started, $result );
+
+			// A plan or a repeat wrote nothing, so there is nothing to compare
+			// or undo.
+			if ( $unchanged ) {
+				$before = null;
+			}
 
 			$after = null;
-			if ( 'ok' === $status && null !== $plan ) {
+			if ( 'ok' === $status && ! $unchanged && null !== $plan ) {
 				if ( 'counterpart' === $plan['strategy'] ) {
 					$after = Mcp_Audit_Snapshot::project( self::run( $plan['get'], $plan['get_args'] ), $plan );
 				} elseif ( 'changes' === $plan['strategy'] ) {
@@ -230,6 +245,7 @@ final class Mcp_Audit {
 			$row['after_json']  = $after_json;
 			$row['meta']        = null !== $plan ? (string) wp_json_encode( $plan ) : null;
 			$row['revertable']  = ( 'ok' === $status
+				&& ! $unchanged
 				&& null !== $plan
 				&& null !== $before_json
 				&& null !== $after_json
@@ -339,7 +355,7 @@ final class Mcp_Audit {
 	/**
 	 * Fields every row carries.
 	 *
-	 * @param string $kind    write | read | revert.
+	 * @param string $kind    write | plan | repeat | read | revert.
 	 * @param string $status  ok | error | denied.
 	 * @param string $tool    Bare tool name.
 	 * @param array  $args    Arguments.
@@ -365,6 +381,38 @@ final class Mcp_Audit {
 			'ip'            => self::client_ip(),
 			'message'       => is_wp_error( $result ) ? substr( (string) $result->get_error_message(), 0, 255 ) : '',
 		];
+	}
+
+	/**
+	 * The kind of a successful write call that changed nothing, if it did not.
+	 *
+	 * update-post-content and update-post-slug, called without a
+	 * confirmation_token, return `status: planned` and `changed: false`: a
+	 * `plan`. A confirmed call sent again after its edit was saved (a client
+	 * retrying because the first answer was lost) answers `status: applied`,
+	 * `already_applied: true` and `changed: false`: a `repeat`. Neither is a
+	 * change, so neither is stored as a `write`, and the row of the confirmed
+	 * call stays the one entry for the edit.
+	 *
+	 * @since 2.21.2
+	 *
+	 * @param mixed $result Result.
+	 * @return string|null `plan`, `repeat`, or null for a call that wrote.
+	 */
+	private static function unchanged_kind( $result ): ?string {
+		if ( ! is_array( $result ) || false !== ( $result['changed'] ?? null ) ) {
+			return null;
+		}
+
+		if ( 'planned' === ( $result['status'] ?? null ) ) {
+			return 'plan';
+		}
+
+		if ( 'applied' === ( $result['status'] ?? null ) && true === ( $result['already_applied'] ?? null ) ) {
+			return 'repeat';
+		}
+
+		return null;
 	}
 
 	/**

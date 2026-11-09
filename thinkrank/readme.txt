@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.21.1
+Stable tag: 2.21.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -263,6 +263,20 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.21.2 =
+Release Date: 2026-11-09
+
+- New: Ignore a Site SEO Audit check that does not apply, so it no longer counts toward the score
+- New: Turn off all structured data on a single post from the SEO panel
+- New: AI can write image captions and descriptions along with the alt text
+- New: Choose where the classic edit screen shows the ThinkRank launcher
+- New: Sitemaps list TranslatePress translations with hreflang alternates
+- New: Usage Breakdown shows token and cost totals for the selected period
+- Improved: SEO analysis counts the text in ACF fields
+- Improved: Imports keep Rank Math IndexNow running and carry WooCommerce identifiers from more plugins
+- Improved: AI assistants respect a post open in the editor, and the MCP log marks plans and repeats
+- Improved: Security Enhancement
+
 = 2.21.1 =
 Release Date: 2026-11-05
 
@@ -319,26 +333,12 @@ Release Date: 2026-10-28
 - Fixed: Title formats and author archive templates drop variables they cannot fill
 - Fixed: Minor robots.txt, llms.txt, SEO score and MCP issues
 
-= 2.19.0 =
-Release Date: 2026-10-27
-
-- New: Bulk SEO templates take price, SKU, stock and custom field variables, previewed on real items
-- New: Business hours can have more than one opening range a day, such as a lunch break
-- New: A Help drawer shows the documentation for the screen you are on
-- New: SureCart support, with ThinkRank's title, Open Graph and Product schema on product pages
-- New: Connect opencode, or any other MCP client, to your site
-- Improved: Breadcrumb and hero texts translate per language with WPML and Polylang
-- Improved: IndexNow pauses on staging copies and hidden sites, and the settings screen says so
-- Improved: Content Type Matrix search matches slugs and keeps the content type column in view
-- Fixed: Your Site Identity Site Name now appears everywhere the site is named
-- Fixed: Minor schema, sitemap, robots.txt, image alt, title, WooCommerce sharing, MCP and AI issues
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.21.2 =
+Ignore audit checks that do not apply, turn off a post's structured data and let AI write image captions and descriptions. Sitemaps now list TranslatePress translations. Recommended for all sites.
+
 = 2.21.1 =
 The SEO Analyzer now grades indexable content of every post type, and the Setup Wizard keeps your old SEO plugin active after a partial migration. Also fixes sitemap dates and permalink redirects. Recommended for all sites.
-
-= 2.21.0 =
-Adds taxonomy and archive title templates, URL base removal with 301 redirects, live date variables and WooCommerce store settings. The shop page now uses its own SEO values. Recommended for all sites.

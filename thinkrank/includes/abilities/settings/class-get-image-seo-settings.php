@@ -32,6 +32,8 @@ class Get_Image_Seo_Settings extends Ability_Base {
 		'save_alt_to_media',
 		'auto_fill_on_upload',
 		'media_alt_overwrite',
+		'media_ai_caption',
+		'media_ai_description',
 	];
 
 	/**
@@ -98,6 +100,14 @@ class Get_Image_Seo_Settings extends Ability_Base {
 						'save_alt_to_media'   => [ 'type' => 'boolean' ],
 						'auto_fill_on_upload' => [ 'type' => 'boolean' ],
 						'media_alt_overwrite' => [ 'type' => 'boolean' ],
+						'media_ai_caption'    => [
+							'type'        => 'boolean',
+							'description' => __( 'With alt_source ai, Media Library fills (fill-missing-alt-text and fill on upload) also write the image caption from the same AI request. Empty captions only, unless media_alt_overwrite is on.', 'thinkrank' ),
+						],
+						'media_ai_description' => [
+							'type'        => 'boolean',
+							'description' => __( 'With alt_source ai, Media Library fills also write the image description from the same AI request. Empty descriptions only, unless media_alt_overwrite is on.', 'thinkrank' ),
+						],
 						'alt_source'          => [
 							'type'        => 'string',
 							'enum'        => Image_SEO_Manager::ALT_SOURCES,

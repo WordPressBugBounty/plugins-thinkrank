@@ -1940,8 +1940,7 @@ class SEOScoreCalculator {
             'slug' => $post->post_name,
             'post_modified' => $post->post_modified,
             'schema_present' => $this->detect_schema_present($content)
-                || $this->thinkrank_global_schema_active($post->post_type)
-                || $this->thinkrank_deployed_schema_active($post),
+                || $this->thinkrank_schema_active($post),
         ];
     }
 
@@ -2232,6 +2231,29 @@ class SEOScoreCalculator {
         return stripos($content, 'application/ld+json') !== false
             || stripos($content, 'itemscope') !== false
             || stripos($content, 'itemtype') !== false;
+    }
+
+    /**
+     * Whether ThinkRank emits structured data for this post at render time.
+     *
+     * Either from the post type's Global SEO schema or from a deployed row.
+     * Neither counts for a post that suppresses all of its schema (#821): its
+     * deployed rows stay active in the table while suppressed, and the type's
+     * schema is withheld too, so crediting them would hide the "add
+     * structured data" suggestion on a page that has none.
+     *
+     * @param \WP_Post $post Post being scored.
+     * @return bool
+     */
+    private function thinkrank_schema_active(\WP_Post $post): bool {
+        if (class_exists('ThinkRank\\Frontend\\Schema_Graph')
+            && \ThinkRank\Frontend\Schema_Graph::schema_suppressed_for_post((int) $post->ID)
+        ) {
+            return false;
+        }
+
+        return $this->thinkrank_global_schema_active((string) $post->post_type)
+            || $this->thinkrank_deployed_schema_active($post);
     }
 
     /**
@@ -2768,8 +2790,7 @@ class SEOScoreCalculator {
             'slug' => $post->post_name,
             'post_modified' => $post->post_modified,
             'schema_present' => $this->detect_schema_present($content)
-                || $this->thinkrank_global_schema_active($post->post_type)
-                || $this->thinkrank_deployed_schema_active($post),
+                || $this->thinkrank_schema_active($post),
         ];
     }
 

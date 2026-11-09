@@ -139,6 +139,10 @@ export const loadSchemaFormData = async (ctx) => {
 		});
 
 		if (response && response.meta) {
+			// Per-post schema suppression (#821). Handed over raw: the tab
+			// decides whether this answer is still the one to show.
+			ctx.onSuppressionLoaded?.(response.meta._thinkrank_schema_disabled);
+
 			const savedSchemaType =
 				response.meta._thinkrank_selected_schema_type;
 			// Only a type this post type's select offers. Any other (an
@@ -180,10 +184,34 @@ export const loadSchemaFormData = async (ctx) => {
 			} else {
 				ctx.setSavedSchemas([]);
 			}
+		} else {
+			ctx.onSuppressionLoadFailed?.();
 		}
 	} catch (error) {
-		// Failed to load schema form data - handled silently
+		// Failed to load schema form data. The suppression box cannot show a
+		// value it never read, so it stays unavailable with a retry.
+		ctx.onSuppressionLoadFailed?.();
 	}
+};
+
+/**
+ * Read this post's stored schema suppression on its own, for a retry after
+ * the tab's metadata load failed (#821).
+ *
+ * @param {Object} ctx Tab context.
+ * @return {Promise<*>} The raw `_thinkrank_schema_disabled` meta value.
+ */
+export const loadSchemaSuppression = async (ctx) => {
+	const response = await apiFetch({
+		path: `/wp/v2/${ctx.postRestBase}/${ctx.postId}?context=edit&_fields=meta`,
+		method: 'GET',
+	});
+
+	if (!response || !response.meta) {
+		throw new Error('No post meta in the response.');
+	}
+
+	return response.meta._thinkrank_schema_disabled;
 };
 
 /**
@@ -290,6 +318,46 @@ export const saveAdditionalSchemas = async (ctx, schemas) => {
 			__('Failed to save schema list.', 'thinkrank'),
 			'error'
 		);
+	}
+};
+
+/**
+ * Save this post's schema suppression setting.
+ *
+ * `'all'` emits nothing for the post, a list of @type names drops those nodes and
+ * leaves the rest of the graph standing, and `''` clears the setting (#821).
+ *
+ * The same meta pipeline the rest of this tab uses, so nothing new has to be
+ * registered or authorised. The post's deployed schema rows are left as they
+ * are: the front end withholds them while the setting is on, and they serve
+ * again once it is cleared.
+ *
+ * @param {Object}          ctx         Tab context.
+ * @param {string|string[]} suppression 'all', a list of @type names, or ''.
+ * @return {Promise<boolean>} Whether the write succeeded.
+ */
+export const saveSchemaSuppression = async (ctx, suppression) => {
+	if (!ctx.postId) return false;
+
+	const value = Array.isArray(suppression)
+		? JSON.stringify(suppression)
+		: String(suppression || '');
+
+	try {
+		await apiFetch({
+			path: `/wp/v2/${ctx.postRestBase}/${ctx.postId}`,
+			method: 'POST',
+			data: { meta: { _thinkrank_schema_disabled: value } },
+		});
+
+		return true;
+	} catch (error) {
+		ctx.showNotice?.(
+			__('Failed to save the schema output setting.', 'thinkrank'),
+			'error'
+		);
+
+		return false;
 	}
 };
 

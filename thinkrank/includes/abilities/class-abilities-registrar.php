@@ -20,6 +20,7 @@ use ThinkRank\Abilities\Content\Get_Term_Seo;
 use ThinkRank\Abilities\Content\List_Content_Items;
 use ThinkRank\Abilities\Content\Get_Duplicate_Snippets;
 use ThinkRank\Abilities\Content\Get_Thin_Content;
+use ThinkRank\Abilities\Content\Get_Thin_Content_Settings;
 use ThinkRank\Abilities\Content\List_Snippet_Issues;
 use ThinkRank\Abilities\Content\Update_Thin_Content_Settings;
 use ThinkRank\Abilities\Content\List_Content_Types;
@@ -92,6 +93,7 @@ use ThinkRank\Abilities\Analysis\Publish_Llms_Txt;
 use ThinkRank\Abilities\Analysis\Get_Seo_Analytics_Data;
 use ThinkRank\Abilities\Analysis\Get_Seo_Opportunities;
 use ThinkRank\Abilities\Analysis\Get_Seo_Score;
+use ThinkRank\Abilities\Analysis\Get_Seo_Score_History;
 use ThinkRank\Abilities\Analysis\Get_Seo_Analyzer;
 use ThinkRank\Abilities\Analysis\Run_Seo_Analyzer;
 use ThinkRank\Abilities\Analysis\Fix_Seo_Check;
@@ -366,6 +368,7 @@ class Abilities_Registrar {
 			new List_Snippet_Issues(),
 			new Get_Duplicate_Snippets(),
 			new Get_Thin_Content(),
+			new Get_Thin_Content_Settings(),
 			new Update_Thin_Content_Settings(),
 			new Get_Term_Seo(),
 			new Update_Term_Seo(),
@@ -429,6 +432,7 @@ class Abilities_Registrar {
 			new Get_Seo_Analytics_Data(),
 			new Get_Seo_Opportunities(),
 			new Get_Seo_Score(),
+			new Get_Seo_Score_History(),
 			new Get_Seo_Analyzer(),
 			new Run_Seo_Analyzer(),
 			new Fix_Seo_Check(),

@@ -192,7 +192,7 @@ class TOC_Element extends \Bricks\Element {
         // and kept publishing an ItemList with Schema switched off (#688).
         $schema = !empty($settings['outputSchema'])
             && (!class_exists('ThinkRank\\Frontend\\Schema_Graph')
-                || (\ThinkRank\Frontend\Schema_Graph::output_allowed()
+                || (\ThinkRank\Frontend\Schema_Graph::output_allowed_for_type('SiteNavigationElement')
                     // Only on the singular URL of the post it belongs to,
                     // never once per post on a listing (#1329).
                     && \ThinkRank\Frontend\Schema_Graph::renders_queried_post()));

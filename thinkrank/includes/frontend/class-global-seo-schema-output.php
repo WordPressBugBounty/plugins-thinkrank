@@ -137,6 +137,17 @@ class Global_SEO_Schema_Output {
             return $markup;
         }
 
+        // A product that suppresses its own Product schema, or all of it,
+        // emits no Product entity from ThinkRank, so WooCommerce's stays. Its
+        // deployed rows remain active while suppressed (#821), so without this
+        // the deployed-Product check below would strip WooCommerce's markup
+        // from a page ThinkRank says nothing about.
+        if (Schema_Graph::schema_suppressed_for_post($queried_id)
+            || in_array('product', Schema_Graph::suppressed_types_for_post($queried_id), true)
+        ) {
+            return $markup;
+        }
+
         $settings = $this->get_global_seo_settings($post_type);
         if (($settings['schema_type'] ?? '') === 'Product') {
             // ...but only if this class is actually going to emit it. The

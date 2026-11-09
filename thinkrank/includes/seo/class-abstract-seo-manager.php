@@ -800,6 +800,8 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
             'save_alt_to_media',
             'auto_fill_on_upload',
             'media_alt_overwrite',
+            'media_ai_caption',
+            'media_ai_description',
         ];
     }
 

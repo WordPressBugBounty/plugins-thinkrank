@@ -124,6 +124,7 @@ const PluginImportCard = ({ plugin, snapshot, onRefresh }) => {
 	const [dialog, setDialog] = useState(null);
 	const schemaLines = schemaNotImportedLines(progress.schema);
 	const schemaNote = schemaStagedNote(progress.schema);
+	const settingsNotices = progress.settingsNotices || [];
 
 	// Toast the export/migration outcome once, on the actual state transition —
 	// tracked via a ref so an initial SNAPSHOT_READY (from a pre-existing
@@ -508,6 +509,27 @@ const PluginImportCard = ({ plugin, snapshot, onRefresh }) => {
 											{schemaNote}
 										</p>
 									)}
+								</Alert>
+							</div>
+						)}
+					{!error &&
+						state === STATES.MIGRATION_COMPLETE &&
+						settingsNotices.length > 0 && (
+							<div className="tr-mt-3">
+								<Alert
+									variant="warning"
+									title={__(
+										'Some settings need your attention',
+										'thinkrank'
+									)}
+								>
+									<ul className="tr-m-0 tr-pl-5 tr-flex tr-flex-col tr-gap-0.5">
+										{settingsNotices.map((notice) => (
+											<li key={notice.key}>
+												{notice.message}
+											</li>
+										))}
+									</ul>
 								</Alert>
 							</div>
 						)}

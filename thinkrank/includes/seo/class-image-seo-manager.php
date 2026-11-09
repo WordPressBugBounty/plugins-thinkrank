@@ -125,6 +125,27 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
     private ?string $alt_source_override = null;
 
     /**
+     * Whether this fill may also write a caption and a description.
+     *
+     * True only inside a bulk fill and the fill on upload, the two runs the
+     * "Also write a caption/description" settings are for. A single-image
+     * alt text write (update-image-alt-text) stays alt text only (#1058).
+     *
+     * @since 2.21.2
+     * @var bool
+     */
+    private bool $ai_fields_active = false;
+
+    /**
+     * Caption/description choice for the current batch, overriding the
+     * saved settings, or null to use them.
+     *
+     * @since 2.21.2
+     * @var array<string,bool>|null
+     */
+    private ?array $ai_fields_override = null;
+
+    /**
      * Why the last explicit AI alt request wrote nothing, or '' when it did.
      *
      * @since 2.17.0
@@ -178,7 +199,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             'score' => 100
         ];
 
-        $boolean_fields = ['add_missing_alt', 'add_missing_title', 'save_alt_to_media', 'auto_fill_on_upload', 'media_alt_overwrite'];
+        $boolean_fields = ['add_missing_alt', 'add_missing_title', 'save_alt_to_media', 'auto_fill_on_upload', 'media_alt_overwrite', 'media_ai_caption', 'media_ai_description'];
         foreach ($boolean_fields as $field) {
             if (isset($settings[$field]) && !is_bool($settings[$field])) {
                 $validation['errors'][] = sprintf('%s must be a boolean value', $field);
@@ -251,6 +272,11 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             'save_alt_to_media' => false,
             'auto_fill_on_upload' => false,
             'media_alt_overwrite' => false,
+            // With the AI source, also write the attachment's caption and
+            // description from the same vision call. Off by default: a theme
+            // prints the caption on the page (#1058).
+            'media_ai_caption' => false,
+            'media_ai_description' => false,
             // 'template' rewrites the filename; 'ai' looks at the picture.
             // Defaults to template because AI costs the user money per image.
             'alt_source' => 'template',
@@ -314,6 +340,18 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
                 'type' => 'boolean',
                 'title' => __('Overwrite existing alt text', 'thinkrank'),
                 'description' => __('Replace alt text that is already set, instead of only filling images that are missing it.', 'thinkrank'),
+                'default' => false
+            ],
+            'media_ai_caption' => [
+                'type' => 'boolean',
+                'title' => __('Also write a caption', 'thinkrank'),
+                'description' => __('With the AI alt text source, also write the image caption from the same AI request. Captions already set are kept unless Overwrite is on.', 'thinkrank'),
+                'default' => false
+            ],
+            'media_ai_description' => [
+                'type' => 'boolean',
+                'title' => __('Also write a description', 'thinkrank'),
+                'description' => __('With the AI alt text source, also write the image description from the same AI request. Descriptions already set are kept unless Overwrite is on.', 'thinkrank'),
                 'default' => false
             ]
         ];
@@ -886,6 +924,11 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         }
 
         $existing = (string) get_post_meta($attachment_id, '_wp_attachment_image_alt', true);
+        $settings = $this->get_settings('site');
+
+        // Caption and description the AI source should write alongside the
+        // alt text, by the same "only fill empty unless overwrite" rule (#1058).
+        $fields = $this->ai_fields_due($attachment_id, $overwrite, $settings);
 
         // Non-destructive by default: never clobber hand-written alt text.
         // Stored filler such as "1" or "image" is not a description anyone
@@ -893,15 +936,17 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         // count it as missing. Skipping it left those images out of every
         // fill, so the one-click fix failed on each run (#1209).
         if (!$overwrite && trim($existing) !== '' && Alt_Text_Quality::is_descriptive($existing)) {
-            return false;
+            // The alt text stays; only an empty caption or description is
+            // left to write.
+            return [] !== $fields && $this->fill_ai_fields_only($attachment_id, $existing, $fields, $purge);
         }
 
-        $settings = $this->get_settings('site');
-        $format   = $settings['alt_format'] ?? '%filename%';
+        $format = $settings['alt_format'] ?? '%filename%';
 
         $value         = '';
         $from_ai       = false;
         $keep_existing = false;
+        $field_values  = [];
 
         // AI describes the picture; the template can only rewrite its filename.
         // With AI chosen by the saved setting, any failure falls back to the
@@ -914,7 +959,18 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         // overwrite on, that turned a failed AI call into lost hand-written
         // alt text (#1039).
         if (!$this->bulk_dry_run && 'ai' === $this->resolve_alt_source($settings)) {
-            $value   = $this->ai_alt_or_empty($this->generate_ai_alt($attachment_id));
+            if ([] === $fields) {
+                $value = $this->ai_alt_or_empty($this->generate_ai_alt($attachment_id));
+            } else {
+                $described = $this->generate_ai_fields($attachment_id, $fields);
+                $value     = $this->ai_alt_or_empty($described['alt']);
+
+                // A caption is written only with the alt text it came with:
+                // a reply whose alt text is filler is not trusted for the rest.
+                if ('' !== $value) {
+                    $field_values = array_intersect_key($described, array_flip($fields));
+                }
+            }
             $from_ai = '' !== $value;
 
             if ('' === $value) {
@@ -976,7 +1032,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
             return false;
         }
 
-        if ($existing === $value) {
+        if ($existing === $value && [] === $field_values) {
             // Already correct — treat as success without a redundant write.
             return true;
         }
@@ -990,20 +1046,271 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         }
 
         // WordPress unslashes meta values; the saved text must match its template/AI candidate.
-        $written = update_post_meta($attachment_id, '_wp_attachment_image_alt', wp_slash($value)) !== false;
+        $written = $existing === $value
+            || update_post_meta($attachment_id, '_wp_attachment_image_alt', wp_slash($value)) !== false;
 
-        if ($written) {
+        $field_changes = $written ? $this->write_ai_fields($attachment_id, $field_values, $overwrite) : [];
+
+        if ($written && ($existing !== $value || [] !== $field_changes)) {
             if (null !== $this->bulk_alt_changes) {
                 $this->bulk_alt_changes[$attachment_id] = [
                     'before' => $existing,
                     'after'  => $value,
                     'source' => $from_ai ? 'ai' : 'template',
-                ];
+                ] + $field_changes;
             }
             $this->record_alt_write($attachment_id, $purge);
         }
 
         return $written;
+    }
+
+    /**
+     * Caption and description fields this fill should ask the AI for.
+     *
+     * Only inside a bulk fill or the fill on upload, only with the AI source
+     * (a template has nothing to say about a caption, and a dry run makes no
+     * AI call), only for a field switched on, and only where the attachment's
+     * value is empty or overwrite is on (#1058).
+     *
+     * @since 2.21.2
+     * @param int                  $attachment_id Attachment being filled.
+     * @param bool                 $overwrite     Replace values already set.
+     * @param array<string, mixed> $settings      Saved image SEO settings.
+     * @return string[] Any of Vision_Client::FIELDS.
+     */
+    private function ai_fields_due(int $attachment_id, bool $overwrite, array $settings): array {
+        if (!$this->ai_fields_active || $this->bulk_dry_run || 'ai' !== $this->resolve_alt_source($settings)) {
+            return [];
+        }
+
+        $due = [];
+        foreach ($this->ai_fields_enabled($settings) as $field) {
+            if ($overwrite || '' === trim($this->attachment_field($attachment_id, $field))) {
+                $due[] = $field;
+            }
+        }
+
+        return $due;
+    }
+
+    /**
+     * The caption/description fields switched on for the current fill.
+     *
+     * @since 2.21.2
+     * @param array<string, mixed> $settings Saved image SEO settings.
+     * @return string[] Any of Vision_Client::FIELDS.
+     */
+    private function ai_fields_enabled(array $settings): array {
+        $enabled = [];
+        foreach (\ThinkRank\AI\Vision_Client::FIELDS as $field) {
+            $on = $this->ai_fields_override[$field] ?? !empty($settings['media_ai_' . $field]);
+            if ($on) {
+                $enabled[] = $field;
+            }
+        }
+
+        return $enabled;
+    }
+
+    /**
+     * An attachment's caption (`post_excerpt`) or description (`post_content`).
+     *
+     * @since 2.21.2
+     * @param int    $attachment_id Attachment ID.
+     * @param string $field         'caption' or 'description'.
+     * @return string
+     */
+    private function attachment_field(int $attachment_id, string $field): string {
+        return (string) get_post_field('caption' === $field ? 'post_excerpt' : 'post_content', $attachment_id, 'raw');
+    }
+
+    /**
+     * Write AI caption/description to an image whose alt text stays as it is.
+     *
+     * Still one AI request: the alt text in the reply is not written, but a
+     * reply whose alt text is filler is treated as a failed description, as
+     * on the main path.
+     *
+     * @since 2.21.2
+     * @param int      $attachment_id Attachment ID.
+     * @param string   $existing      The alt text it keeps.
+     * @param string[] $fields        Fields to write.
+     * @param bool     $purge         Clear caches that rendered the image.
+     * @return bool True when a caption or description was written.
+     */
+    private function fill_ai_fields_only(int $attachment_id, string $existing, array $fields, bool $purge): bool {
+        $described = $this->generate_ai_fields($attachment_id, $fields);
+
+        if ('' === $this->ai_alt_or_empty($described['alt'])) {
+            if ('' === $this->last_ai_alt_error) {
+                $this->last_ai_alt_error = __('The AI provider returned no description for this image.', 'thinkrank');
+            }
+            if (null !== $this->bulk_ai_errors) {
+                $this->bulk_ai_errors[$attachment_id] = $this->last_ai_alt_error;
+            }
+            if ('ai' === $this->alt_source_override && null !== $this->bulk_ai_failures) {
+                $this->bulk_ai_failures[$attachment_id] = $this->last_ai_alt_error;
+            }
+
+            return false;
+        }
+
+        $changes = $this->write_ai_fields($attachment_id, array_intersect_key($described, array_flip($fields)), false);
+        if ([] === $changes) {
+            return false;
+        }
+
+        if (null !== $this->bulk_alt_changes) {
+            $this->bulk_alt_changes[$attachment_id] = [
+                'before' => $existing,
+                'after'  => $existing,
+                'source' => 'ai',
+            ] + $changes;
+        }
+        $this->record_alt_write($attachment_id, $purge);
+
+        return true;
+    }
+
+    /**
+     * Save AI captions and descriptions onto the attachment post.
+     *
+     * Empty values are never written: a field the model left out stays as it
+     * was, and there is no template fallback, since a file name is not a
+     * caption (#1058).
+     *
+     * The fields were chosen before the provider request, which can take
+     * seconds, and a caption saved by an editor or another fill meanwhile
+     * must survive a fill that only fills empty fields (review on #1591).
+     * Without overwrite each field is therefore written by its own
+     * conditional UPDATE that matches only while the column is still empty,
+     * and only a row the database actually changed is reported. Nothing else
+     * on the post is written, so a field saved meanwhile cannot be put back
+     * from a stale copy either, as wp_update_post() would do by writing the
+     * whole post. With overwrite the whole post is saved as before, from the
+     * post as stored now rather than this request's cached copy.
+     *
+     * @since 2.21.2
+     * @param int                  $attachment_id Attachment ID.
+     * @param array<string,string> $values        Field => new value.
+     * @param bool                 $overwrite     Replace a field that is no longer empty.
+     * @return array<string, array{before: string, after: string}> What was written, by field.
+     */
+    private function write_ai_fields(int $attachment_id, array $values, bool $overwrite): array {
+        $columns = ['caption' => 'post_excerpt', 'description' => 'post_content'];
+        $wanted  = [];
+
+        clean_post_cache($attachment_id);
+
+        foreach ($values as $field => $value) {
+            if (!isset($columns[$field])) {
+                continue;
+            }
+            $value  = 'description' === $field ? sanitize_textarea_field((string) $value) : sanitize_text_field((string) $value);
+            $before = $this->attachment_field($attachment_id, $field);
+            if ('' === trim($value) || $before === $value || (!$overwrite && '' !== trim($before))) {
+                continue;
+            }
+            $wanted[$field] = ['before' => $before, 'after' => $value];
+        }
+
+        if ([] === $wanted) {
+            return [];
+        }
+
+        if ($overwrite) {
+            $postarr = ['ID' => $attachment_id];
+            foreach ($wanted as $field => $change) {
+                // wp_update_post() unslashes its input, as update_post_meta() does.
+                $postarr[$columns[$field]] = wp_slash($change['after']);
+            }
+            $result = wp_update_post($postarr, true);
+
+            return is_wp_error($result) || 0 === (int) $result ? [] : $wanted;
+        }
+
+        global $wpdb;
+        $changes = [];
+        foreach ($wanted as $field => $change) {
+            $column = $columns[$field];
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- an atomic fill-if-empty; the post cache is cleaned below.
+            $affected = $wpdb->query(
+                $wpdb->prepare(
+                    // The column comes from the fixed map above, never from input.
+                    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                    "UPDATE {$wpdb->posts} SET {$column} = %s WHERE ID = %d AND post_type = 'attachment' AND TRIM({$column}) = ''",
+                    $change['after'],
+                    $attachment_id
+                )
+            );
+            if (1 === (int) $affected) {
+                $changes[$field] = $change;
+            }
+        }
+
+        if ([] !== $changes) {
+            clean_post_cache($attachment_id);
+        }
+
+        return $changes;
+    }
+
+    /**
+     * Describe an attachment and write a caption and/or description with it.
+     *
+     * Never throws, like generate_ai_alt(): returns '' for every field and
+     * records the reason in $last_ai_alt_error.
+     *
+     * @since 2.21.2
+     * @param int      $attachment_id Attachment to describe.
+     * @param string[] $fields        Fields wanted besides alt text.
+     * @return array{alt: string, caption: string, description: string}
+     */
+    protected function generate_ai_fields(int $attachment_id, array $fields): array {
+        $empty = ['alt' => '', 'caption' => '', 'description' => ''];
+        $this->last_ai_alt_error = '';
+
+        try {
+            $vision = new \ThinkRank\AI\Vision_Client();
+
+            if (!$vision->is_available()) {
+                $this->last_ai_alt_error = __('AI alt text is on, but the selected AI provider cannot describe images or has no API key.', 'thinkrank');
+
+                return $empty;
+            }
+
+            $described = $vision->describe_attachment_fields($attachment_id, $this->ai_context($attachment_id), $fields);
+
+            return [
+                'alt'         => sanitize_text_field($described['alt']),
+                'caption'     => sanitize_text_field($described['caption']),
+                'description' => sanitize_textarea_field($described['description']),
+            ];
+        } catch (\Throwable $e) {
+            $this->last_ai_alt_error = wp_strip_all_tags($e->getMessage());
+
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging only when WP_DEBUG is enabled.
+                error_log(sprintf('[ThinkRank] AI image text failed for attachment %d: %s', $attachment_id, $this->last_ai_alt_error));
+            }
+
+            return $empty;
+        }
+    }
+
+    /**
+     * The parent post's title, which disambiguates images that are visually
+     * ambiguous on their own (a generic chart, a product on white).
+     *
+     * @since 2.21.2
+     * @param int $attachment_id Attachment ID.
+     * @return string
+     */
+    private function ai_context(int $attachment_id): string {
+        $parent = (int) get_post_field('post_parent', $attachment_id);
+
+        return $parent > 0 ? (string) get_the_title($parent) : '';
     }
 
     /**
@@ -1323,15 +1630,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
                 return '';
             }
 
-            // The parent post's title disambiguates images that are visually
-            // ambiguous on their own (a generic chart, a product on white).
-            $context = '';
-            $parent  = (int) get_post_field('post_parent', $attachment_id);
-            if ($parent > 0) {
-                $context = (string) get_the_title($parent);
-            }
-
-            $alt = sanitize_text_field($vision->describe_attachment($attachment_id, $context));
+            $alt = sanitize_text_field($vision->describe_attachment($attachment_id, $this->ai_context($attachment_id)));
             if ('' === $alt) {
                 $this->last_ai_alt_error = __('The AI returned no description for this image.', 'thinkrank');
             }
@@ -1363,6 +1662,9 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
      *     @type bool $dry_run   Work out the values and return them as `proposed`
      *                           without writing anything or calling the AI. Default false.
      *     @type string $alt_source 'template' or 'ai' for this batch only. Default: the saved setting.
+     *     @type bool   $caption     With the AI source, also write empty captions, for this batch
+     *                               only. Default: the saved `media_ai_caption`.
+     *     @type bool   $description Same for descriptions. Default: the saved `media_ai_description`.
      * }
      * @return array {
      *     @type int  $total       Total images in the library.
@@ -1386,10 +1688,14 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
      *                                  batch ran as a template batch.
      *     @type int    $ai_failed AI mode: images the vision call failed for in this batch.
      *     @type string $ai_error  AI mode: the first failure's message, or ''.
+     *     @type int    $captions_written     Only when the batch writes AI captions: how many it wrote.
+     *     @type int    $descriptions_written Only when the batch writes AI descriptions: how many it wrote.
      * }
      */
     public function bulk_fill_missing_alt(array $args = []): array {
-        $previous_override = $this->alt_source_override;
+        $previous_override        = $this->alt_source_override;
+        $previous_fields_active   = $this->ai_fields_active;
+        $previous_fields_override = $this->ai_fields_override;
         if (isset($args['alt_source']) && is_string($args['alt_source'])) {
             $this->alt_source_override = $this->normalize_alt_source($args['alt_source']);
         }
@@ -1397,10 +1703,19 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         if (!empty($args['dry_run'])) {
             $this->alt_source_override = 'template';
         }
+        $this->ai_fields_active = true;
+        foreach (\ThinkRank\AI\Vision_Client::FIELDS as $field) {
+            if (isset($args[$field]) && is_bool($args[$field])) {
+                $this->ai_fields_override           = $this->ai_fields_override ?? [];
+                $this->ai_fields_override[$field] = $args[$field];
+            }
+        }
         try {
             return $this->run_alt_batch($args);
         } finally {
             $this->alt_source_override = $previous_override;
+            $this->ai_fields_active    = $previous_fields_active;
+            $this->ai_fields_override  = $previous_fields_override;
         }
     }
 
@@ -1416,7 +1731,8 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         $overwrite = !empty($args['overwrite']);
         $dry_run   = !empty($args['dry_run']);
 
-        $source = $this->resolve_alt_source($this->get_settings('site'));
+        $settings = $this->get_settings('site');
+        $source   = $this->resolve_alt_source($settings);
 
         // AI chosen by the saved setting, with no provider that can read
         // images (or the AI budget paused): every image would fall back to
@@ -1516,6 +1832,12 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
                 if ($with_source) {
                     $row['source'] = $change['source'] ?? 'template';
                 }
+                // AI captions and descriptions written with the alt text (#1058).
+                foreach (\ThinkRank\AI\Vision_Client::FIELDS as $field) {
+                    if (isset($change[$field])) {
+                        $row[$field] = $change[$field];
+                    }
+                }
 
                 return $row;
             },
@@ -1555,9 +1877,18 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         // every image as updated while writing nothing. `updated` and
         // `skipped` have documented the write, not the return value, since
         // this method was added.
-        $updated = count($written);
+        // `updated` stays the count of alt text writes. An image whose alt
+        // text was kept while its caption or description was written is a
+        // write too, so it is not counted as skipped (#1058).
+        $changed = count($written);
+        $updated = max(0, $changed - count(array_filter(
+            $change_rows,
+            static function (array $row): bool {
+                return $row['before'] === $row['after'];
+            }
+        )));
         $failed  = count($failures);
-        $skipped = max(0, $processed - $updated - $failed);
+        $skipped = max(0, $processed - $changed - $failed);
 
         $next_offset = $offset + count($ids);
 
@@ -1570,7 +1901,7 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         $remaining = $exhausted ? 0 : max(0, $total - $next_offset);
 
         // Bulk writes change the Site SEO Analyzer's "images have alt text" coverage.
-        if ($updated > 0) {
+        if ($changed > 0) {
             $this->flush_analyzer_cache();
         }
 
@@ -1613,6 +1944,17 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
                 array_keys($failures),
                 array_values($failures)
             );
+        }
+
+        // Only a batch that writes AI captions or descriptions reports them.
+        $fields_on = 'ai' === $source ? $this->ai_fields_enabled($settings) : [];
+        foreach ($fields_on as $field) {
+            $report[$field === 'caption' ? 'captions_written' : 'descriptions_written'] = count(array_filter(
+                $change_rows,
+                static function (array $row) use ($field): bool {
+                    return isset($row[$field]);
+                }
+            ));
         }
 
         // Each AI image is a paid request. Report what this batch spent and
@@ -1672,7 +2014,14 @@ class Image_SEO_Manager extends Abstract_SEO_Manager {
         // No cache purge: this fires on add_attachment, so the file was created
         // seconds ago and no page can be displaying it yet. Skipping the lookup
         // keeps a bulk media import off two unindexed postmeta scans per file.
-        $this->fill_attachment_alt($attachment_id, !empty($settings['media_alt_overwrite']), false);
+        // The saved caption/description switches apply here too (#1058).
+        $previous               = $this->ai_fields_active;
+        $this->ai_fields_active = true;
+        try {
+            $this->fill_attachment_alt($attachment_id, !empty($settings['media_alt_overwrite']), false);
+        } finally {
+            $this->ai_fields_active = $previous;
+        }
     }
 
     /**

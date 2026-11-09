@@ -32,7 +32,7 @@ class Fill_Missing_Alt_Text extends Image_Alt_Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/fill-missing-alt-text';
 		$this->label       = __( 'Fill Missing ThinkRank Image Alt Text', 'thinkrank' );
-		$this->description = __( 'Fill in missing alt text across the Media Library, in batches, from the site\'s alt text template or, with alt_source ai, by having the AI provider describe each image. AI costs one paid request per image and batches are capped at 10: ask the user before using it, and watch ai_budget in the result to stop before the daily limit. An image the AI cannot describe is left as it was and listed in failures, never filled from the template. Template filler is skipped and counted in skipped_low_quality. With dry_run true, only template values are previewed: nothing is written and no AI request is made. An explicit AI source cannot use dry_run. Returns how many images were updated plus remaining and next_offset; call again with that offset until done is true. Images that already have alt text are skipped unless overwrite is true. Call list-images with alt_status \'missing\' first to see how many need filling, and update-image-alt-text when you want to write one image yourself. Caches holding the old alt text are cleared where possible; check cache.warnings and pass on anything the user still has to clear by hand.', 'thinkrank' );
+		$this->description = __( 'Fill in missing alt text across the Media Library, in batches, from the site\'s alt text template or, with alt_source ai, by having the AI provider describe each image. AI costs one paid request per image and batches are capped at 10: ask the user before using it, and watch ai_budget in the result to stop before the daily limit. An image the AI cannot describe is left as it was and listed in failures, never filled from the template. Template filler is skipped and counted in skipped_low_quality. With dry_run true, only template values are previewed: nothing is written and no AI request is made. An explicit AI source cannot use dry_run. Returns how many images were updated plus remaining and next_offset; call again with that offset until done is true. Images that already have alt text are skipped unless overwrite is true. Call list-images with alt_status \'missing\' first to see how many need filling, and update-image-alt-text when you want to write one image yourself. Caches holding the old alt text are cleared where possible; check cache.warnings and pass on anything the user still has to clear by hand. With the AI source, caption and description (default: the saved media_ai_caption and media_ai_description) also write each image\'s caption and description from the same request, filling only empty ones unless overwrite is true; they are reported per image in changes, and undo from the activity log restores alt text only.', 'thinkrank' );
 	}
 
 	/**
@@ -82,6 +82,14 @@ class Fill_Missing_Alt_Text extends Image_Alt_Ability_Base {
 					'description' => __( 'Preview template candidates only in proposed, without writing or making any AI request. This does not preview AI output; alt_source ai with dry_run is refused. Explicitly choose template on a later write and recheck the selection first. Default false.', 'thinkrank' ),
 				],
 				'alt_source' => $this->alt_source_property(),
+				'caption'    => [
+					'type'        => 'boolean',
+					'description' => __( 'AI source only: also write each image\'s caption from the same AI request, for this call. Themes print the caption on the page. Default: the saved media_ai_caption.', 'thinkrank' ),
+				],
+				'description' => [
+					'type'        => 'boolean',
+					'description' => __( 'AI source only: also write each image\'s description from the same AI request, for this call. Default: the saved media_ai_description.', 'thinkrank' ),
+				],
 			],
 		];
 	}
@@ -147,8 +155,18 @@ class Fill_Missing_Alt_Text extends Image_Alt_Ability_Base {
 								'enum'        => [ 'ai', 'template' ],
 								'description' => __( 'Only on an AI batch: where this value came from. template means the AI provider could not describe the image and the template was used instead.', 'thinkrank' ),
 							],
+							'caption'     => $this->field_change_property( __( 'Only when this image\'s caption was written: its caption before and after.', 'thinkrank' ) ),
+							'description' => $this->field_change_property( __( 'Only when this image\'s description was written: its description before and after.', 'thinkrank' ) ),
 						],
 					],
+				],
+				'captions_written' => [
+					'type'        => 'integer',
+					'description' => __( 'Only when the batch writes AI captions: how many it wrote.', 'thinkrank' ),
+				],
+				'descriptions_written' => [
+					'type'        => 'integer',
+					'description' => __( 'Only when the batch writes AI descriptions: how many it wrote.', 'thinkrank' ),
 				],
 				'template_fallbacks' => [
 					'type'        => 'integer',
@@ -206,7 +224,7 @@ class Fill_Missing_Alt_Text extends Image_Alt_Ability_Base {
 				$args[ $key ] = (int) $input[ $key ];
 			}
 		}
-		foreach ( [ 'overwrite', 'dry_run' ] as $key ) {
+		foreach ( [ 'overwrite', 'dry_run', 'caption', 'description' ] as $key ) {
 			if ( array_key_exists( $key, $input ) ) {
 				$args[ $key ] = (bool) $input[ $key ];
 			}
@@ -229,5 +247,22 @@ class Fill_Missing_Alt_Text extends Image_Alt_Ability_Base {
 		}
 
 		return $this->manager()->bulk_fill_missing_alt( $args );
+	}
+
+	/**
+	 * Schema for a caption or description change in `changes`.
+	 *
+	 * @param string $description What the property holds.
+	 * @return array<string, mixed>
+	 */
+	private function field_change_property( string $description ): array {
+		return [
+			'type'        => 'object',
+			'description' => $description,
+			'properties'  => [
+				'before' => [ 'type' => 'string' ],
+				'after'  => [ 'type' => 'string' ],
+			],
+		];
 	}
 }

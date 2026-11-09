@@ -210,6 +210,7 @@ class Squirrly_Exporter extends Abstract_Plugin_Exporter {
                     'twitter_description' => $this->convert_post_value($this->seo_string($seo, 'tw_description'), $post_id),
                     'twitter_image'       => $this->seo_string($seo, 'tw_media'),
                     'primary_category'    => (int) ($seo['primary_category'] ?? 0),
+                    'product_identifier'  => $this->extract_product_identifier($post_id),
                     'schema_type'         => $this->map_schema_type($seo['jsonld_types'] ?? null),
                     // Squirrly's `focuspage` marks a page as one of the site's
                     // important ones — the same concept Yoast calls cornerstone
@@ -407,9 +408,43 @@ class Squirrly_Exporter extends Abstract_Plugin_Exporter {
                     'sitemap_settings'            => $this->normalize_sitemap($opts),
                     'instant_indexing_post_types' => $indexnow_types,
                     'focus_pages'                 => $this->fetch_focus_pages(),
+                    // Squirrly SEO Pack → "No Category Base" and its
+                    // WooCommerce switches, kept in the same sq_options.
+                    'permalinks'                  => [
+                        'remove_category_base'            => !empty($opts['sq_nocategory']),
+                        'remove_product_base'             => !empty($opts['sq_noproduct_woocommerce']),
+                        'remove_product_category_base'    => !empty($opts['sq_nocategory_woocommerce']),
+                        'remove_product_category_parents' => !empty($opts['sq_noslug_woocommerce']),
+                    ],
                 ],
             ],
         ];
+    }
+
+    /**
+     * A product's identifier from Squirrly's WooCommerce fields.
+     *
+     * Squirrly keeps them in one `_sq_woocommerce` map (`gtin`, `ean`, `upc`,
+     * `isbn`, `mpn`, beside `brand`). ThinkRank Pro holds a single identifier,
+     * so a GTIN wins over an MPN, and an ISBN comes last.
+     *
+     * @param int $post_id Post ID
+     * @return string Identifier, or '' when the product has none.
+     */
+    private function extract_product_identifier(int $post_id): string {
+        $fields = get_post_meta($post_id, '_sq_woocommerce', true);
+        if (!is_array($fields)) {
+            return '';
+        }
+
+        foreach (['gtin', 'ean', 'upc', 'mpn', 'isbn'] as $field) {
+            $value = trim((string) ($fields[$field] ?? ''));
+            if ('' !== $value) {
+                return $value;
+            }
+        }
+
+        return '';
     }
 
     /**

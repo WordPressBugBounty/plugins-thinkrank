@@ -33,6 +33,9 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
         $this->plugin_name = 'Yoast SEO';
         $this->plugin_file = 'wordpress-seo/wp-seo.php';
         $this->meta_key_prefix = '_yoast_wpseo_';
+        // Yoast WooCommerce SEO stores identifiers outside the prefix: one map
+        // on the product, and one on each variation.
+        $this->extra_post_meta_keys = [self::IDENTIFIER_META_KEY, self::VARIATION_IDENTIFIER_META_KEY];
         $this->option_keys = ['wpseo', 'wpseo_titles', 'wpseo_social'];
     }
 
@@ -155,7 +158,9 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
                     'twitter_title'       => $this->convert_post_value($meta['_yoast_wpseo_twitter-title'] ?? '', $post_id),
                     'twitter_description' => $this->convert_post_value($meta['_yoast_wpseo_twitter-description'] ?? '', $post_id),
                     'twitter_image'       => $meta['_yoast_wpseo_twitter-image'] ?? '',
-                    'primary_category'    => (int) ($meta['_yoast_wpseo_primary_category'] ?? 0),
+                    // Yoast keeps one primary term per taxonomy; a product's is
+                    // _yoast_wpseo_primary_product_cat.
+                    'primary_category'    => (int) ($meta['_yoast_wpseo_primary_category'] ?? 0) ?: (int) ($meta['_yoast_wpseo_primary_product_cat'] ?? 0),
                     'product_identifier'  => $this->extract_product_identifier($meta),
                     'schema_type'         => $meta['_yoast_wpseo_schema_page_type'] ?? '',
                     // Yoast "cornerstone content" maps to ThinkRank pillar content.
@@ -1121,6 +1126,16 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
     }
 
     /**
+     * Yoast WooCommerce SEO's identifier map on a product.
+     */
+    private const IDENTIFIER_META_KEY = 'wpseo_global_identifier_values';
+
+    /**
+     * Yoast WooCommerce SEO's identifier map on a variation.
+     */
+    private const VARIATION_IDENTIFIER_META_KEY = 'wpseo_variation_global_identifiers_values';
+
+    /**
      * Extract post type archive templates from Yoast titles option
      * (`title-ptarchive-{type}`, `metadesc-ptarchive-{type}`), in the shape
      * migrate_archive_templates() consumes (#1425).
@@ -1202,7 +1217,7 @@ class Yoast_Exporter extends Abstract_Plugin_Exporter {
      * @return string Identifier, or '' when the product has none.
      */
     private function extract_product_identifier(array $meta): string {
-        $raw = $meta['wpseo_global_identifier_values'] ?? '';
+        $raw = $meta[self::IDENTIFIER_META_KEY] ?? ($meta[self::VARIATION_IDENTIFIER_META_KEY] ?? '');
 
         if (is_string($raw) && '' !== $raw) {
             $decoded = maybe_unserialize($raw);

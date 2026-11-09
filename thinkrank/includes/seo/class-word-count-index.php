@@ -73,8 +73,12 @@ class Word_Count_Index {
      * tag-to-space change in version 3 left the punctuation after an inline
      * tag ("<a>link</a>.") standing alone, where it was counted as a word, so
      * every version 3 entry is recounted once.
+     *
+     * Version 5 reads ACF text fields into the resolved content (#827), so a
+     * post whose copy lives in ACF had been counted without it, and every
+     * version 4 entry is recounted once.
      */
-    public const VERSION = 4;
+    public const VERSION = 5;
 
     /**
      * Short codes for the counting unit, as stored in an entry.
@@ -153,9 +157,9 @@ class Word_Count_Index {
     public function init(): void {
         add_action('save_post', [self::class, 'mark_post_stale'], 99, 1);
 
-        add_action('added_post_meta', [self::class, 'on_meta_change'], 10, 3);
-        add_action('updated_post_meta', [self::class, 'on_meta_change'], 10, 3);
-        add_action('deleted_post_meta', [self::class, 'on_meta_change'], 10, 3);
+        add_action('added_post_meta', [self::class, 'on_meta_change'], 10, 4);
+        add_action('updated_post_meta', [self::class, 'on_meta_change'], 10, 4);
+        add_action('deleted_post_meta', [self::class, 'on_meta_change'], 10, 4);
 
         // A post *leaving* the report is the case no other hook here covers.
         // Trashing, unpublishing or deleting one removes it from every query
@@ -206,15 +210,71 @@ class Word_Count_Index {
     /**
      * Post meta changed.
      *
-     * @param int|array $meta_id   Meta ID(s).
-     * @param int       $object_id Post ID.
-     * @param string    $meta_key  Meta key.
+     * @param int|array $meta_id    Meta ID(s).
+     * @param int       $object_id  Post ID.
+     * @param string    $meta_key   Meta key.
+     * @param mixed     $meta_value Meta value written or deleted.
      * @return void
      */
-    public static function on_meta_change($meta_id, $object_id, $meta_key): void {
-        if (in_array($meta_key, self::watched_meta(), true)) {
+    public static function on_meta_change($meta_id, $object_id, $meta_key, $meta_value = null): void {
+        if (in_array($meta_key, self::watched_meta(), true) || self::is_acf_meta($object_id, $meta_key, $meta_value)) {
             self::mark_post_stale($object_id);
         }
+    }
+
+    /**
+     * Whether a post meta write is an ACF field value, or the reference ACF
+     * keeps beside it.
+     *
+     * {@see Builder_Content::resolve()} reads ACF text fields into the count
+     * (#827), so an ACF value changing changes the count. ACF field names are
+     * chosen per site, so they cannot be listed in {@see watched_meta()}, and
+     * `update_field()` writes meta without saving the post, so `save_post`
+     * does not cover an import or an integration that only touches fields.
+     *
+     * ACF stores every value, at any depth (`sections_0_body`), next to a
+     * reference `_{name}` holding the field key, and that is what identifies
+     * it. A new value is written before its reference, so the value write
+     * finds no reference yet; the reference write that follows it carries the
+     * field key itself and is caught by that, the value now beside it. An
+     * update or delete of a value finds its reference still in place.
+     *
+     * Only asked while ACF is loaded, because only then does the resolver read
+     * fields. The reference lookup is answered from the post's meta cache.
+     *
+     * @param int|mixed $object_id  Post ID.
+     * @param mixed     $meta_key   Meta key.
+     * @param mixed     $meta_value Meta value written or deleted.
+     * @return bool
+     */
+    private static function is_acf_meta($object_id, $meta_key, $meta_value): bool {
+        if (!function_exists('get_field_objects') || !is_string($meta_key) || '' === $meta_key) {
+            return false;
+        }
+
+        if (self::META_KEY === $meta_key) {
+            return false;
+        }
+
+        // A reference only counts beside a value it describes: field keys are
+        // free text for fields registered in PHP or local JSON, so a value
+        // that merely starts with `field_` is not enough on its own.
+        if ('_' === $meta_key[0]) {
+            return self::is_acf_field_key($meta_value)
+                && '' !== get_post_meta((int) $object_id, substr($meta_key, 1), true);
+        }
+
+        return self::is_acf_field_key(get_post_meta((int) $object_id, '_' . $meta_key, true));
+    }
+
+    /**
+     * Whether a value is an ACF field key (`field_` followed by its ID).
+     *
+     * @param mixed $value Value.
+     * @return bool
+     */
+    private static function is_acf_field_key($value): bool {
+        return is_string($value) && 0 === strpos($value, 'field_') && strlen($value) > 6;
     }
 
     /**

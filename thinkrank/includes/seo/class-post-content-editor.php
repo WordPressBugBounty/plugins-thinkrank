@@ -35,6 +35,9 @@ if (!defined('ABSPATH')) {
  * - **A version, not a hope.** Every edit names the version it was planned
  *   against. Anything saved since, in wp-admin or by another agent, refuses
  *   the edit instead of being overwritten.
+ * - **Not under an open editor.** While another user has the post open, the
+ *   plan says who, and the write is refused unless the call overrides the
+ *   lock: that editor's next save would put their copy back over the edit.
  * - **Plan, then confirm.** The first call computes the result and its effect
  *   (words, headings, links, focus keyword placement, projected score) and
  *   writes nothing. It returns a confirmation bound to the site, the user, the
@@ -1013,6 +1016,110 @@ final class Post_Content_Editor {
         }
 
         return [];
+    }
+
+    /**
+     * Who else has this post open in the editor right now, if anyone.
+     *
+     * Core's own answer (wp_check_post_lock()): another user's `_edit_lock`
+     * refreshed within the lock window. That editor holds the post as it was
+     * when they opened it, so their next Update writes it back over anything
+     * the connector saved in between, and restore-post-content then refuses
+     * because the post changed after the edit. The function lives in wp-admin
+     * and is not loaded for REST requests, so it is loaded here.
+     *
+     * @param \WP_Post $post Post.
+     * @return array{user_id: int, user_name: string}|null
+     */
+    public static function edit_lock(\WP_Post $post): ?array {
+        if (!function_exists('wp_check_post_lock') && defined('ABSPATH') && is_readable(ABSPATH . 'wp-admin/includes/post.php')) {
+            require_once ABSPATH . 'wp-admin/includes/post.php';
+        }
+
+        if (!function_exists('wp_check_post_lock')) {
+            return null;
+        }
+
+        $user_id = (int) wp_check_post_lock($post);
+
+        if ($user_id <= 0) {
+            return null;
+        }
+
+        $user = get_userdata($user_id);
+
+        return [
+            'user_id'   => $user_id,
+            'user_name' => $user instanceof \WP_User ? (string) $user->display_name : '',
+        ];
+    }
+
+    /**
+     * The warning a plan carries while someone else has the post open.
+     *
+     * @param array{user_id: int, user_name: string} $lock Lock from edit_lock().
+     * @return string
+     */
+    public static function lock_warning(array $lock): string {
+        return sprintf(
+            /* translators: %s: display name of the user editing the post. */
+            __('%s has this post open in the editor right now. If they save it there, their copy can replace this change. Ask them to close the editor first; the change is refused while they have it open unless override_edit_lock is sent.', 'thinkrank'),
+            self::lock_holder($lock)
+        );
+    }
+
+    /**
+     * Whether a write may go ahead past the edit lock.
+     *
+     * Refuses while another user has the post open, unless the call says
+     * `override_edit_lock`; then the write goes ahead with a warning, because
+     * that editor can still save over it.
+     *
+     * @param \WP_Post             $post  Post as it is now.
+     * @param array<string, mixed> $input Ability input.
+     * @return string[]|\WP_Error Warnings for the answer, or the refusal.
+     */
+    public static function lock_guard(\WP_Post $post, array $input) {
+        $lock = self::edit_lock($post);
+
+        if (null === $lock) {
+            return [];
+        }
+
+        $holder = self::lock_holder($lock);
+
+        if (true !== ($input['override_edit_lock'] ?? false)) {
+            return new \WP_Error(
+                'thinkrank_post_locked',
+                sprintf(
+                    /* translators: %s: display name of the user editing the post. */
+                    __('%s has this post open in the editor, and their next save there can replace this change. Nothing was written. Ask them to close the editor and try again, or send override_edit_lock: true if the person agrees to go ahead anyway.', 'thinkrank'),
+                    $holder
+                ),
+                [
+                    'status'    => 409,
+                    'edit_lock' => $lock,
+                ]
+            );
+        }
+
+        return [
+            sprintf(
+                /* translators: %s: display name of the user editing the post. */
+                __('%s had this post open in the editor when the change was saved. If they save it there, their copy can replace this change.', 'thinkrank'),
+                $holder
+            ),
+        ];
+    }
+
+    /**
+     * What edit_lock()'s answer calls the user holding the lock.
+     *
+     * @param array{user_id: int, user_name: string} $lock Lock.
+     * @return string
+     */
+    private static function lock_holder(array $lock): string {
+        return '' !== $lock['user_name'] ? $lock['user_name'] : __('Another user', 'thinkrank');
     }
 
     /**

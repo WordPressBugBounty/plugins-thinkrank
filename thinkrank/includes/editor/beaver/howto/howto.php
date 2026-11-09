@@ -243,7 +243,7 @@ class ThinkRank_Beaver_Howto_Module extends FLBuilderModule {
         // Schema_Graph, so gating the graph never reached it and it kept
         // publishing with Schema switched off (#688).
         if (class_exists('ThinkRank\\Frontend\\Schema_Graph')
-            && !\ThinkRank\Frontend\Schema_Graph::output_allowed()) {
+            && !\ThinkRank\Frontend\Schema_Graph::output_allowed_for_type('HowTo')) {
             return;
         }
 

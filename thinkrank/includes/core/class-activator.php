@@ -84,8 +84,11 @@ class Activator {
                 // Using bin2hex(random_bytes(16)) as requested
                 $key = bin2hex(random_bytes(16));
 
-                // Save to options
-                $settings['api_key'] = $key;
+                // Save to options. Marked as ThinkRank's own placeholder, so a
+                // migration may replace it with the key the old plugin already
+                // had verified (#1559).
+                $settings['api_key']        = $key;
+                $settings['api_key_source'] = \ThinkRank\SEO\Instant_Indexing_Manager::KEY_SOURCE_GENERATED;
 
                 // Initialize default post types if not set
                 if (!isset($settings['auto_submit_post_types'])) {

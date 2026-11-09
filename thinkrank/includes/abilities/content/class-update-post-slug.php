@@ -42,7 +42,7 @@ class Update_Post_Slug extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-post-slug';
 		$this->label       = __( 'Update ThinkRank Post Slug', 'thinkrank' );
-		$this->description = __( 'Change the URL slug of a post. This changes a live address: on a published post the new URL is live as soon as the change is confirmed, and WordPress redirects the old URL to it. Published pages and other hierarchical content are refused, because WordPress does not redirect their old addresses (nor their child pages\'). Pass the slug get-post-content returned as expected_slug. Call once without confirmation_token: nothing changes, and the answer is the plan (old and new URL, whether the old URL redirects, whether each focus keyword is in the slug before and after) with a confirmation_token. Show it to the person and call again with the same slug and token only after they agree. WordPress may append a number to keep the slug unique; the plan shows the slug that will be stored. To undo, call again with the previous slug from the answer. Changing a slug can cost a page its existing search rankings for a while, so suggest it for new or low-traffic pages.', 'thinkrank' );
+		$this->description = __( 'Change the URL slug of a post. This changes a live address: on a published post the new URL is live as soon as the change is confirmed, and WordPress redirects the old URL to it. Published pages and other hierarchical content are refused, because WordPress does not redirect their old addresses (nor their child pages\'). Pass the slug get-post-content returned as expected_slug. Call once without confirmation_token: nothing changes, and the answer is the plan (old and new URL, whether the old URL redirects, whether each focus keyword is in the slug before and after) with a confirmation_token. Show it to the person and call again with the same slug and token only after they agree. While another user has the post open in the editor, the plan names them in edit_lock and the change is refused unless override_edit_lock is sent, because their next save there can put the old slug back. WordPress may append a number to keep the slug unique; the plan shows the slug that will be stored. To undo, call again with the previous slug from the answer. Changing a slug can cost a page its existing search rankings for a while, so suggest it for new or low-traffic pages.', 'thinkrank' );
 	}
 
 	/**
@@ -92,6 +92,11 @@ class Update_Post_Slug extends Ability_Base {
 					'type'        => 'string',
 					'pattern'     => Post_Content_Editor::TOKEN_PATTERN,
 					'description' => __( 'The confirmation_token from the plan, sent with the same slug only after the person agreed. Omit it to plan.', 'thinkrank' ),
+				],
+				'override_edit_lock' => [
+					'type'        => 'boolean',
+					'default'     => false,
+					'description' => __( 'Save even though another user has the post open in the editor (the plan\'s edit_lock). Their next save there can put the old slug back, so send it only when the person agreed to that.', 'thinkrank' ),
 				],
 			],
 		];
@@ -149,6 +154,14 @@ class Update_Post_Slug extends Ability_Base {
 				],
 				'confirmation_token'    => [ 'type' => 'string' ],
 				'confirmation_expires'  => [ 'type' => 'integer' ],
+				'edit_lock'             => [
+					'type'        => [ 'object', 'null' ],
+					'description' => __( 'The user who has the post open in the editor right now, or null. While set, the change is refused unless override_edit_lock is sent.', 'thinkrank' ),
+					'properties'  => [
+						'user_id'   => [ 'type' => 'integer' ],
+						'user_name' => [ 'type' => 'string' ],
+					],
+				],
 				'warnings'              => [
 					'type'  => 'array',
 					'items' => [ 'type' => 'string' ],
@@ -225,11 +238,13 @@ class Update_Post_Slug extends Ability_Base {
 
 		if ( '' === $token ) {
 			$confirmation = Post_Content_Editor::confirmation( 'slug', $post_id, self::before_hash( $post ), self::hash( $predicted ) );
-			$answer       = $this->answer( 'planned', $post, $current, $predicted, $requested, false, false, [] );
+			$lock         = Post_Content_Editor::edit_lock( $post );
+			$answer       = $this->answer( 'planned', $post, $current, $predicted, $requested, false, false, null === $lock ? [] : [ Post_Content_Editor::lock_warning( $lock ) ] );
 
 			return $answer + [
 				'confirmation_token'   => $confirmation['token'],
 				'confirmation_expires' => $confirmation['expires'],
+				'edit_lock'            => $lock,
 			];
 		}
 
@@ -239,6 +254,12 @@ class Update_Post_Slug extends Ability_Base {
 				__( 'This confirmation was issued for a different slug, or before the post last changed. Nothing was changed. Plan again and ask for agreement again.', 'thinkrank' ),
 				[ 'status' => 409 ]
 			);
+		}
+
+		$lock_warnings = Post_Content_Editor::lock_guard( $post, $input );
+
+		if ( is_wp_error( $lock_warnings ) ) {
+			return $lock_warnings;
 		}
 
 		$saved = wp_update_post(
@@ -261,7 +282,7 @@ class Update_Post_Slug extends Ability_Base {
 		$fresh  = get_post( $post_id );
 		$stored = $fresh instanceof \WP_Post ? (string) $fresh->post_name : $predicted;
 
-		$warnings = Post_Content_Editor::purge( $post_id );
+		$warnings = array_merge( $lock_warnings, Post_Content_Editor::purge( $post_id ) );
 
 		if ( $stored !== $predicted ) {
 			$warnings[] = __( 'WordPress stored a different slug from the plan. The answer shows the stored one.', 'thinkrank' );

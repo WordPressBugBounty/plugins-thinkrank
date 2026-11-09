@@ -303,6 +303,10 @@ class SEOPress_Exporter extends Abstract_Plugin_Exporter {
                         'remove_category_base'         => !empty($advanced['seopress_advanced_advanced_category_url']),
                         'remove_product_category_base' => !empty($advanced['seopress_advanced_advanced_product_cat_url']),
                     ],
+                    // PRO → WooCommerce → "Remove WooCommerce generator tag".
+                    'woocommerce_settings' => isset($pro['seopress_woocommerce_meta_generator'])
+                        ? ['remove_generator' => '1' === (string) $pro['seopress_woocommerce_meta_generator']]
+                        : [],
                     'post_type_settings' => $this->extract_seopress_post_type_settings($titles),
                     // Per-taxonomy and post type archive templates (#1425).
                     'taxonomy_settings'          => $this->extract_seopress_archive_templates($titles['seopress_titles_tax_titles'] ?? [], self::TERM_ARCHIVE_VARS),

@@ -115,9 +115,16 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * and authentication fields. `auth` is matched via `authoriz|authenticat|
      * (^|[_-])auth([_-]|$)` rather than a bare `auth` so legitimate `author_*`
      * keys (author_custom_robots, authors_sitemap, …) are NOT stripped.
+     *
+     * Google service-account material is matched too (#1561): the Instant
+     * Indexing plugin keeps the whole service-account JSON, private key
+     * included, in `json_key` as ONE string, so the recursive redactor can only
+     * drop it by its key. `private_key` / `client_email` cover the same JSON
+     * stored decoded. ThinkRank has no Google Indexing API, so nothing reads
+     * any of it.
      */
     private const SENSITIVE_KEY_PATTERN =
-        '/token|secret|credential|api_key|console_email|oauth|authoriz|authenticat|(^|[_-])auth([_-]|$)/i';
+        '/token|secret|credential|api_key|json_key|private_key|client_email|console_email|oauth|authoriz|authenticat|(^|[_-])auth([_-]|$)/i';
 
     /**
      * Upper bound on IndexNow history entries carried into the snapshot, so a
@@ -134,6 +141,10 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         $this->plugin_name = 'Rank Math';
         $this->plugin_file = 'seo-by-rank-math/rank-math.php';
         $this->meta_key_prefix = 'rank_math_';
+        // Rank Math Pro keeps the GTIN under a key with a leading underscore,
+        // on products and on each variation, which the prefix never matched:
+        // no store's identifiers were imported (#1477).
+        $this->extra_post_meta_keys = [self::GTIN_META_KEY];
         $this->option_keys = ['rank-math-options-general', 'rank-math-options-titles'];
     }
 
@@ -334,57 +345,6 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      */
     private const GTIN_META_KEY = '_rank_math_gtin_code';
 
-    /**
-     * Posts carrying Rank Math meta, plus products and variations carrying
-     * only a GTIN.
-     *
-     * The shared query matches the `rank_math_` prefix on viewable post types.
-     * The GTIN key starts with an underscore, and variations are not a
-     * viewable type, so a product whose only Rank Math data was its GTIN, and
-     * every variation's GTIN, were never visited (#1477).
-     *
-     * @param int $page Page number (1-indexed)
-     * @return array Post IDs
-     */
-    protected function get_post_ids_with_meta(int $page): array {
-        global $wpdb;
-
-        $offset = ($page - 1) * $this->chunk_size;
-        $post_types = $this->get_exportable_post_types();
-        if (post_type_exists('product_variation')) {
-            $post_types[] = 'product_variation';
-        }
-
-        if (empty($post_types)) {
-            return [];
-        }
-
-        $placeholders = implode(', ', array_fill(0, count($post_types), '%s'));
-
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- table names are $wpdb properties, and every value is a placeholder replacement.
-        $sql = $wpdb->prepare(
-            "SELECT DISTINCT pm.post_id
-             FROM {$wpdb->postmeta} pm
-             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-             WHERE (pm.meta_key LIKE %s OR pm.meta_key = %s)
-             AND p.post_type IN ({$placeholders})
-             ORDER BY pm.post_id ASC
-             LIMIT %d OFFSET %d",
-            array_merge(
-                [$wpdb->esc_like($this->meta_key_prefix) . '%', self::GTIN_META_KEY],
-                $post_types,
-                [$this->chunk_size, $offset]
-            )
-        );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- one-off migration read of another plugin's meta; $sql is prepared above.
-        $ids = $wpdb->get_col($sql);
-        $this->last_page_row_count = count($ids);
-
-        return $ids;
-    }
-
     protected function export_postmeta_page(int $page): array {
         $post_ids = $this->get_post_ids_with_meta($page);
 
@@ -396,14 +356,6 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         foreach ($post_ids as $post_id) {
             $post_id = (int) $post_id;
             $meta = $this->get_all_plugin_meta($post_id);
-
-            // Rank Math Pro keeps the GTIN under a key with a leading
-            // underscore, which the `rank_math_` prefix never matched: no
-            // store's identifiers were ever imported (#1477).
-            $gtin = (string) get_post_meta($post_id, self::GTIN_META_KEY, true);
-            if ('' !== $gtin) {
-                $meta[self::GTIN_META_KEY] = $gtin;
-            }
 
             if (empty($meta)) {
                 continue;
@@ -730,6 +682,11 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
                     // Past IndexNow submissions, so the Instant Indexing history
                     // is not blank after switching.
                     'instant_indexing_log'        => $this->extract_rm_indexnow_log(),
+                    // Whether the Instant Indexing plugin submits to Google's
+                    // Indexing API, which ThinkRank does not have. Presence
+                    // only: the service-account key never leaves Rank Math
+                    // (#1561, #1562).
+                    'google_indexing_api'         => $this->extract_rm_google_indexing_api(),
                     // News/Video sitemap post types (ThinkRank Pro Publisher Sitemaps).
                     'publisher_sitemaps'          => $this->extract_rm_publisher_sitemaps($sitemap),
                     // Role Manager: which roles hold which `rank_math_*`
@@ -2042,6 +1999,28 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         }
 
         return [];
+    }
+
+    /**
+     * Whether Rank Math's Instant Indexing plugin is set up to submit to the
+     * Google Indexing API: a service-account key is saved.
+     *
+     * Only the fact and the post types it covers are returned, never the key.
+     *
+     * @return array{configured: bool, post_types: string[]}|array{} Empty when not set up.
+     */
+    private function extract_rm_google_indexing_api(): array {
+        $settings = get_option('rank-math-options-instant-indexing', []);
+        if (!is_array($settings) || empty($settings['json_key'])) {
+            return [];
+        }
+
+        $types = $settings['post_types'] ?? [];
+
+        return [
+            'configured' => true,
+            'post_types' => is_array($types) ? array_values(array_map('strval', $types)) : [],
+        ];
     }
 
     /**

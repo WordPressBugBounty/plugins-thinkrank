@@ -1,11 +1,11 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { useState, useEffect } from '@wordpress/element';
+import { useState, useEffect, useRef } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { Alert, Button, SkeletonCard, EmptyState } from '../ui';
 import ModelBadge from '../shared/ModelBadge';
 import logger from '../../../shared/utils/logger';
 
-const UsageBreakdownTable = ({ records, isLoading }) => {
+const UsageBreakdownTable = ({ records, totals, periodLabel, isLoading }) => {
 	if (isLoading) {
 		return <SkeletonCard lines={6} />;
 	}
@@ -85,6 +85,36 @@ const UsageBreakdownTable = ({ records, isLoading }) => {
 						</tr>
 					))}
 				</tbody>
+				{/* Period totals, not page totals. The server sends these from
+				    its own whole-period query precisely because summing the
+				    rows above would produce a subtotal that changes as the
+				    reader pages, directly beneath a paginated table. The label
+				    names the period so the row cannot be read as a page
+				    subtotal. */}
+				{totals && (
+					<tfoot>
+						<tr className="tr-border-t-2 tr-border-secondary">
+							<td
+								colSpan={3}
+								className="tr-py-3 tr-px-4 tr-text-xs tr-font-semibold tr-text-tertiary tr-uppercase tr-tracking-wide"
+							>
+								{periodLabel
+									? sprintf(
+											/* translators: %s: the selected reporting period, e.g. "Last 30 days". */
+											__('Total (%s)', 'thinkrank'),
+											periodLabel
+										)
+									: __('Total', 'thinkrank')}
+							</td>
+							<td className="tr-py-3 tr-px-4 tr-text-right tr-font-mono tr-font-semibold tr-text-primary">
+								{totals.total_tokens.toLocaleString()}
+							</td>
+							<td className="tr-py-3 tr-px-4 tr-text-right tr-font-mono tr-font-semibold tr-text-primary">
+								{`$${totals.total_cost.toFixed(4)}`}
+							</td>
+						</tr>
+					</tfoot>
+				)}
 			</table>
 		</div>
 	);
@@ -140,38 +170,76 @@ const Pagination = ({ currentPage, totalPages, onPageChange, isLoading }) => {
 	);
 };
 
-const UsageBreakdown = ({ period = '30d', isActive = true }) => {
+const UsageBreakdown = ({
+	period = '30d',
+	periodLabel = '',
+	isActive = true,
+}) => {
 	const [currentPage, setCurrentPage] = useState(1);
 	const [perPage] = useState(20);
 	const [data, setData] = useState(null);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState(null);
 
+	// The period totals are the same on every page, so they are asked for
+	// once per period and reused while paging that period, rather than having
+	// the server total the whole period again. They are kept with the period
+	// they total, and reused only for that period (re-review on #1591).
+	const totalsFor = useRef({ period: null, totals: null });
+	// Only the newest request may set data, errors or loading: a period
+	// switched while an older page or period was loading must not be
+	// overwritten by that older answer.
+	const latestRequest = useRef(0);
+
 	const fetchUsageBreakdown = async (
 		selectedPeriod = period,
-		page = currentPage
+		page = currentPage,
+		freshTotals = false
 	) => {
+		const request = ++latestRequest.current;
+		const cached =
+			totalsFor.current.period === selectedPeriod
+				? totalsFor.current.totals
+				: null;
+		// A period load always re-totals; a page change reuses this period's.
+		const withTotals = freshTotals || !cached;
+
 		setIsLoading(true);
 		setError(null);
 
 		try {
 			const response = await apiFetch({
-				path: `/thinkrank/v1/analytics/usage?period=${selectedPeriod}&page=${page}&per_page=${perPage}`,
+				path: `/thinkrank/v1/analytics/usage?period=${selectedPeriod}&page=${page}&per_page=${perPage}${
+					withTotals ? '' : '&include_totals=false'
+				}`,
 				method: 'GET',
 			});
 
+			if (request !== latestRequest.current) {
+				return;
+			}
+
 			if (response.success) {
-				setData(response.data);
+				const totals = withTotals ? response.data?.totals : cached;
+				if (withTotals) {
+					totalsFor.current = { period: selectedPeriod, totals };
+				}
+				setData({ ...response.data, totals });
 			} else {
 				setError(
 					__('Failed to load usage breakdown data.', 'thinkrank')
 				);
 			}
 		} catch (err) {
+			if (request !== latestRequest.current) {
+				return;
+			}
 			logger.error('Usage breakdown fetch error:', err);
 			setError(__('Failed to load usage breakdown data.', 'thinkrank'));
 		} finally {
-			setIsLoading(false);
+			if (request === latestRequest.current) {
+				setIsLoading(false);
+			}
 		}
 	};
 
@@ -190,7 +258,10 @@ const UsageBreakdown = ({ period = '30d', isActive = true }) => {
 			return;
 		}
 		setCurrentPage(1);
-		fetchUsageBreakdown(period, 1);
+		// Another period's rows and totals must not stay on screen, labelled
+		// with this period, if this load fails.
+		setData(null);
+		fetchUsageBreakdown(period, 1, true);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isActive, period]);
 
@@ -210,6 +281,8 @@ const UsageBreakdown = ({ period = '30d', isActive = true }) => {
 
 			<UsageBreakdownTable
 				records={data?.usage_records || []}
+				totals={data?.totals}
+				periodLabel={periodLabel}
 				isLoading={isLoading}
 			/>
 
@@ -244,6 +317,25 @@ const UsageBreakdown = ({ period = '30d', isActive = true }) => {
 							data.pagination.page * data.pagination.per_page,
 							data.pagination.total_records
 						),
+						data.pagination.total_records
+					)}
+				</p>
+			)}
+
+			{/* Without this a site on a local model reads a total that
+			    silently omits most of its traffic: an uncosted row is not a
+			    free row, it is one we have no price for. */}
+			{data?.totals?.uncosted_records > 0 && (
+				<p className="tr-text-xs tr-text-tertiary tr-text-center tr-mt-1 tr-m-0">
+					{sprintf(
+						/* translators: 1: number of requests with no price data, 2: total number of requests in the period. */
+						_n(
+							'%1$d of %2$d request has no price data and is not included in this total. Add a per-1M-token rate for your custom endpoint to include it.',
+							'%1$d of %2$d requests have no price data and are not included in this total. Add a per-1M-token rate for your custom endpoint to include them.',
+							data.totals.uncosted_records,
+							'thinkrank'
+						),
+						data.totals.uncosted_records,
 						data.pagination.total_records
 					)}
 				</p>

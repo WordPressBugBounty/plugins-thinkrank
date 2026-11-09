@@ -34,7 +34,7 @@ class Restore_Post_Content extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/restore-post-content';
 		$this->label       = __( 'Restore ThinkRank Post Content', 'thinkrank' );
-		$this->description = __( 'Undo one update-post-content edit by putting back the body from the revision_id that edit returned. This changes a live page. Ask the person before restoring. Call get-post-content first and pass its version as expected_version. Refused when the post changed after the edit (newer work is never overwritten; restore older states from the Revisions screen in wp-admin), and for any revision the connector did not make. Only the body is restored; the title, slug, status and SEO fields are not touched. Returns a revision_id that undoes the restore.', 'thinkrank' );
+		$this->description = __( 'Undo one update-post-content edit by putting back the body from the revision_id that edit returned. This changes a live page. Ask the person before restoring. Call get-post-content first and pass its version as expected_version. Refused when the post changed after the edit (newer work is never overwritten; restore older states from the Revisions screen in wp-admin), and for any revision the connector did not make. Refused while another user has the post open in the editor (their next save there can replace the restored body) unless override_edit_lock is sent. Only the body is restored; the title, slug, status and SEO fields are not touched. Returns a revision_id that undoes the restore.', 'thinkrank' );
 	}
 
 	/**
@@ -78,6 +78,11 @@ class Restore_Post_Content extends Ability_Base {
 					'type'        => 'string',
 					'pattern'     => '^[a-f0-9]{64}$',
 					'description' => __( 'The version get-post-content returned just now.', 'thinkrank' ),
+				],
+				'override_edit_lock' => [
+					'type'        => 'boolean',
+					'default'     => false,
+					'description' => __( 'Restore even though another user has the post open in the editor (get-post-content\'s edit_lock). Their next save there can replace the restored body, so send it only when the person agreed to that.', 'thinkrank' ),
 				],
 			],
 		];
@@ -172,6 +177,12 @@ class Restore_Post_Content extends Ability_Base {
 		$stored   = Post_Content_Editor::stored_form( $post_id, $restored );
 		$after    = Post_Content_Editor::content_hash( $stored );
 
+		$lock_warnings = Post_Content_Editor::lock_guard( $post, $input );
+
+		if ( is_wp_error( $lock_warnings ) ) {
+			return $lock_warnings;
+		}
+
 		$revision_id = Post_Content_Editor::keep_revision( $post, $after );
 
 		if ( is_wp_error( $revision_id ) ) {
@@ -185,7 +196,7 @@ class Restore_Post_Content extends Ability_Base {
 		}
 
 		$as_planned = hash_equals( $after, Post_Content_Editor::content_hash( (string) $saved->post_content ) );
-		$warnings   = Post_Content_Editor::purge( $post_id );
+		$warnings   = array_merge( $lock_warnings, Post_Content_Editor::purge( $post_id ) );
 
 		if ( ! $as_planned ) {
 			Post_Content_Editor::mark_revision( $revision_id, Post_Content_Editor::content_hash( (string) $saved->post_content ) );

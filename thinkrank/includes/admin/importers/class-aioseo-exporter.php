@@ -360,11 +360,12 @@ class AIOSEO_Exporter extends Abstract_Plugin_Exporter {
         }
 
         $terms = json_decode((string) $row['primary_term'], true);
-        if (!is_array($terms) || empty($terms['category'])) {
+        if (!is_array($terms)) {
             return 0;
         }
 
-        return (int) $terms['category'];
+        // A product's primary term is under product_cat.
+        return (int) ($terms['category'] ?? 0) ?: (int) ($terms['product_cat'] ?? 0);
     }
 
     /**

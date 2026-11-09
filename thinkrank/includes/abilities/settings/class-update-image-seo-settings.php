@@ -32,6 +32,8 @@ class Update_Image_Seo_Settings extends Ability_Base {
 		'save_alt_to_media',
 		'auto_fill_on_upload',
 		'media_alt_overwrite',
+		'media_ai_caption',
+		'media_ai_description',
 	];
 
 	/**
@@ -48,7 +50,7 @@ class Update_Image_Seo_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-image-seo-settings';
 		$this->label       = __( 'Update ThinkRank Image SEO Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank image SEO settings, which control automatic alt/title injection, the token-based formats used to generate them, and whether generated alt text is persisted to the Media Library, and alt_source. Setting alt_source to ai makes every later alt text fill (fill-missing-alt-text, the analyzer fix, auto-fill on upload) send each image to the AI provider, which costs money per image: ask the user before switching it on, and check get-ai-budget. Switching to ai is refused while no AI provider that can read images is set up, or while AI is paused. Read the current values with get-image-seo-settings first; only the keys you pass are changed, and settings in the result is what was stored.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank image SEO settings, which control automatic alt/title injection, the token-based formats used to generate them, and whether generated alt text is persisted to the Media Library, and alt_source. Setting alt_source to ai makes every later alt text fill (fill-missing-alt-text, the analyzer fix, auto-fill on upload) send each image to the AI provider, which costs money per image: ask the user before switching it on, and check get-ai-budget. Switching to ai is refused while no AI provider that can read images is set up, or while AI is paused. media_ai_caption and media_ai_description make those AI fills also write the image caption and description; themes print the caption on the page, so ask the user first. Read the current values with get-image-seo-settings first; only the keys you pass are changed, and settings in the result is what was stored.', 'thinkrank' );
 	}
 
 	/**
@@ -94,6 +96,14 @@ class Update_Image_Seo_Settings extends Ability_Base {
 						'save_alt_to_media'   => [ 'type' => 'boolean' ],
 						'auto_fill_on_upload' => [ 'type' => 'boolean' ],
 						'media_alt_overwrite' => [ 'type' => 'boolean' ],
+						'media_ai_caption'    => [
+							'type'        => 'boolean',
+							'description' => __( 'With alt_source ai, Media Library fills (fill-missing-alt-text and fill on upload) also write the image caption from the same AI request. Empty captions only, unless media_alt_overwrite is on.', 'thinkrank' ),
+						],
+						'media_ai_description' => [
+							'type'        => 'boolean',
+							'description' => __( 'With alt_source ai, Media Library fills also write the image description from the same AI request. Empty descriptions only, unless media_alt_overwrite is on.', 'thinkrank' ),
+						],
 						'alt_source'          => [
 							'type'        => 'string',
 							'enum'        => Image_SEO_Manager::ALT_SOURCES,

@@ -128,6 +128,23 @@ class Multilingual_Manager {
         add_filter('thinkrank_sitemap_is_front_page', [$this, 'filter_sitemap_is_front_page'], 10, 2);
         add_filter('thinkrank_sitemap_homepage_page_id', [$this, 'filter_sitemap_homepage_page_id']);
 
+        if ($this->provider === 'translatepress') {
+            // TranslatePress keeps one post per piece of content, so its
+            // translated URLs reach the sitemap only as language versions of
+            // each entry (#1423).
+            add_filter('thinkrank_sitemap_entry_alternates', [$this, 'filter_sitemap_entry_alternates'], 10, 2);
+            // The most versions an entry can get, for the index promotion
+            // estimate, which only samples a few entries (#1460).
+            add_filter('thinkrank_sitemap_language_versions', [$this, 'filter_sitemap_language_versions']);
+
+            // Which languages are published, their slugs and the excluded
+            // paths all decide what the sitemap lists.
+            foreach (['trp_settings', 'trp_advanced_settings'] as $option) {
+                add_action('update_option_' . $option, [$this, 'queue_sitemap_rebuild'], 10, 0);
+                add_action('add_option_' . $option, [$this, 'queue_sitemap_rebuild'], 10, 0);
+            }
+        }
+
         if (!is_admin()) {
             // WPML prints at wp_head priority 1 and Polylang at 10, so run
             // after both: by then we know whether anything was printed.
@@ -605,27 +622,13 @@ class Multilingual_Manager {
      * @return array<int, array{code: string, locale: string, url: string, is_default: bool}>
      */
     private function get_translatepress_alternates(): array {
-        if (!class_exists('\TRP_Translate_Press')) {
+        $translatepress = $this->translatepress();
+        if ($translatepress === null) {
             return [];
         }
 
-        $trp = \TRP_Translate_Press::get_trp_instance();
-        if (!is_object($trp) || !method_exists($trp, 'get_component')) {
-            return [];
-        }
+        [$settings, $url_converter] = $translatepress;
 
-        $settings_component = $trp->get_component('settings');
-        $url_converter      = $trp->get_component('url_converter');
-
-        if (!is_object($settings_component)
-            || !is_object($url_converter)
-            || !method_exists($settings_component, 'get_settings')
-            || !method_exists($url_converter, 'get_url_for_language')
-        ) {
-            return [];
-        }
-
-        $settings  = (array) $settings_component->get_settings();
         $languages = $settings['publish-languages'] ?? [];
 
         if (!is_array($languages) || empty($languages)) {
@@ -680,6 +683,294 @@ class Multilingual_Manager {
         }
 
         return $out;
+    }
+
+    /**
+     * TranslatePress' settings and URL converter, or null when it is not
+     * running or no longer exposes them.
+     *
+     * TranslatePress has no public helper for "every published language and
+     * its URL", so both are read off its singleton.
+     *
+     * @return array{0: array<string, mixed>, 1: object}|null
+     */
+    private function translatepress(): ?array {
+        if (!class_exists('\TRP_Translate_Press')) {
+            return null;
+        }
+
+        $trp = \TRP_Translate_Press::get_trp_instance();
+        if (!is_object($trp) || !method_exists($trp, 'get_component')) {
+            return null;
+        }
+
+        $settings_component = $trp->get_component('settings');
+        $url_converter      = $trp->get_component('url_converter');
+
+        if (!is_object($settings_component)
+            || !is_object($url_converter)
+            || !method_exists($settings_component, 'get_settings')
+            || !method_exists($url_converter, 'get_url_for_language')
+        ) {
+            return null;
+        }
+
+        return [(array) $settings_component->get_settings(), $url_converter];
+    }
+
+    /**
+     * Language versions of a sitemap entry on a TranslatePress site.
+     *
+     * TranslatePress serves every language from the one post, so the sitemap
+     * only ever held the default-language URL. Its own sitemap support lives
+     * in the paid SEO Pack and hooks Yoast, Rank Math and AIOSEO, not
+     * ThinkRank, so a site moving to ThinkRank lost every translated URL from
+     * its sitemap (#1423).
+     *
+     * The rows mirror TranslatePress' own add_hreflang_to_head(), so the
+     * sitemap and the page head agree: the country tag per published language
+     * (`trp_add_country_hreflang_tags`), the region-independent tag where it
+     * is not already a country tag (`trp_add_region_independent_hreflang_tags`),
+     * both through `trp_hreflang`, and x-default only when its advanced
+     * setting names a language. Its exclusions apply too: "Exclude translated
+     * links from sitemap" (`trp_disable_languages_sitemap`), `trp-exclude-hreflang`,
+     * and "Do not translate certain paths" in both its exclude and include
+     * forms.
+     *
+     * @since 2.21.2
+     *
+     * @param mixed $alternates Rows so far; an earlier answer is kept.
+     * @param mixed $url        The entry's URL.
+     * @return mixed
+     */
+    public function filter_sitemap_entry_alternates($alternates, $url) {
+        if (!empty($alternates) || !is_string($url) || $url === '') {
+            return $alternates;
+        }
+
+        $translatepress = $this->translatepress();
+        if ($translatepress === null) {
+            return $alternates;
+        }
+
+        [$settings, $url_converter] = $translatepress;
+
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- TranslatePress' own hook, not ours to name.
+        if (apply_filters('trp_disable_languages_sitemap', false)) {
+            return $alternates;
+        }
+
+        $languages = array_values(array_filter(array_map('strval', (array) ($settings['publish-languages'] ?? [])), 'strlen'));
+        $default   = (string) ($settings['default-language'] ?? '');
+
+        if (count($languages) < 2 || $default === '') {
+            return $alternates;
+        }
+
+        // TranslatePress treats any request for a path containing "sitemap"
+        // and ".xml" as one of its own sitemaps and refuses to convert a URL
+        // without a path of its own, which is the homepage. A dynamically
+        // served sitemap is exactly such a request, so the conversions run as
+        // if for the site root, and the real value is put back after.
+        $had_uri = isset($_SERVER['REQUEST_URI']);
+        $uri     = $had_uri ? $_SERVER['REQUEST_URI'] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- restored verbatim below, never used.
+        $_SERVER['REQUEST_URI'] = '/';
+
+        try {
+            return $this->translatepress_rows($url, $languages, $default, $settings, $url_converter);
+        } finally {
+            if ($had_uri) {
+                $_SERVER['REQUEST_URI'] = $uri;
+            } else {
+                unset($_SERVER['REQUEST_URI']);
+            }
+        }
+    }
+
+    /**
+     * The most language versions a sitemap entry can have on a TranslatePress
+     * site: one per published language, unless translated links are kept out
+     * of the sitemap.
+     *
+     * The promotion estimate samples the homepage and the newest entries, and
+     * "translate only these paths" can leave all of those untranslated while
+     * listed pages still get every language (#1460).
+     *
+     * @since 2.21.2
+     *
+     * @param mixed $versions Versions found so far.
+     * @return mixed
+     */
+    public function filter_sitemap_language_versions($versions) {
+        $translatepress = $this->translatepress();
+        if ($translatepress === null) {
+            return $versions;
+        }
+
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- TranslatePress' own hook, not ours to name.
+        if (apply_filters('trp_disable_languages_sitemap', false)) {
+            return $versions;
+        }
+
+        $languages = array_unique(array_filter(array_map('strval', (array) ($translatepress[0]['publish-languages'] ?? [])), 'strlen'));
+
+        return count($languages) >= 2 ? max((int) $versions, count($languages)) : $versions;
+    }
+
+    /**
+     * Build the hreflang rows for one URL from TranslatePress' converter.
+     *
+     * @param string               $url              The entry's URL.
+     * @param string[]             $languages        Published languages.
+     * @param string               $default_language Default language.
+     * @param array<string, mixed> $settings         TranslatePress settings.
+     * @param object               $url_converter    TranslatePress' TRP_Url_Converter.
+     * @return array<int, array{hreflang: string, href: string}>
+     */
+    private function translatepress_rows(string $url, array $languages, string $default_language, array $settings, $url_converter): array {
+        $url_for = static function (string $language) use ($url, $url_converter): string {
+            // The marker TranslatePress appends to processed links is internal
+            // and must never reach a href; passing '' asks for none.
+            return str_replace('#TRPLINKPROCESSED', '', (string) $url_converter->get_url_for_language($language, $url, ''));
+        };
+
+        $original = $url_for($default_language);
+
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound, WordPress.NamingConventions.ValidHookName.UseUnderscores -- TranslatePress' own hook, not ours to name.
+        if ($original === '' || apply_filters('trp-exclude-hreflang', false, $original)) {
+            return [];
+        }
+
+        if ($this->translatepress_path_excluded($original, $url_converter)) {
+            return [];
+        }
+
+        // phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- TranslatePress' own hooks, not ours to name.
+        $country     = (bool) apply_filters('trp_add_country_hreflang_tags', true);
+        $independent = (bool) apply_filters('trp_add_region_independent_hreflang_tags', true);
+
+        $rows          = [];
+        $hrefs         = [];
+        $country_tags  = [];
+        $language_rows = [];
+        $language_tags = [];
+
+        foreach ($languages as $language) {
+            $href = $url_for($language);
+            if ($href === '') {
+                continue;
+            }
+
+            $hrefs[$language] = $href;
+
+            if ($country) {
+                $tag            = (string) apply_filters('trp_hreflang', str_replace('_', '-', str_replace(['_formal', '_informal'], '', $language)), $language);
+                $country_tags[] = $tag;
+                $rows[]         = ['hreflang' => $tag, 'href' => $href];
+            }
+
+            if ($independent) {
+                $tag = (string) apply_filters('trp_hreflang', explode('_', $language)[0], $language);
+                if ($tag !== '' && !in_array($tag, $language_tags, true)) {
+                    $language_tags[]            = $tag;
+                    $language_rows[$language] = ['hreflang' => $tag, 'href' => $href];
+                }
+            }
+        }
+
+        // A region-independent tag is added only where no country tag already
+        // says the same, as TranslatePress does in the page head.
+        foreach ($language_rows as $row) {
+            if (!in_array($row['hreflang'], $country_tags, true)) {
+                $rows[] = $row;
+            }
+        }
+        // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+
+        // Read from the option, like the path rules below, rather than from
+        // the copy TranslatePress loaded when the request began.
+        $advanced     = get_option('trp_advanced_settings', []);
+        $x_default    = is_array($advanced) ? (string) ($advanced['enable_hreflang_xdefault'] ?? '') : '';
+        $translatable = (array) ($settings['translation-languages'] ?? []);
+
+        if ($x_default !== '' && $x_default !== 'disabled' && in_array($x_default, $translatable, true)) {
+            $href = $hrefs[$x_default] ?? $url_for($x_default);
+            if ($href !== '') {
+                $rows[] = ['hreflang' => 'x-default', 'href' => $href];
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Whether TranslatePress' "Do not translate certain paths" keeps a URL in
+     * the default language only.
+     *
+     * Reuses TranslatePress' own matching functions, the way its SEO Pack
+     * filters sitemap links, so a rule means the same thing in both places.
+     *
+     * @param string $original      The URL in the default language.
+     * @param object $url_converter TranslatePress' TRP_Url_Converter.
+     * @return bool
+     */
+    private function translatepress_path_excluded(string $original, $url_converter): bool {
+        $advanced = get_option('trp_advanced_settings', []);
+        $rule     = is_array($advanced) ? ($advanced['translateable_content'] ?? null) : null;
+
+        if (!is_array($rule) || empty($rule['option']) || empty($rule['paths'])) {
+            return false;
+        }
+
+        if (!function_exists('trp_dntcp_get_paths')
+            || !function_exists('trp_test_current_slug')
+            || !function_exists('trp_return_exclude_include_url')
+            || !method_exists($url_converter, 'get_abs_home')
+        ) {
+            return false;
+        }
+
+        // Compared by path, below the site's own path. TranslatePress strips
+        // its absolute home instead, but that one follows the request's
+        // scheme, so a rebuild from cron or WP-CLI (http) never matched the
+        // https URLs it was handed and no rule applied.
+        $home_path = untrailingslashit((string) wp_parse_url((string) $url_converter->get_abs_home(), PHP_URL_PATH));
+        $path      = (string) wp_parse_url($original, PHP_URL_PATH);
+        $query     = (string) wp_parse_url($original, PHP_URL_QUERY);
+
+        if ($home_path !== '' && strpos($path, $home_path) === 0) {
+            $path = (string) substr($path, strlen($home_path));
+        }
+
+        $slug   = untrailingslashit($path) . ($query !== '' ? '?' . $query : '');
+        $slugs  = [];
+        trp_test_current_slug($slug, $slugs);
+        $listed = (bool) trp_return_exclude_include_url(trp_dntcp_get_paths(), $slug, $slugs);
+
+        if ($rule['option'] === 'exclude') {
+            return $listed;
+        }
+
+        if ($rule['option'] === 'include') {
+            return !$listed;
+        }
+
+        return false;
+    }
+
+    /**
+     * Ask the sitemap to rebuild after a TranslatePress setting changed.
+     *
+     * @since 2.21.2
+     * @return void
+     */
+    public function queue_sitemap_rebuild(): void {
+        /**
+         * Fires when what the sitemap lists as language versions has changed.
+         *
+         * @since 2.21.2
+         */
+        do_action('thinkrank_sitemap_alternates_changed');
     }
 
     /**
@@ -796,7 +1087,8 @@ class Multilingual_Manager {
      * Both are documented WPML hooks and no-op safely when absent. Polylang
      * needs none of this — its permalink filtering rides post_link, which
      * get_permalink() applies regardless of suppress_filters — and
-     * TranslatePress translates rendered output without duplicating posts.
+     * TranslatePress translates rendered output without duplicating posts, so
+     * its translated URLs come from filter_sitemap_entry_alternates() instead.
      *
      * thinkrank_sitemap_post_permalink is public, so an earlier callback can
      * hand over null or another non-string. That is read as '' so it cannot

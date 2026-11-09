@@ -336,6 +336,8 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
 
                         $minted            = $this->generate_api_key();
                         $stored['api_key'] = $minted;
+                        // A placeholder a migration may replace (#1559).
+                        $stored['api_key_source'] = \ThinkRank\SEO\Instant_Indexing_Manager::KEY_SOURCE_GENERATED;
 
                         return $stored;
                     },
@@ -427,7 +429,16 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
         $new_settings = Shared_State::update_option(
             $this->option_name,
             static function ($stored) use ($new_settings): array {
-                return array_merge(is_array($stored) ? $stored : [], $new_settings);
+                $stored = is_array($stored) ? $stored : [];
+
+                // The screen posts the stored key back on every save, so only a
+                // different key is the admin's own choice, which a migration
+                // must then keep (#1559).
+                if (isset($new_settings['api_key']) && $new_settings['api_key'] !== ($stored['api_key'] ?? '')) {
+                    $new_settings['api_key_source'] = \ThinkRank\SEO\Instant_Indexing_Manager::KEY_SOURCE_USER;
+                }
+
+                return array_merge($stored, $new_settings);
             },
             null,
             []
@@ -495,6 +506,8 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
                 $old_key  = $settings['api_key'] ?? null;
 
                 $settings['api_key'] = $new_key;
+                // Regenerating is the admin's choice; a migration keeps it.
+                $settings['api_key_source'] = \ThinkRank\SEO\Instant_Indexing_Manager::KEY_SOURCE_USER;
 
                 return $settings;
             },
@@ -520,38 +533,7 @@ class Instant_Indexing_Endpoint extends WP_REST_Controller {
      * @return void
      */
     private function manage_key_file(string $new_key, ?string $old_key = null): void {
-        global $wp_filesystem;
-        if (!function_exists('WP_Filesystem')) {
-            require_once ABSPATH . 'wp-admin/includes/file.php';
-        }
-        WP_Filesystem();
-
-        if (!$wp_filesystem) {
-            return;
-        }
-
-        // Defense-in-depth: the key becomes a filename under ABSPATH, so never
-        // touch the filesystem with anything that isn't a plain hex token. Guards
-        // against a traversal payload (e.g. ../../ads) reaching put_contents/delete.
-        $is_valid_key = static function (string $key): bool {
-            return (bool) preg_match('/^[a-f0-9]{8,64}$/', $key);
-        };
-
-        // Create new file
-        if (!empty($new_key) && $is_valid_key($new_key)) {
-            $file_path = ABSPATH . $new_key . '.txt';
-            if ($wp_filesystem->is_writable(ABSPATH)) {
-                $wp_filesystem->put_contents($file_path, $new_key, FS_CHMOD_FILE);
-            }
-        }
-
-        // Delete old file
-        if (!empty($old_key) && $old_key !== $new_key && $is_valid_key($old_key)) {
-            $old_file_path = ABSPATH . $old_key . '.txt';
-            if ($wp_filesystem->exists($old_file_path)) {
-                $wp_filesystem->delete($old_file_path);
-            }
-        }
+        \ThinkRank\SEO\Instant_Indexing_Manager::write_key_file($new_key, $old_key);
     }
 
     /**

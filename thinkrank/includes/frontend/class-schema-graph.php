@@ -684,6 +684,128 @@ class Schema_Graph {
     }
 
     /**
+     * Meta key holding per-post schema suppression.
+     *
+     * Either the string 'all', meaning emit nothing for this post, or a list of
+     * @type names to drop while the rest of the graph stands. Both are needed:
+     * "this legal page carries nothing" and "this landing page must not be an
+     * Article" are different asks and the issue left which one open, so the gate
+     * answers both (#821).
+     *
+     * @since 2.21.2
+     */
+    public const SUPPRESSION_META_KEY = '_thinkrank_schema_disabled';
+
+    /**
+     * Whether this post suppresses all structured data.
+     *
+     * Read inside output_allowed() rather than in the producers. There are four
+     * of them plus every block, widget and builder element, and #688 is what
+     * happens when a gate reaches one of them: turning schema off removed the
+     * deployed rows and left the live generator running, so the page emitted
+     * more types with the switch off than with it on. output_allowed() is the
+     * helper that fix created, and all twelve callers already ask it.
+     *
+     * @since 2.21.2
+     *
+     * @param int $post_id Post to test.
+     * @return bool True when nothing may be emitted for this post.
+     */
+    public static function schema_suppressed_for_post(int $post_id): bool {
+        return 'all' === self::suppression_setting($post_id);
+    }
+
+    /**
+     * Schema @type names this post suppresses individually.
+     *
+     * Empty when the post suppresses everything or nothing: 'all' is answered by
+     * schema_suppressed_for_post() and never reaches the per-type filter, so a
+     * caller cannot accidentally treat "all" as "no types".
+     *
+     * @since 2.21.2
+     *
+     * @param int $post_id Post to test.
+     * @return string[] Lowercased type names.
+     */
+    public static function suppressed_types_for_post(int $post_id): array {
+        $setting = self::suppression_setting($post_id);
+
+        if (!is_array($setting)) {
+            return [];
+        }
+
+        $types = [];
+        foreach ($setting as $type) {
+            if (is_string($type) && '' !== trim($type)) {
+                $types[] = strtolower(trim($type));
+            }
+        }
+
+        return array_values(array_unique($types));
+    }
+
+    /**
+     * The raw suppression setting for a post: 'all', a list of types, or null.
+     *
+     * @param int $post_id Post to test.
+     * @return string|array<int,mixed>|null
+     */
+    private static function suppression_setting(int $post_id) {
+        if ($post_id <= 0) {
+            return null;
+        }
+
+        $stored = get_post_meta($post_id, self::SUPPRESSION_META_KEY, true);
+
+        if (is_string($stored) && 'all' === strtolower(trim($stored))) {
+            return 'all';
+        }
+
+        // The meta is registered as a string so one key can carry both forms, so
+        // a type list arrives as JSON. Decoded here rather than at the call sites:
+        // reading it as a bare array matched nothing and the gate silently never
+        // fired.
+        if (is_string($stored) && '' !== trim($stored)) {
+            $decoded = json_decode($stored, true);
+
+            if (is_array($decoded)) {
+                $stored = $decoded;
+            }
+        }
+
+        if (is_array($stored)) {
+            // A UI that stored ['all'] means the same thing as the string.
+            foreach ($stored as $entry) {
+                if (is_string($entry) && 'all' === strtolower(trim($entry))) {
+                    return 'all';
+                }
+            }
+
+            return $stored;
+        }
+
+        /**
+         * Suppress ThinkRank's structured data for one post.
+         *
+         * Return 'all' to emit nothing, or an array of @type names to drop
+         * individually. Runs even when no meta is stored, so a site can decide
+         * this in code without writing post meta.
+         *
+         * @since 2.21.2
+         *
+         * @param string|array|null $setting Stored suppression setting.
+         * @param int               $post_id Post being tested.
+         */
+        $filtered = apply_filters('thinkrank_schema_suppressed_for_post', null, $post_id);
+
+        if (is_string($filtered) && 'all' === strtolower(trim($filtered))) {
+            return 'all';
+        }
+
+        return is_array($filtered) ? $filtered : null;
+    }
+
+    /**
      * output_allowed(), asked about a named post instead of the current query.
      *
      * output_allowed() resolves the content type from the main query, which in
@@ -694,6 +816,12 @@ class Schema_Graph {
      * @return bool
      */
     private static function schema_allowed_for_post(\WP_Post $post): bool {
+        // A post that switches its own schema off wins over its content type
+        // and the master switch (#821).
+        if (self::schema_suppressed_for_post((int) $post->ID)) {
+            return false;
+        }
+
         if (class_exists('ThinkRank\\SEO\\Content_Type_Settings')) {
             return \ThinkRank\SEO\Content_Type_Settings::is_enabled(
                 \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
@@ -831,6 +959,18 @@ class Schema_Graph {
         // and could never turn schema on for one type of a site that has it
         // off (#1335). The per-content-type answer is query-dependent and
         // stays live.
+        //
+        // The per-post gate comes first: a post that switches its own schema
+        // off wins over an On for its type. Singular only: on an archive there
+        // is no one post whose setting could speak for the page (#821).
+        if (is_singular()) {
+            $queried = get_queried_object_id();
+
+            if ($queried > 0 && self::schema_suppressed_for_post((int) $queried)) {
+                return false;
+            }
+        }
+
         if (class_exists('ThinkRank\\SEO\\Content_Type_Settings')) {
             return \ThinkRank\SEO\Content_Type_Settings::is_enabled_for_current(
                 \ThinkRank\SEO\Content_Type_Settings::FEATURE_SCHEMA,
@@ -870,6 +1010,98 @@ class Schema_Graph {
         }
 
         return self::$master_switch_on;
+    }
+
+    /**
+     * Whether ThinkRank may emit a node of this @type for this request.
+     *
+     * output_allowed(), plus the per-type suppression of the post being viewed.
+     * The graph drops suppressed nodes itself, but the block filter and every
+     * builder FAQ, HowTo and TOC element print their own script and never pass
+     * through it, so a post suppressing "HowTo" still published one from an
+     * Elementor HowTo widget. Those emitters ask this instead of
+     * output_allowed() (#821).
+     *
+     * @since 2.21.2
+     *
+     * @param string $type Top-level @type the emitter is about to print.
+     * @return bool True when the node may be emitted.
+     */
+    public static function output_allowed_for_type(string $type): bool {
+        if (!self::output_allowed()) {
+            return false;
+        }
+
+        return !in_array(strtolower(trim($type)), self::suppressed_types_for_queried_post(), true);
+    }
+
+    /**
+     * Types the post being viewed suppresses individually.
+     *
+     * Singular only: on an archive there is no one post whose setting could
+     * speak for the page, the same rule output_allowed() applies to 'all'.
+     *
+     * @return string[] Lowercased type names.
+     */
+    private static function suppressed_types_for_queried_post(): array {
+        if (!function_exists('is_singular') || !is_singular()) {
+            return [];
+        }
+
+        $post_id = (int) get_queried_object_id();
+
+        return $post_id > 0 ? self::suppressed_types_for_post($post_id) : [];
+    }
+
+    /**
+     * Remove the @type nodes this post suppresses individually.
+     *
+     * Matches on @type case-insensitively, and on every entry when a node
+     * declares an array of types, because "Article" and "BlogPosting" can both
+     * describe one node and a user removing "Article" means that node.
+     *
+     * A node other nodes point at is still dropped. The alternative is keeping
+     * markup the user asked to remove, and the @id pruning that follows leaves a
+     * dangling reference rather than a wrong entity — which is the lesser of the
+     * two, and the same trade the master switch already makes.
+     *
+     * @since 2.21.2
+     *
+     * @param array<int,array<string,mixed>> $graph Assembled nodes.
+     * @return array<int,array<string,mixed>> Nodes that survive.
+     */
+    private function drop_suppressed_types(array $graph): array {
+        $suppressed = self::suppressed_types_for_queried_post();
+
+        if (empty($suppressed)) {
+            return $graph;
+        }
+
+        $kept = [];
+
+        foreach ($graph as $node) {
+            if (!is_array($node)) {
+                $kept[] = $node;
+                continue;
+            }
+
+            $types = $node['@type'] ?? null;
+            $types = is_array($types) ? $types : [$types];
+            $drop  = false;
+
+            foreach ($types as $type) {
+                if (is_string($type) && in_array(strtolower($type), $suppressed, true)) {
+                    $drop = true;
+                    break;
+                }
+            }
+
+            if (!$drop) {
+                $kept[] = $node;
+            }
+        }
+
+        return array_values($kept);
     }
 
     /**
@@ -932,6 +1164,12 @@ class Schema_Graph {
         $this->rendered = true;
 
         $graph = $this->build_graph();
+
+        // Per-type suppression, applied to the assembled graph rather than at the
+        // producers. A node can arrive from any of four of them, from a block, or
+        // from Pro's WooCommerce enricher, which never touches post meta — the
+        // graph is the one place every node passes through (#821).
+        $graph = $this->drop_suppressed_types($graph);
 
         /**
          * Filter the assembled schema graph before output.

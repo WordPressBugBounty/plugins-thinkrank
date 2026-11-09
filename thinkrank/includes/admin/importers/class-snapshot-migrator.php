@@ -24,6 +24,7 @@ namespace ThinkRank\Admin\Importers;
 
 use ThinkRank\SEO\Absolute_Url;
 use ThinkRank\SEO\Focus_Keywords;
+use ThinkRank\SEO\Instant_Indexing_Manager;
 use ThinkRank\SEO\Metadata_Pending;
 use ThinkRank\SEO\Object_Redirect;
 use ThinkRank\SEO\Pattern_Resolver;
@@ -46,6 +47,16 @@ class Snapshot_Migrator {
      * @var string[]
      */
     private array $cache_warnings = [];
+
+    /**
+     * Settings a migration could not finish on its own, for the settings
+     * result (`settings_notices`): each is a key and one sentence the Migration
+     * screen shows the admin.
+     *
+     * @since 2.21.2
+     * @var array<int, array{key: string, message: string}>
+     */
+    private array $settings_notices = [];
 
     /**
      * Canonical field → ThinkRank meta key mapping.
@@ -124,6 +135,9 @@ class Snapshot_Migrator {
         'author_archives',
         'instant_indexing_post_types',
         'instant_indexing_log',
+        // Informational: reported by migrate_settings() (#1562). It holds no
+        // value of its own to lose, so it never blocks cleanup.
+        'google_indexing_api',
         'publisher_sitemaps',
         'email_reports',
         'role_capabilities',
@@ -2191,6 +2205,7 @@ class Snapshot_Migrator {
         $data = $settings_record['data'] ?? [];
         $extended = $settings_record['extended'] ?? [];
         $processed = 0;
+        $this->settings_notices = [];
         // Settings groups that need ThinkRank Pro or that Pro refused (#925).
         $unwritten = self::new_unwritten();
 
@@ -2370,6 +2385,15 @@ class Snapshot_Migrator {
             $processed++;
         }
 
+        // Google Indexing API submissions have no ThinkRank home, so they stop
+        // with the source plugin. Say so rather than finish silently (#1562).
+        if (!empty($extended['google_indexing_api']['configured'])) {
+            $this->settings_notices[] = [
+                'key'     => 'google_indexing_api',
+                'message' => __('Google Indexing API submissions (Rank Math Instant Indexing plugin) were not imported: ThinkRank submits to IndexNow only. Google stops receiving those submissions once that plugin is deactivated.', 'thinkrank'),
+            ];
+        }
+
         // News/Video sitemap post types into Pro's Publisher Sitemaps.
         if ($this->migrate_publisher_sitemaps($extended, $unwritten)) {
             $processed++;
@@ -2386,6 +2410,8 @@ class Snapshot_Migrator {
             'schema_not_imported' => $this->schema_not_imported($extended),
             // Caches still answering the old URLs, which only the admin can clear.
             'cache_warnings'      => $this->cache_warnings,
+            // Settings the admin still has to act on (#1560).
+            'settings_notices'    => $this->settings_notices,
         ], self::unwritten_fields($unwritten));
     }
 
@@ -3079,12 +3105,21 @@ class Snapshot_Migrator {
      * Instant_Indexing_Manager). Carrying the key over avoids re-verifying the
      * site with IndexNow ({key}.txt is already served for it).
      *
-     * Never clobbers a configured key: ThinkRank generates its own key on
-     * activation, so this only fills the slot when it is genuinely empty/unset.
+     * ThinkRank mints a key on activation, so the slot is never empty by the
+     * time a migration runs. That placeholder is replaced; a key the admin
+     * regenerated or set is never clobbered
+     * (Instant_Indexing_Manager::is_replaceable_key(), #1559). The key file
+     * moves with it, since Rank Math stops serving the old one once it is
+     * deactivated.
      *
      * Also carries the source's auto-submit post types
      * (extended.instant_indexing_post_types) so publishing keeps pinging the
      * same content types it did before the switch.
+     *
+     * A source with a key and post types was pinging IndexNow on every
+     * publish, with no separate switch. Instant Indexing is turned on for it
+     * while ThinkRank's switch has never been saved; a switch the admin saved
+     * off stays off, and the result says so instead (#1560).
      *
      * @param array $data     Canonical settings `data` payload
      * @param array $extended Canonical settings `extended` payload
@@ -3099,55 +3134,106 @@ class Snapshot_Migrator {
             return false;
         }
 
-        $settings = get_option('thinkrank_instant_indexing_settings', []);
-        if (!is_array($settings)) {
-            $settings = [];
-        }
+        // Read, decided and written under the option's lock, from the committed
+        // value, as the settings route and key regeneration write it. Deciding
+        // on a copy read earlier would put back a key the admin regenerated or
+        // turn on a switch they saved off while the migration ran
+        // (re-review on #1591).
+        $wrote      = false;
+        $new_key    = '';
+        $old_key    = '';
+        $notice_off = false;
 
-        $wrote = false;
+        \ThinkRank\Core\Shared_State::update_option(
+            'thinkrank_instant_indexing_settings',
+            static function ($settings) use ($api_key, $source_types, &$wrote, &$new_key, &$old_key, &$notice_off) {
+                $settings   = is_array($settings) ? $settings : [];
+                $wrote      = false;
+                $new_key    = '';
+                $old_key    = '';
+                $notice_off = false;
 
-        // Auto-submit post types. ThinkRank seeds ['post','page'] on activation,
-        // so only replace that untouched seed — never a user's own selection.
-        if (!empty($source_types)) {
-            $types = [];
-            foreach ($source_types as $type) {
-                $type = sanitize_key((string) $type);
-                if ($type !== '' && post_type_exists($type)) {
-                    $types[] = $type;
+                // Auto-submit post types. ThinkRank seeds ['post','page'] on activation,
+                // so only replace that untouched seed — never a user's own selection.
+                if (!empty($source_types)) {
+                    $types = [];
+                    foreach ($source_types as $type) {
+                        $type = sanitize_key((string) $type);
+                        if ($type !== '' && post_type_exists($type)) {
+                            $types[] = $type;
+                        }
+                    }
+                    $types = array_values(array_unique($types));
+
+                    $current_types = $settings['auto_submit_post_types'] ?? null;
+                    $is_seed = $current_types === null
+                        || (is_array($current_types) && array_diff($current_types, ['post', 'page']) === []
+                            && array_diff(['post', 'page'], $current_types) === []);
+
+                    if (!empty($types) && $is_seed && $types !== $current_types) {
+                        $settings['auto_submit_post_types'] = $types;
+                        $wrote = true;
+                    }
                 }
-            }
-            $types = array_values(array_unique($types));
 
-            $current_types = $settings['auto_submit_post_types'] ?? null;
-            $is_seed = $current_types === null
-                || (is_array($current_types) && array_diff($current_types, ['post', 'page']) === []
-                    && array_diff(['post', 'page'], $current_types) === []);
+                if ($api_key !== '') {
+                    // The key becomes a filename and is matched as a hex token when served,
+                    // so anything else could neither be written nor answered.
+                    $old_key = (string) ($settings['api_key'] ?? '');
+                    if (Instant_Indexing_Manager::is_valid_key($api_key)
+                        && $api_key !== $old_key
+                        && Instant_Indexing_Manager::is_replaceable_key($settings)
+                    ) {
+                        $settings['api_key']        = $api_key;
+                        $settings['api_key_source'] = Instant_Indexing_Manager::KEY_SOURCE_MIGRATED;
+                        $new_key = $api_key;
+                        $wrote   = true;
+                    }
 
-            if (!empty($types) && $is_seed && $types !== $current_types) {
-                $settings['auto_submit_post_types'] = $types;
-                $wrote = true;
-            }
+                    // After the key: whether the stored key may be replaced is read from
+                    // the switch as it was before this migration.
+                    if (!empty($source_types)) {
+                        if (!array_key_exists('enabled', $settings)) {
+                            $settings['enabled'] = true;
+                            $wrote = true;
+                        } elseif (empty($settings['enabled'])) {
+                            $notice_off = true;
+                        }
+                    }
+                }
+
+                return $wrote ? $settings : \ThinkRank\Core\Shared_State::KEEP;
+            },
+            null,
+            []
+        );
+
+        if ($notice_off) {
+            $this->settings_notices[] = [
+                'key'     => 'instant_indexing_off',
+                'message' => __('Instant Indexing was sending new posts to IndexNow in the plugin you migrated from, and it is turned off in ThinkRank. Turn it on under Instant Indexing, or new posts stop reaching IndexNow once that plugin is deactivated.', 'thinkrank'),
+            ];
         }
 
-        if ($api_key === '') {
-            if ($wrote) {
-                update_option('thinkrank_instant_indexing_settings', $settings);
-            }
-
-            return $wrote;
-        }
-
-        // Only migrate the key when the target is empty/unset — never overwrite.
-        if (empty($settings['api_key'])) {
-            $settings['api_key'] = $api_key;
-            $wrote = true;
-        }
-
-        if ($wrote) {
-            update_option('thinkrank_instant_indexing_settings', $settings);
+        // Only the key this write committed has its file written.
+        if ($new_key !== '') {
+            $this->write_indexnow_key_file($new_key, $old_key !== '' ? $old_key : null);
         }
 
         return $wrote;
+    }
+
+    /**
+     * Write the migrated key's file and remove the placeholder's.
+     *
+     * A seam so tests can record the call instead of touching ABSPATH.
+     *
+     * @param string      $new_key Migrated key.
+     * @param string|null $old_key Replaced key.
+     * @return void
+     */
+    protected function write_indexnow_key_file(string $new_key, ?string $old_key): void {
+        Instant_Indexing_Manager::write_key_file($new_key, $old_key);
     }
 
     /**

@@ -27,7 +27,7 @@ class Update_Thin_Content_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-thin-content-settings';
 		$this->label       = __( 'Update ThinkRank Thin Content Settings', 'thinkrank' );
-		$this->description = __( 'Set the length below which a published page counts as thin: a default for the site, and an override per post type for content that is short by nature, such as products or staff profiles. Send null for a post type to clear its override and return it to the default. Lengths are in words, or in characters for locales that count characters. Changing a threshold re-reads the existing counts and never recounts the site, so it takes effect immediately; call get-thin-content afterwards to see the report under the new numbers.', 'thinkrank' );
+		$this->description = __( 'Set the length below which a published page counts as thin: a default for the site, and an override per post type for content that is short by nature, such as products or staff profiles. Send null for a post type to clear its override and return it to the default. Lengths are in words, or in characters for locales that count characters. Changing a threshold re-reads the existing counts and never recounts the site, so it takes effect immediately; call get-thin-content-settings to read back what was stored, since a value outside the allowed range is clamped rather than refused, and get-thin-content to see the report under the new numbers.', 'thinkrank' );
 	}
 
 	/**

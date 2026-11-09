@@ -5,6 +5,8 @@
  * Exposes the site-wide SEO Analyzer:
  * - GET  /thinkrank/v1/seo-analyzer      → last cached analysis (computes if empty)
  * - POST /thinkrank/v1/seo-analyzer/run  → force a fresh analysis (busts the cache)
+ * - POST /thinkrank/v1/seo-analyzer/fix  → apply a check's one-click fix
+ * - POST /thinkrank/v1/seo-analyzer/ignore → leave a check out of the score, or count it again
  *
  * @package ThinkRank\API
  * @since 1.18.0
@@ -81,6 +83,67 @@ class SEO_Analyzer_Endpoint {
                 ],
             ],
         ]);
+
+        register_rest_route(self::NAMESPACE, '/seo-analyzer/ignore', [
+            'methods'             => 'POST',
+            'callback'            => [$this, 'set_ignored'],
+            'permission_callback' => [$this, 'check_permissions'],
+            'args'                => [
+                'check_id' => [
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_key',
+                ],
+                'ignore'   => [
+                    'type'    => 'boolean',
+                    'default' => true,
+                ],
+                'reason'   => [
+                    'type'              => 'string',
+                    'default'           => '',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Leave a check out of the score, or count it again (#1289), and return
+     * the re-scored analysis so the score and the row update together.
+     *
+     * @since 2.21.2
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return WP_REST_Response
+     */
+    public function set_ignored(WP_REST_Request $request): WP_REST_Response {
+        $check_id = (string) $request->get_param('check_id');
+        $ignore   = false !== rest_sanitize_boolean($request->get_param('ignore') ?? true);
+
+        try {
+            $analysis = $this->analyzer->set_ignored(
+                $check_id,
+                $ignore,
+                (string) ($request->get_param('reason') ?? '')
+            );
+        } catch (\InvalidArgumentException $e) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => $ignore
+                ? __('This check no longer counts towards your score.', 'thinkrank')
+                : __('This check counts towards your score again.', 'thinkrank'),
+            'data'    => [
+                'check_id' => $check_id,
+                'ignored'  => $ignore,
+                'analysis' => $analysis,
+            ],
+        ], 200);
     }
 
     /**

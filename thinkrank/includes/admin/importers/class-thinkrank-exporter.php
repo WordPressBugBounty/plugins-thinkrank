@@ -118,7 +118,9 @@ class Thinkrank_Exporter extends Abstract_Plugin_Exporter {
      * @var array<string, string[]> Option name => secret keys inside it.
      */
     public const SECRET_OPTION_KEYS = [
-        'thinkrank_instant_indexing_settings' => ['api_key'],
+        // The key's source travels with the key: a restore that keeps the
+        // local key must keep the local marker too (#1559).
+        'thinkrank_instant_indexing_settings' => ['api_key', 'api_key_source'],
     ];
 
     /**

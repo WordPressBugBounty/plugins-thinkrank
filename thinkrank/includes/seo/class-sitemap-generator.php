@@ -508,6 +508,12 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         add_action('thinkrank_pro_redirects_changed', static function (): void {
             self::listener()->handle_redirect_rules_change();
         }, 20, 0);
+
+        // A multilingual plugin's languages or URL rules changed, so the
+        // language versions each entry lists did too (#1423).
+        add_action('thinkrank_sitemap_alternates_changed', static function (): void {
+            self::listener()->schedule_regeneration();
+        }, 20, 0);
     }
 
     /**
@@ -648,17 +654,10 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     public function generate_sitemap(array $options = []): string {
         $settings = $this->get_settings('site');
 
-        $xml = $this->xml_prolog($settings, 'sitemap');
-
-        // Add image namespace if images are enabled
-        if (!empty($settings['include_images'])) {
-            $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">' . "\n";
-        } else {
-            $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
-        }
-
+        // The entries are built first so the <urlset> tag can declare the
+        // xhtml namespace only when one of them carries language links.
         // Add homepage, unless its own robots tag says noindex.
-        $xml .= $this->homepage_entry();
+        $xml = $this->homepage_entry();
 
         // MEMORY-EFFICIENT: Generate posts using chunked processing.
         // Note: the single "general" sitemap includes every URL (no per-file cap);
@@ -682,9 +681,10 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
         }
 
-        $xml .= '</urlset>';
-
-        return $xml;
+        return $this->xml_prolog($settings, 'sitemap')
+            . $this->urlset_open(!empty($settings['include_images']), $xml)
+            . $xml
+            . '</urlset>';
     }
 
     /**
@@ -1008,9 +1008,12 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @param float  $priority   Priority (0.0 to 1.0)
      * @param string $changefreq Change frequency
      * @param array  $images     Optional array of image data
+     * @param array  $alternates Language versions of this URL, as normalized by
+     *                           normalize_alternates(). Written as
+     *                           `<xhtml:link rel="alternate">` (#1423).
      * @return string XML URL entry
      */
-    private function generate_url_entry(string $url, string $lastmod, float $priority, string $changefreq, array $images = []): string {
+    private function generate_url_entry(string $url, string $lastmod, float $priority, string $changefreq, array $images = [], array $alternates = []): string {
         $xml = "  <url>\n";
         // Every <loc> in every sitemap passes through here, which is why the
         // scheme preference is applied at this one point rather than at each
@@ -1025,6 +1028,10 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         }
         $xml .= "    <priority>" . number_format($priority, 1) . "</priority>\n";
         $xml .= "    <changefreq>" . self::xml_text($changefreq) . "</changefreq>\n";
+
+        foreach ($alternates as $alternate) {
+            $xml .= '    <xhtml:link rel="alternate" hreflang="' . esc_attr($alternate['hreflang']) . '" href="' . esc_url(Url_Scheme::apply($alternate['href'])) . '"/>' . "\n";
+        }
 
         // Add image entries if provided
         foreach ($images as $image) {
@@ -1048,6 +1055,158 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         $xml .= "  </url>\n";
 
         return $xml;
+    }
+
+    /**
+     * The <url> entries for one piece of content, one per language version.
+     *
+     * A multilingual integration describes the language versions of a URL
+     * through `thinkrank_sitemap_entry_alternates`. When it does, every
+     * version is written as its own <url>, and each of them carries the full
+     * set of `<xhtml:link rel="alternate">` links, itself included: the form
+     * Google documents for sitemaps. TranslatePress translates rendered output
+     * instead of storing a post per language, so without this its translated
+     * URLs appeared nowhere in the sitemap (#1423).
+     *
+     * With nothing hooked, or with fewer than two distinct language URLs, the
+     * entry is the plain one it always was, so a monolingual site's output is
+     * unchanged byte for byte.
+     *
+     * @since 2.21.2
+     *
+     * @param string                  $url        The entry's URL.
+     * @param string                  $lastmod    Last modification date.
+     * @param float                   $priority   Priority.
+     * @param string                  $changefreq Change frequency.
+     * @param array                   $images     Image data.
+     * @param \WP_Post|\WP_Term|null $described  What the URL stands for; null for the homepage.
+     * @return string One or more <url> entries.
+     */
+    private function language_entries(string $url, string $lastmod, float $priority, string $changefreq, array $images, $described): string {
+        /**
+         * Filter the language versions of a sitemap entry.
+         *
+         * Return one row per language, `['hreflang' => 'sv-SE', 'href' => '…']`,
+         * the entry's own language included, plus an optional `x-default` row.
+         * Each distinct href of a language row is written as its own <url>, so
+         * an integration whose translations are separate posts (WPML,
+         * Polylang) must answer only for the entry that stands for the group,
+         * or the translations are listed twice.
+         *
+         * Rows with an invalid language tag or a non-http(s) href are dropped,
+         * the first row for a language tag wins, and fewer than two distinct
+         * language URLs leaves the entry as it is.
+         *
+         * @since 2.21.2
+         *
+         * @param array                   $alternates Language versions. Empty by default.
+         * @param string                  $url        The entry's URL.
+         * @param \WP_Post|\WP_Term|null $described  Post or term the entry describes; null for the homepage.
+         */
+        $alternates = self::normalize_alternates(apply_filters('thinkrank_sitemap_entry_alternates', [], $url, $described));
+
+        if (empty($alternates)) {
+            return $this->generate_url_entry($url, $lastmod, $priority, $changefreq, $images);
+        }
+
+        $xml = '';
+        foreach (self::alternate_locations($alternates) as $location) {
+            $xml .= $this->generate_url_entry($location, $lastmod, $priority, $changefreq, $images, $alternates);
+        }
+
+        return $xml;
+    }
+
+    /**
+     * Validate the rows an integration returned for an entry's language versions.
+     *
+     * @since 2.21.2
+     *
+     * @param mixed $raw Filter result.
+     * @return array<int, array{hreflang: string, href: string}> Usable rows, or
+     *         an empty array when they name fewer than two distinct language URLs.
+     */
+    private static function normalize_alternates($raw): array {
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $rows = [];
+        $seen = [];
+
+        foreach ($raw as $row) {
+            if (!is_array($row) || !is_string($row['hreflang'] ?? null) || !is_string($row['href'] ?? null)) {
+                continue;
+            }
+
+            $hreflang = trim($row['hreflang']);
+            $href     = trim($row['href']);
+
+            // A language, optionally with script and region subtags, or
+            // x-default. Case is kept: hreflang values are case-insensitive.
+            if (!preg_match('/^(?:x-default|[a-z]{2,3}(?:-[a-z0-9]{1,8})*)$/i', $hreflang)) {
+                continue;
+            }
+
+            $key = strtolower($hreflang);
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $parts  = wp_parse_url($href);
+            $scheme = is_array($parts) ? strtolower((string) ($parts['scheme'] ?? '')) : '';
+            if (!in_array($scheme, ['http', 'https'], true) || empty($parts['host'])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $rows[]     = ['hreflang' => $hreflang, 'href' => $href];
+        }
+
+        return count(self::alternate_locations($rows)) >= 2 ? $rows : [];
+    }
+
+    /**
+     * The distinct URLs of the language rows, in order. x-default names one
+     * of them (or a language picker), never a version of its own.
+     *
+     * @param array<int, array{hreflang: string, href: string}> $alternates Normalized rows.
+     * @return string[]
+     */
+    private static function alternate_locations(array $alternates): array {
+        $locations = [];
+
+        foreach ($alternates as $alternate) {
+            if (strtolower($alternate['hreflang']) !== 'x-default') {
+                $locations[$alternate['href']] = true;
+            }
+        }
+
+        return array_keys($locations);
+    }
+
+    /**
+     * The opening <urlset> tag, declaring only the namespaces the entries use.
+     *
+     * The xhtml namespace is added only when an entry carries language links,
+     * so a monolingual site's sitemap is unchanged (#1423).
+     *
+     * @param bool   $with_image_ns Declare the image namespace.
+     * @param string $body          The entries the urlset will hold.
+     * @return string
+     */
+    private function urlset_open(bool $with_image_ns, string $body): string {
+        $tag = '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"';
+
+        if ($with_image_ns) {
+            $tag .= ' xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"';
+        }
+
+        if (strpos($body, '<xhtml:link ') !== false) {
+            $tag .= ' xmlns:xhtml="http://www.w3.org/1999/xhtml"';
+        }
+
+        return $tag . ">\n";
     }
 
     /**
@@ -1137,7 +1296,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             return '';
         }
 
-        return $this->generate_url_entry(home_url('/'), $this->get_homepage_lastmod(), 1.0, 'daily');
+        return $this->language_entries(home_url('/'), $this->get_homepage_lastmod(), 1.0, 'daily', [], null);
     }
 
     /**
@@ -1339,7 +1498,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                             $attachment_ids[] = $gallery_id;
                         }
 
-                        yield $this->generate_url_entry($url, $lastmod, $priority, $changefreq, $images);
+                        yield $this->language_entries($url, $lastmod, $priority, $changefreq, $images, $post);
                     }
                 }
 
@@ -1505,7 +1664,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 if (!is_wp_error($url)) {
                     // Omit lastmod for terms — the generation time is not a real
                     // modification time and would mislabel every term as just-changed.
-                    yield $this->generate_url_entry($url, '', $priority, 'weekly');
+                    yield $this->language_entries($url, '', $priority, 'weekly', [], $term);
                 }
             }
 
@@ -1569,18 +1728,12 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * @return string Full sitemap XML
      */
     private function wrap_urlset(array $entries, array $settings, bool $with_image_ns): string {
-        $xml = $this->xml_prolog($settings, 'sitemap');
+        $body = implode('', $entries);
 
-        if ($with_image_ns && !empty($settings['include_images'])) {
-            $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">' . "\n";
-        } else {
-            $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
-        }
-
-        $xml .= implode('', $entries);
-        $xml .= '</urlset>';
-
-        return $xml;
+        return $this->xml_prolog($settings, 'sitemap')
+            . $this->urlset_open($with_image_ns && !empty($settings['include_images']), $body)
+            . $body
+            . '</urlset>';
     }
 
     /**
@@ -2105,7 +2258,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 $priority = $taxonomy === 'category' ? 0.6 : 0.4;
                 $changefreq = 'weekly';
 
-                $xml .= $this->generate_url_entry($url, $lastmod, $priority, $changefreq);
+                $xml .= $this->language_entries($url, $lastmod, $priority, $changefreq, [], $term);
             }
         }
 
@@ -4364,17 +4517,24 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * Rough count of URLs a single-file sitemap would contain, used only to
      * decide whether to auto-promote to a paginated index. Cheap COUNT queries;
      * intentionally approximate (homepage + published posts of enabled types +
-     * terms of enabled taxonomies).
+     * terms of enabled taxonomies), times the language versions each entry is
+     * written as.
      *
      * @param array $settings Sitemap settings.
      * @return int
      */
     private function estimate_total_sitemap_urls(array $settings): int {
-        $total = 1; // homepage
+        $total     = 1; // homepage
+        $populated = [];
 
         foreach ($this->get_enabled_post_types($settings) as $post_type) {
-            $counts = wp_count_posts($post_type);
-            $total += isset($counts->publish) ? (int) $counts->publish : 0;
+            $counts    = wp_count_posts($post_type);
+            $published = isset($counts->publish) ? (int) $counts->publish : 0;
+            $total    += $published;
+
+            if ($published > 0) {
+                $populated[] = $post_type;
+            }
         }
 
         foreach ($this->get_enabled_taxonomies($settings) as $taxonomy) {
@@ -4385,7 +4545,79 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             }
         }
 
-        return $total;
+        return $total * $this->language_versions_per_entry($populated);
+    }
+
+    /**
+     * How many <url> elements one entry becomes, for the promotion estimate.
+     *
+     * The counts above are pieces of content, but language_entries() writes
+     * every language version a multilingual integration names as its own
+     * <url>. Counted as one, a TranslatePress site with two languages and 600
+     * posts was estimated at 601 URLs, kept its single file under a limit of
+     * 1000, and wrote 1202 <url> elements into it (#1460).
+     *
+     * The answer is asked of the same filter, for the homepage and for the
+     * newest published entry of each post type that has any, and the largest
+     * is used. One probe could miss the translations: TranslatePress can
+     * translate listed paths only, which may leave the homepage untranslated.
+     * Sampling alone is not an upper bound: with "translate only these
+     * paths" listing a few pages, the homepage and the newest entries can
+     * all be untranslated while the listed pages each write several <url>.
+     * So an integration can also name the most language versions any entry
+     * can have, through `thinkrank_sitemap_language_versions`, and the larger
+     * answer is used. Erring high is the safe side here: an overestimate
+     * promotes to an index a little early, an underestimate writes a file
+     * past the limit. With nothing hooked it is 1 and the estimate is what
+     * it was.
+     *
+     * @param string[] $post_types Enabled post types with published entries.
+     * @return int At least 1.
+     */
+    private function language_versions_per_entry(array $post_types): int {
+        $versions = static function (string $url, $described): int {
+            /** This filter is documented in language_entries(). */
+            $alternates = self::normalize_alternates(apply_filters('thinkrank_sitemap_entry_alternates', [], $url, $described));
+
+            return count(self::alternate_locations($alternates));
+        };
+
+        $most = $versions(home_url('/'), null);
+
+        foreach ($post_types as $post_type) {
+            $newest = get_posts([
+                'post_type'        => $post_type,
+                'post_status'      => 'publish',
+                'numberposts'      => 1,
+                'orderby'          => 'date',
+                'order'            => 'DESC',
+                'no_found_rows'    => true,
+                'suppress_filters' => false,
+            ]);
+            $post   = $newest[0] ?? null;
+
+            if ($post instanceof \WP_Post) {
+                /** This filter is documented in collect_post_entries_iter(). */
+                $url  = (string) apply_filters('thinkrank_sitemap_post_permalink', get_permalink($post), $post);
+                $most = max($most, $versions($url, $post));
+            }
+        }
+
+        /**
+         * Filter the most language versions one sitemap entry can be written as.
+         *
+         * Used only to decide whether a single-file sitemap must become an
+         * index. Answer with the number of languages an entry can have at
+         * most, so a site that translates only some paths is still counted
+         * high enough. A lower answer than the sampled one is ignored.
+         *
+         * @since 2.21.2
+         *
+         * @param int $versions Language versions found on the sampled entries.
+         */
+        $most = max($most, (int) apply_filters('thinkrank_sitemap_language_versions', $most));
+
+        return max(1, $most);
     }
 
     /**
@@ -4825,16 +5057,36 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 // suffix, and every page is listed in the index. Buffering only one
                 // page at a time keeps peak memory bounded to $limit entries rather
                 // than every URL of the type.
+                //
+                // One entry is one <url>, except on a multilingual site, where
+                // it is every language version of one piece of content (#1423).
+                // The limit counts <url> elements, and a language group is
+                // never split across two files: a page that cannot take the
+                // whole next group is written first. A group larger than the
+                // limit on its own still goes out whole, on a page of its own.
                 $image_ns = $source['image_ns'];
                 $buffer   = [];
+                $buffered = 0;
                 $page     = 0;
 
                 foreach ($source['entries'] as $entry) {
-                    $buffer[] = $entry;
-                    if (count($buffer) >= $limit) {
+                    $urls = max(1, substr_count($entry, '<url>'));
+
+                    if (!empty($buffer) && $buffered + $urls > $limit) {
                         $page++;
-                        $this->write_sitemap_page($this->paginate_url($sitemap_config['url'], $page), $this->wrap_urlset($buffer, $settings, $image_ns), $type, count($buffer), $results, $index_children);
-                        $buffer = [];
+                        $this->write_sitemap_page($this->paginate_url($sitemap_config['url'], $page), $this->wrap_urlset($buffer, $settings, $image_ns), $type, $buffered, $results, $index_children);
+                        $buffer   = [];
+                        $buffered = 0;
+                    }
+
+                    $buffer[]  = $entry;
+                    $buffered += $urls;
+
+                    if ($buffered >= $limit) {
+                        $page++;
+                        $this->write_sitemap_page($this->paginate_url($sitemap_config['url'], $page), $this->wrap_urlset($buffer, $settings, $image_ns), $type, $buffered, $results, $index_children);
+                        $buffer   = [];
+                        $buffered = 0;
                     }
                 }
 
@@ -4861,7 +5113,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 // stale file deleted rather than left serving.
                 if (!empty($buffer) || ($page === 0 && $index_config === null)) {
                     $page++;
-                    $this->write_sitemap_page($this->paginate_url($sitemap_config['url'], $page), $this->wrap_urlset($buffer, $settings, $image_ns), $type, count($buffer), $results, $index_children);
+                    $this->write_sitemap_page($this->paginate_url($sitemap_config['url'], $page), $this->wrap_urlset($buffer, $settings, $image_ns), $type, $buffered, $results, $index_children);
                 }
 
                 // Nothing written: the admin must not link to it (#1219).

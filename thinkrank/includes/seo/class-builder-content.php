@@ -811,19 +811,371 @@ class Builder_Content {
             $content = $raw;
         }
 
+        // Copy that lives in ACF fields and is printed by a template rather than
+        // by post_content. Appended, not substituted: the post's own body is
+        // still the body, and a post with both gets both (#827).
+        $content = self::append_acf_text((int) $post->ID, $content);
+
         /**
          * Filter the content ThinkRank analyzes for a post.
          *
          * Use this to teach ThinkRank about a builder it does not know, or to
          * override extraction for one it does.
          *
-         * @since 1.23.0
+         * Runs last, so a site that already overrides extraction keeps winning
+         * over everything above — including the ACF pass.
+         *
+         * @since 1.24.0
          *
          * @param string   $content Resolved content.
          * @param \WP_Post $post    Post being analyzed.
          * @param string   $raw     Markup this resolution started from.
          */
         return (string) apply_filters('thinkrank_analyzable_content', $content, $post, $raw);
+    }
+
+    /**
+     * ACF field types whose value is copy a visitor reads.
+     *
+     * Only these. A `url`, `image`, `select`, `true_false` or `post_object`
+     * holds an identifier or a setting, and counting those as body text inflates
+     * the word count with strings nobody reads. Matches the field types Yoast's
+     * ACF Content Analysis add-on and Rank Math's ACF module read.
+     *
+     * @since 2.21.2
+     */
+    private const ACF_TEXT_FIELD_TYPES = ['text', 'textarea', 'wysiwyg'];
+
+    /**
+     * How deep to follow nested ACF containers.
+     *
+     * A `clone` field can point at a group that contains it, so the walk needs a
+     * bound rather than trusting the data to be a tree.
+     *
+     * @since 2.21.2
+     */
+    private const ACF_MAX_DEPTH = 10;
+
+    /**
+     * ACF field types that hold other fields rather than a value of their own.
+     *
+     * @since 2.21.2
+     */
+    private const ACF_CONTAINER_FIELD_TYPES = ['group', 'repeater', 'flexible_content', 'clone'];
+
+    /**
+     * Field names whose value reads as a heading rather than as a paragraph.
+     *
+     * Wrapped in <h2> so the Structure check counts them, which is the whole
+     * reason to tell them apart: a page whose only headings live in ACF
+     * otherwise scores as having none.
+     *
+     * @since 2.21.2
+     */
+    private const ACF_HEADING_NAME_FRAGMENTS = ['heading', 'title', 'headline', 'subtitle', 'subheading'];
+
+    /**
+     * Append the post's ACF text to the content being analyzed.
+     *
+     * A post whose copy lives in ACF fields and is printed by an Elementor Pro
+     * Theme Builder template scored as near-empty — Word Count 2, "Too short",
+     * D+ — because nothing resolved the template and nothing read ACF (#827).
+     * Reading the values is the cheap half of that: it covers the copy wherever
+     * the template puts it, without a front-end render (#566 weighs that).
+     *
+     * Appended rather than substituted, so a post with both a body and ACF copy
+     * is measured on both.
+     *
+     * Deliberately not reached by visible_content(), which is what the meta, OG,
+     * Twitter and schema descriptions use: a description is a deliberate summary
+     * and must not grow a tail of field values.
+     *
+     * @since 2.21.2
+     *
+     * @param int    $post_id Post being analyzed.
+     * @param string $content Content resolved so far.
+     * @return string Content with the ACF text appended.
+     */
+    private static function append_acf_text(int $post_id, string $content): string {
+        if ($post_id <= 0 || !function_exists('get_field_objects')) {
+            return $content;
+        }
+
+        /**
+         * Whether to read ACF values into the analyzed content for this post.
+         *
+         * A field that exists but is not printed on the page would still be
+         * counted, so this is the way to narrow or switch off the pass — per post
+         * type, per post, or entirely.
+         *
+         * @since 2.21.2
+         *
+         * @param bool $enabled Whether to read ACF values.
+         * @param int  $post_id Post being analyzed.
+         */
+        if (!apply_filters('thinkrank_analyze_acf_fields', true, $post_id)) {
+            return $content;
+        }
+
+        $fields = get_field_objects($post_id, false);
+
+        if (!is_array($fields) || empty($fields)) {
+            return $content;
+        }
+
+        $parts = self::acf_text_parts($fields, 0);
+
+        /**
+         * The HTML fragments extracted from this post's ACF fields.
+         *
+         * Each entry is already wrapped in <h2> or <p>. Use this to drop a field
+         * whose value is not really page copy, or to add one ThinkRank's type
+         * list does not cover.
+         *
+         * @since 2.21.2
+         *
+         * @param string[] $parts   Extracted fragments.
+         * @param int      $post_id Post being analyzed.
+         */
+        $parts = (array) apply_filters('thinkrank_acf_analyzable_parts', $parts, $post_id);
+
+        if (empty($parts)) {
+            return $content;
+        }
+
+        $appended = implode("\n", $parts);
+
+        return '' === trim($content) ? $appended : $content . "\n" . $appended;
+    }
+
+    /**
+     * Walk an ACF field set and collect the copy it holds.
+     *
+     * Recurses into the container types, because a repeater is where this kind of
+     * page usually keeps its sections, and depth is bounded for the same reason
+     * the builder tree walk is: a `clone` field can point at a group that
+     * contains it.
+     *
+     * @since 2.21.2
+     *
+     * @param array<string,mixed> $fields ACF field objects, or sub field rows.
+     * @param int                 $depth  Current recursion depth.
+     * @return string[] HTML fragments.
+     */
+    private static function acf_text_parts(array $fields, int $depth): array {
+        if ($depth > self::ACF_MAX_DEPTH) {
+            return [];
+        }
+
+        $parts = [];
+
+        foreach ($fields as $key => $field) {
+            if (!is_array($field)) {
+                continue;
+            }
+
+            $type  = isset($field['type']) ? (string) $field['type'] : '';
+            $name  = isset($field['name']) ? (string) $field['name'] : (string) $key;
+            $value = $field['value'] ?? null;
+
+            if (in_array($type, self::ACF_CONTAINER_FIELD_TYPES, true)) {
+                $parts = array_merge($parts, self::acf_container_parts($field, $depth));
+                continue;
+            }
+
+            if (!in_array($type, self::ACF_TEXT_FIELD_TYPES, true) || !is_string($value)) {
+                continue;
+            }
+
+            $text = trim(wp_strip_all_tags($value));
+
+            if ('' === $text || self::is_machine_data($text)) {
+                continue;
+            }
+
+            // A WYSIWYG value is the page's own markup: its headings, links
+            // and paragraph breaks are what the Structure and link checks
+            // and the word counter read. Stripping it to one <p> dropped the
+            // headings and links and ran "</h2><p>" together into one word
+            // (re-review on #1591). The value is read unformatted, so blank
+            // lines become paragraphs the way ACF's own formatting does, and
+            // kses keeps only post markup.
+            if ('wysiwyg' === $type) {
+                $html = trim(wp_kses_post(wpautop($value)));
+                if ('' !== $html) {
+                    $parts[] = $html;
+                }
+                continue;
+            }
+
+            $parts[] = self::is_heading_field($name)
+                ? '<h2>' . $text . '</h2>'
+                : '<p>' . $text . '</p>';
+        }
+
+        return $parts;
+    }
+
+    /**
+     * The copy inside a group, repeater, flexible content or clone field.
+     *
+     * ACF keeps a container's definitions and its values apart. The field
+     * types live under `sub_fields` (per layout under `layouts` for flexible
+     * content), and the value holds plain key => value cells: one row for a
+     * group or a clone, a list of rows for a repeater or flexible content.
+     * Unformatted, a cell is keyed by its sub field key; formatted, by its
+     * name.
+     *
+     * Each cell is matched to its definition and walked as a typed field, so
+     * the text-type allowlist applies inside a container exactly as it does at
+     * the top level. A cell with no definition is skipped: without a type
+     * there is no telling a URL or a select value from copy, and counting it
+     * would inflate the word count and the readability input.
+     *
+     * Sub fields that carry their own `value` (a shape some callers build by
+     * hand) are walked directly when the container has no row value.
+     *
+     * @since 2.21.2
+     *
+     * @param array<string,mixed> $field ACF field object.
+     * @param int                 $depth Current recursion depth.
+     * @return string[] HTML fragments.
+     */
+    private static function acf_container_parts(array $field, int $depth): array {
+        $type  = isset($field['type']) ? (string) $field['type'] : '';
+        $value = $field['value'] ?? null;
+
+        if (!is_array($value)) {
+            return !empty($field['sub_fields']) && is_array($field['sub_fields'])
+                ? self::acf_text_parts($field['sub_fields'], $depth + 1)
+                : [];
+        }
+
+        $rows  = in_array($type, ['repeater', 'flexible_content'], true) ? $value : [$value];
+        $parts = [];
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $definitions = self::acf_row_definitions($field, $row);
+            $typed       = [];
+
+            foreach ($row as $cell_key => $cell) {
+                $definition = $definitions[(string) $cell_key] ?? null;
+
+                if (null === $definition) {
+                    continue;
+                }
+
+                $definition['value'] = $cell;
+                $typed[]             = $definition;
+            }
+
+            $parts = array_merge($parts, self::acf_text_parts($typed, $depth + 1));
+        }
+
+        return $parts;
+    }
+
+    /**
+     * The sub field definitions that type one container row, by key and name.
+     *
+     * A flexible content row is typed by the layout it names in
+     * `acf_fc_layout`; every other container uses its own `sub_fields`.
+     *
+     * @since 2.21.2
+     *
+     * @param array<string,mixed> $field Container field object.
+     * @param array<mixed>        $row   One row of the container's value.
+     * @return array<string,array<string,mixed>> Definitions keyed by both key and name.
+     */
+    private static function acf_row_definitions(array $field, array $row): array {
+        $sub_fields = isset($field['sub_fields']) && is_array($field['sub_fields']) ? $field['sub_fields'] : [];
+
+        if ('flexible_content' === ($field['type'] ?? '')) {
+            $sub_fields = [];
+            $layout     = isset($row['acf_fc_layout']) ? (string) $row['acf_fc_layout'] : '';
+            $layouts    = isset($field['layouts']) && is_array($field['layouts']) ? $field['layouts'] : [];
+
+            foreach ($layouts as $definition) {
+                if (is_array($definition)
+                    && $layout === (string) ($definition['name'] ?? '')
+                    && isset($definition['sub_fields'])
+                    && is_array($definition['sub_fields'])
+                ) {
+                    $sub_fields = $definition['sub_fields'];
+                    break;
+                }
+            }
+        }
+
+        $definitions = [];
+
+        foreach ($sub_fields as $sub_field) {
+            if (!is_array($sub_field)) {
+                continue;
+            }
+
+            unset($sub_field['value']);
+
+            foreach (['key', 'name'] as $id) {
+                if (isset($sub_field[$id]) && '' !== (string) $sub_field[$id]) {
+                    $definitions[(string) $sub_field[$id]] = $sub_field;
+                }
+            }
+        }
+
+        return $definitions;
+    }
+
+    /**
+     * Whether a field value is machine data rather than copy.
+     *
+     * A textarea is the field type people reach for when they need somewhere to
+     * put JSON, and a site here does exactly that: `recipe_extra_json` holds a
+     * schema fragment. Counted as prose it added words no visitor reads and
+     * skewed the readability grade, which is the risk this feature carries.
+     *
+     * Only a complete JSON object or array is refused. A sentence that merely
+     * contains a brace is prose, and `json_decode` rejects it anyway.
+     *
+     * @since 2.21.2
+     *
+     * @param string $text Trimmed field value.
+     * @return bool
+     */
+    private static function is_machine_data(string $text): bool {
+        $first = $text[0] ?? '';
+
+        if ('{' !== $first && '[' !== $first) {
+            return false;
+        }
+
+        json_decode($text, true);
+
+        return JSON_ERROR_NONE === json_last_error();
+    }
+
+    /**
+     * Whether a field name reads as a heading.
+     *
+     * @since 2.21.2
+     *
+     * @param string $name Field name.
+     * @return bool
+     */
+    private static function is_heading_field(string $name): bool {
+        $name = strtolower($name);
+
+        foreach (self::ACF_HEADING_NAME_FRAGMENTS as $fragment) {
+            if (false !== strpos($name, $fragment)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

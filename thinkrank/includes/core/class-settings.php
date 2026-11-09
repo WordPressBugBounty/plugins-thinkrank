@@ -141,6 +141,32 @@ class Settings {
         return !empty($this->get($provider . '_api_key'));
     }
 
+    /**
+     * Where the classic edit screen shows the ThinkRank launcher (#985).
+     *
+     * The classic screen (Classic Editor, or a post type without `editor`
+     * support) has two launchers for the same drawer: the "ThinkRank SEO" box
+     * in the main column and the "ThinkRank" box in the sidebar. Both is what
+     * every site had before the choice existed, so it stays the default.
+     *
+     * @since 2.21.2
+     */
+    public const CLASSIC_LAUNCHER_BOTH    = 'both';
+    public const CLASSIC_LAUNCHER_MAIN    = 'main';
+    public const CLASSIC_LAUNCHER_SIDEBAR = 'sidebar';
+
+    /**
+     * Legal values for `classic_launcher_position`.
+     *
+     * @since 2.21.2
+     * @var string[]
+     */
+    public const CLASSIC_LAUNCHER_POSITIONS = [
+        self::CLASSIC_LAUNCHER_BOTH,
+        self::CLASSIC_LAUNCHER_MAIN,
+        self::CLASSIC_LAUNCHER_SIDEBAR,
+    ];
+
     const DEFAULT_AUTHOR_ARCHIVES_TITLE     = '%author_name% %separator% %site_title% %page%';
     const DEFAULT_AUTHOR_ARCHIVES_META_DESC = 'Articles written by %author_name% on %site_title%';
 
@@ -302,6 +328,8 @@ class Settings {
         'show_welcome_message' => true,
         'dashboard_widgets' => ['seo_score', 'ai_usage', 'recent_briefs'],
         'editor_panel_position' => 'side',
+        // Main column / sidebar / both on the classic edit screen (#985).
+        'classic_launcher_position' => self::CLASSIC_LAUNCHER_BOTH,
 
         // Advanced Settings
         'debug_mode' => false,
@@ -953,6 +981,15 @@ class Settings {
 
             case 'temperature':
                 return (float) $value;
+
+            case 'classic_launcher_position':
+                // Anything else would be stored and reported back while the
+                // edit screen falls back to Both, so store the fallback.
+                $position = sanitize_key((string) $value);
+
+                return in_array($position, self::CLASSIC_LAUNCHER_POSITIONS, true)
+                    ? $position
+                    : self::CLASSIC_LAUNCHER_BOTH;
 
             case 'dashboard_widgets':
                 return is_array($value) ? array_map('sanitize_key', $value) : [];
