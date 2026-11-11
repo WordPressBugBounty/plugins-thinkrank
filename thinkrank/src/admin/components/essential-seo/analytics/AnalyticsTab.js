@@ -578,6 +578,40 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 			return <EmailReportingPanel onNavigate={onNavigate} />;
 		}
 
+		// Question Coverage reads the editor's per-post results, not Google:
+		// it works with Analytics off, so it is not gated on it either.
+		if (activeSubSection === 'question-coverage') {
+			return (
+				<ProGatedTab
+					filter="thinkrank.analytics.questionCoverageTab"
+					teaser={
+						<ProTeaser
+							illustration={<TopContentIllustration />}
+							title={__('Question Coverage', 'thinkrank')}
+							description={__(
+								'See which questions your guides leave unanswered across the whole site, not one post at a time.',
+								'thinkrank'
+							)}
+							features={[
+								__(
+									'Check question coverage on every post of a type in one background run',
+									'thinkrank'
+								),
+								__(
+									'Sort the post list by coverage to plan your next refresh',
+									'thinkrank'
+								),
+								__(
+									'Find the questions most often missing across your content',
+									'thinkrank'
+								),
+							]}
+						/>
+					}
+				/>
+			);
+		}
+
 		if (!settings.seo_analytics_enabled) {
 			return null;
 		}

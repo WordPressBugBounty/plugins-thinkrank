@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 2.21.2
+ * Version: 2.21.3
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Requires PHP: 7.4
  * 
  * @package ThinkRank
- * @version 2.21.2
+ * @version 2.21.3
  * @since 1.0.0
  */
 
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '2.21.2');
+define('THINKRANK_VERSION', '2.21.3');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -404,6 +404,10 @@ final class ThinkRank {
             // separate index because a word count and a snippet verdict go
             // stale for different reasons (#565).
             'word_count_index' => new ThinkRank\SEO\Word_Count_Index(),
+            // The keyword map's inverted index: same reason again, and a
+            // separate index because a keyword changes when the focus keyword
+            // field changes, which neither of the two above watch (#568).
+            'keyword_index' => new ThinkRank\SEO\Keyword_Index(),
             // Counts changes to robots settings and redirects, so the two
             // reports above refresh when a post stops being indexable (#1013).
             'indexability' => new ThinkRank\SEO\Indexability(),

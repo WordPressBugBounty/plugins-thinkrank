@@ -621,6 +621,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-ml-4{
   margin-left: 1rem;
 }
+.tr-root .tr-ml-8{
+  margin-left: 2rem;
+}
 .tr-root .tr-ml-auto{
   margin-left: auto;
 }
@@ -674,6 +677,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-mt-\[3px\]{
   margin-top: 3px;
+}
+.tr-root .tr-mt-auto{
+  margin-top: auto;
 }
 .tr-root .tr-mt-px{
   margin-top: 1px;
@@ -1613,6 +1619,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   background-color: rgb(83 83 83 / 0.4);
 }
 .tr-root .tr-bg-line{
+  --tw-bg-opacity: 1;
+  background-color: rgb(213 213 221 / var(--tw-bg-opacity, 1));
+}
+.tr-root .tr-bg-line-1{
   --tw-bg-opacity: 1;
   background-color: rgb(213 213 221 / var(--tw-bg-opacity, 1));
 }

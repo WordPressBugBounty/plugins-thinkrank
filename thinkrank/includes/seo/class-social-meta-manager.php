@@ -2634,8 +2634,25 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
          */
         $locale = (string) apply_filters('thinkrank_og_locale', get_locale());
 
-        // Convert WordPress locale to OG locale format for the few that differ
-        // from the xx_YY form (e.g. bare 'ja').
+        $og_locale = self::normalize_og_locale($locale);
+
+        return $og_locale !== '' ? $og_locale : 'en_US';
+    }
+
+    /**
+     * Shape a locale or language tag into the xx_YY form Open Graph expects.
+     *
+     * Accepts a W3C tag as well as a WordPress locale, since a filter or a
+     * multilingual plugin may hand either over: a hyphenated `es-ES` was read
+     * as unparseable and published as en_US (#1592).
+     *
+     * @param string $locale Locale (`es_ES`), tag (`es-ES`) or bare code (`nl`).
+     * @return string The OG locale, or '' when the value cannot be read as one.
+     */
+    public static function normalize_og_locale(string $locale): string {
+        $locale = str_replace('-', '_', trim($locale));
+
+        // The few bare codes whose region is not the code doubled.
         $og_locale_map = [
             'ja' => 'ja_JP',
         ];
@@ -2644,18 +2661,16 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             return $og_locale_map[$locale];
         }
 
-        // Fall back to the actual site locale (normalized to xx_YY) rather than
-        // mislabeling every unmapped language as en_US.
-        if (preg_match('/^[a-z]{2,3}_[A-Z]{2}$/', $locale)) {
-            return $locale;
+        if (preg_match('/^([a-z]{2,3})_([a-z]{2})$/i', $locale, $m)) {
+            return strtolower($m[1]) . '_' . strtoupper($m[2]);
         }
 
         // Bare language code (e.g. 'nl') → best-effort xx_XX.
-        if (preg_match('/^([a-z]{2,3})$/', $locale, $m)) {
-            return $m[1] . '_' . strtoupper($m[1]);
+        if (preg_match('/^([a-z]{2,3})$/i', $locale, $m)) {
+            return strtolower($m[1]) . '_' . strtoupper($m[1]);
         }
 
-        return 'en_US';
+        return '';
     }
 
     /**

@@ -50,6 +50,10 @@ class Foreign_Schema_Detector {
 
     /**
      * Timeout for the loopback fetch, in seconds.
+     *
+     * Longer than the page sampler's, deliberately: that one budgets for three
+     * pages in a row and this one reads a single URL, so a slow host should not
+     * turn a conflict scan into an inconclusive one.
      */
     private const FETCH_TIMEOUT = 10;
 
@@ -573,53 +577,31 @@ class Foreign_Schema_Detector {
     /**
      * Fetch a front-end URL from this server.
      *
-     * Anonymous (no cookies) so the scan sees what a search engine sees, and
-     * `sslverify` off because this is a self-request — a local or self-signed
-     * certificate must not read as a conflict-free page. Mirrors how WP Site
-     * Health runs its own loopback probes, and how Instant Indexing checks its
-     * key file.
+     * Delegated to Page_Sampler, which owns the one loopback fetcher in the
+     * plugin. Two copies would drift on timeouts, redirects and TLS the first
+     * time one of them met a real host, and the rendered-page checks added in
+     * 2.12.0 need exactly this request (#769).
+     *
+     * This scan's own budget travels with the call. The sampler's defaults are
+     * tuned for three pages held in a transient: 5 seconds each, truncated at
+     * 512 KB. This scan reads one page, stores nothing, and looks for
+     * `application/ld+json` anywhere in the document — a foreign plugin that
+     * prints its block in the footer of a page-builder page sits past that
+     * truncation, and losing it would report a conflicting plugin as no
+     * conflict at all. The User-Agent stays as it was too, since a host or WAF
+     * may have been told to expect it.
      *
      * @param string $url URL to fetch.
      * @return string|\WP_Error Response body, or the failure.
      */
     private function fetch(string $url) {
-        $response = wp_remote_get(
+        return Page_Sampler::fetch(
             $url,
             [
-                'timeout'     => self::FETCH_TIMEOUT,
-                'sslverify'   => false,
-                'redirection' => 3,
-                'user-agent'  => 'ThinkRank-SchemaConflictCheck/1.0',
-                'headers'     => ['Cache-Control' => 'no-cache'],
+                'timeout'    => self::FETCH_TIMEOUT,
+                'max_bytes'  => 0,
+                'user_agent' => 'ThinkRank-SchemaConflictCheck/1.0',
             ]
         );
-
-        if (is_wp_error($response)) {
-            return $response;
-        }
-
-        $code = (int) wp_remote_retrieve_response_code($response);
-
-        if ($code !== 200) {
-            return new \WP_Error(
-                'thinkrank_scan_http_error',
-                sprintf(
-                    /* translators: %d: HTTP status code. */
-                    __('The page returned HTTP %d, so it could not be checked.', 'thinkrank'),
-                    $code
-                )
-            );
-        }
-
-        $body = (string) wp_remote_retrieve_body($response);
-
-        if ($body === '') {
-            return new \WP_Error(
-                'thinkrank_scan_empty_body',
-                __('The page returned an empty response, so it could not be checked.', 'thinkrank')
-            );
-        }
-
-        return $body;
     }
 }

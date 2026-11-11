@@ -194,6 +194,10 @@ class ThinkRank_Uninstaller {
             // three Brand Visibility tables are no longer created, but sites
             // that used the feature before it was removed still have them.
             $wpdb->prefix . 'thinkrank_ai_traffic',
+            // The focus keyword index behind the keyword map. Derived data,
+            // rebuilt from post meta, so nothing is lost by dropping it - but
+            // a table left behind is a table left behind.
+            $wpdb->prefix . 'thinkrank_post_keywords',
             $wpdb->prefix . 'thinkrank_brand_visibility_checks',
             $wpdb->prefix . 'thinkrank_bv_runs',
             $wpdb->prefix . 'thinkrank_bv_tasks',

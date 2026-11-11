@@ -208,13 +208,28 @@ class SEO_Analyzer {
             }
         }
 
+        // A forced run is the user asking for a fresh answer, usually after
+        // fixing something, so it re-reads the rendered pages too. The stored
+        // sample outlives the analysis on purpose (Page_Sampler::CACHE_TTL),
+        // and reading it here kept reporting markup that had already been
+        // fixed. The refetch also replaces the stored sample, so ordinary runs
+        // afterwards see the same pages.
+        $this->fresh_agent_sample = $force;
+        if ($force) {
+            $this->agent_sample = null;
+        }
+
         // The checks run unlocked: a full audit is slow, and its results do
         // not depend on which checks are ignored. Scoring and caching do, so
         // they run under the ignored-check lock with the committed map, as
         // set_ignored() does. Otherwise a run that read the map before an
         // ignore landed would cache an analysis that counts the check again
         // (re-review on #1591).
-        $checks = $this->run_checks();
+        try {
+            $checks = $this->run_checks();
+        } finally {
+            $this->fresh_agent_sample = false;
+        }
 
         return \ThinkRank\Core\Shared_State::locked(
             'option|' . self::IGNORED_OPTION,
@@ -629,7 +644,17 @@ class SEO_Analyzer {
         $out = [];
 
         foreach ($posts as $post) {
-            if (!is_array($post) || empty($post['id'])) {
+            if (!is_array($post)) {
+                continue;
+            }
+
+            // A finding is usually about a post, and an entry with neither an
+            // id nor a URL names nothing. The rendered-page checks are the
+            // exception: a sampled URL can have no post behind it — the front
+            // page of a site with no static home page is the common case — and
+            // dropping it would hide the one page most likely to carry a
+            // broken header (#769).
+            if (empty($post['id']) && empty($post['url'])) {
                 continue;
             }
 
@@ -688,6 +713,17 @@ class SEO_Analyzer {
             ['id' => 'structured_content', 'category' => 'geo', 'weight' => 0.5, 'callback' => [$this, 'check_structured_content']],
             ['id' => 'content_depth', 'category' => 'geo', 'weight' => 0.5, 'callback' => [$this, 'check_content_depth']],
             ['id' => 'content_freshness', 'category' => 'geo', 'weight' => 0.5, 'callback' => [$this, 'check_content_freshness']],
+
+            // Agentic browsing. These two read RENDERED pages rather than
+            // stored content, because the markup they are about — an icon
+            // link, a sprite button, an image link with a blank alt — exists
+            // only after the page renders, and on a builder site post_content
+            // is empty (#769). Both return nothing at all when no page could
+            // be fetched, which run_checks() treats as "not asked" rather than
+            // as a failure: a host that blocks loopback requests has a hosting
+            // limitation, not an SEO problem.
+            ['id' => 'agent_element_names', 'category' => 'geo', 'weight' => 0.5, 'callback' => [$this, 'check_agent_element_names']],
+            ['id' => 'agent_hidden_interactive', 'category' => 'geo', 'weight' => 0.5, 'callback' => [$this, 'check_agent_hidden_interactive']],
         ];
 
         /**
@@ -1778,6 +1814,26 @@ class SEO_Analyzer {
      * @var array<int,array{id: int, content: string, text: string, modified: int}>|null
      */
     private $content_sample = null;
+
+    /**
+     * Rendered pages and their accessibility findings, resolved once.
+     *
+     * Two checks read the same sample and the sample costs HTTP requests, so
+     * it is memoized for the analysis exactly as the content sample is.
+     *
+     * @since 2.21.3
+     * @var array|null
+     */
+    private $agent_sample = null;
+
+    /**
+     * Whether this analysis must fetch the rendered pages rather than read the
+     * stored sample. Set by a forced run().
+     *
+     * @since 2.21.3
+     * @var bool
+     */
+    private $fresh_agent_sample = false;
 
     /**
      * Word counts of the sampled posts, by ID, as Word_Count_Index reports
@@ -3535,5 +3591,290 @@ class SEO_Analyzer {
             __('Review your most important pages, update what has changed, and save them so their modified date reflects the revision.', 'thinkrank'),
             __('No published, indexable content to check yet.', 'thinkrank')
         );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Agentic browsing (rendered pages)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Every link and button an agent can name.
+     *
+     * The oldest accessibility rule there is, asked on behalf of a machine:
+     * an agent driving a page reads the accessibility tree, so a link whose
+     * whole content is an icon font glyph is a link to nowhere describable.
+     * Lighthouse 13.3.0 put it in its Agentic Browsing category; a screen
+     * reader has had the same complaint for twenty years.
+     *
+     * @since 2.21.3
+     * @return array Empty when no page could be read, which skips the check.
+     */
+    public function check_agent_element_names(): array {
+        $label  = __('Links and buttons have names an agent can read', 'thinkrank');
+        $sample = $this->get_agent_sample();
+
+        if ([] === $sample['pages']) {
+            return [];
+        }
+
+        $total   = (int) $sample['interactive'];
+        $unnamed = (int) $sample['unnamed_total'];
+        $pages   = count($sample['pages']);
+
+        if (0 === $total) {
+            return [
+                'label'   => $label,
+                'status'  => self::PASSED,
+                'message' => __('The sampled pages have no links or buttons to check.', 'thinkrank'),
+            ];
+        }
+
+        if (0 === $unnamed) {
+            return [
+                'label'   => $label,
+                'status'  => self::PASSED,
+                'message' => sprintf(
+                    /* translators: 1: interactive elements checked, 2: pages sampled. */
+                    _n(
+                        'All %1$d links and buttons on the %2$d sampled page have a name.',
+                        'All %1$d links and buttons across the %2$d sampled pages have a name.',
+                        $pages,
+                        'thinkrank'
+                    ),
+                    $total,
+                    $pages
+                ),
+                'value'   => $this->agent_findings($sample, ['unnamed']),
+            ];
+        }
+
+        // A single unnamed control in a header repeats on every page of the
+        // site, so the proportion matters more than the count: a tenth of the
+        // page's controls being unreadable is a different problem from one.
+        $share  = ($unnamed / max(1, $total)) * 100;
+        $status = $share >= 10 ? self::FAILED : self::WARNING;
+
+        return [
+            'label'    => $label,
+            'status'   => $status,
+            'message'  => sprintf(
+                /* translators: 1: unnamed elements, 2: elements checked, 3: pages sampled. */
+                __('%1$d of %2$d links and buttons across %3$d sampled pages have no name. An agent or screen reader cannot tell what they do.', 'thinkrank'),
+                $unnamed,
+                $total,
+                $pages
+            ),
+            'how_to_fix' => __('Give each one words. Add visible text, or an aria-label on the element, or alt text on the image inside it. An icon on its own is not a name.', 'thinkrank'),
+            'value'      => $this->agent_findings($sample, ['unnamed']),
+            'affected_posts' => $this->agent_affected_posts($sample, 'unnamed'),
+        ];
+    }
+
+    /**
+     * Interactive elements the accessibility tree cannot see.
+     *
+     * Two defects reported together because they have one cause and one fix:
+     * a control inside `aria-hidden="true"` is invisible to an agent while
+     * remaining clickable to a mouse, and an `aria-labelledby` naming an id
+     * that is not on the page leaves the browser to concatenate nothing. Both
+     * are markup that says a thing has a name when it does not.
+     *
+     * @since 2.21.3
+     * @return array Empty when no page could be read, which skips the check.
+     */
+    public function check_agent_hidden_interactive(): array {
+        $label  = __('No interactive element is hidden from agents', 'thinkrank');
+        $sample = $this->get_agent_sample();
+
+        if ([] === $sample['pages']) {
+            return [];
+        }
+
+        $hidden   = (int) $sample['hidden_total'];
+        $dangling = (int) $sample['dangling_total'];
+        $pages    = count($sample['pages']);
+
+        if (0 === $hidden && 0 === $dangling) {
+            return [
+                'label'   => $label,
+                'status'  => self::PASSED,
+                'message' => sprintf(
+                    /* translators: %d: pages sampled. */
+                    _n(
+                        'Nothing interactive is hidden from the accessibility tree on the %d sampled page.',
+                        'Nothing interactive is hidden from the accessibility tree across the %d sampled pages.',
+                        $pages,
+                        'thinkrank'
+                    ),
+                    $pages
+                ),
+                'value'   => $this->agent_findings($sample, ['hidden', 'dangling']),
+            ];
+        }
+
+        $parts = [];
+
+        if ($hidden > 0) {
+            $parts[] = sprintf(
+                /* translators: %d: number of elements. */
+                _n(
+                    '%d link or button sits inside aria-hidden markup, so it is clickable but invisible to an agent.',
+                    '%d links or buttons sit inside aria-hidden markup, so they are clickable but invisible to an agent.',
+                    $hidden,
+                    'thinkrank'
+                ),
+                $hidden
+            );
+        }
+
+        if ($dangling > 0) {
+            $parts[] = sprintf(
+                /* translators: %d: number of elements. */
+                _n(
+                    '%d element points aria-labelledby at an id that is not on the page, so it ends up with no name.',
+                    '%d elements point aria-labelledby at an id that is not on the page, so they end up with no name.',
+                    $dangling,
+                    'thinkrank'
+                ),
+                $dangling
+            );
+        }
+
+        return [
+            'label'      => $label,
+            // A warning rather than a failure: unlike a missing name, this is
+            // often a theme or plugin decision the site owner did not make and
+            // cannot change from the editor.
+            'status'     => self::WARNING,
+            'message'    => implode(' ', $parts),
+            'how_to_fix' => __('Move aria-hidden onto the decorative icon rather than the control around it, and check that every aria-labelledby names an id that exists on the same page.', 'thinkrank'),
+            'value'      => $this->agent_findings($sample, ['hidden', 'dangling']),
+            'affected_posts' => $this->agent_affected_posts($sample, 'hidden'),
+        ];
+    }
+
+    /**
+     * The rendered sample, analysed once per analysis.
+     *
+     * @since 2.21.3
+     * @return array{pages: array, interactive: int, unnamed_total: int, hidden_total: int, dangling_total: int, findings: array}
+     */
+    private function get_agent_sample(): array {
+        if (null !== $this->agent_sample) {
+            return $this->agent_sample;
+        }
+
+        $sample = [
+            'pages'          => [],
+            'interactive'    => 0,
+            'unnamed_total'  => 0,
+            'hidden_total'   => 0,
+            'dangling_total' => 0,
+            'findings'       => [],
+        ];
+
+        if (!class_exists('ThinkRank\\Diagnostics\\Page_Sampler')
+            || !class_exists('ThinkRank\\SEO\\Agent_Accessibility')) {
+            $this->agent_sample = $sample;
+
+            return $sample;
+        }
+
+        foreach (\ThinkRank\Diagnostics\Page_Sampler::pages(!$this->fresh_agent_sample) as $page) {
+            $result = Agent_Accessibility::analyze((string) ($page['html'] ?? ''));
+
+            $sample['pages'][]        = (string) ($page['url'] ?? '');
+            $sample['interactive']   += (int) $result['interactive'];
+            $sample['unnamed_total'] += (int) $result['unnamed_total'];
+            $sample['hidden_total']  += (int) $result['hidden_total'];
+            $sample['dangling_total'] += (int) $result['dangling_total'];
+
+            $sample['findings'][] = [
+                'url'      => (string) ($page['url'] ?? ''),
+                'unnamed'  => $result['unnamed'],
+                'hidden'   => $result['hidden'],
+                'dangling' => $result['dangling'],
+            ];
+        }
+
+        $this->agent_sample = $sample;
+
+        return $sample;
+    }
+
+    /**
+     * The sample's findings, narrowed to the buckets one check is about.
+     *
+     * Both checks read the same sample, and handing each of them all three
+     * buckets would store the same list twice in every cached analysis and
+     * every audit snapshot — and would show a reader of one check the other
+     * check's findings.
+     *
+     * @since 2.21.3
+     * @param array    $sample  Analysed sample.
+     * @param string[] $buckets Finding buckets to keep.
+     * @return array
+     */
+    private function agent_findings(array $sample, array $buckets): array {
+        $out = [];
+
+        foreach ($sample['findings'] as $finding) {
+            $row = ['url' => (string) $finding['url']];
+
+            foreach ($buckets as $bucket) {
+                $row[$bucket] = $finding[$bucket] ?? [];
+            }
+
+            $out[] = $row;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Name the sampled pages a finding is about, in the shape the audit UI reads.
+     *
+     * A sampled URL is resolved back to its post so the list can link to an
+     * editor the way every other finding does; the front page of a site with
+     * no static home page has no post behind it, and is reported by URL alone
+     * under id 0 rather than being dropped.
+     *
+     * @since 2.21.3
+     * @param array  $sample Analysed sample.
+     * @param string $key    Finding bucket: 'unnamed' or 'hidden'.
+     * @return array
+     */
+    private function agent_affected_posts(array $sample, string $key): array {
+        $out = [];
+
+        foreach ($sample['findings'] as $finding) {
+            $has = !empty($finding[$key])
+                || ('hidden' === $key && !empty($finding['dangling']));
+
+            if (!$has) {
+                continue;
+            }
+
+            $url     = (string) $finding['url'];
+            $post_id = function_exists('url_to_postid') ? (int) url_to_postid($url) : 0;
+            $post    = $post_id > 0 ? get_post($post_id) : null;
+
+            // The post type's LABEL, matching every other finding's list; the
+            // raw slug would read as a different kind of value beside them.
+            $type_object = $post ? get_post_type_object($post->post_type) : null;
+
+            $out[] = [
+                'id'       => $post_id,
+                'title'    => $post ? (string) get_the_title($post) : $url,
+                // The post type's LABEL, matching every other finding's list;
+                // the raw slug would read as a different kind of value beside
+                // them.
+                'type'     => $type_object ? (string) $type_object->labels->singular_name : __('URL', 'thinkrank'),
+                'edit_url' => $post_id > 0 ? admin_url('post.php?post=' . $post_id . '&action=edit') : '',
+                'url'      => $url,
+            ];
+        }
+
+        return $out;
     }
 }

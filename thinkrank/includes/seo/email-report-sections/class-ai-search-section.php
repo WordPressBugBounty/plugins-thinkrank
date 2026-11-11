@@ -78,6 +78,22 @@ final class Ai_Search_Section implements Email_Report_Section_Interface {
             'platforms'     => is_array($current['platforms'] ?? null) ? $current['platforms'] : [],
             'crawler_hits'  => (int) array_sum(array_map('intval', is_array($current['crawlers'] ?? null) ? $current['crawlers'] : [])),
             'llms_txt'      => !empty($current['llms_txt']),
+            /**
+             * Filters extra lines for the AI section of the email report.
+             *
+             * ThinkRank Pro adds "conversions from AI visits" from GA4 here
+             * (#734). Each line is a short sentence that may carry inline
+             * markup; it is passed through wp_kses_post() on render.
+             *
+             * @since 2.21.3
+             *
+             * @param string[] $lines   Extra lines. Empty by default.
+             * @param array    $context Report context (period, frequency).
+             */
+            'extra_lines'   => array_values(array_filter(
+                (array) apply_filters('thinkrank_email_report_ai_search_lines', [], $context),
+                'is_string'
+            )),
         ];
     }
 
@@ -129,6 +145,9 @@ final class Ai_Search_Section implements Email_Report_Section_Interface {
                 _n('AI crawlers fetched %s page this period.', 'AI crawlers fetched %s pages this period.', (int) $payload['crawler_hits'], 'thinkrank'),
                 '<strong>' . esc_html(number_format_i18n((int) $payload['crawler_hits'])) . '</strong>'
             );
+        }
+        foreach ((array) ($payload['extra_lines'] ?? []) as $extra) {
+            $lines[] = wp_kses_post((string) $extra);
         }
         $lines[] = !empty($payload['llms_txt'])
             ? __('Your llms.txt is published.', 'thinkrank')

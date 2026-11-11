@@ -295,10 +295,140 @@ const textButtonStyle = (disabled) => ({
 // Keep a click or key press on a control inside a row from toggling the row.
 const stopRowToggle = (event) => event.stopPropagation();
 
+// Markup a rendered-page finding carries, per page. The agent-accessibility
+// checks put the offending elements in `value` as
+// `[{ url, unnamed: [{ tag, snippet }], hidden: [...], dangling: [...] }]`,
+// and a page with a hundred links is no use named without them.
+export const MARKUP_SNIPPETS_SHOWN = 3;
+
+const MARKUP_BUCKETS = ['unnamed', 'hidden', 'dangling'];
+
+const markupBucketLabel = (bucket) => {
+	if ('hidden' === bucket) {
+		return __('Inside aria-hidden', 'thinkrank');
+	}
+	if ('dangling' === bucket) {
+		return __('aria-labelledby target missing', 'thinkrank');
+	}
+	return '';
+};
+
+/**
+ * Index a check's `value` by page URL, keeping only snippet findings.
+ *
+ * @param {*} value A check's `value`; anything but the findings shape yields
+ *                  an empty map.
+ * @return {Map<string, Array<{bucket: string, tag: string, snippet: string}>>} Snippets by URL.
+ */
+export const markupByUrl = (value) => {
+	const byUrl = new Map();
+
+	if (!Array.isArray(value)) {
+		return byUrl;
+	}
+
+	value.forEach((row) => {
+		if (!row || 'object' !== typeof row || !row.url) {
+			return;
+		}
+
+		const items = [];
+		MARKUP_BUCKETS.forEach((bucket) => {
+			(Array.isArray(row[bucket]) ? row[bucket] : []).forEach((item) => {
+				if (item && 'string' === typeof item.snippet && item.snippet) {
+					items.push({
+						bucket,
+						tag: String(item.tag || ''),
+						snippet: item.snippet,
+					});
+				}
+			});
+		});
+
+		if (items.length) {
+			byUrl.set(row.url, [...(byUrl.get(row.url) || []), ...items]);
+		}
+	});
+
+	return byUrl;
+};
+
+// The offending markup under a page row, as code. React escapes the text, so
+// a snippet is shown as written and never rendered as HTML.
+const MarkupSnippets = ({ items }) => {
+	const shown = items.slice(0, MARKUP_SNIPPETS_SHOWN);
+	const more = items.length - shown.length;
+
+	return (
+		<ul
+			className="thinkrank-markup-snippets"
+			style={{ listStyle: 'none', margin: '6px 0 0', padding: 0 }}
+		>
+			{shown.map((item, i) => (
+				<li
+					key={i}
+					style={{
+						display: 'flex',
+						alignItems: 'baseline',
+						gap: '6px',
+						marginTop: i === 0 ? 0 : '4px',
+						minWidth: 0,
+					}}
+				>
+					{markupBucketLabel(item.bucket) && (
+						<span
+							style={{
+								flexShrink: 0,
+								fontSize: '11px',
+								color: '#92400e',
+							}}
+						>
+							{markupBucketLabel(item.bucket)}
+						</span>
+					)}
+					<code
+						style={{
+							display: 'block',
+							minWidth: 0,
+							fontSize: '11.5px',
+							color: '#374151',
+							background: '#f3f4f6',
+							borderRadius: '4px',
+							padding: '2px 6px',
+							overflowWrap: 'anywhere',
+							whiteSpace: 'pre-wrap',
+						}}
+					>
+						{item.snippet}
+					</code>
+				</li>
+			))}
+			{more > 0 && (
+				<li
+					style={{
+						marginTop: '4px',
+						fontSize: '11.5px',
+						color: '#6b7280',
+					}}
+				>
+					{sprintf(
+						/* translators: %d: number of further elements not shown. */
+						__('+%d more', 'thinkrank'),
+						more
+					)}
+				</li>
+			)}
+		</ul>
+	);
+};
+
 // A count ("7 of your 8 pages…") leaves the user to guess which pages it
 // means. Name them, ten at a time, each linking to its editor. `total` can be
-// larger than the list when the server capped it.
-const AffectedPosts = ({ posts, total }) => {
+// larger than the list when the server capped it. `findings` is the check's
+// `value`; when it carries markup for a listed page, that markup is shown
+// under the page.
+const AffectedPosts = ({ posts, total, findings }) => {
+	const markup = useMemo(() => markupByUrl(findings), [findings]);
 	const count = Math.max(posts.length, total || 0);
 	const [page, setPage] = useState(1);
 	const pageCount = Math.max(1, Math.ceil(posts.length / AFFECTED_PER_PAGE));
@@ -342,52 +472,68 @@ const AffectedPosts = ({ posts, total }) => {
 			>
 				{visible.map((post, i) => (
 					<li
-						key={post.id}
+						// A finding about a rendered URL has no post behind it,
+						// so the id is 0 for every one of them and would not be
+						// a key at all.
+						key={post.id || post.url || i}
 						style={{
-							display: 'flex',
-							alignItems: 'center',
-							gap: '10px',
 							padding: '7px 10px',
 							borderTop: i === 0 ? 'none' : '1px solid #eef0f4',
 						}}
 					>
-						<a
-							href={post.edit_url}
-							target="_blank"
-							rel="noopener noreferrer"
+						<div
 							style={{
-								flex: 1,
-								minWidth: 0,
-								color: '#4451FF',
-								fontWeight: 600,
-								textDecoration: 'none',
-								overflow: 'hidden',
-								textOverflow: 'ellipsis',
-								whiteSpace: 'nowrap',
+								display: 'flex',
+								alignItems: 'center',
+								gap: '10px',
 							}}
 						>
-							{post.title}
-						</a>
-						{post.type && (
-							<span
-								style={{ fontSize: '11.5px', color: '#6b7280' }}
-							>
-								{post.type}
-							</span>
-						)}
-						{post.url && (
 							<a
-								href={post.url}
+								// Same reason: with no post there is no editor to
+								// open, so the page itself is the useful link.
+								href={post.edit_url || post.url}
 								target="_blank"
 								rel="noopener noreferrer"
 								style={{
-									fontSize: '11.5px',
-									color: '#6b7280',
+									flex: 1,
+									minWidth: 0,
+									color: '#4451FF',
+									fontWeight: 600,
 									textDecoration: 'none',
+									overflow: 'hidden',
+									textOverflow: 'ellipsis',
+									whiteSpace: 'nowrap',
 								}}
 							>
-								{__('View', 'thinkrank')}
+								{post.title}
 							</a>
+							{post.type && (
+								<span
+									style={{
+										fontSize: '11.5px',
+										color: '#6b7280',
+									}}
+								>
+									{post.type}
+								</span>
+							)}
+							{post.url && (
+								<a
+									href={post.url}
+									target="_blank"
+									rel="noopener noreferrer"
+									style={{
+										fontSize: '11.5px',
+										color: '#6b7280',
+										textDecoration: 'none',
+									}}
+								>
+									{__('View', 'thinkrank')}
+								</a>
+							)}
+						</div>
+						{post.url && markup.has(post.url) && (
+							<MarkupSnippets items={markup.get(post.url)} />
 						)}
 					</li>
 				))}
@@ -621,6 +767,7 @@ const CheckRow = ({ check, last, onFix, onIgnore, busy = false }) => {
 							<AffectedPosts
 								posts={check.affected_posts}
 								total={check.affected_total}
+								findings={check.value}
 							/>
 						)}
 

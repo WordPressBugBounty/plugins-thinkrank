@@ -239,12 +239,63 @@ class Analytics_Manager {
     }
 
     /**
+     * Get the initialized Search Analytics client
+     *
+     * The sibling of get_search_console_client(), and added for the same
+     * reason: a caller that builds its own client has to know which setting
+     * holds the OAuth token, and guessing that wrong is how an OAuth-connected
+     * site came to report every integration as unconfigured (#519). Going
+     * through initialize_clients() also refreshes an expired token, which a
+     * hand-built client would not.
+     *
+     * @since 2.21.3
+     *
+     * @return Google_Search_Analytics_Client|null
+     */
+    public function get_search_analytics_client(): ?Google_Search_Analytics_Client {
+        if (!$this->search_analytics_client) {
+            $this->initialize_clients();
+        }
+        return $this->search_analytics_client;
+    }
+
+    /**
      * Get the configured Search Console property URL
      *
      * @return string
      */
     public function get_property_url(): string {
         return $this->get_setting('search_console_property', get_site_url());
+    }
+
+    /**
+     * Whether a string is a property Search Console recognises.
+     *
+     * A URL-prefix property (https://example.com/) or a domain property
+     * (sc-domain:example.com). Anything else, most often the empty setting a
+     * site has before a property is picked, makes Google answer "'http://' is
+     * not a valid Search Console site URL", which tells an admin nothing.
+     *
+     * @since 2.21.3
+     * @param string $property Property URL.
+     * @return bool
+     */
+    public static function is_search_console_property(string $property): bool {
+        return 1 === preg_match('#^(sc-domain:\S+|https?://\S+)$#i', trim($property));
+    }
+
+    /**
+     * Whether this site has a usable Search Console property selected.
+     *
+     * The one predicate every Search Console caller checks before asking
+     * Google, so the analytics screen, the keyword map and Question Coverage
+     * agree on when a property is missing.
+     *
+     * @since 2.21.3
+     * @return bool
+     */
+    public function has_search_console_property(): bool {
+        return self::is_search_console_property($this->get_property_url());
     }
 
     /**

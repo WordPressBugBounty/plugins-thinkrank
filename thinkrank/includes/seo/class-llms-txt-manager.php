@@ -811,6 +811,31 @@ class LLMs_Txt_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * When the served llms.txt was last written, as a Unix timestamp.
+     *
+     * The cheap counterpart to get_llms_txt_status()'s `last_modified`: the
+     * physical file's mtime in static delivery, the publish stamp in dynamic
+     * delivery — without the loopback probe and filesystem API that status
+     * runs, which is far too much for a dashboard card (#734).
+     *
+     * @since 2.21.3
+     *
+     * @return int|null Timestamp, or null when nothing is published.
+     */
+    public function last_published_at(): ?int {
+        $llms_file = ABSPATH . 'llms.txt';
+
+        if (file_exists($llms_file)) {
+            $mtime = filemtime($llms_file);
+            return false !== $mtime ? (int) $mtime : null;
+        }
+
+        $published_at = (int) get_option(self::PUBLISHED_AT_OPTION, 0);
+
+        return $published_at > 0 ? $published_at : null;
+    }
+
+    /**
      * Note that a plugin was activated or deactivated.
      *
      * The republish is not done here: `deactivated_plugin` fires inside the

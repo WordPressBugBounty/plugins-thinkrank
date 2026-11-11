@@ -1,7 +1,8 @@
 /**
  * Analysis panel — AI tools + SEO score.
  *
- * Top: an AI Assistant card (content type, tone, Generate-with-AI, Analyze).
+ * Top: an AI Assistant card (content type, tone, Generate-with-AI, Analyze),
+ * then Question Coverage (#723).
  * Below: the full SEOScoreCalculator (score ring, scoring factors, suggestions),
  * which reports its score upward via `onScoreChange` for the drawer header ring.
  */
@@ -12,6 +13,12 @@ import Button from '../../../admin/components/ui/Button';
 import PanelCard from '../ui/PanelCard';
 import { IconSparkle } from '../ui/icons';
 import SEOScoreCalculator from '../../../admin/components/seo/SEOScoreCalculator';
+import QuestionCoverageCard from './QuestionCoverageCard';
+import {
+	isBlockEditor,
+	classicVisualEditor,
+	classicTextarea,
+} from '../../utils/editorContent';
 
 const CONTENT_TYPES = [
 	{ value: 'blog_post', label: __('Blog Post', 'thinkrank') },
@@ -31,11 +38,10 @@ const CONTENT_TYPES = [
 const appendEditorContent = (html) => {
 	if (!html) return;
 	const wp = window.wp;
-	// Block editor: convert the HTML to blocks and insert at the end.
-	if (
-		wp?.blocks?.rawHandler &&
-		wp?.data?.dispatch?.('core/block-editor')?.insertBlocks
-	) {
+	// Block editor: convert the HTML to blocks and insert at the end. The
+	// block-editor store is registered on Classic Editor screens too, so
+	// check for the editor itself.
+	if (isBlockEditor() && wp?.blocks?.rawHandler) {
 		const blocks = wp.blocks.rawHandler({ HTML: html });
 		if (blocks && blocks.length) {
 			wp.data.dispatch('core/block-editor').insertBlocks(blocks);
@@ -43,16 +49,14 @@ const appendEditorContent = (html) => {
 		}
 	}
 	// Classic editor (TinyMCE visual mode).
-	if (window.tinymce) {
-		const editor = window.tinymce.get('content');
-		if (editor && !editor.isHidden()) {
-			editor.setContent(editor.getContent() + html);
-			editor.fire('change');
-			return;
-		}
+	const editor = classicVisualEditor();
+	if (editor) {
+		editor.setContent(editor.getContent() + html);
+		editor.fire('change');
+		return;
 	}
 	// Classic editor (text mode) / fallback textarea.
-	const textarea = document.getElementById('content');
+	const textarea = classicTextarea();
 	if (textarea) {
 		textarea.value += '\n' + html;
 		textarea.dispatchEvent(new Event('change', { bubbles: true }));
@@ -170,6 +174,12 @@ const AnalysisPanel = ({
 					</p>
 				)}
 			</PanelCard>
+
+			<QuestionCoverageCard
+				postId={postId}
+				focusKeyword={formData.thinkrank_focus_keyword}
+				onAppendContent={appendEditorContent}
+			/>
 
 			<SEOScoreCalculator
 				postId={postId}

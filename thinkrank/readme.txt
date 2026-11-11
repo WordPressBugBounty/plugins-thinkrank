@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.21.2
+Stable tag: 2.21.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -263,6 +263,18 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.21.3 =
+Release Date: 2026-11-11
+
+- New: Question Coverage shows which questions about the focus keyword a post answers
+- New: AI Insights lists the pages each AI platform sends visitors to
+- New: AI Insights shows the state of AI crawler access and llms.txt at a glance
+- New: The SEO Analyzer checks that links and buttons have names AI agents can read
+- New: AI assistants can read AI Insights, map focus keywords and find pages competing for one
+- New: AI assistants can compare a post with competitor pages and list the terms it misses
+- Fixed: Polylang sites print valid og:locale values for every language
+- Fixed: Minor SEO Analyzer, Search Console and Question Coverage issues
+
 = 2.21.2 =
 Release Date: 2026-11-09
 
@@ -319,26 +331,12 @@ Release Date: 2026-10-29
 - Fixed: External Links and Image SEO apply to Bricks content, and builder image alts are read
 - Fixed: Minor Bricks editor, SEO Analyzer, MCP Activity, OpenRouter and alt fill issues
 
-= 2.20.0 =
-Release Date: 2026-10-28
-
-- New: Connect Gemini, Gemini CLI, Grok, Codex, Windsurf and Le Chat from the MCP screen
-- New: ThinkRank's breadcrumb trail shows in the Kadence theme
-- Improved: SEO changes now clear xSpeed and seven more page caches, and warn about host caches
-- Fixed: Chinese, Japanese and Thai posts get a fair word count, keyword density and SEO score
-- Fixed: Content Type Matrix "On" now outputs schema and social tags that are off site-wide
-- Fixed: A site that represents a person publishes a Person instead of an Organization
-- Fixed: Rank Math import keeps Product and Event schema fields and lists the schema it left behind
-- Fixed: Image sitemaps list the images on Oxygen, Breakdance, Bricks and Divi pages
-- Fixed: Title formats and author archive templates drop variables they cannot fill
-- Fixed: Minor robots.txt, llms.txt, SEO score and MCP issues
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.21.3 =
+Find out which questions a post answers with Question Coverage, see where each AI platform sends visitors, and check that links and buttons are named for AI agents. Recommended for all sites.
+
 = 2.21.2 =
 Ignore audit checks that do not apply, turn off a post's structured data and let AI write image captions and descriptions. Sitemaps now list TranslatePress translations. Recommended for all sites.
-
-= 2.21.1 =
-The SEO Analyzer now grades indexable content of every post type, and the Setup Wizard keeps your old SEO plugin active after a partial migration. Also fixes sitemap dates and permalink redirects. Recommended for all sites.

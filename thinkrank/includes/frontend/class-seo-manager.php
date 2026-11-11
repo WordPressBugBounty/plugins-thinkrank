@@ -2268,7 +2268,12 @@ class SEO_Manager {
          *
          * @param string $locale Locale for the current request.
          */
-        $og_locale = (string) apply_filters('thinkrank_og_locale', get_locale());
+        $og_locale = \ThinkRank\SEO\Social_Meta_Manager::normalize_og_locale(
+            (string) apply_filters('thinkrank_og_locale', get_locale())
+        );
+        if ($og_locale === '') {
+            $og_locale = 'en_US';
+        }
         echo "<meta property=\"og:locale\" content=\"" . esc_attr($og_locale) . "\" />\n";
 
         // Add OG image — per-post override > featured image

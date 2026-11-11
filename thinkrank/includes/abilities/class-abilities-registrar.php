@@ -19,6 +19,7 @@ use ThinkRank\Abilities\Content\Get_Post_Seo;
 use ThinkRank\Abilities\Content\Get_Term_Seo;
 use ThinkRank\Abilities\Content\List_Content_Items;
 use ThinkRank\Abilities\Content\Get_Duplicate_Snippets;
+use ThinkRank\Abilities\Content\Get_Keyword_Map;
 use ThinkRank\Abilities\Content\Get_Thin_Content;
 use ThinkRank\Abilities\Content\Get_Thin_Content_Settings;
 use ThinkRank\Abilities\Content\List_Snippet_Issues;
@@ -28,6 +29,8 @@ use ThinkRank\Abilities\Content\Update_Post_Seo;
 use ThinkRank\Abilities\Content\Update_Term_Seo;
 use ThinkRank\Abilities\Content\Generate_Content_Brief;
 use ThinkRank\Abilities\Content\Get_Pillar_Content;
+use ThinkRank\Abilities\Content\Get_Question_Coverage;
+use ThinkRank\Abilities\Content\Analyze_Question_Coverage;
 use ThinkRank\Abilities\Content\Update_Pillar_Content;
 use ThinkRank\Abilities\Import\Detect_Import_Sources;
 use ThinkRank\Abilities\Import\Get_Import_Status;
@@ -93,8 +96,10 @@ use ThinkRank\Abilities\Analysis\Publish_Llms_Txt;
 use ThinkRank\Abilities\Analysis\Get_Seo_Analytics_Data;
 use ThinkRank\Abilities\Analysis\Get_Seo_Opportunities;
 use ThinkRank\Abilities\Analysis\Get_Seo_Score;
+use ThinkRank\Abilities\Analysis\Get_Ai_Insights;
 use ThinkRank\Abilities\Analysis\Get_Seo_Score_History;
 use ThinkRank\Abilities\Analysis\Get_Seo_Analyzer;
+use ThinkRank\Abilities\Analysis\Get_Topical_Relevance;
 use ThinkRank\Abilities\Analysis\Run_Seo_Analyzer;
 use ThinkRank\Abilities\Analysis\Fix_Seo_Check;
 use ThinkRank\Abilities\Analysis\Get_Performance_Data;
@@ -368,6 +373,7 @@ class Abilities_Registrar {
 			new List_Snippet_Issues(),
 			new Get_Duplicate_Snippets(),
 			new Get_Thin_Content(),
+			new Get_Keyword_Map(),
 			new Get_Thin_Content_Settings(),
 			new Update_Thin_Content_Settings(),
 			new Get_Term_Seo(),
@@ -434,6 +440,8 @@ class Abilities_Registrar {
 			new Get_Seo_Score(),
 			new Get_Seo_Score_History(),
 			new Get_Seo_Analyzer(),
+			new Get_Ai_Insights(),
+			new Get_Topical_Relevance(),
 			new Run_Seo_Analyzer(),
 			new Fix_Seo_Check(),
 			new Get_Performance_Data(),
@@ -444,6 +452,8 @@ class Abilities_Registrar {
 			new Generate_Content_Brief(),
 			new Get_Pillar_Content(),
 			new Update_Pillar_Content(),
+			new Get_Question_Coverage(),
+			new Analyze_Question_Coverage(),
 			new Detect_Import_Sources(),
 			new Get_Import_Status(),
 			new Run_Seo_Import(),

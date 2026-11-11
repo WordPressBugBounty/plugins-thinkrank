@@ -85,6 +85,7 @@ final class Mcp_Scopes {
 		'list-snippet-issues'              => 'content',
 		'get-duplicate-snippets'           => 'content',
 		'get-thin-content'                 => 'content',
+		'get-keyword-map'                  => 'content',
 		'list-images'                      => 'content',
 		'get-image-alt-text'               => 'content',
 		'get-image-alt-preview'            => 'content',
@@ -165,9 +166,13 @@ final class Mcp_Scopes {
 		'get-performance-data'             => 'analytics',
 		'get-integrations-status'          => 'analytics',
 		'get-post-seo-checks'              => 'analytics',
+		'analyze-question-coverage'        => 'analytics',
+		'get-question-coverage'            => 'analytics',
 		'get-term-seo-checks'              => 'analytics',
+		'get-topical-relevance'            => 'analytics',
 		'get-seo-score-history'            => 'analytics',
 		'get-mcp-activity'                 => 'analytics',
+		'get-ai-insights'                  => 'analytics',
 	];
 
 	/**

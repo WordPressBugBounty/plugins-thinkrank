@@ -7,6 +7,13 @@
  * AI Revenue is a ThinkRank Pro slot (`thinkrank.aiInsights.revenueTab`,
  * thinkrank-pro#60); free shows the teaser.
  *
+ * #734 adds, on the AI Traffic tab: platform rows that open onto the pages
+ * that platform sent visitors to, three guidance cards stating the site's
+ * current state on the controls that affect AI visibility, and inline Pro
+ * slots for GA4 conversions (`thinkrank.aiInsights.conversions`,
+ * `.platformConversions`, `.ga4OnlyPlatforms`, `.reconciliation`) and the
+ * Markdown for AI card (`thinkrank.aiInsights.markdownCard`).
+ *
  * Auto AI (metadata on publish) was a tab here until #707 moved it to
  * Bulk SEO Optimization, next to the rest of the AI-written metadata; see
  * `../AutoAiSection.js`.
@@ -18,6 +25,7 @@
 import { useState, useEffect } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
+import { applyFilters } from '@wordpress/hooks';
 import classnames from 'classnames';
 import {
 	Card,
@@ -33,6 +41,8 @@ import ProTeaser from '../../pro/ProTeaser';
 import ProGatedTab from '../../pro/ProGatedTab';
 import { InternalLinksIllustration } from '../../pro/pro-teaser-illustrations';
 import logger from '../../../../shared/utils/logger';
+import { getPageUrl } from '../../../utils/router';
+import { crawlerCard, llmsCard } from './guidance';
 
 // --- Inline icons (currentColor → theme-aware, no icon-font dependency) ------
 
@@ -485,6 +495,241 @@ const PanelTitle = ({ children, trailing }) => (
 	</div>
 );
 
+// An inline Pro slot: a tile, a column, a line inside a free panel. Rendered
+// only for a licensed Pro. Unlike ProGatedTab it shows no teaser and no licence
+// notice — a notice wedged into a row of metric tiles would crowd the data the
+// row is for. The AI Revenue tab and the Markdown card on this same screen
+// already carry the upsell and the licence state.
+const ProInlineSlot = ({ filter, args = [] }) =>
+	window.thinkrankAdmin?.isPro
+		? (applyFilters(filter, null, ...args) ?? null)
+		: null;
+
+// Pro rows for platforms GA4 credited but the server never saw. Without them
+// the conversions tile counts sessions no row accounts for. Pro gets the
+// server's slugs to leave out, and the label and colour helpers so its rows
+// read like these.
+const Ga4OnlyPlatformsSlot = ({ platforms, days }) => (
+	<ProInlineSlot
+		filter="thinkrank.aiInsights.ga4OnlyPlatforms"
+		args={[
+			{
+				platforms,
+				days,
+				label: sourceLabel,
+				color: platformColor,
+			},
+		]}
+	/>
+);
+
+// Platform rows that open onto the pages each platform sent visitors to.
+export const PlatformList = ({ entries, max, pagesByPlatform = {}, days }) => {
+	const [open, setOpen] = useState(null);
+
+	return (
+		<div className="tr-flex tr-flex-col tr-gap-1">
+			{entries.map(([slug, hits]) => {
+				const color = platformColor(slug);
+				const pct = Math.max(3, Math.round((hits / max) * 100));
+				const pages = Object.entries(pagesByPlatform[slug] || {});
+				const isOpen = open === slug;
+				const panelId = `tr-ai-platform-${slug}`;
+
+				return (
+					<div key={slug} className="tr-rounded-lg">
+						<button
+							type="button"
+							aria-expanded={isOpen}
+							aria-controls={panelId}
+							onClick={() => setOpen(isOpen ? null : slug)}
+							className="tr-flex tr-w-full tr-items-center tr-gap-3 tr-rounded-lg tr-border-0 tr-bg-transparent tr-px-2 tr-py-1.5 tr-text-left tr-cursor-pointer hover:tr-bg-line-2 tr-transition-colors"
+						>
+							<span
+								aria-hidden="true"
+								className={classnames(
+									'tr-w-3 tr-text-xs tr-text-tertiary tr-transition-transform',
+									isOpen && 'tr-rotate-90'
+								)}
+							>
+								›
+							</span>
+							<span className="tr-flex tr-items-center tr-gap-2 tr-w-44 tr-shrink-0 tr-min-w-0">
+								<span
+									className="tr-w-2.5 tr-h-2.5 tr-rounded-full tr-shrink-0"
+									style={{ backgroundColor: color }}
+								/>
+								<span className="tr-text-sm tr-text-secondary tr-truncate">
+									{sourceLabel(slug)}
+								</span>
+							</span>
+							<span className="tr-flex-1 tr-h-2.5 tr-rounded-full tr-bg-line-2 tr-overflow-hidden">
+								<span
+									className="tr-block tr-h-full tr-rounded-full"
+									style={{
+										width: `${pct}%`,
+										backgroundColor: color,
+									}}
+								/>
+							</span>
+							<span className="tr-w-12 tr-text-right tr-text-sm tr-font-semibold tr-text-primary tr-tabular-nums">
+								{hits}
+							</span>
+						</button>
+
+						{isOpen && (
+							<div
+								id={panelId}
+								className="tr-ml-8 tr-mr-2 tr-mb-2 tr-mt-1 tr-flex tr-flex-col tr-gap-2"
+							>
+								<ProInlineSlot
+									filter="thinkrank.aiInsights.platformConversions"
+									args={[{ platform: slug, days }]}
+								/>
+								{pages.length > 0 ? (
+									<div className="tr-flex tr-flex-col tr-gap-0.5">
+										<span className="tr-text-xs tr-font-medium tr-text-tertiary">
+											{sprintf(
+												/* translators: %s: AI platform name. */
+												__(
+													'Pages %s sent visitors to',
+													'thinkrank'
+												),
+												sourceLabel(slug)
+											)}
+										</span>
+										{pages.map(([path, pageHits]) => (
+											<div
+												key={path}
+												className="tr-flex tr-items-center tr-justify-between tr-gap-4 tr-rounded tr-px-2 tr-py-1 tr-text-sm"
+											>
+												<code className="tr-truncate tr-text-secondary tr-bg-transparent tr-p-0">
+													{path}
+												</code>
+												<span className="tr-font-semibold tr-text-primary tr-tabular-nums">
+													{pageHits}
+												</span>
+											</div>
+										))}
+									</div>
+								) : (
+									<p className="tr-m-0 tr-text-sm tr-text-tertiary">
+										{__(
+											'No landing page was recorded for these visits.',
+											'thinkrank'
+										)}
+									</p>
+								)}
+							</div>
+						)}
+					</div>
+				);
+			})}
+			<Ga4OnlyPlatformsSlot
+				platforms={entries.map(([slug]) => slug)}
+				days={days}
+			/>
+		</div>
+	);
+};
+
+const TONE_DOT = {
+	good: 'tr-bg-success',
+	warning: 'tr-bg-warning',
+	poor: 'tr-bg-danger',
+	neutral: 'tr-bg-line-1',
+};
+
+export const GuidanceCard = ({ title, tone, status, detail, href, action }) => (
+	<div className="tr-flex tr-flex-col tr-gap-2 tr-rounded-xl tr-border tr-border-secondary tr-bg-white tr-p-4">
+		<span className="tr-text-xs tr-font-medium tr-text-tertiary">
+			{title}
+		</span>
+		<span className="tr-flex tr-items-center tr-gap-2 tr-text-sm tr-font-semibold tr-text-primary">
+			<span
+				className={classnames(
+					'tr-w-2 tr-h-2 tr-rounded-full tr-shrink-0',
+					TONE_DOT[tone] || TONE_DOT.neutral
+				)}
+				aria-hidden="true"
+			/>
+			{status}
+		</span>
+		<span className="tr-text-xs tr-text-secondary tr-leading-snug">
+			{detail}
+		</span>
+		{href && (
+			<a
+				href={href}
+				className="tr-mt-auto tr-text-xs tr-font-medium tr-text-brand tr-no-underline hover:tr-underline"
+			>
+				{action}
+			</a>
+		)}
+	</div>
+);
+
+// Where the site stands on each control that affects AI visibility, with a
+// link to it. States, never promises: no citations, no exposure estimates.
+const GuidanceCards = ({ guidance }) => {
+	const now = Math.floor(Date.now() / 1000);
+	const crawlers = crawlerCard(guidance?.crawlers);
+	const llms = llmsCard(guidance?.llms_txt, now);
+	const crawlingLink = (item) =>
+		getPageUrl('essential-seo', {
+			nav_section: 'crawling-ai-indexing',
+			nav_item: item,
+		});
+
+	return (
+		<div>
+			<PanelTitle>{__('AI visibility controls', 'thinkrank')}</PanelTitle>
+			<div className="tr-grid tr-grid-cols-1 md:tr-grid-cols-3 tr-gap-3">
+				<GuidanceCard
+					title={__('AI crawler access', 'thinkrank')}
+					{...crawlers}
+					href={crawlingLink('robots-management')}
+					action={__('Review crawler rules →', 'thinkrank')}
+				/>
+				<GuidanceCard
+					title={__('llms.txt', 'thinkrank')}
+					{...llms}
+					href={crawlingLink('llms-ai-indexing')}
+					action={
+						guidance?.llms_txt?.published
+							? __('Edit llms.txt →', 'thinkrank')
+							: __('Generate llms.txt →', 'thinkrank')
+					}
+				/>
+				<ProGatedTab
+					filter="thinkrank.aiInsights.markdownCard"
+					args={[
+						{
+							href: crawlingLink('markdown-for-ai'),
+						},
+					]}
+					teaser={
+						<GuidanceCard
+							title={__('Markdown for AI', 'thinkrank')}
+							tone="neutral"
+							status={__(
+								'Available in ThinkRank Pro',
+								'thinkrank'
+							)}
+							detail={__(
+								'Serves AI agents a clean Markdown copy of each page instead of the full HTML.',
+								'thinkrank'
+							)}
+							href={crawlingLink('markdown-for-ai')}
+							action={__('Learn more →', 'thinkrank')}
+						/>
+					}
+				/>
+			</div>
+		</div>
+	);
+};
+
 // --- Tab: AI Traffic ---------------------------------------------------------
 
 const RANGES = [7, 30, 90];
@@ -639,7 +884,24 @@ const TrafficPanel = () => {
 							label={__('Top AI platform', 'thinkrank')}
 							value={topPlatform}
 						/>
+						<ProInlineSlot
+							filter="thinkrank.aiInsights.conversions"
+							args={[{ days: data.days }]}
+						/>
 					</div>
+					<ProInlineSlot
+						filter="thinkrank.aiInsights.reconciliation"
+						args={[
+							{
+								days: data.days,
+								// GA4's window: complete days to yesterday.
+								// ai_sessions also holds today.
+								serverSessions:
+									data.ai_sessions_to_yesterday ??
+									data.ai_sessions,
+							},
+						]}
+					/>
 				</>
 			)}
 
@@ -690,17 +952,25 @@ const TrafficPanel = () => {
 						<div className="tr-pt-4">
 							{view === 'platforms' &&
 								(platforms.length > 0 ? (
-									<BarList
+									<PlatformList
 										entries={platforms}
 										max={maxPlatform}
+										pagesByPlatform={data.pages_by_platform}
+										days={data.days}
 									/>
 								) : (
-									<p className="tr-m-0 tr-text-sm tr-text-secondary">
-										{__(
-											'No AI platform referrals recorded yet.',
-											'thinkrank'
-										)}
-									</p>
+									<>
+										<p className="tr-m-0 tr-text-sm tr-text-secondary">
+											{__(
+												'No AI platform referrals recorded yet.',
+												'thinkrank'
+											)}
+										</p>
+										<Ga4OnlyPlatformsSlot
+											platforms={[]}
+											days={data.days}
+										/>
+									</>
 								))}
 
 							{view === 'pages' &&
@@ -783,6 +1053,10 @@ const TrafficPanel = () => {
 					</div>
 				</>
 			)}
+
+			{/* Shown even before any traffic: where the site stands on these
+			    controls is useful before the first AI visit, not after. */}
+			{data.guidance && <GuidanceCards guidance={data.guidance} />}
 		</div>
 	);
 };

@@ -698,6 +698,14 @@ class Manager {
             // Failed to register Pillar Content endpoint
         }
 
+        // Register Content Analysis endpoints (Question Coverage, #723).
+        try {
+            $content_analysis_endpoint = new \ThinkRank\API\Content_Analysis_Endpoint();
+            $content_analysis_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register Content Analysis endpoint
+        }
+
         // Register Focus Keyword Usage endpoint ("already used" status).
         try {
             $focus_keyword_usage_endpoint = new \ThinkRank\API\Focus_Keyword_Usage_Endpoint();
@@ -2995,6 +3003,25 @@ class Manager {
             $thin_content_endpoint->register_routes();
         } catch (\Exception $e) {
             // Failed to register Thin Content endpoint
+        }
+
+        try {
+            // Keyword map + cannibalization (#568): also under global-seo/, so
+            // the same Bulk SEO Optimization capability covers it.
+            $keyword_map_endpoint = new \ThinkRank\API\Keyword_Map_Endpoint();
+            $keyword_map_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register Keyword Map endpoint
+        }
+
+        try {
+            // Topical coverage against named competitor pages (#567). Scoped
+            // per post rather than to a section: the route's permission is
+            // edit_post, because it fetches on the caller's say-so.
+            $topical_relevance_endpoint = new \ThinkRank\API\Topical_Relevance_Endpoint();
+            $topical_relevance_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register Topical Relevance endpoint
         }
 
         try {

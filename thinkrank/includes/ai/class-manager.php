@@ -1097,6 +1097,37 @@ class Manager {
         }
     }
 
+    /**
+     * One completion for a caller that owns its own prompt and parsing.
+     *
+     * Runs the same readiness, rate-limit and spend checks as every built-in
+     * generator, and records the usage under $action, so a feature built
+     * outside this class (Question Coverage, #723) is metered and capped
+     * exactly like the rest. Retrying on an unparseable answer is the
+     * caller's job: only it knows what a usable answer looks like.
+     *
+     * @since 2.21.2
+     *
+     * @param string $prompt     Full prompt.
+     * @param string $action     Label for Usage Analytics.
+     * @param int    $max_tokens Output ceiling (covers hidden reasoning too).
+     * @return array{text:string,tokens:int}
+     * @throws \Exception When AI is not configured, rate-limited or refused.
+     */
+    public function complete_text(string $prompt, string $action, int $max_tokens = 4096): array {
+        $this->ensure_ready_for_ai();
+
+        $completion = $this->request_completion($prompt, $max_tokens);
+
+        $actual_model = $this->client ? $this->client->get_model() : null;
+        $this->log_ai_usage(get_current_user_id(), $action, (int) $completion['tokens'], $actual_model, $completion['ai_text']);
+
+        return [
+            'text'   => (string) $completion['ai_text'],
+            'tokens' => (int) $completion['tokens'],
+        ];
+    }
+
     private function request_completion(string $prompt, int $max_tokens = 2048, array $options = []): array {
         // "Thinking" providers (e.g. Gemini 2.5) spend output tokens on reasoning
         // before emitting text, so the cap must cover both the reasoning and the

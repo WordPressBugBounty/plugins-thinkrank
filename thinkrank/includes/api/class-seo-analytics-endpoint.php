@@ -793,7 +793,7 @@ class SEO_Analytics_Endpoint extends WP_REST_Controller {
         // property (https://example.com/) or a domain property
         // (sc-domain:example.com). Anything else — most often an empty setting —
         // means no verified property has been picked yet.
-        if (!preg_match('#^(sc-domain:\S+|https?://\S+)$#i', $site_url)) {
+        if (!Analytics_Manager::is_search_console_property($site_url)) {
             return new WP_Error(
                 'no_search_console_property',
                 __('No Search Console property is selected for this site. Choose your verified property to start loading search data.', 'thinkrank'),

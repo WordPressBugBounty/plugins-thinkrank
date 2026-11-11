@@ -187,6 +187,9 @@ class Capability_Manager {
             'url-inspection'    => 'thinkrank_analytics',
             'refresh-radar'     => 'thinkrank_analytics',
             'seo-score'         => 'thinkrank_content_tools',
+            // Question Coverage (#723) runs from the editor, alongside the
+            // other per-post AI tools.
+            'content-analysis'  => 'thinkrank_content_tools',
             'content-brief'     => 'thinkrank_content_tools',
             'pillar-content'    => 'thinkrank_content_tools',
             'ai'                => 'thinkrank_content_tools',

@@ -84,6 +84,16 @@ class Ai_Traffic_Tracker {
     private const RETENTION_DAYS = 180;
 
     /**
+     * Landing pages listed under each platform, and in the all-platform list.
+     */
+    private const PAGES_PER_PLATFORM = 10;
+
+    /**
+     * Transient prefix for the landing-page lists, one entry per range.
+     */
+    private const LANDING_CACHE_PREFIX = 'thinkrank_ai_landing_';
+
+    /**
      * `template_redirect` priority record() runs at: after core's
      * redirect_canonical() and wp_old_slug_redirect() (10), WooCommerce's
      * product canonical redirect (5), ThinkRank's permalink and author
@@ -760,10 +770,14 @@ class Ai_Traffic_Tracker {
         // DST transition inside the window does not move the boundary.
         $since = $this->day_key_offset($days);
 
+        // Summed per day and source in the database, not per landing path:
+        // the path dimension is what makes the raw rows grow with a site's
+        // URL count, and nothing below needs it. Landing pages are read by
+        // landing_pages(), capped in the database (#734 review).
         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- read-only aggregates over our own table.
         $rows = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT day, kind, source, path, hits FROM {$table} WHERE day >= %s",
+                "SELECT day, kind, source, SUM(hits) AS hits FROM {$table} WHERE day >= %s GROUP BY day, kind, source",
                 $since
             ),
             ARRAY_A
@@ -772,9 +786,11 @@ class Ai_Traffic_Tracker {
 
         $baseline  = 0;
         $referrals = 0;
+        // The same referrals without today: what GA4 can be compared with.
+        $to_yesterday = 0;
+        $today        = $this->day_key();
         $platforms = [];
         $trend     = [];
-        $pages     = [];
         $crawlers  = [];
         $markdown  = 0;
 
@@ -786,11 +802,11 @@ class Ai_Traffic_Tracker {
                     break;
                 case 'referral':
                     $referrals += $hits;
+                    if ((string) $row['day'] < $today) {
+                        $to_yesterday += $hits;
+                    }
                     $platforms[$row['source']] = ($platforms[$row['source']] ?? 0) + $hits;
                     $trend[$row['day']]        = ($trend[$row['day']] ?? 0) + $hits;
-                    if ('' !== $row['path']) {
-                        $pages[$row['path']] = ($pages[$row['path']] ?? 0) + $hits;
-                    }
                     break;
                 case 'crawler':
                     $crawlers[$row['source']] = ($crawlers[$row['source']] ?? 0) + $hits;
@@ -802,7 +818,17 @@ class Ai_Traffic_Tracker {
         }
 
         arsort($platforms);
-        arsort($pages);
+
+        // Landing pages per platform, so a platform row can open onto the
+        // pages that platform sent visitors to (#734), in the platforms' own
+        // order, plus the list across every platform. One statement for all
+        // of them (#770 review).
+        $landing           = $this->cached_landing_pages(
+            $days,
+            $since,
+            array_slice(array_map('strval', array_keys($platforms)), 0, count(self::REFERRER_PLATFORMS))
+        );
+        $pages_by_platform = $landing['by_platform'];
         arsort($crawlers);
         ksort($trend);
 
@@ -816,7 +842,7 @@ class Ai_Traffic_Tracker {
         // so the series covers exactly what was counted, and it is built on
         // day_key() so the keys match how the rows were written.
         $filled = [];
-        foreach ($this->day_range($since, $this->day_key()) as $day) {
+        foreach ($this->day_range($since, $today) as $day) {
             $filled[$day] = $trend[$day] ?? 0;
         }
 
@@ -833,10 +859,18 @@ class Ai_Traffic_Tracker {
             'days'         => $days,
             'baseline'     => $baseline,
             'ai_sessions'  => $referrals,
+            // AI referrals over the N complete site-local days ending
+            // yesterday: the window GA4 reports for the same range
+            // (`NdaysAgo` to `yesterday`). ai_sessions runs through today,
+            // one day more and that one partial, so comparing it with GA4
+            // overstated the gap. The site clock stands in for the GA4
+            // property's timezone, which is not known here.
+            'ai_sessions_to_yesterday' => $to_yesterday,
             'ai_share'     => $baseline > 0 ? round($referrals / $baseline * 100, 1) : 0.0,
             'platforms'    => $platforms,
             'trend'        => $trend,
-            'top_pages'    => array_slice($pages, 0, 10, true),
+            'top_pages'    => $landing['top'],
+            'pages_by_platform' => $pages_by_platform,
             'crawlers'     => $crawlers,
             // Whether llms.txt is being served, so the crawler panel can pair
             // "bots are coming" with "and here's what we feed them".
@@ -849,6 +883,154 @@ class Ai_Traffic_Tracker {
             // Pages served as Markdown by Pro's Markdown for AI feature
             // (kind 'markdown', written via record_served_markdown()).
             'markdown_served' => $markdown,
+        ];
+    }
+
+    /**
+     * landing_pages(), reused for FLUSH_AFTER seconds.
+     *
+     * Ranking landing pages has to group every referral bucket in the range
+     * before its LIMIT applies, so it is the one read here whose cost grows
+     * with the site's URL count (#770 review). The dashboard and the
+     * get-ai-insights ability both ask for it on every load; this keeps that
+     * to one computation per range every few minutes.
+     *
+     * Fresh enough by construction: with a persistent object cache the
+     * counters themselves reach the table up to FLUSH_AFTER late, so the
+     * lists can lag by no more than the totals already may. Nothing is
+     * invalidated on write, since without an object cache every referral is
+     * a write and would empty the cache as fast as it filled.
+     *
+     * The entry records the window start and the platform list it answered;
+     * a new day or a new platform is a miss, and prune() only ever removes
+     * days before a window start, so it needs no hook of its own.
+     *
+     * @since 2.21.3
+     *
+     * @param int      $days    Range in days, the cache key.
+     * @param string   $since   First site-local day, `Y-m-d`.
+     * @param string[] $sources Platform slugs, in the order to return them.
+     * @return array{top: array<string,int>, by_platform: array<string, array<string,int>>}
+     */
+    private function cached_landing_pages(int $days, string $since, array $sources): array {
+        $key    = self::LANDING_CACHE_PREFIX . $days;
+        $sorted = $sources;
+        sort($sorted);
+
+        $cached = get_transient($key);
+        if (
+            is_array($cached)
+            && ($cached['since'] ?? null) === $since
+            && ($cached['sources'] ?? null) === $sorted
+            && is_array($cached['lists'] ?? null)
+        ) {
+            // Re-key by this call's platform order, which can change between
+            // loads without changing the set.
+            $by_platform = [];
+            foreach ($sources as $source) {
+                if (!empty($cached['lists']['by_platform'][$source])) {
+                    $by_platform[$source] = $cached['lists']['by_platform'][$source];
+                }
+            }
+
+            return [
+                'top'         => (array) ($cached['lists']['top'] ?? []),
+                'by_platform' => $by_platform,
+            ];
+        }
+
+        $lists = $this->landing_pages($since, $sources);
+
+        set_transient(
+            $key,
+            ['since' => $since, 'sources' => $sorted, 'lists' => $lists],
+            self::FLUSH_AFTER
+        );
+
+        return $lists;
+    }
+
+    /**
+     * The busiest AI landing pages since a date: across every platform, and
+     * for each platform given.
+     *
+     * One statement: a UNION ALL of one branch per list, each summed, ordered
+     * and cut to PAGES_PER_PLATFORM in the database, so a request makes one
+     * round trip and gets back at most (platforms + 1) × PAGES_PER_PLATFORM
+     * rows however many URLs the site has. A window function would need
+     * MySQL 8; a per-branch LIMIT works on every version WordPress supports.
+     * idx_referral_pages covers every branch, so a platform's branch reads
+     * only that platform's slice of the index (#770 review).
+     *
+     * Ties break on the path, so the lists are stable between loads.
+     *
+     * @since 2.21.3
+     *
+     * @param string   $since   First site-local day, `Y-m-d`.
+     * @param string[] $sources Platform slugs, in the order to return them.
+     * @return array{top: array<string,int>, by_platform: array<string, array<string,int>>}
+     *         Path => visits, busiest first. A platform with no recorded
+     *         landing path has no entry.
+     */
+    private function landing_pages(string $since, array $sources): array {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'thinkrank_ai_traffic';
+
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- read-only aggregate over our own table; the table name is $wpdb->prefix plus a literal and every branch is prepared.
+        // The all-platform list is tagged with an empty string, which no
+        // platform slug can be.
+        $branches = [
+            $wpdb->prepare(
+                "(SELECT '' AS list, path, SUM(hits) AS hits FROM {$table}
+                  WHERE kind = 'referral' AND day >= %s AND path <> ''
+                  GROUP BY path ORDER BY hits DESC, path ASC LIMIT %d)",
+                $since,
+                self::PAGES_PER_PLATFORM
+            ),
+        ];
+        foreach ($sources as $source) {
+            $branches[] = $wpdb->prepare(
+                "(SELECT source AS list, path, SUM(hits) AS hits FROM {$table}
+                  WHERE kind = 'referral' AND source = %s AND day >= %s AND path <> ''
+                  GROUP BY source, path ORDER BY hits DESC, path ASC LIMIT %d)",
+                $source,
+                $since,
+                self::PAGES_PER_PLATFORM
+            );
+        }
+
+        $rows = $wpdb->get_results(implode(' UNION ALL ', $branches), ARRAY_A);
+        // phpcs:enable
+
+        $lists = [];
+        foreach ((array) $rows as $row) {
+            $path = (string) ($row['path'] ?? '');
+            if ('' !== $path) {
+                $lists[(string) ($row['list'] ?? '')][$path] = (int) ($row['hits'] ?? 0);
+            }
+        }
+
+        // A UNION's rows come back in no promised order, so rank each list
+        // again, the way its branch did.
+        foreach ($lists as &$pages) {
+            uksort(
+                $pages,
+                static fn ($a, $b) => [$pages[$b], $a] <=> [$pages[$a], $b]
+            );
+        }
+        unset($pages);
+
+        $by_platform = [];
+        foreach ($sources as $source) {
+            if (!empty($lists[$source])) {
+                $by_platform[$source] = $lists[$source];
+            }
+        }
+
+        return [
+            'top'         => $lists[''] ?? [],
+            'by_platform' => $by_platform,
         ];
     }
 

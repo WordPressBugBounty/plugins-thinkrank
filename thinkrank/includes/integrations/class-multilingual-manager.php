@@ -593,11 +593,22 @@ class Multilingual_Manager {
                 continue;
             }
 
+            // The switcher's raw `locale` is the display form, which Polylang
+            // 3.9 made the W3C tag (`es-ES`), and it no longer carries `w3c`
+            // at all. Read both from the language object instead (#1592).
+            // `facebook` is the Open Graph form Polylang keeps for every
+            // language (`ca` becomes `ca_ES`); `locale` is the WordPress one.
+            $object = $this->polylang_language($code);
+            $locale = (string) ($object->facebook ?? '');
+            if ($locale === '') {
+                $locale = (string) ($object->locale ?? ($language['locale'] ?? ''));
+            }
+
             $out[] = [
                 'code'       => $code,
                 // Polylang exposes a W3C-valid tag for exactly this purpose.
-                'tag'        => (string) ($language['w3c'] ?? ''),
-                'locale'     => (string) ($language['locale'] ?? ''),
+                'tag'        => (string) ($object->w3c ?? ($language['w3c'] ?? '')),
+                'locale'     => $locale,
                 'url'        => $url,
                 'is_default' => $code === $default,
                 'is_current' => !empty($language['current_lang']),
@@ -605,6 +616,30 @@ class Multilingual_Manager {
         }
 
         return $out;
+    }
+
+    /**
+     * Polylang's own language object for a slug.
+     *
+     * @param string $slug Language slug.
+     * @return object|null The PLL_Language, or null when it cannot be read.
+     */
+    private function polylang_language(string $slug) {
+        if (!function_exists('PLL')) {
+            return null;
+        }
+
+        // Since Polylang 3.7 `get_language()` is routed through
+        // PLL_Model::__call(), which method_exists() does not see, so it
+        // would report false on every current install (#1592 review).
+        $polylang = PLL();
+        if (!is_object($polylang) || empty($polylang->model) || !is_callable([$polylang->model, 'get_language'])) {
+            return null;
+        }
+
+        $language = $polylang->model->get_language($slug);
+
+        return is_object($language) ? $language : null;
     }
 
     /**
@@ -1024,6 +1059,13 @@ class Multilingual_Manager {
             // reporting the default locale when the active language has no
             // translation files installed.
             if ($locale === '' || !empty($language['is_current']) || $locale === $current_locale) {
+                continue;
+            }
+
+            // Open Graph only reads xx_YY, so a provider's hyphenated tag
+            // must not reach the page as-is (#1592).
+            $locale = \ThinkRank\SEO\Social_Meta_Manager::normalize_og_locale($locale);
+            if ($locale === '') {
                 continue;
             }
 

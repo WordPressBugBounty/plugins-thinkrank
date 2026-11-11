@@ -21,6 +21,7 @@ declare(strict_types=1);
 namespace ThinkRank\API;
 
 use ThinkRank\Core\Capability_Manager;
+use ThinkRank\SEO\Ai_Insights_Guidance;
 use ThinkRank\SEO\Ai_Traffic_Tracker;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -92,11 +93,26 @@ class Ai_Insights_Endpoint extends WP_REST_Controller {
      * @return WP_REST_Response
      */
     public function get_traffic(WP_REST_Request $request): WP_REST_Response {
-        $tracker = new Ai_Traffic_Tracker();
-
         return new WP_REST_Response([
             'success' => true,
-            'data'    => $tracker->summary((int) $request->get_param('days')),
+            'data'    => self::payload((int) $request->get_param('days')),
         ], 200);
+    }
+
+    /**
+     * The AI Insights payload: the traffic summary plus the guidance cards'
+     * state. Shared with the get-ai-insights ability so the screen and an
+     * agent read the same numbers.
+     *
+     * @since 2.21.3
+     *
+     * @param int $days Range in days.
+     * @return array<string,mixed>
+     */
+    public static function payload(int $days): array {
+        $summary = (new Ai_Traffic_Tracker())->summary($days);
+        $summary['guidance'] = Ai_Insights_Guidance::state();
+
+        return $summary;
     }
 }

@@ -51,7 +51,7 @@ class Database_Schema {
      * @since 1.0.0
      * @var string
      */
-    private string $db_version = '1.10.2';
+    private string $db_version = '1.11.1';
 
     /**
      * Widest single indexed COLUMN InnoDB accepts on a COMPACT/REDUNDANT row
@@ -317,6 +317,14 @@ class Database_Schema {
             'primary_key' => 'id',
             'indexes' => ['ts', 'tool'],
             'foreign_keys' => []
+        ],
+
+        // === KEYWORD GOVERNANCE TABLES (1) ===
+        'post_keywords' => [
+            'description' => 'One row per focus keyword on a post, the inverted index behind the keyword map and cannibalization report',
+            'primary_key' => 'post_id, keyword_hash',
+            'indexes' => ['keyword_hash'],
+            'foreign_keys' => []
         ]
     ];
 
@@ -341,7 +349,8 @@ class Database_Schema {
         'scoring' => ['seo_scores'],
         'reporting' => ['email_report_logs'],
         'ai_visibility' => ['ai_traffic'],
-        'governance' => ['mcp_audit']
+        'governance' => ['mcp_audit'],
+        'keywords' => ['post_keywords']
     ];
 
     /**
@@ -1007,6 +1016,9 @@ class Database_Schema {
                 // Governance Tables
             case 'mcp_audit':
                 return $this->get_mcp_audit_table_sql($full_table_name, $charset_collate);
+                // Keyword Governance Tables
+            case 'post_keywords':
+                return $this->get_post_keywords_table_sql($full_table_name, $charset_collate);
 
             default:
                 throw new \InvalidArgumentException('Unknown table: ' . esc_html($table_name));
@@ -2082,7 +2094,8 @@ class Database_Schema {
             PRIMARY KEY (id),
             UNIQUE KEY uniq_bucket (day, kind, source, path),
             KEY idx_day (day),
-            KEY idx_kind (kind)
+            KEY idx_kind (kind),
+            KEY idx_referral_pages (kind,source,day,path,hits)
         ) {$charset_collate};";
     }
 
@@ -2145,6 +2158,46 @@ class Database_Schema {
             KEY idx_tool (tool),
             KEY idx_kind_day (kind, day),
             KEY idx_target (target_type, target_id)
+        ) {$charset_collate};";
+    }
+
+    /**
+     * Get SQL for the post keyword table
+     *
+     * Focus keywords are stored as a serialized array in
+     * `_thinkrank_focus_keywords`, which answers "is this keyword used
+     * elsewhere" through a LIKE on the serialized form and cannot answer
+     * "which keywords are used more than once" at all: SQL cannot group by a
+     * value inside a blob. One row per (post, keyword) can, and the index on
+     * `keyword_hash` is what makes the grouping cheap.
+     *
+     * The key is a hash rather than the keyword itself. A keyword is free text
+     * of any length, and a composite primary key over a `varchar(191)` in
+     * utf8mb4 is 772 bytes, past the 767-byte ceiling a pre-5.7 server
+     * enforces. An md5 of the lower-cased keyword is 32 bytes, fits everywhere,
+     * and encodes the case-insensitive identity
+     * {@see \ThinkRank\SEO\Focus_Keywords::normalize()} already dedupes by.
+     * The readable keyword rides alongside for display only.
+     *
+     * Rows are derived data, rebuilt from post meta, so no foreign key: a post
+     * deleted while the index is stale leaves rows that
+     * {@see \ThinkRank\SEO\Keyword_Index} drops on its next pass, and
+     * ON DELETE CASCADE would make the table depend on `wp_posts` using the
+     * same engine and collation, which a plugin may not assume.
+     *
+     * @since 2.21.3
+     *
+     * @param string $table_name    Full table name
+     * @param string $charset_collate Charset and collation
+     * @return string SQL for table creation
+     */
+    private function get_post_keywords_table_sql(string $table_name, string $charset_collate): string {
+        return "CREATE TABLE `{$table_name}` (
+            post_id bigint(20) unsigned NOT NULL,
+            keyword_hash char(32) NOT NULL,
+            keyword varchar(191) NOT NULL DEFAULT '',
+            PRIMARY KEY (post_id, keyword_hash),
+            KEY idx_keyword_hash (keyword_hash)
         ) {$charset_collate};";
     }
 }

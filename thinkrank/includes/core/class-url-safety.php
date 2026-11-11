@@ -273,16 +273,34 @@ class Url_Safety {
      * host and connecting to it — the transport resolved the name a second
      * time, and a 0-TTL record could answer differently (#405).
      *
-     * @since 1.29.0
+     * A `$deadline` bounds the whole fetch, redirects included. Without one,
+     * `timeout` applies per hop, so a chain of slow redirects can take
+     * (MAX_REDIRECTS + 1) times as long as the caller asked for. With one,
+     * each hop's timeout is cut to the time left, and a hop that would start
+     * after the deadline is not made.
      *
-     * @param string $url  URL to fetch.
-     * @param array  $args Optional. wp_safe_remote_get() arguments.
+     * @since 1.29.0
+     * @since 2.21.3 Takes `$deadline`.
+     *
+     * @param string $url      URL to fetch.
+     * @param array  $args     Optional. wp_safe_remote_get() arguments.
+     * @param float  $deadline Optional. Absolute time (`microtime(true)`) by
+     *                         which the fetch must be over. 0 for none.
      * @return array|WP_Error Response array on success, WP_Error otherwise.
      */
-    public static function safe_remote_get(string $url, array $args = []) {
+    public static function safe_remote_get(string $url, array $args = [], float $deadline = 0.0) {
         for ($hop = 0; $hop <= self::MAX_REDIRECTS; $hop++) {
             if (!wp_http_validate_url($url)) {
                 return new WP_Error('invalid_url', 'The URL is not allowed.', ['status' => 400]);
+            }
+
+            if ($deadline > 0) {
+                $left = $deadline - microtime(true);
+                if ($left <= 0) {
+                    return new WP_Error('http_request_timeout', 'The time allowed for this request ran out.', ['status' => 504]);
+                }
+
+                $args['timeout'] = min((float) ($args['timeout'] ?? 5), $left);
             }
 
             $ips = self::validated_ips($url);

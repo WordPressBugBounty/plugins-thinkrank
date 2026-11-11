@@ -112,6 +112,7 @@ const ADVANCED_ENTRIES = {
 		'rank-tracker',
 		'traffic-recovery',
 		'index-status',
+		'question-coverage',
 	],
 	// Every per-post-type screen, plus the two cross-cutting ones.
 	'global-seo': (items) =>
@@ -229,6 +230,11 @@ const getBaseStructure = () => [
 			{
 				id: 'index-status',
 				title: __('Index Status', 'thinkrank'),
+				pro: true,
+			},
+			{
+				id: 'question-coverage',
+				title: __('Question Coverage', 'thinkrank'),
 				pro: true,
 			},
 		],
