@@ -115,6 +115,49 @@ class Snapshot_Store {
     }
 
     /**
+     * Page numbers of the chunks stored for one type of a plugin's snapshot.
+     *
+     * Read from the options table rather than the manifest's `total_chunks`:
+     * an export that stopped part-way leaves chunks the manifest does not
+     * count, and a caller cleaning stored data must reach those too.
+     *
+     * @since 2.21.4
+     *
+     * @param string $plugin Plugin slug.
+     * @param string $type   Data type.
+     * @param int    $limit  Most pages to return.
+     * @return int[] Page numbers, ascending.
+     */
+    public static function list_chunk_pages(string $plugin, string $type, int $limit = 100): array {
+        global $wpdb;
+
+        $prefix = self::OPTION_PREFIX . "{$plugin}_{$type}_chunk_";
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- One-off listing of our own option names; no core API lists options by prefix.
+        $option_names = $wpdb->get_col(
+            $wpdb->prepare(
+                "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT %d",
+                $wpdb->esc_like($prefix) . '%',
+                max(1, $limit)
+            )
+        );
+
+        $pages = [];
+        foreach ((array) $option_names as $option_name) {
+            $suffix = substr((string) $option_name, strlen($prefix));
+            // `{type}_chunk_` of a longer type slug shares this prefix only if
+            // the remainder is not a bare page number.
+            if ('' !== $suffix && ctype_digit($suffix)) {
+                $pages[] = (int) $suffix;
+            }
+        }
+
+        sort($pages);
+
+        return $pages;
+    }
+
+    /**
      * Get the manifest for a plugin snapshot
      *
      * @param string $plugin Plugin slug

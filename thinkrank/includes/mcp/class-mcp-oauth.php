@@ -169,6 +169,37 @@ final class Mcp_OAuth {
 	 */
 	private const MAX_SPENT_PER_FAMILY = 8;
 
+	/**
+	 * The access token each grant family last presented, family => digest,
+	 * kept OUT of self::OPTION for the reason LAST_USED_OPTION is (#485):
+	 * it is written from ordinary bearer traffic.
+	 *
+	 * It is what tells an interrupted renewal from a replay. A rotation
+	 * drops the old access token, so the only token a family can present
+	 * afterwards is its replacement's: once that is recorded here, the
+	 * client evidently holds the replacement, and the refresh token it
+	 * replaced is spent for good (WPDevelopers/thinkrank-hub#178).
+	 *
+	 * @since 2.21.4
+	 */
+	public const CONFIRMED_OPTION = 'thinkrank_mcp_oauth_confirmed';
+
+	/**
+	 * How long after a rotation its refresh token may still be presented
+	 * again as a retry (seconds), while the replacement stays unused.
+	 *
+	 * @since 2.21.4
+	 */
+	private const RENEWAL_RETRY_WINDOW = 86400; // 24 hours.
+
+	/**
+	 * How many times one rotation may be retried. Each retry leaves a spent
+	 * digest behind, so this stays inside MAX_SPENT_PER_FAMILY.
+	 *
+	 * @since 2.21.4
+	 */
+	private const MAX_RENEWAL_RETRIES = 5;
+
 	// -- URLs ------------------------------------------------------------
 
 	/**
@@ -655,7 +686,8 @@ final class Mcp_OAuth {
 	 * refresh_token grant: rotate the refresh token, issue a fresh access
 	 * token. The old refresh + its access token are revoked, and the old
 	 * refresh token's digest is remembered: presenting it again revokes the
-	 * whole family it belonged to.
+	 * whole family it belonged to, unless the pair that replaced it has
+	 * never been used, which is a renewal being retried.
 	 *
 	 * @param array<string,string> $body POST body.
 	 * @return array<string,mixed>|\WP_Error
@@ -683,12 +715,49 @@ final class Mcp_OAuth {
 				 */
 				if ( '' !== $refresh && isset( $state['spent'][ $rhash ] ) ) {
 					$spent = $state['spent'][ $rhash ];
+					$next  = self::unconfirmed_successor( $state, $spent, $client_id );
 
-					self::drop_family( $state, (string) ( $spent['family'] ?? '' ) );
+					if ( null === $next ) {
+						self::drop_family( $state, (string) ( $spent['family'] ?? '' ) );
+
+						return [
+							'reuse'  => true,
+							'client' => (string) ( $spent['client_id'] ?? '' ),
+						];
+					}
+
+					/*
+					 * The one exception: the pair that replaced it has never
+					 * been presented, at this endpoint or on a call. That is
+					 * a client that never received its answer (a timeout, a
+					 * connection dropped after this site had rotated) asking
+					 * again, not a copy in a second pair of hands, and
+					 * revoking the family would disconnect it for a fault
+					 * that was nobody's (WPDevelopers/thinkrank-hub#178).
+					 *
+					 * The uncollected pair is withdrawn and a new one issued
+					 * in its place. Its refresh digest is remembered as spent
+					 * with no successor of its own, so whoever does turn up
+					 * holding it is answered as a replay.
+					 */
+					$entry = $state['refresh'][ $next ];
+
+					unset( $state['refresh'][ $next ], $state['tokens'][ (string) ( $entry['access_hash'] ?? '' ) ] );
+
+					$state['spent'][ $next ] = [
+						'family'    => (string) $spent['family'],
+						'client_id' => (string) $entry['client_id'],
+						'expires'   => time() + self::REFRESH_TTL,
+					];
+
+					$tokens = self::store_pair( $state, (string) $entry['client_id'], (string) $entry['scope'], (int) $entry['user_id'], (string) ( $entry['hub'] ?? '' ), (string) $spent['family'], (int) ( $entry['granted_at'] ?? 0 ) );
+
+					$state['spent'][ $rhash ]['next']    = self::hash( (string) $tokens['refresh_token'] );
+					$state['spent'][ $rhash ]['retries'] = (int) ( $spent['retries'] ?? 0 ) + 1;
 
 					return [
-						'reuse'  => true,
-						'client' => (string) ( $spent['client_id'] ?? '' ),
+						'tokens'  => $tokens,
+						'retried' => (string) $entry['client_id'],
 					];
 				}
 
@@ -718,17 +787,23 @@ final class Mcp_OAuth {
 					unset( $state['tokens'][ $entry['access_hash'] ] );
 				}
 
+				// So does the time the grant was made: a refresh continues
+				// the grant, it does not make a new one (#1091).
+				$tokens = self::store_pair( $state, (string) $entry['client_id'], (string) $entry['scope'], (int) $entry['user_id'], (string) ( $entry['hub'] ?? '' ), $family, (int) ( $entry['granted_at'] ?? 0 ) );
+
 				// Remembered for as long as it would have lived, so a replay
 				// is recognized rather than answered as a token never issued.
+				// With it, the pair that replaced it and when: a renewal
+				// whose answer was lost is retried against those.
 				$state['spent'][ $rhash ] = [
 					'family'    => $family,
 					'client_id' => (string) $entry['client_id'],
 					'expires'   => time() + self::REFRESH_TTL,
+					'next'      => self::hash( (string) $tokens['refresh_token'] ),
+					'rotated'   => time(),
 				];
 
-				// So does the time the grant was made: a refresh continues
-				// the grant, it does not make a new one (#1091).
-				return [ 'tokens' => self::store_pair( $state, (string) $entry['client_id'], (string) $entry['scope'], (int) $entry['user_id'], (string) ( $entry['hub'] ?? '' ), $family, (int) ( $entry['granted_at'] ?? 0 ) ) ];
+				return [ 'tokens' => $tokens ];
 			}
 		);
 
@@ -750,7 +825,76 @@ final class Mcp_OAuth {
 			return self::oauth_error( 'invalid_grant', (string) $claim['error'] );
 		}
 
+		if ( isset( $claim['retried'] ) ) {
+			/**
+			 * Fires when a rotated-away refresh token is presented again
+			 * while the pair that replaced it was still unused, and a new
+			 * pair has been issued in that one's place.
+			 *
+			 * @since 2.21.4
+			 *
+			 * @param string $client_id The application the token was issued to.
+			 */
+			do_action( 'thinkrank_mcp_refresh_retried', (string) $claim['retried'] );
+		}
+
 		return $claim['tokens'];
+	}
+
+	/**
+	 * The pair that replaced a spent refresh token, when presenting that
+	 * token again is still a retry of its renewal rather than a replay.
+	 *
+	 * It is a retry only while nothing has ever presented the replacement:
+	 * its refresh token is still the live one (a rotation would have removed
+	 * it), and its access token is not the one the family last made a call
+	 * with. Bounded as well by the application named, by time and by count.
+	 * Past any of those the token is a replay, as every spent token was
+	 * before 2.21.4, and as one rotated by an earlier version still is.
+	 *
+	 * @since 2.21.4
+	 *
+	 * @param array<string,mixed> $state     OAuth state.
+	 * @param array<string,mixed> $spent     The spent entry presented.
+	 * @param string              $client_id The application the request names.
+	 * @return string|null The replacement's refresh digest; null for a replay.
+	 */
+	private static function unconfirmed_successor( array $state, array $spent, string $client_id ): ?string {
+		$next   = (string) ( $spent['next'] ?? '' );
+		$family = (string) ( $spent['family'] ?? '' );
+
+		if ( '' === $next || '' === $family || ! isset( $state['refresh'][ $next ] ) || ! is_array( $state['refresh'][ $next ] ) ) {
+			return null;
+		}
+
+		$entry = $state['refresh'][ $next ];
+
+		if ( $family !== (string) ( $entry['family'] ?? '' ) ) {
+			return null;
+		}
+
+		// A retry comes from the application the token was issued to, and
+		// names it. One that names another, or none, is not owed the benefit
+		// of the doubt: the hub and the MCP clients always send theirs.
+		if ( '' === $client_id || ! hash_equals( (string) ( $spent['client_id'] ?? '' ), $client_id ) ) {
+			return null;
+		}
+
+		if ( time() - (int) ( $spent['rotated'] ?? 0 ) > self::RENEWAL_RETRY_WINDOW ) {
+			return null;
+		}
+
+		if ( (int) ( $spent['retries'] ?? 0 ) >= self::MAX_RENEWAL_RETRIES ) {
+			return null;
+		}
+
+		$confirmed = self::confirmed_map();
+
+		if ( hash_equals( (string) ( $confirmed[ $family ] ?? '' ), (string) ( $entry['access_hash'] ?? '' ) ) ) {
+			return null;
+		}
+
+		return $next;
 	}
 
 	/**
@@ -857,6 +1001,14 @@ final class Mcp_OAuth {
 		// stops being marked staging (thinkrank#1002).
 		if ( '' !== (string) ( $entry['hub'] ?? '' ) && Mcp_Hub::is_staging() ) {
 			return null;
+		}
+
+		// The first call a pair makes settles its rotation: from here on the
+		// refresh token it replaced is a replay, never a retry. Written to
+		// its own option, once per access token (WPDevelopers/thinkrank-hub#178).
+		$family = (string) ( $entry['family'] ?? '' );
+		if ( '' !== $family ) {
+			self::confirm_pair( $family, $hash, $state );
 		}
 
 		// Record activity against the owning client so the "Connected AI apps"
@@ -1037,6 +1189,7 @@ final class Mcp_OAuth {
 		try {
 			delete_option( self::OPTION );
 			delete_option( self::LAST_USED_OPTION );
+			delete_option( self::CONFIRMED_OPTION );
 		} finally {
 			if ( $locked ) {
 				self::unlock();
@@ -1064,6 +1217,7 @@ final class Mcp_OAuth {
 			}
 		);
 		delete_option( self::LAST_USED_OPTION );
+		delete_option( self::CONFIRMED_OPTION );
 	}
 
 	/**
@@ -1540,6 +1694,62 @@ final class Mcp_OAuth {
 		}
 
 		update_option( self::LAST_USED_OPTION, $map, false );
+	}
+
+	/**
+	 * The access token each grant family last presented, family => digest.
+	 *
+	 * @since 2.21.4
+	 *
+	 * @return array<string,string>
+	 */
+	private static function confirmed_map(): array {
+		$stored = get_option( self::CONFIRMED_OPTION, [] );
+
+		return is_array( $stored ) ? $stored : [];
+	}
+
+	/**
+	 * Record that a family's current pair has been used. Writes its own
+	 * option, never the credential store, and only when the token is not
+	 * the one already recorded: once per access token, not once per call.
+	 *
+	 * Losing a race here costs one stamp, which the family's next call
+	 * writes again.
+	 *
+	 * @since 2.21.4
+	 *
+	 * @param string              $family      The family the token belongs to.
+	 * @param string              $access_hash The access token's digest.
+	 * @param array<string,mixed> $state       OAuth state, so the map cannot
+	 *                                         outgrow the store it describes.
+	 * @return void
+	 */
+	private static function confirm_pair( string $family, string $access_hash, array $state ): void {
+		$map = self::confirmed_map();
+
+		if ( isset( $map[ $family ] ) && hash_equals( (string) $map[ $family ], $access_hash ) ) {
+			return;
+		}
+
+		$map[ $family ] = $access_hash;
+
+		// Drop families that are gone (revoked, replayed, expired).
+		$live = [];
+		foreach ( [ 'tokens', 'refresh' ] as $bucket ) {
+			foreach ( $state[ $bucket ] as $entry ) {
+				if ( is_array( $entry ) && '' !== (string) ( $entry['family'] ?? '' ) ) {
+					$live[ (string) $entry['family'] ] = true;
+				}
+			}
+		}
+		foreach ( array_keys( $map ) as $known ) {
+			if ( ! isset( $live[ $known ] ) ) {
+				unset( $map[ $known ] );
+			}
+		}
+
+		update_option( self::CONFIRMED_OPTION, $map, false );
 	}
 
 	/**

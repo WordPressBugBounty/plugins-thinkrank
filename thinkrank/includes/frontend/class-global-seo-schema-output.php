@@ -948,7 +948,11 @@ class Global_SEO_Schema_Output {
             [
                 // Becomes the FAQPage name.
                 'title'   => self::normalize_name(get_the_title($post)),
-                'content' => \ThinkRank\SEO\Builder_Content::visible_content($post),
+                // Questions are read out of the whole body, so only a body
+                // a logged-out visitor reads in full is handed over.
+                'content' => \ThinkRank\SEO\Content_Access::sees_all($post)
+                    ? \ThinkRank\SEO\Builder_Content::visible_content($post)
+                    : '',
                 'excerpt' => $excerpt ? wp_strip_all_tags($excerpt) : '',
                 'url'     => get_permalink($post),
             ],
@@ -1342,10 +1346,7 @@ class Global_SEO_Schema_Output {
         }
 
         if (empty($description)) {
-            $description = \ThinkRank\SEO\Pattern_Resolver::derive_excerpt(
-                \ThinkRank\SEO\Builder_Content::visible_content($post),
-                30
-            );
+            $description = \ThinkRank\SEO\Content_Access::derived_description($post, 30);
         }
 
         // Normalised like every other description rather than merely stripped.
@@ -1935,7 +1936,7 @@ class Global_SEO_Schema_Output {
 
         return '' !== $superseding
             ? \ThinkRank\SEO\Pattern_Resolver::derive_excerpt($superseding, 30)
-            : (string) get_the_excerpt($post);
+            : \ThinkRank\SEO\Content_Access::excerpt($post);
     }
 
     /**

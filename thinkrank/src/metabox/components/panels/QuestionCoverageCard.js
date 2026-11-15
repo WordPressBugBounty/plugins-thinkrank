@@ -175,6 +175,35 @@ const insertBefore = (headings, after) => {
 };
 
 /**
+ * The node to insert in front of so a heading's block wrapper stays whole.
+ *
+ * A post written in the block editor and then opened in the Classic Editor
+ * keeps its `<!-- wp:heading -->` delimiters as comment nodes beside the
+ * heading. Inserting straight before the H2 would land the draft inside that
+ * wrapper, and the block editor would then report the heading block as
+ * invalid. Step back over the opening delimiters that belong to the heading.
+ *
+ * @param {Node} node Heading node the draft goes before.
+ * @return {Node} The heading, or the first opening block comment in front of it.
+ */
+const openingBlockComment = (node) => {
+	let target = node;
+	let prev = node.previousSibling;
+	while (prev) {
+		if (prev.nodeType === 3 && !prev.textContent.trim()) {
+			prev = prev.previousSibling;
+			continue;
+		}
+		if (prev.nodeType !== 8 || !/^\s*wp:/.test(prev.data)) {
+			break;
+		}
+		target = prev;
+		prev = prev.previousSibling;
+	}
+	return target;
+};
+
+/**
  * Insert into the Classic Editor's Visual mode in place.
  *
  * @param {Object}  editor TinyMCE editor.
@@ -195,7 +224,7 @@ const insertClassic = (editor, html, after) => {
 	if (before?.start) {
 		body.insertBefore(fragment, body.firstChild);
 	} else if (before?.node) {
-		body.insertBefore(fragment, before.node);
+		body.insertBefore(fragment, openingBlockComment(before.node));
 	} else {
 		body.appendChild(fragment);
 	}

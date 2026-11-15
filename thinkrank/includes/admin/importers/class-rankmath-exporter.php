@@ -771,7 +771,7 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
         foreach ($option_names as $name) {
             $value = get_option($name, null);
             if (is_array($value) && !empty($value)) {
-                $raw[$name] = $this->redact_sensitive_keys($value);
+                $raw[$name] = self::redact_sensitive_keys($value);
             }
         }
 
@@ -783,16 +783,20 @@ class Rankmath_Exporter extends Abstract_Plugin_Exporter {
      * array so tokens/credentials (console_authorization_code, console_email*,
      * analytics/API tokens, …) are never persisted into the snapshot.
      *
+     * Public and static so Snapshot_Scrubber can run the same rule over a
+     * snapshot stored before a key joined the pattern (#1561): one redactor,
+     * so what a fresh export drops and what the scrub drops cannot drift.
+     *
      * @param array $options Raw option array
      * @return array Redacted copy
      */
-    private function redact_sensitive_keys(array $options): array {
+    public static function redact_sensitive_keys(array $options): array {
         $clean = [];
         foreach ($options as $key => $value) {
             if (is_string($key) && preg_match(self::SENSITIVE_KEY_PATTERN, $key)) {
                 continue;
             }
-            $clean[$key] = is_array($value) ? $this->redact_sensitive_keys($value) : $value;
+            $clean[$key] = is_array($value) ? self::redact_sensitive_keys($value) : $value;
         }
 
         return $clean;

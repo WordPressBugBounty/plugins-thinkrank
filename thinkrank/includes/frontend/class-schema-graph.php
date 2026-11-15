@@ -533,6 +533,13 @@ class Schema_Graph {
      * @return bool
      */
     public function absorbed_content_faq(): bool {
+        // Asked from the off-page render that learns what a visitor reads.
+        // Collecting here would spend the one collection pass on a render
+        // nobody sees, and the block's own JSON-LD is not wanted in it.
+        if (\ThinkRank\SEO\Content_Access::is_measuring()) {
+            return true;
+        }
+
         $this->maybe_collect_post_faq();
 
         return $this->absorbed_content_faq;
@@ -621,8 +628,32 @@ class Schema_Graph {
                 continue;
             }
 
-            $this->absorb_content_faq($this->questions_from_pairs($group['pairs']));
+            $this->absorb_content_faq($this->questions_from_pairs(self::visible_pairs($post, $group['pairs'])));
         }
+    }
+
+    /**
+     * The question and answer pairs a logged-out visitor reads on the page.
+     *
+     * The pairs come from the stored body. A body restricted from a
+     * `the_content` filter never renders the block for a visitor, so its
+     * questions are not published as structured data either.
+     *
+     * @since 2.21.4
+     * @param \WP_Post $post  Post the pairs were read from.
+     * @param mixed    $pairs Pairs as FAQ_Content reports them.
+     * @return array
+     */
+    private static function visible_pairs(\WP_Post $post, $pairs): array {
+        if (!is_array($pairs)) {
+            return [];
+        }
+
+        return array_values(array_filter($pairs, static function ($pair) use ($post): bool {
+            $question = is_array($pair) ? trim(wp_strip_all_tags((string) ($pair['question'] ?? ''))) : '';
+
+            return '' !== $question && \ThinkRank\SEO\Content_Access::sees_rendered_text($post, $question);
+        }));
     }
 
     /**
@@ -661,7 +692,7 @@ class Schema_Graph {
                 continue;
             }
 
-            foreach ($group['pairs'] as $pair) {
+            foreach (self::visible_pairs($post, $group['pairs']) as $pair) {
                 if ('' !== trim((string) ($pair['question'] ?? '')) && '' !== trim((string) ($pair['answer'] ?? ''))) {
                     $has_questions = true;
                     break 2;

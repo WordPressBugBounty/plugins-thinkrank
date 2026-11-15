@@ -1086,7 +1086,7 @@ class Pattern_Resolver {
             return self::excerpt_text($post->post_excerpt);
         }
 
-        return self::is_password_required($post) ? '' : self::derive_excerpt(Builder_Content::visible_content($post));
+        return self::is_password_required($post) ? '' : Content_Access::derived_description($post);
     }
 
     /**

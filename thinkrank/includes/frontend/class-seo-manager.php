@@ -2221,7 +2221,7 @@ class SEO_Manager {
         // so this is not a leak — but publishing that sentence as the social
         // description is worse than publishing none (#363).
         if (!$description && !$this->is_content_password_protected()) {
-            $description = is_singular() ? \ThinkRank\Core\Seo_Text::trim_words(get_the_excerpt(), 30) : get_bloginfo('description');
+            $description = is_singular() ? \ThinkRank\Core\Seo_Text::trim_words($this->public_excerpt(), 30) : get_bloginfo('description');
         }
 
         $url = is_singular() ? get_permalink() : home_url();
@@ -2471,7 +2471,7 @@ class SEO_Manager {
         // so this is not a leak — but publishing that sentence as the social
         // description is worse than publishing none (#363).
         if (!$description && !$this->is_content_password_protected()) {
-            $description = is_singular() ? \ThinkRank\Core\Seo_Text::trim_words(get_the_excerpt(), 30) : get_bloginfo('description');
+            $description = is_singular() ? \ThinkRank\Core\Seo_Text::trim_words($this->public_excerpt(), 30) : get_bloginfo('description');
         }
 
         // Determine card type based on image availability
@@ -3707,6 +3707,18 @@ class SEO_Manager {
     }
 
     /**
+     * The current post's excerpt, as far as a logged-out visitor may read it.
+     *
+     * @since 2.21.4
+     * @return string
+     */
+    private function public_excerpt(): string {
+        $post = get_post($this->current_post_id ?: null);
+
+        return $post instanceof \WP_Post ? \ThinkRank\SEO\Content_Access::excerpt($post) : '';
+    }
+
+    /**
      * Get meta description with fallback system
      * Priority: Post-specific metadata > Global SEO templates > Site Identity templates > WordPress defaults
      *
@@ -3784,16 +3796,14 @@ class SEO_Manager {
         if (is_singular() && $this->current_post_id && !$this->is_content_password_protected()) {
             // Not the raw column: a Bricks page discards `post_content`, so
             // whatever is still stored there is invisible — and this one value
-            // becomes the meta, og: and twitter: descriptions (#651).
+            // becomes the meta, og: and twitter: descriptions (#651). And only
+            // text a logged-out visitor reads on the page.
             $described = get_post($this->current_post_id);
-            $post_content = $described instanceof \WP_Post
-                ? \ThinkRank\SEO\Builder_Content::visible_content($described)
-                : get_post_field('post_content', $this->current_post_id);
-            if ($post_content) {
-                $excerpt = \ThinkRank\SEO\Pattern_Resolver::derive_excerpt((string) $post_content);
-                if (!empty($excerpt)) {
-                    return $excerpt;
-                }
+            $excerpt   = $described instanceof \WP_Post
+                ? \ThinkRank\SEO\Content_Access::derived_description($described)
+                : '';
+            if ('' !== $excerpt) {
+                return $excerpt;
             }
         }
 

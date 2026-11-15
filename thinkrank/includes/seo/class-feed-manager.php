@@ -214,7 +214,8 @@ class Feed_Manager {
             return '';
         }
 
-        $excerpt = trim((string) get_the_excerpt($post_id));
+        $post    = get_post($post_id);
+        $excerpt = $post instanceof \WP_Post ? trim(Content_Access::excerpt($post)) : '';
 
         return '' === $excerpt ? '' : wpautop($excerpt);
     }

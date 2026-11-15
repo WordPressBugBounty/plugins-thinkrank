@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.21.3
+Stable tag: 2.21.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -263,6 +263,14 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.21.4 =
+Release Date: 2026-11-15
+
+- Improved: Security Enhancement
+- Fixed: A connected app stays connected when the answer to its token renewal is lost
+- Fixed: Category embeds, feeds and plugin endpoints keep working after the category base is removed
+- Fixed: Inserting a Question Coverage draft in the Classic Editor keeps heading blocks valid
+
 = 2.21.3 =
 Release Date: 2026-11-11
 
@@ -317,26 +325,12 @@ Release Date: 2026-11-02
 - Fixed: The shop page uses its own SEO, social and robots values and the product archive template
 - Fixed: Search and filtered shop titles, plus minor sitemap, permalink, taxonomy title and preview issues
 
-= 2.20.1 =
-Release Date: 2026-10-29
-
-- Fixed: Sitemaps keep their styled view in Chrome 158 and other browsers that drop XSLT
-- Fixed: AI visits are counted on cached pages and from ChatGPT links with no referrer
-- Fixed: WooCommerce Product schema starts from the product's price, currency, SKU and stock
-- Fixed: Global SEO templates fill price, SKU and other WooCommerce variables on the front end
-- Fixed: Thin Content and Duplicate Snippets leave out noindexed and redirected pages
-- Fixed: The SEO panel no longer restores an old draft over newer saved values
-- Fixed: Schema Deployment waits until unsaved Schema changes are saved
-- Fixed: Article schema names the configured organization as its publisher
-- Fixed: External Links and Image SEO apply to Bricks content, and builder image alts are read
-- Fixed: Minor Bricks editor, SEO Analyzer, MCP Activity, OpenRouter and alt fill issues
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.21.4 =
+Connected apps stay connected after a lost token renewal, and category embeds and feeds work with the category base removed. Recommended for all sites.
+
 = 2.21.3 =
 Find out which questions a post answers with Question Coverage, see where each AI platform sends visitors, and check that links and buttons are named for AI agents. Recommended for all sites.
-
-= 2.21.2 =
-Ignore audit checks that do not apply, turn off a post's structured data and let AI write image captions and descriptions. Sitemaps now list TranslatePress translations. Recommended for all sites.

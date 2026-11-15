@@ -88,6 +88,15 @@ class ThinkRank_Uninstaller {
         // from the settings that were kept.
         self::remove_webroot_files();
 
+        // WPDeveloper plugins share one option to show a single campaign
+        // pointer at a time (Admin\Campaign_Notice). Free the slot if
+        // ThinkRank holds it (priority 10), or it would keep a sibling
+        // plugin's pointer from showing. Another plugin's value is left
+        // alone. Not gated on $keep_data: it is not the user's data.
+        if ((int) get_option('_wpdeveloper_plugin_pointer_priority') === 10) {
+            delete_option('_wpdeveloper_plugin_pointer_priority');
+        }
+
         if (!$keep_data) {
             self::remove_database_tables();
             self::remove_options();

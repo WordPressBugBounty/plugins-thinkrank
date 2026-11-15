@@ -200,8 +200,16 @@ class Social_Images {
 
         $images = [];
 
+        $post = get_post($post_id);
+
         foreach ($tags[0] as $tag) {
             if (preg_match('/\bsrc\s*=\s*["\']([^"\']+)["\']/i', $tag, $match)) {
+                // An image a logged-out visitor is not served on the page is
+                // not offered to a crawler either.
+                if ($post instanceof \WP_Post && !Content_Access::sees_image($post, $match[1])) {
+                    continue;
+                }
+
                 $images[] = [
                     'url'           => $match[1],
                     'attachment_id' => Attachment_Lookup::hint_from_markup($tag),

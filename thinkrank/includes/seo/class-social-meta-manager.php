@@ -2252,13 +2252,13 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         $superseding = Builder_Content::superseding_excerpt_source($post);
         $description = '' !== $superseding
             ? Pattern_Resolver::derive_excerpt($superseding, 30)
-            : get_the_excerpt($post);
+            : Content_Access::excerpt($post);
 
         // If no excerpt, generate from content. Shortcodes and block delimiters
         // are removed the way core's wp_trim_excerpt() does, so a shortcode-built
         // page does not publish its source as og:description (#387).
         if (empty($description)) {
-            $description = Pattern_Resolver::derive_excerpt(Builder_Content::visible_content($post), 30);
+            $description = Content_Access::derived_description($post, 30);
         }
 
         // If still empty, use site description

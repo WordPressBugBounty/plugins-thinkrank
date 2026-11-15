@@ -134,6 +134,50 @@
 	color: #1d2327;
 }
 
+/* Campaign offer: the logo on the left, centred against the copy. */
+.thinkrank-campaign-notice .thinkrank-notice__inner {
+	align-items: center;
+	gap: 32px;
+	padding-left: 24px;
+}
+
+.thinkrank-campaign-notice__logo {
+	flex: 0 0 auto;
+}
+
+.thinkrank-campaign-notice__logo img {
+	display: block;
+	width: auto;
+	height: 40px;
+	max-width: 165px;
+}
+
+/* One line of copy, so it reads darker and a size up. */
+.thinkrank-campaign-notice .thinkrank-notice__text {
+	max-width: none;
+	color: #1d2327;
+	font-size: 14px;
+}
+
+/* ThinkRank's full-page screens hide every WordPress notice (src/global/base.css).
+   The campaign offer is the exception: it sits above the app's top bar as a
+   flush strip rather than a floating card. */
+#wpbody:has(#thinkrank-root) #wpbody-content > .notice.thinkrank-campaign-notice {
+	display: block;
+	margin: 0;
+	border-top: 0;
+	border-right: 0;
+	border-bottom: 1px solid #e5e7eb;
+	box-shadow: none;
+}
+
+@media screen and ( max-width: 767px ) {
+
+	.thinkrank-campaign-notice {
+		display: none !important;
+	}
+}
+
 @media screen and ( max-width: 600px ) {
 
 	.thinkrank-notice .thinkrank-notice__inner {

@@ -153,6 +153,16 @@ class Permalinks {
     private static ?array $held_term_paths = null;
 
     /**
+     * The category rules core generated for the rewrite build in progress,
+     * captured in {@see filter_category_rewrite_rules()} so that every
+     * endpoint registered on `EP_CATEGORIES` gets a base-free twin; null
+     * outside a build.
+     *
+     * @var array<string, string>|null
+     */
+    private static ?array $core_category_rules = null;
+
+    /**
      * Register the hooks. Every callback reads the switches when it runs, so
      * a save in this request is honoured by the flush it schedules.
      *
@@ -343,6 +353,7 @@ class Permalinks {
         self::$one_segment_rules = null;
         self::$reserved_rules = null;
         self::$held_term_paths = null;
+        self::$core_category_rules = null;
         self::$flush_scheduled = false;
     }
 
@@ -563,6 +574,8 @@ class Permalinks {
         self::$reserved_rules = self::reserved_rules_among($rules);
         self::$held_term_paths = null;
         $rules = self::without_reserved_category_rules($rules);
+        // The build that captured core's category rules is over.
+        self::$core_category_rules = null;
 
         if (!function_exists('wc_get_permalink_structure') || !taxonomy_exists('product_cat')) {
             return $rules;
@@ -678,6 +691,10 @@ class Permalinks {
             return $rules;
         }
 
+        // Kept for the whole build: without_reserved_category_rules() runs
+        // later in the same build and has to remove exactly what was added.
+        self::$core_category_rules = $rules;
+
         $categories = self::terms_by_id('category');
         $added = [];
 
@@ -704,18 +721,81 @@ class Permalinks {
 
         $pagination = (string) ($wp_rewrite->pagination_base ?? 'page');
         $prefix = self::blog_prefix();
+        $endpoints = self::category_endpoint_rules(self::$core_category_rules ?? []);
         $rules = [];
 
         // Percent-encoded slugs reach the rules in either case; WordPress
         // matches the request byte for byte.
         foreach (array_unique([$path, self::uppercase_encoding($path)]) as $form) {
             $form = preg_quote($form, '#');
+            // The endpoints first: each ends in its own literal suffix, so
+            // none of them can swallow the bare or paged URL below.
+            foreach ($endpoints as $suffix => $query) {
+                $rules[$prefix . '(' . $form . ')/' . $suffix] = $query;
+            }
             $rules[$prefix . '(' . $form . ')/(?:feed/)?(feed|rdf|rss|rss2|atom)/?$'] = 'index.php?category_name=$matches[1]&feed=$matches[2]';
             $rules[$prefix . '(' . $form . ')/' . $pagination . '/?([0-9]{1,})/?$'] = 'index.php?category_name=$matches[1]&paged=$matches[2]';
             $rules[$prefix . '(' . $form . ')/?$'] = 'index.php?category_name=$matches[1]';
         }
 
         return $rules;
+    }
+
+    /**
+     * The endpoints core generated for categories, beyond the three
+     * {@see base_free_category_rules()} writes itself, as suffix => query.
+     *
+     * Core builds a category rule for every endpoint registered on
+     * `EP_CATEGORIES`: `/embed/` on every site, WooCommerce's `wc-api` and
+     * `wc/file/transient`, and whatever another plugin adds. Writing a fixed
+     * list by hand lost all of them once the base was removed, so they only
+     * resolved under the old `/category/` URL. Each rule is read as
+     * `{front}{base}/(.+?)/{suffix}` and the suffix is kept, so the category
+     * path that replaces `(.+?)` is still `$matches[1]` and the rest of the
+     * query still lines up.
+     *
+     * A rule is skipped when its front holds a group of its own, which would
+     * shift the match numbers, or when it does not ask for `category_name`.
+     *
+     * @since 2.21.4
+     *
+     * @param array<string, string> $core_rules Category rules core generated.
+     * @return array<string, string>
+     */
+    public static function category_endpoint_rules(array $core_rules): array {
+        $handled = [
+            '',                     // The bare archive.
+            '&paged=$matches[2]',   // Pagination.
+            '&feed=$matches[2]',    // Both feed forms.
+        ];
+        $endpoints = [];
+
+        foreach ($core_rules as $pattern => $query) {
+            $pattern = (string) $pattern;
+            // Core writes the match references as `$matches[1]` or as `$1`,
+            // depending on how WP_Rewrite::$matches was set when the rules
+            // were built. Read both, and write the form the other rules use.
+            $query = (string) preg_replace('/\$(\d+)/', '\$matches[$1]', (string) $query);
+            $at = strpos($pattern, '(.+?)/');
+            $rest = 0 === strpos($query, 'index.php?category_name=$matches[1]')
+                ? substr($query, strlen('index.php?category_name=$matches[1]'))
+                : null;
+
+            if (false === $at || null === $rest || false !== strpos(substr($pattern, 0, $at), '(')) {
+                continue;
+            }
+
+            $suffix = substr($pattern, $at + strlen('(.+?)/'));
+            // `category/(.+?)/?$` is the bare archive: its "suffix" is the
+            // optional slash itself.
+            if ('' === $suffix || '?' === $suffix[0] || in_array($rest, $handled, true)) {
+                continue;
+            }
+
+            $endpoints[$suffix] = $query;
+        }
+
+        return $endpoints;
     }
 
     /**

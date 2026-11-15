@@ -2,14 +2,14 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 2.21.3\n"
+"Project-Id-Version: ThinkRank 2.21.4\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11T05:18:58+00:00\n"
+"POT-Creation-Date: 2026-11-15T12:05:23+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
@@ -3301,7 +3301,7 @@ msgid "The taxonomies registered on products that brand_taxonomy accepts."
 msgstr ""
 
 #: includes/admin/class-beaver-metabox.php:377
-#: includes/admin/class-manager.php:676
+#: includes/admin/class-manager.php:680
 #: includes/admin/class-metabox-manager.php:532
 #: src/bricks/index.js:245
 #: src/bricks/index.js:246
@@ -3328,6 +3328,31 @@ msgstr ""
 #: includes/admin/class-bricks-metabox.php:244
 #: includes/admin/class-metabox-manager.php:1945
 msgid "Insufficient permissions"
+msgstr ""
+
+#: includes/admin/class-campaign-notice.php:273
+msgid "Black Friday Sale:"
+msgstr ""
+
+#: includes/admin/class-campaign-notice.php:274
+#: includes/admin/class-campaign-notice.php:329
+msgid "50% off ThinkRank Pro. Unlock AI-powered SEO features to rank higher and get found by AI assistants."
+msgstr ""
+
+#: includes/admin/class-campaign-notice.php:278
+msgid "Upgrade To PRO Now"
+msgstr ""
+
+#: includes/admin/class-campaign-notice.php:281
+msgid "I Want To Pay Full Price"
+msgstr ""
+
+#: includes/admin/class-campaign-notice.php:328
+msgid "Black Friday Is On!"
+msgstr ""
+
+#: includes/admin/class-campaign-notice.php:331
+msgid "View Deals"
 msgstr ""
 
 #: includes/admin/class-dashboard-widget.php:82
@@ -3384,7 +3409,7 @@ msgstr ""
 
 #: includes/admin/class-manager.php:257
 #: includes/admin/class-manager.php:258
-#: includes/admin/class-manager.php:544
+#: includes/admin/class-manager.php:548
 #: src/admin/components/App.js:109
 #: src/admin/components/dashboard/QuickAccess.js:226
 #: src/admin/components/layout/TopNav.js:585
@@ -3393,7 +3418,7 @@ msgstr ""
 
 #: includes/admin/class-manager.php:267
 #: includes/admin/class-manager.php:268
-#: includes/admin/class-manager.php:556
+#: includes/admin/class-manager.php:560
 #: includes/core/class-capability-manager.php:118
 #: src/admin/components/App.js:117
 #: src/admin/components/dashboard/QuickAccess.js:232
@@ -3426,7 +3451,7 @@ msgstr ""
 
 #: includes/admin/class-manager.php:307
 #: includes/admin/class-manager.php:308
-#: includes/admin/class-manager.php:629
+#: includes/admin/class-manager.php:633
 #: src/admin/components/App.js:149
 #: src/admin/components/pages/Settings.js:412
 #: src/admin/components/pages/Settings.js:3050
@@ -3435,67 +3460,67 @@ msgstr ""
 
 #: includes/admin/class-manager.php:321
 #: includes/admin/class-manager.php:322
-#: includes/admin/class-manager.php:646
+#: includes/admin/class-manager.php:650
 #: src/admin/components/App.js:157
 #: src/admin/setup-wizard/SetupWizard.js:55
 msgid "Migration"
 msgstr ""
 
-#: includes/admin/class-manager.php:532
+#: includes/admin/class-manager.php:536
 msgid "ThinkRank Dashboard"
 msgstr ""
 
-#: includes/admin/class-manager.php:533
+#: includes/admin/class-manager.php:537
 msgid "AI-powered SEO optimization for WordPress"
 msgstr ""
 
-#: includes/admin/class-manager.php:545
+#: includes/admin/class-manager.php:549
 msgid "Configure your site-wide SEO settings with AI-powered optimization"
 msgstr ""
 
-#: includes/admin/class-manager.php:557
+#: includes/admin/class-manager.php:561
 msgid "AI-powered content tools including Content Planner and Metadata Generator"
 msgstr ""
 
-#: includes/admin/class-manager.php:568
+#: includes/admin/class-manager.php:572
 msgid "ThinkRank Settings"
 msgstr ""
 
-#: includes/admin/class-manager.php:569
+#: includes/admin/class-manager.php:573
 msgid "Configure your AI SEO settings"
 msgstr ""
 
-#: includes/admin/class-manager.php:608
+#: includes/admin/class-manager.php:612
 #: src/admin/components/dashboard/QuickAccess.js:238
 msgid "Usage Analytics"
 msgstr ""
 
-#: includes/admin/class-manager.php:609
+#: includes/admin/class-manager.php:613
 msgid "Track your AI usage, costs, and plugin performance analytics"
 msgstr ""
 
-#: includes/admin/class-manager.php:625
+#: includes/admin/class-manager.php:629
 msgid "Import / Export is not enabled."
 msgstr ""
 
-#: includes/admin/class-manager.php:642
+#: includes/admin/class-manager.php:646
 msgid "The Migration tools are not enabled."
 msgstr ""
 
-#: includes/admin/class-manager.php:759
+#: includes/admin/class-manager.php:763
 #: src/admin/components/dashboard/WelcomeCard.js:61
 msgid "Welcome to ThinkRank!"
 msgstr ""
 
-#: includes/admin/class-manager.php:760
+#: includes/admin/class-manager.php:764
 msgid "Thanks for installing ThinkRank. Add an AI provider key to unlock automatic titles, descriptions, and SEO scoring."
 msgstr ""
 
-#: includes/admin/class-manager.php:763
+#: includes/admin/class-manager.php:767
 msgid "Configure Settings"
 msgstr ""
 
-#: includes/admin/class-manager.php:766
+#: includes/admin/class-manager.php:770
 #: includes/admin/class-search-visibility-notice.php:136
 #: includes/admin/class-seo-notice.php:102
 #: includes/admin/class-webroot-writable-notice.php:416
@@ -3509,24 +3534,24 @@ msgstr ""
 msgid "Dismiss"
 msgstr ""
 
-#: includes/admin/class-manager.php:917
+#: includes/admin/class-manager.php:921
 msgid "Loading..."
 msgstr ""
 
-#: includes/admin/class-manager.php:918
+#: includes/admin/class-manager.php:922
 msgid "An error occurred"
 msgstr ""
 
-#: includes/admin/class-manager.php:919
+#: includes/admin/class-manager.php:923
 #: includes/admin/class-metabox-manager.php:1347
 msgid "Success!"
 msgstr ""
 
-#: includes/admin/class-manager.php:920
+#: includes/admin/class-manager.php:924
 msgid "Are you sure?"
 msgstr ""
 
-#: includes/admin/class-manager.php:921
+#: includes/admin/class-manager.php:925
 #: includes/admin/class-post-list-columns.php:778
 #: includes/core/class-plugin-usage-tracker.php:1174
 #: src/admin/components/dashboard/SiteHealthAudit.js:890
@@ -3542,7 +3567,7 @@ msgstr ""
 msgid "Cancel"
 msgstr ""
 
-#: includes/admin/class-manager.php:922
+#: includes/admin/class-manager.php:926
 #: includes/admin/class-post-list-columns.php:776
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1514
 #: src/admin/components/essential-seo/IntegrationsTab.js:377
@@ -3551,7 +3576,7 @@ msgstr ""
 msgid "Save"
 msgstr ""
 
-#: includes/admin/class-manager.php:971
+#: includes/admin/class-manager.php:975
 #: src/admin/components/content-brief/ContentStructure.js:1467
 #: src/admin/components/essential-seo/ai-insights/AIInsightsTab.js:857
 #: src/admin/components/pages/UsageAnalytics.js:19
@@ -3559,21 +3584,21 @@ msgstr ""
 msgid "Overview"
 msgstr ""
 
-#: includes/admin/class-manager.php:972
+#: includes/admin/class-manager.php:976
 msgid "ThinkRank.ai helps you optimize your content with AI-powered SEO suggestions."
 msgstr ""
 
-#: includes/admin/class-manager.php:976
+#: includes/admin/class-manager.php:980
 msgid "For more information:"
 msgstr ""
 
-#: includes/admin/class-manager.php:977
+#: includes/admin/class-manager.php:981
 #: src/admin/components/dashboard/QuickAccess.js:251
 #: src/admin/components/pages/Settings.js:462
 msgid "Documentation"
 msgstr ""
 
-#: includes/admin/class-manager.php:978
+#: includes/admin/class-manager.php:982
 msgid "Support"
 msgstr ""
 
@@ -5947,7 +5972,7 @@ msgid "Page %d"
 msgstr ""
 
 #. translators: %s: search query.
-#: includes/frontend/class-seo-manager.php:5618
+#: includes/frontend/class-seo-manager.php:5628
 #, php-format
 msgid "Search results for \"%s\""
 msgstr ""
@@ -6213,59 +6238,59 @@ msgid "Could not authorize"
 msgstr ""
 
 #. translators: %d: the most redirect URIs one client may register.
-#: includes/mcp/class-mcp-oauth.php:347
+#: includes/mcp/class-mcp-oauth.php:378
 #, php-format
 msgid "A client may register at most %d redirect_uris."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:352
+#: includes/mcp/class-mcp-oauth.php:383
 msgid "Every redirect_uri must be a string."
 msgstr ""
 
 #. translators: %d: the longest redirect URI accepted, in bytes.
-#: includes/mcp/class-mcp-oauth.php:358
+#: includes/mcp/class-mcp-oauth.php:389
 #, php-format
 msgid "A redirect_uri may be at most %d bytes long."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:366
+#: includes/mcp/class-mcp-oauth.php:397
 msgid "At least one valid redirect_uri is required."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:370
+#: includes/mcp/class-mcp-oauth.php:401
 msgid "client_name must be a string."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:422
+#: includes/mcp/class-mcp-oauth.php:453
 msgid "Unknown client_id."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:426
+#: includes/mcp/class-mcp-oauth.php:457
 msgid "redirect_uri does not match a registered value."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:431
+#: includes/mcp/class-mcp-oauth.php:462
 msgid "Only response_type=code is supported."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:442
+#: includes/mcp/class-mcp-oauth.php:473
 msgid "PKCE with code_challenge_method=S256 is required."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:456
+#: includes/mcp/class-mcp-oauth.php:487
 msgid "code_challenge is not a valid S256 challenge."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:469
+#: includes/mcp/class-mcp-oauth.php:500
 msgid "That request asked for a token for a different address than this one."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:991
+#: includes/mcp/class-mcp-oauth.php:1143
 #: src/admin/components/pages/MCPConnectedApps.js:891
 msgid "ThinkRank Hub’s access can only be narrowed here. To let the hub read or change more, disconnect it on the ThinkRank Hub card and connect it again with the access you want."
 msgstr ""
 
-#: includes/mcp/class-mcp-oauth.php:1132
+#: includes/mcp/class-mcp-oauth.php:1286
 msgid "MCP Client"
 msgstr ""
 
@@ -7305,7 +7330,7 @@ msgid "Google could not return performance data for this site right now. Try aga
 msgstr ""
 
 #. translators: %d: number of products.
-#: includes/seo/class-permalinks.php:314
+#: includes/seo/class-permalinks.php:324
 #, php-format
 msgid "Your store has more than %d products, so not every product page was cleared from your page cache. Clear the cache so the old product addresses redirect straight away."
 msgstr ""
@@ -8295,35 +8320,35 @@ msgstr ""
 msgid "Business type is selected for proper schema markup."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:2935
+#: includes/seo/class-sitemap-generator.php:2941
 msgid "The previous automatic sitemap rebuild stopped before it finished, most likely because PHP ran out of memory or time. It is retried with a growing delay. If this keeps happening, raise the PHP memory_limit or max_execution_time, or run WP-Cron from a system cron."
 msgstr ""
 
 #. translators: 1: memory in use, 2: PHP memory limit.
-#: includes/seo/class-sitemap-generator.php:3360
+#: includes/seo/class-sitemap-generator.php:3366
 #, php-format
 msgid "The sitemap rebuild was stopped at %1$s of the %2$s PHP memory limit, before PHP would have run out of memory. It will be retried by a process with more memory (WP-CLI or a system cron). To let it finish in the admin, raise the PHP memory_limit."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3889
+#: includes/seo/class-sitemap-generator.php:3895
 #, php-format
 msgid "The sitemap is disabled, but these files are still in the site root and your web server is still serving them: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: 1: comma-separated file names, 2: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3897
+#: includes/seo/class-sitemap-generator.php:3903
 #, php-format
 msgid "The sitemap is being served from WordPress, but these files are still in the site root and your web server will keep serving them instead: %1$s. They could not be removed because %2$s is not writable. Delete them, or ask your host to make the WordPress root writable."
 msgstr ""
 
 #. translators: %s: absolute path to the WordPress root.
-#: includes/seo/class-sitemap-generator.php:3919
+#: includes/seo/class-sitemap-generator.php:3925
 #, php-format
 msgid "The sitemap could not be written because the folder %s is not writable by PHP. Ask your host to make the WordPress root writable, or set Sitemap Delivery to Dynamic to serve the sitemap without writing files."
 msgstr ""
 
-#: includes/seo/class-sitemap-generator.php:3924
+#: includes/seo/class-sitemap-generator.php:3930
 msgid "The sitemap files could not be written to the site root."
 msgstr ""
 
@@ -8631,11 +8656,11 @@ msgstr ""
 msgid "ThinkRank requires WordPress 6.0 or higher. Please upgrade your WordPress installation."
 msgstr ""
 
-#: thinkrank.php:516
+#: thinkrank.php:518
 msgid "ThinkRank activation failed. Please check your server logs."
 msgstr ""
 
-#: thinkrank.php:517
+#: thinkrank.php:519
 msgid "Plugin Activation Error"
 msgstr ""
 
@@ -9588,7 +9613,7 @@ msgid "Insert this brief into a draft post (Pro)"
 msgstr ""
 
 #: src/admin/components/content-brief/ContentBriefInsertTeaser.js:49
-#: src/metabox/components/panels/QuestionCoverageCard.js:581
+#: src/metabox/components/panels/QuestionCoverageCard.js:610
 msgid "Insert into post"
 msgstr ""
 
@@ -11675,7 +11700,7 @@ msgid "AI draft"
 msgstr ""
 
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1522
-#: src/metabox/components/panels/QuestionCoverageCard.js:588
+#: src/metabox/components/panels/QuestionCoverageCard.js:617
 msgid "Discard"
 msgstr ""
 
@@ -22557,7 +22582,7 @@ msgstr ""
 #. translators: %s: where, e.g. "SEO title".
 #. translators: %s: section heading.
 #: src/admin/components/seo/KeywordGauges.js:127
-#: src/metabox/components/panels/QuestionCoverageCard.js:292
+#: src/metabox/components/panels/QuestionCoverageCard.js:321
 #, js-format
 msgid "In: %s"
 msgstr ""
@@ -25119,68 +25144,68 @@ msgstr ""
 msgid "Answered"
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:244
+#: src/metabox/components/panels/QuestionCoverageCard.js:273
 msgid "the introduction"
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:248
+#: src/metabox/components/panels/QuestionCoverageCard.js:277
 msgid "before the first heading"
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:266
+#: src/metabox/components/panels/QuestionCoverageCard.js:295
 msgid "Draft a section"
 msgstr ""
 
 #. translators: %s: number of impressions.
-#: src/metabox/components/panels/QuestionCoverageCard.js:275
+#: src/metabox/components/panels/QuestionCoverageCard.js:304
 #, js-format
 msgid "Real query from Search Console · %s impressions"
 msgstr ""
 
 #. translators: %s: section heading.
-#: src/metabox/components/panels/QuestionCoverageCard.js:303
+#: src/metabox/components/panels/QuestionCoverageCard.js:332
 #, js-format
 msgid "Would fit after: %s"
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:385
+#: src/metabox/components/panels/QuestionCoverageCard.js:414
 msgid "Couldn’t start."
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:398
+#: src/metabox/components/panels/QuestionCoverageCard.js:427
 msgid "Couldn’t check coverage. Try again."
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:426
+#: src/metabox/components/panels/QuestionCoverageCard.js:455
 msgid "Couldn’t draft that section."
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:446
+#: src/metabox/components/panels/QuestionCoverageCard.js:475
 msgid "Set a focus keyword in the General tab first. The questions are built from it."
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:455
+#: src/metabox/components/panels/QuestionCoverageCard.js:484
 msgid "Add an AI provider in ThinkRank → Settings to check question coverage."
 msgstr ""
 
 #. translators: 1: answered questions, 2: all questions.
-#: src/metabox/components/panels/QuestionCoverageCard.js:470
+#: src/metabox/components/panels/QuestionCoverageCard.js:499
 #, js-format
 msgid "%1$d of %2$d answered"
 msgstr ""
 
 #. translators: %s: focus keyword.
-#: src/metabox/components/panels/QuestionCoverageCard.js:478
+#: src/metabox/components/panels/QuestionCoverageCard.js:507
 #, js-format
 msgid "For “%s”"
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:489
+#: src/metabox/components/panels/QuestionCoverageCard.js:518
 msgid "Questions answered"
 msgstr ""
 
 #. translators: %d: number of Search Console queries.
-#: src/metabox/components/panels/QuestionCoverageCard.js:500
+#: src/metabox/components/panels/QuestionCoverageCard.js:529
 #, js-format
 msgid "Includes %d real query this page gets impressions for in Search Console."
 msgid_plural "Includes %d real queries this page gets impressions for in Search Console."
@@ -25188,40 +25213,40 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: estimated number of tokens.
-#: src/metabox/components/panels/QuestionCoverageCard.js:517
+#: src/metabox/components/panels/QuestionCoverageCard.js:546
 #, js-format
 msgid "This uses about %s tokens from your AI provider. Later runs reuse the questions and only re-check the content."
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:528
+#: src/metabox/components/panels/QuestionCoverageCard.js:557
 msgid "The focus keyword changed since the last check. Run it again for the new keyword."
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:548
+#: src/metabox/components/panels/QuestionCoverageCard.js:577
 msgid "Run the check"
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:551
+#: src/metabox/components/panels/QuestionCoverageCard.js:580
 msgid "Check again"
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:552
+#: src/metabox/components/panels/QuestionCoverageCard.js:581
 msgid "Check question coverage"
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:559
+#: src/metabox/components/panels/QuestionCoverageCard.js:588
 msgid "Draft to review before adding"
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:580
+#: src/metabox/components/panels/QuestionCoverageCard.js:609
 msgid "Insert in place"
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:635
+#: src/metabox/components/panels/QuestionCoverageCard.js:664
 msgid "Question coverage"
 msgstr ""
 
-#: src/metabox/components/panels/QuestionCoverageCard.js:636
+#: src/metabox/components/panels/QuestionCoverageCard.js:665
 msgid "Questions people search around this topic, and whether this page answers them."
 msgstr ""
 

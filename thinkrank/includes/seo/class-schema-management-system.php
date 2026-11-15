@@ -2887,19 +2887,26 @@ class Schema_Management_System extends Abstract_SEO_Manager {
      * @return string
      */
     private function generation_description(\WP_Post $post): string {
-        // The meta description the page resolves: the post's own, or the
-        // post-type template rendered for it.
-        $description = Pattern_Resolver::effective_description((int) $post->ID);
+        // Measured even here, in the admin: what is generated is stored and
+        // then published as it is, and a description template can name the
+        // body through %excerpt%.
+        $description = (string) Content_Access::measured(function () use ($post): string {
+            // The meta description the page resolves: the post's own, or the
+            // post-type template rendered for it.
+            $description = Pattern_Resolver::effective_description((int) $post->ID);
 
-        // Then the authored excerpt, which is public even on a protected post.
-        if ('' === trim($description)) {
-            $description = (string) $post->post_excerpt;
-        }
+            // Then the authored excerpt, which is public even on a protected post.
+            if ('' === trim($description)) {
+                $description = (string) $post->post_excerpt;
+            }
 
-        // Then the visible text, never a protected body.
-        if ('' === trim($description) && !('' !== (string) $post->post_password && (!function_exists('post_password_required') || post_password_required($post)))) {
-            $description = Pattern_Resolver::derive_excerpt(Builder_Content::visible_content($post), 30);
-        }
+            // Then the visible text, never a protected body.
+            if ('' === trim($description) && !('' !== (string) $post->post_password && (!function_exists('post_password_required') || post_password_required($post)))) {
+                $description = Content_Access::derived_description($post, 30);
+            }
+
+            return $description;
+        });
 
         // Normalised the way the live page normalises a description node
         // (Global_SEO_Schema_Output::normalize_description()): tags stripped,

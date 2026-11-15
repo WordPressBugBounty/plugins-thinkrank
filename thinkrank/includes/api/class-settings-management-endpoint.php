@@ -519,7 +519,9 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
      */
     public function get_global_settings(WP_REST_Request $request): WP_REST_Response {
         try {
-            $include_categories = $request->get_param('categories') ?? array_keys($this->setting_categories);
+            $include_categories = $this->accessible_categories(
+                $request->get_param('categories') ?? array_keys($this->setting_categories)
+            );
             $include_schema = $request->get_param('include_schema') ?? false;
 
             $global_settings = [];
@@ -587,6 +589,14 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                     'Settings must be provided as an array',
                     ['status' => 400]
                 );
+            }
+
+            // A write is refused whole, before anything is validated or saved:
+            // dropping the categories the caller does not hold and saving the
+            // rest would answer 200 for a request that was only partly applied.
+            $forbidden = $this->forbidden_categories(array_keys($settings));
+            if (!empty($forbidden)) {
+                return $this->forbidden_categories_error($forbidden);
             }
 
             // Each per-category value must be an array before it reaches the
@@ -703,7 +713,14 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
      */
     public function get_category_settings(WP_REST_Request $request) {
         try {
-            $category = $request->get_param('category');
+            // URL path only. get_param() searches the query string and request
+            // body ahead of the route path, so ?category=integrations (or a JSON
+            // body category) on /category/seo_analytics would be authorised as
+            // seo_analytics by capability_for_request() / Role_Manager::gate_rest()
+            // — both read the path — and then read a different category here
+            // (#1609). The handler must act on the same category the permission
+            // layers checked.
+            $category = $request->get_url_params()['category'] ?? null;
             $include_schema = $request->get_param('include_schema') ?? false;
 
             // Validate category
@@ -762,7 +779,11 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
      */
     public function update_category_settings(WP_REST_Request $request) {
         try {
-            $category = $request->get_param('category');
+            // URL path only — same reason as get_category_settings(): the
+            // permission layers authorise the path's category, so a body or
+            // query-string category here would write a category the caller was
+            // never checked against (#1609).
+            $category = $request->get_url_params()['category'] ?? null;
             $request_data = $request->get_param('settings');
             $validate_before_update = $request->get_param('validate') ?? true;
 
@@ -994,7 +1015,9 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             if (!is_array($settings)) {
                 $settings = [];
             }
-            $categories = $request->get_param('categories') ?? array_keys($this->setting_categories);
+            $categories = $this->accessible_categories(
+                $request->get_param('categories') ?? array_keys($this->setting_categories)
+            );
 
             $validation_results = [];
             $overall_valid = true;
@@ -1063,7 +1086,9 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
      */
     public function get_settings_schema(WP_REST_Request $request): WP_REST_Response {
         try {
-            $categories = $request->get_param('categories') ?? array_keys($this->setting_categories);
+            $categories = $this->accessible_categories(
+                $request->get_param('categories') ?? array_keys($this->setting_categories)
+            );
 
             $schema_data = [];
 
@@ -1116,7 +1141,9 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
      */
     public function export_settings(WP_REST_Request $request) {
         try {
-            $categories = $request->get_param('categories') ?? array_keys($this->setting_categories);
+            $categories = $this->accessible_categories(
+                $request->get_param('categories') ?? array_keys($this->setting_categories)
+            );
             $format = $request->get_param('format') ?? 'json';
             $include_metadata = $request->get_param('include_metadata') ?? true;
 
@@ -1343,7 +1370,9 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
     public function create_settings_backup(WP_REST_Request $request) {
         try {
             $backup_name = $request->get_param('backup_name') ?? 'backup_' . gmdate('Y-m-d_H-i-s');
-            $categories = $request->get_param('categories') ?? array_keys($this->setting_categories);
+            $categories = $this->accessible_categories(
+                $request->get_param('categories') ?? array_keys($this->setting_categories)
+            );
             $description = $request->get_param('description') ?? '';
 
             // Create backup data
@@ -1430,6 +1459,18 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 );
             }
 
+            // Determine categories to restore
+            $categories_to_restore = $categories ?? array_keys((array) ($backup_data['settings'] ?? []));
+
+            // Refused whole, and before the restore point is taken: a backup made
+            // by an administrator holds every section, and restoring only the
+            // part this caller holds would report a restore that did not happen.
+            // Naming the held categories in `categories` restores just those.
+            $forbidden = $this->forbidden_categories((array) $categories_to_restore);
+            if (!empty($forbidden)) {
+                return $this->forbidden_categories_error($forbidden);
+            }
+
             // Create restore point if requested. Abort if it couldn't be saved,
             // so the current configuration isn't overwritten with no rollback.
             $restore_point_id = null;
@@ -1445,9 +1486,6 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             }
 
             $restore_results = [];
-
-            // Determine categories to restore
-            $categories_to_restore = $categories ?? array_keys($backup_data['settings']);
 
             // Restore settings for each category
             foreach ($categories_to_restore as $category) {
@@ -1691,6 +1729,94 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
         }
 
         return \ThinkRank\Core\Capability_Manager::capability_for_settings_category($category);
+    }
+
+    /**
+     * Whether the current user holds the section that owns a settings category.
+     *
+     * The routes with no {category} in the path — /global, /validate, /schema,
+     * /export, /backup, /restore — are authorised once, for `thinkrank_settings`,
+     * and then act on whichever categories the request names. That one check
+     * says nothing about those categories: Site Identity, Social, Sitemap,
+     * Schema, Performance and Analytics each belong to their own section, and
+     * /category/{category} refuses a caller who does not hold it. This is the
+     * same question, asked per category, so the two kinds of route agree.
+     *
+     * @since 2.21.4
+     *
+     * @param string $category Category key.
+     * @return bool
+     */
+    private function user_can_access_category(string $category): bool {
+        return \ThinkRank\Core\Capability_Manager::current_user_can(
+            \ThinkRank\Core\Capability_Manager::capability_for_settings_category($category)
+        );
+    }
+
+    /**
+     * The categories from a list that the current user may act on.
+     *
+     * For reads: a category the caller does not hold is left out, the same as
+     * one that does not exist. Anything that is not a category name is dropped.
+     *
+     * @since 2.21.4
+     *
+     * @param mixed $categories Requested categories.
+     * @return string[]
+     */
+    private function accessible_categories($categories): array {
+        $accessible = [];
+
+        foreach ((array) $categories as $category) {
+            if (is_string($category) && $this->user_can_access_category($category)) {
+                $accessible[] = $category;
+            }
+        }
+
+        return $accessible;
+    }
+
+    /**
+     * The categories from a list that the current user may not act on.
+     *
+     * For writes, which are refused whole when this is not empty.
+     *
+     * @since 2.21.4
+     *
+     * @param array $categories Requested categories.
+     * @return string[]
+     */
+    private function forbidden_categories(array $categories): array {
+        $forbidden = [];
+
+        foreach ($categories as $category) {
+            $category = (string) $category;
+
+            if (!$this->user_can_access_category($category)) {
+                $forbidden[] = $category;
+            }
+        }
+
+        return $forbidden;
+    }
+
+    /**
+     * The 403 a write answers when it names categories the caller does not hold.
+     *
+     * @since 2.21.4
+     *
+     * @param string[] $forbidden Category keys.
+     * @return WP_Error
+     */
+    private function forbidden_categories_error(array $forbidden): WP_Error {
+        return new WP_Error(
+            'rest_forbidden',
+            'You do not have permission to manage these settings categories: ' . implode(', ', $forbidden),
+            [
+                'status' => 403,
+                'categories' => $forbidden
+            ]
+        );
     }
 
     /**

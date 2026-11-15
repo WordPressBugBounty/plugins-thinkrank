@@ -510,6 +510,10 @@ class Manager {
         // becomes one feature per line, so the next regeneration publishes the
         // bullets the site already had rather than one merged line.
         \ThinkRank\SEO\LLMs_Txt_Manager::maybe_migrate_legacy_key_features();
+
+        // One-time: re-run the import redactor over a Rank Math snapshot stored
+        // by a version whose deny-list was shorter.
+        \ThinkRank\Admin\Importers\Snapshot_Scrubber::maybe_scrub();
     }
 
     /**

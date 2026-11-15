@@ -1799,7 +1799,13 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         }
 
         // Extract images from the content the visitor actually sees
-        $content_images = $this->extract_content_images($this->image_source_content($post));
+        // And only those a logged-out visitor is served: a sitemap is built
+        // from cron and from the admin, so the answer is measured here rather
+        // than assumed.
+        $content_images = array_filter(
+            $this->extract_content_images($this->image_source_content($post)),
+            static fn(array $image): bool => Content_Access::sees_image($post, (string) $image['url'], true)
+        );
         $images = array_merge($images, $content_images);
 
         // Remove duplicates based on URL
