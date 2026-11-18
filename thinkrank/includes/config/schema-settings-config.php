@@ -128,6 +128,20 @@ class Schema_Settings_Config {
             'organization_contact_email' => '',
             'organization_contact_hours' => '',
 
+            // Organization relationships (#768). Stored as structures rather
+            // than the flat strings around them, because each entry is an
+            // entity with its own name, URL and profiles.
+            //
+            // The distinction between the last two is the one users get wrong:
+            // subOrganization is for divisions and separate legal entities,
+            // brand is for the names the organization sells under. A company's
+            // products are brands, however they are marketed; filing them as
+            // sub-organizations tells a crawler there are six companies where
+            // there is one.
+            'organization_parent' => [],
+            'organization_subs' => [],
+            'organization_brands' => [],
+
             // Website schema settings
             'website_name' => '',
             'website_url' => '',
@@ -384,7 +398,14 @@ class Schema_Settings_Config {
             'business_opening_hours',
             'software_operating_systems',
             'software_features',
-            'howto_supply'
+            'howto_supply',
+            // Person profile URLs, and the two organization relationship
+            // LISTS (#768). organization_parent is a single object, not a
+            // list, so it does not belong here: the JS counterpart of this
+            // list replaces anything in it that is not an array with [].
+            'person_same_as',
+            'organization_subs',
+            'organization_brands'
         ];
     }
 

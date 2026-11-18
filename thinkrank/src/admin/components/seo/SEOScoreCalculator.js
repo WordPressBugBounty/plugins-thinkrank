@@ -174,6 +174,7 @@ const SEOScoreCalculator = ({
 	scoreData: externalScoreData = null,
 	onRefresh: externalOnRefresh = null,
 	onScoreChange = null,
+	onScoreDataChange = null,
 	seoTitle = '',
 	contentType = 'blog_post',
 	tone = 'professional',
@@ -717,6 +718,16 @@ const SEOScoreCalculator = ({
 			onScoreChange(hasScore ? overallScore : null);
 		}
 	}, [overallScore, hasScore, onScoreChange]);
+
+	// Report the whole response the panel is showing, not only the number, so
+	// a sibling that rides on the same calculation (the answer readiness card,
+	// #677) follows every live and manual re-score instead of keeping the one
+	// it was first handed.
+	useEffect(() => {
+		if (typeof onScoreDataChange === 'function') {
+			onScoreDataChange(effectiveScoreData || null);
+		}
+	}, [effectiveScoreData, onScoreDataChange]);
 
 	// Recalculate button label (avoids a nested ternary in JSX).
 	let calcLabel = __('Calculate Score', 'thinkrank');

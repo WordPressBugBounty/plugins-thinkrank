@@ -4,7 +4,7 @@
  * Plugin Name: ThinkRank
  * Plugin URI: https://thinkrank.ai/
  * Description: AI-native SEO plugin for WordPress. Automate and enhance your SEO with cutting-edge AI while maintaining editorial control.
- * Version: 2.21.4
+ * Version: 2.22.0
  * Author: WPDeveloper
  * Author URI: https://wpdeveloper.com/
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Requires PHP: 7.4
  * 
  * @package ThinkRank
- * @version 2.21.4
+ * @version 2.22.0
  * @since 1.0.0
  */
 
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('THINKRANK_VERSION', '2.21.4');
+define('THINKRANK_VERSION', '2.22.0');
 define('THINKRANK_PLUGIN_FILE', __FILE__);
 define('THINKRANK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('THINKRANK_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -406,10 +406,20 @@ final class ThinkRank {
             // separate index because a word count and a snippet verdict go
             // stale for different reasons (#565).
             'word_count_index' => new ThinkRank\SEO\Word_Count_Index(),
+            // The orphan page report's link graph: same reason again, and a
+            // third index because an inbound link changes when *another* post
+            // is edited, which neither of the two above can observe (#566).
+            'link_index' => new ThinkRank\SEO\Link_Index(),
             // The keyword map's inverted index: same reason again, and a
             // separate index because a keyword changes when the focus keyword
             // field changes, which neither of the two above watch (#568).
             'keyword_index' => new ThinkRank\SEO\Keyword_Index(),
+            // SEO Goals' cached list is dropped whenever an option, a post or
+            // the analyzer run changes, so its hooks run on every request (#728).
+            'seo_goals' => new ThinkRank\SEO\Goals\Goal_Registry(),
+            // Title Experiments serve a variant title on the frontend and
+            // advance on a daily event, so both run on every request (#719).
+            'title_experiments' => new ThinkRank\SEO\Experiments\Title_Experiments(),
             // Counts changes to robots settings and redirects, so the two
             // reports above refresh when a post stops being indexable (#1013).
             'indexability' => new ThinkRank\SEO\Indexability(),
@@ -424,6 +434,9 @@ final class ThinkRank {
             // switch and does nothing without WooCommerce (#1478).
             'woocommerce' => new ThinkRank\Integrations\WooCommerce_Settings(),
             'ai_traffic' => new ThinkRank\SEO\Ai_Traffic_Tracker(),
+            // "What changed?" is the first question after a traffic drop, and
+            // until now nothing in WordPress could answer it (#722).
+            'timeline' => new ThinkRank\SEO\Timeline\Event_Recorder(),
             'analytics' => new ThinkRank\SEO\Analytics_Manager(),
             'schema_conflict_health_check' => new ThinkRank\Diagnostics\Schema_Conflict_Health_Check(),
             'abilities' => new ThinkRank\Abilities\Abilities_Registrar(),

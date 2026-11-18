@@ -649,7 +649,7 @@ final class Mcp_OAuth {
 				$hub = '';
 				if ( '' !== (string) ( $entry['hub_ticket'] ?? '' ) ) {
 					if ( '' === $hub_ticket || ! hash_equals( (string) $entry['hub_ticket'], Mcp_Hub::digest( $hub_ticket ) ) || ! Mcp_Hub::spend_ticket( $hub_ticket ) ) {
-						return [ 'error' => 'That connection was not started from this site’s ThinkRank Hub tab, or it has already been completed. Start it again from ThinkRank > AI Tools > ThinkRank Hub.' ];
+						return [ 'error' => __( 'That connection was not started from this site’s ThinkRank Hub tab, or it has already been completed. Start it again from ThinkRank > AI Tools > ThinkRank Hub.', 'thinkrank' ) ];
 					}
 					$hub = (string) ( $entry['hub'] ?? '' );
 

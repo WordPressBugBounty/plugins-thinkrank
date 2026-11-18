@@ -11,6 +11,7 @@ namespace ThinkRank\Abilities\Settings;
 
 use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\Config\Schema_Settings_Config;
+use ThinkRank\SEO\Organization_Relations;
 use ThinkRank\SEO\Schema_Management_System;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -55,6 +56,18 @@ class Update_Schema_Settings extends Ability_Base {
 		'enabled_schema_types',
 		'business_opening_hours',
 		'person_same_as',
+	];
+
+	/**
+	 * Structured organization-relationship keys.
+	 *
+	 * Held apart from ARRAY_KEYS because their shape matters: the parent is an
+	 * object, and array_values() over it would strip its field names.
+	 */
+	private const RELATION_KEYS = [
+		Organization_Relations::SETTING_PARENT,
+		Organization_Relations::SETTING_SUBS,
+		Organization_Relations::SETTING_BRANDS,
 	];
 
 	/**
@@ -107,7 +120,7 @@ class Update_Schema_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-schema-settings';
 		$this->label       = __( 'Update ThinkRank Schema Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank structured-data (schema) settings. When auto_deploy is enabled, saving automatically regenerates and redeploys the site-wide schema markup. Read the current values with get-schema-settings first; only the keys you pass are changed.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank structured-data (schema) settings. When auto_deploy is enabled, saving automatically regenerates and redeploys the site-wide schema markup. Read the current values with get-schema-settings first; only the keys you pass are changed. organization_parent, organization_subs and organization_brands describe the organization\'s place in a group: subs are divisions or separate legal entities, brands are the names it sells under, and products belong under brands rather than subs. Entries that fail validation are dropped, so read the settings returned in the response rather than assuming what you sent was stored.', 'thinkrank' );
 	}
 
 	/**
@@ -160,7 +173,7 @@ class Update_Schema_Settings extends Ability_Base {
 		$props['organization_type']['description'] = __( 'schema.org type the site entity is published as: Organization, one of its subtypes, or LocalBusiness or one of its subtypes.', 'thinkrank' );
 		$props['validation_level']['enum']         = Schema_Settings_Config::VALIDATION_LEVELS;
 
-		return $props;
+		return array_merge( $props, Organization_Relations::json_schema_properties() );
 	}
 
 	/**
@@ -192,8 +205,13 @@ class Update_Schema_Settings extends Ability_Base {
 		return [
 			'type'       => 'object',
 			'properties' => [
-				'success' => [ 'type' => 'boolean' ],
-				'message' => [ 'type' => 'string' ],
+				'success'  => [ 'type' => 'boolean' ],
+				'message'  => [ 'type' => 'string' ],
+				'settings' => [
+					'type'        => 'object',
+					'description' => __( 'The organization relationship keys as stored, when any were sent. Entries that failed validation are absent, so compare this with what you passed.', 'thinkrank' ),
+					'properties'  => Organization_Relations::json_schema_properties(),
+				],
 			],
 		];
 	}
@@ -255,6 +273,17 @@ class Update_Schema_Settings extends Ability_Base {
 			}
 		}
 
+		$relations = [];
+		foreach ( self::RELATION_KEYS as $key ) {
+			if ( ! array_key_exists( $key, $settings ) ) {
+				continue;
+			}
+
+			$merged[ $key ]    = Organization_Relations::sanitize_setting( $key, $settings[ $key ] );
+			$relations[ $key ] = $merged[ $key ];
+			$found             = true;
+		}
+
 		if ( ! $found ) {
 			return new \WP_Error(
 				'thinkrank_no_valid_schema_setting_keys',
@@ -267,9 +296,23 @@ class Update_Schema_Settings extends Ability_Base {
 			return self::settings_save_failed( __( 'Failed to update schema settings.', 'thinkrank' ), $mgr->get_last_save_error(), $mgr->get_last_save_error_code() );
 		}
 
-		return [
+		$out = [
 			'success' => true,
 			'message' => __( 'Schema settings updated.', 'thinkrank' ),
 		];
+
+		// Report what survived validation, not what was submitted. These three
+		// drop entries with no name, with a duplicate name, with a relative URL
+		// or naming this site as its own parent, and a caller told only
+		// "success" would believe all of it was stored.
+		if ( [] !== $relations ) {
+			// A cleared parent is typed `object` and must encode as `{}` (#1089).
+			if ( array_key_exists( Organization_Relations::SETTING_PARENT, $relations ) ) {
+				$relations[ Organization_Relations::SETTING_PARENT ] = self::object_value( $relations[ Organization_Relations::SETTING_PARENT ] );
+			}
+			$out['settings'] = $relations;
+		}
+
+		return $out;
 	}
 }

@@ -14,11 +14,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use ThinkRank\Abilities\Analysis\Get_Post_Seo_Checks;
+use ThinkRank\Abilities\Analysis\Get_Seo_Goals;
+use ThinkRank\Abilities\Analysis\Update_Seo_Goal;
+use ThinkRank\Abilities\Experiments\Create_Title_Experiment;
+use ThinkRank\Abilities\Experiments\Get_Title_Experiments;
+use ThinkRank\Abilities\Experiments\Stop_Title_Experiment;
 use ThinkRank\Abilities\Analysis\Get_Term_Seo_Checks;
 use ThinkRank\Abilities\Content\Get_Post_Seo;
 use ThinkRank\Abilities\Content\Get_Term_Seo;
 use ThinkRank\Abilities\Content\List_Content_Items;
 use ThinkRank\Abilities\Content\Get_Duplicate_Snippets;
+use ThinkRank\Abilities\Content\Get_Orphan_Pages;
 use ThinkRank\Abilities\Content\Get_Keyword_Map;
 use ThinkRank\Abilities\Content\Get_Thin_Content;
 use ThinkRank\Abilities\Content\Get_Thin_Content_Settings;
@@ -91,6 +97,7 @@ use ThinkRank\Abilities\Settings\Update_Social_Platforms_Settings;
 use ThinkRank\Abilities\Indexing\Submit_Urls_To_Index;
 use ThinkRank\Abilities\Indexing\Get_Instant_Indexing_History;
 use ThinkRank\Abilities\Analysis\Get_Llms_Txt_Status;
+use ThinkRank\Abilities\Analysis\Get_Seo_Timeline;
 use ThinkRank\Abilities\Analysis\Generate_Llms_Txt;
 use ThinkRank\Abilities\Analysis\Publish_Llms_Txt;
 use ThinkRank\Abilities\Analysis\Get_Seo_Analytics_Data;
@@ -373,6 +380,7 @@ class Abilities_Registrar {
 			new List_Snippet_Issues(),
 			new Get_Duplicate_Snippets(),
 			new Get_Thin_Content(),
+			new Get_Orphan_Pages(),
 			new Get_Keyword_Map(),
 			new Get_Thin_Content_Settings(),
 			new Update_Thin_Content_Settings(),
@@ -433,16 +441,22 @@ class Abilities_Registrar {
 			new Submit_Urls_To_Index(),
 			new Get_Instant_Indexing_History(),
 			new Get_Llms_Txt_Status(),
+			new Get_Seo_Timeline(),
 			new Generate_Llms_Txt(),
 			new Publish_Llms_Txt(),
 			new Get_Seo_Analytics_Data(),
 			new Get_Seo_Opportunities(),
+			new Get_Title_Experiments(),
+			new Create_Title_Experiment(),
+			new Stop_Title_Experiment(),
 			new Get_Seo_Score(),
 			new Get_Seo_Score_History(),
 			new Get_Seo_Analyzer(),
 			new Get_Ai_Insights(),
 			new Get_Topical_Relevance(),
 			new Run_Seo_Analyzer(),
+			new Get_Seo_Goals(),
+			new Update_Seo_Goal(),
 			new Fix_Seo_Check(),
 			new Get_Performance_Data(),
 			new Get_Integrations_Status(),

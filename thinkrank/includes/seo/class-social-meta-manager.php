@@ -620,6 +620,306 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
     }
 
     /**
+     * Setting keys holding a search-engine verification code.
+     *
+     * @since 2.22.0
+     *
+     * @return string[]
+     */
+    public static function get_site_verification_keys(): array {
+        return [
+            'google_site_verification',
+            'bing_site_verification',
+            'yandex_site_verification',
+            'baidu_site_verification',
+        ];
+    }
+
+    /**
+     * Setting keys whose value may arrive as the whole `<meta>` tag.
+     *
+     * The four search-engine codes, plus Pinterest, whose Claim page also
+     * hands out a whole tag. Pinterest stays out of get_site_verification_keys()
+     * because it keeps that list's other rules apart: it is stored encrypted
+     * and masked, and an empty value leaves it alone rather than clearing it.
+     *
+     * @since 2.22.0
+     *
+     * @return string[]
+     */
+    public static function get_pasted_tag_keys(): array {
+        return array_merge(self::get_site_verification_keys(), ['pinterest_site_verification']);
+    }
+
+    /**
+     * A submitted platform value, sanitised for storage.
+     *
+     * For a key in get_pasted_tag_keys() a pasted tag is reduced to its code
+     * first: sanitize_text_field() strips a whole element to '', and a save
+     * path that skips empty values then reported success while storing
+     * nothing (#1684). Every other key is sanitised as text.
+     *
+     * @since 2.22.0
+     *
+     * @param string $key   Setting key.
+     * @param string $value Submitted value.
+     * @return string
+     */
+    public static function sanitize_platform_value(string $key, string $value): string {
+        if (in_array($key, self::get_pasted_tag_keys(), true)) {
+            $value = self::extract_verification_code($value, $key);
+        }
+
+        return sanitize_text_field($value);
+    }
+
+    /**
+     * Take the code out of a pasted verification tag.
+     *
+     * Every one of these engines hands the user a whole `<meta>` element to
+     * copy, and a field labelled "verification code" is where people paste it.
+     * Storing the tag verbatim emits a meta tag whose content is another meta
+     * tag, which verifies nothing and looks like the plugin is broken; failing
+     * format validation instead tells someone their correct code is wrong.
+     * Reading the `content` attribute out of it is what the user meant either
+     * way, and a bare code passes through untouched.
+     *
+     * Given the setting the value is for, a tag that names another engine is
+     * not read: the four fields sit side by side and each engine hands out a
+     * whole tag, so the Bing tag lands in the Google field easily, and its
+     * code would be published under the Google name, which verifies the site
+     * with neither (#1633). foreign_verification_tag() reports it.
+     *
+     * @since 2.22.0
+     *
+     * @param string $value Submitted value.
+     * @param string $key   Optional. Setting key the value is for.
+     * @return string The code.
+     */
+    public static function extract_verification_code(string $value, string $key = ''): string {
+        $value = trim($value);
+
+        if (false === strpos($value, '<')) {
+            return $value;
+        }
+
+        $expected = self::PLATFORM_META_KEYS[$key] ?? '';
+
+        if ('' !== $expected) {
+            $tags = self::parse_meta_tags($value);
+
+            if ([] !== $tags) {
+                // The tag named for this field wins, wherever it sits in the
+                // paste; a tag with no name is taken at its word, as before.
+                foreach ([$expected, ''] as $wanted) {
+                    foreach ($tags as $tag) {
+                        if ($wanted === $tag['name'] && '' !== $tag['content']) {
+                            return $tag['content'];
+                        }
+                    }
+                }
+
+                return '';
+            }
+        }
+
+        if (preg_match('/content\s*=\s*(["\'])(.*?)\1/i', $value, $matches)) {
+            return trim($matches[2]);
+        }
+
+        // A tag with no readable content attribute is not a code, and
+        // returning the markup would store the angle brackets. Empty is the
+        // honest answer; unusable_verification_codes() reports it, so the
+        // save is refused rather than claimed.
+        return '';
+    }
+
+    /**
+     * The `<meta>` elements in a pasted value, with their name and content.
+     *
+     * @since 2.22.0
+     *
+     * @param string $value Submitted value.
+     * @return array<int, array{name: string, content: string}> Name lowercased, '' when absent.
+     */
+    private static function parse_meta_tags(string $value): array {
+        if (!preg_match_all('/<meta\b[^>]*>/i', $value, $elements)) {
+            return [];
+        }
+
+        $tags = [];
+
+        foreach ($elements[0] as $element) {
+            $attributes = [];
+
+            foreach (['name', 'content'] as $attribute) {
+                $attributes[$attribute] = preg_match('/\b' . $attribute . '\s*=\s*(["\'])(.*?)\1/i', $element, $match)
+                    ? trim($match[2])
+                    : '';
+            }
+
+            $attributes['name'] = strtolower($attributes['name']);
+            $tags[]             = $attributes;
+        }
+
+        return $tags;
+    }
+
+    /**
+     * The name of the tag pasted into a verification field it is not for.
+     *
+     * Only when the paste holds no tag for the field itself and no tag without
+     * a name, which extract_verification_code() would still read.
+     *
+     * @since 2.22.0
+     *
+     * @param string $key   Setting key.
+     * @param string $value Submitted value.
+     * @return string|null The foreign tag's name, or null.
+     */
+    public static function foreign_verification_tag(string $key, string $value): ?string {
+        $expected = self::PLATFORM_META_KEYS[$key] ?? '';
+
+        if ('' === $expected || false === strpos($value, '<')) {
+            return null;
+        }
+
+        $foreign = null;
+
+        foreach (self::parse_meta_tags($value) as $tag) {
+            if ($expected === $tag['name'] || '' === $tag['name']) {
+                return null;
+            }
+
+            $foreign = $foreign ?? $tag['name'];
+        }
+
+        return $foreign;
+    }
+
+    /**
+     * The field a verification tag name belongs in, as the screen labels it.
+     *
+     * @param string $name Lowercased meta name.
+     * @return string Field label, or '' for a name ThinkRank has no field for.
+     */
+    private static function verification_field_label(string $name): string {
+        switch ($name) {
+            case 'google-site-verification':
+                return __('Google Search Console', 'thinkrank');
+            case 'msvalidate.01':
+                return __('Bing Webmaster Tools', 'thinkrank');
+            case 'yandex-verification':
+                return __('Yandex Webmaster', 'thinkrank');
+            case 'baidu-site-verification':
+                return __('Baidu Webmaster', 'thinkrank');
+            case 'p:domain_verify':
+                return __('Pinterest', 'thinkrank');
+            case 'instagram-site-verification':
+                return __('Instagram', 'thinkrank');
+            case 'tiktok-site-verification':
+                return __('TikTok', 'thinkrank');
+        }
+
+        return '';
+    }
+
+    /**
+     * The verification codes in a write payload, ready to store.
+     *
+     * One write contract for every entry point that stores these four codes
+     * (the Social Platforms route, the update ability, Settings Management),
+     * so none of them can drift into its own rules again:
+     *
+     * - a key that is absent is not an edit and is left out;
+     * - an explicitly empty value is a removal and comes back as '';
+     * - anything else has its code taken out of a pasted tag, then sanitised;
+     *   if nothing usable is left the key is left out, so a tag with no
+     *   content attribute never wipes the stored code.
+     *
+     * Format validation is the caller's, against validate_platform_field().
+     *
+     * @since 2.22.0
+     *
+     * @param array $settings Submitted settings, keyed by setting key.
+     * @return array<string,string> Verification key => value to store.
+     */
+    public static function sanitize_verification_codes(array $settings): array {
+        $codes = [];
+
+        foreach (self::get_site_verification_keys() as $key) {
+            if (!array_key_exists($key, $settings)
+                || !(is_scalar($settings[$key]) || null === $settings[$key])) {
+                continue;
+            }
+
+            $value = trim((string) $settings[$key]);
+
+            if ('' === $value) {
+                $codes[$key] = '';
+                continue;
+            }
+
+            $value = sanitize_text_field(self::extract_verification_code($value, $key));
+
+            if ('' !== $value) {
+                $codes[$key] = $value;
+            }
+        }
+
+        return $codes;
+    }
+
+    /**
+     * Verification fields submitted with something that holds no code.
+     *
+     * sanitize_verification_codes() leaves such a key out, so a pasted tag
+     * without a content attribute never wipes the stored code. Left at that,
+     * every save path reported success while nothing was stored and the field
+     * went back to the old code. Each caller refuses the save with these
+     * messages instead, the same way it refuses a malformed code.
+     *
+     * @since 2.22.0
+     *
+     * @param array $settings Submitted settings, keyed by setting key.
+     * @return array<string,string> Verification key => error message.
+     */
+    public static function unusable_verification_codes(array $settings): array {
+        $errors = [];
+
+        // Pinterest too: its tag is pasted the same way, and with nothing
+        // usable in it the save used to answer success and store nothing.
+        foreach (self::get_pasted_tag_keys() as $key) {
+            if (!array_key_exists($key, $settings) || !is_scalar($settings[$key])) {
+                continue;
+            }
+
+            $value = trim((string) $settings[$key]);
+
+            if ('' === $value || '' !== sanitize_text_field(self::extract_verification_code($value, $key))) {
+                continue;
+            }
+
+            $foreign = self::foreign_verification_tag($key, $value);
+
+            if (null === $foreign) {
+                $errors[$key] = __('No verification code found. Paste the code, or the whole meta tag including its content attribute.', 'thinkrank');
+                continue;
+            }
+
+            $label = self::verification_field_label($foreign);
+
+            $errors[$key] = '' !== $label
+                /* translators: 1: name of the pasted meta tag, 2: the field it belongs in, 3: the meta tag this field expects. */
+                ? sprintf(__('This is the %1$s tag, which belongs in the %2$s field. Paste the %3$s tag here.', 'thinkrank'), $foreign, $label, self::PLATFORM_META_KEYS[$key])
+                /* translators: 1: name of the pasted meta tag, 2: the meta tag this field expects. */
+                : sprintf(__('This is a %1$s tag, not a %2$s tag. Paste the %2$s tag here.', 'thinkrank'), $foreign, self::PLATFORM_META_KEYS[$key]);
+        }
+
+        return $errors;
+    }
+
+    /**
      * Format-validation rules for social platform verification codes / IDs.
      *
      * Single source of truth for the per-field format constraints, shared by
@@ -637,27 +937,52 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         return [
             'facebook_app_id' => [
                 'pattern' => '/^[0-9]+$/',
-                'message' => 'Facebook App ID must contain digits only.',
+                'message' => __('Facebook App ID must contain digits only.', 'thinkrank'),
+            ],
+            // Deliberately loose. Every one of these is a token whose format
+            // the search engine owns and has changed before, and a pattern
+            // tight enough to describe today's token rejects tomorrow's while
+            // telling the user their correct code is wrong. The alphabet is
+            // what is worth asserting; the length bound only catches a paste
+            // of something that is plainly not a code. Each message states
+            // the length as well, because a code cut short while copying uses
+            // only allowed characters and would otherwise be refused with a
+            // message that is already true of it (#1632).
+            'google_site_verification' => [
+                'pattern' => '/^[A-Za-z0-9_-]{10,128}$/',
+                'message' => __('Google verification codes are 10 to 128 letters, numbers, dashes and underscores. Check that the whole code was copied.', 'thinkrank'),
+            ],
+            'bing_site_verification' => [
+                'pattern' => '/^[A-Za-z0-9]{12,128}$/',
+                'message' => __('Bing verification codes are 12 to 128 letters and numbers. Check that the whole code was copied.', 'thinkrank'),
+            ],
+            'yandex_site_verification' => [
+                'pattern' => '/^[A-Za-z0-9]{8,128}$/',
+                'message' => __('Yandex verification codes are 8 to 128 letters and numbers. Check that the whole code was copied.', 'thinkrank'),
+            ],
+            'baidu_site_verification' => [
+                'pattern' => '#^[A-Za-z0-9_=+/-]{8,128}$#',
+                'message' => __('Baidu verification codes are 8 to 128 letters, numbers and the characters = + / - _. Check that the whole code was copied.', 'thinkrank'),
             ],
             'pinterest_site_verification' => [
                 'pattern' => '/^[a-f0-9]{32}$/',
-                'message' => 'Pinterest site verification must be a 32-character hexadecimal string.',
+                'message' => __('Pinterest site verification must be a 32-character hexadecimal string.', 'thinkrank'),
             ],
             'instagram_verification' => [
                 'pattern' => '/^[a-zA-Z0-9_-]{20,}$/',
-                'message' => 'Instagram verification must be at least 20 characters (letters, numbers, underscore, dash).',
+                'message' => __('Instagram verification must be at least 20 characters (letters, numbers, underscore, dash).', 'thinkrank'),
             ],
             'tiktok_verification' => [
                 'pattern' => '/^[a-zA-Z0-9_-]{20,}$/',
-                'message' => 'TikTok verification must be at least 20 characters (letters, numbers, underscore, dash).',
+                'message' => __('TikTok verification must be at least 20 characters (letters, numbers, underscore, dash).', 'thinkrank'),
             ],
             'youtube_channel_id' => [
                 'pattern' => '/^UC[a-zA-Z0-9_-]{22}$/',
-                'message' => 'YouTube channel ID must start with "UC" followed by 22 characters (letters, numbers, underscore, dash).',
+                'message' => __('YouTube channel ID must start with "UC" followed by 22 characters (letters, numbers, underscore, dash).', 'thinkrank'),
             ],
             'whatsapp_business_id' => [
                 'pattern' => '/^[0-9]{10,15}$/',
-                'message' => 'WhatsApp Business ID must be 10-15 digits.',
+                'message' => __('WhatsApp Business ID must be 10-15 digits.', 'thinkrank'),
             ],
         ];
     }
@@ -1282,6 +1607,15 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
             // LinkedIn settings
             'enable_linkedin' => false,
 
+            // Search-engine site verification (#631). No enable switch beside
+            // them, unlike the social platforms: a verification tag is either
+            // configured or it is not, and a second switch would only let a
+            // site set a code and still fail verification.
+            'google_site_verification' => '',
+            'bing_site_verification' => '',
+            'yandex_site_verification' => '',
+            'baidu_site_verification' => '',
+
             // Pinterest settings
             'enable_pinterest' => false,
             'pinterest_site_verification' => '',
@@ -1470,6 +1804,30 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
                 'title' => 'Enable LinkedIn',
                 'description' => 'Enable LinkedIn-specific optimizations',
                 'default' => false
+            ],
+            'google_site_verification' => [
+                'type' => 'string',
+                'title' => 'Google Search Console verification',
+                'description' => 'The content value from the google-site-verification meta tag. Pasting the whole tag works too.',
+                'default' => ''
+            ],
+            'bing_site_verification' => [
+                'type' => 'string',
+                'title' => 'Bing Webmaster Tools verification',
+                'description' => 'The content value from the msvalidate.01 meta tag. Pasting the whole tag works too.',
+                'default' => ''
+            ],
+            'yandex_site_verification' => [
+                'type' => 'string',
+                'title' => 'Yandex Webmaster verification',
+                'description' => 'The content value from the yandex-verification meta tag. Pasting the whole tag works too.',
+                'default' => ''
+            ],
+            'baidu_site_verification' => [
+                'type' => 'string',
+                'title' => 'Baidu Webmaster verification',
+                'description' => 'The content value from the baidu-site-verification meta tag. Pasting the whole tag works too.',
+                'default' => ''
             ],
             'enable_pinterest' => [
                 'type' => 'boolean',
@@ -3276,9 +3634,18 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
         // Core Settings (decrypted for sensitive keys) wins; the table value is a
         // backward-compat fallback for installs that saved these before the UI
         // moved to the Social Platforms tab.
-        $resolve = static function (string $key) use ($core, $settings): string {
+        //
+        // Not for the search-engine verification codes. They are newer than
+        // that move, so no install holds one only in the table, and every
+        // write path (Social Platforms, the update ability, Settings
+        // Management, the importers) stores them in Core Settings. Settings
+        // Management also leaves a copy in the table, and falling back to it
+        // would bring a code the user just cleared straight back into the head.
+        $verification_keys = self::get_site_verification_keys();
+
+        $resolve = static function (string $key) use ($core, $settings, $verification_keys): string {
             $value = (string) $core->get($key, '');
-            if ('' === $value) {
+            if ('' === $value && !in_array($key, $verification_keys, true)) {
                 $value = (string) ($settings[$key] ?? '');
             }
             return $value;
@@ -3306,7 +3673,19 @@ class Social_Meta_Manager extends Abstract_SEO_Manager {
     private const PLATFORM_META_KEYS = [
         'facebook_app_id'             => 'fb:app_id',
         'facebook_admins'             => 'fb:admins',
-        'pinterest_site_verification' => 'pinterest-site-verification',
+        // Search-engine site verification (#631). Emitted from this list
+        // rather than from a second place in the head: the list is what
+        // generate_platform_meta_tags() primes in one query, and a separate
+        // emitter would mean a second batch of option reads on every
+        // anonymous front-end request — the cost #393 removed.
+        'google_site_verification'    => 'google-site-verification',
+        'bing_site_verification'      => 'msvalidate.01',
+        'yandex_site_verification'    => 'yandex-verification',
+        'baidu_site_verification'     => 'baidu-site-verification',
+        // The name on the tag Pinterest's Claim page hands out. It was
+        // `pinterest-site-verification`, which Pinterest does not read, so
+        // no site could claim its domain through this field (#1684).
+        'pinterest_site_verification' => 'p:domain_verify',
         'instagram_verification'      => 'instagram-site-verification',
         'tiktok_verification'         => 'tiktok-site-verification',
         'youtube_channel_id'          => 'youtube-channel-id',

@@ -306,6 +306,17 @@ class Settings {
         'facebook_admins' => '',
         'youtube_channel_id' => '',
         'whatsapp_business_id' => '',
+        // Search-engine site verification. Deliberately here rather than with
+        // the encrypted codes below: these are printed verbatim in the page
+        // head for anyone to read, so there is nothing to protect, and
+        // Thinkrank_Exporter strips every encrypted key from a snapshot
+        // (strip_secret_keys()). Encrypting them would drop them from
+        // ThinkRank's own export and recreate, one plugin over, exactly the
+        // loss #631 exists to fix.
+        'google_site_verification' => '',
+        'bing_site_verification' => '',
+        'yandex_site_verification' => '',
+        'baidu_site_verification' => '',
         // Verification codes (encrypted)
         'pinterest_site_verification' => '',
         'instagram_verification' => '',

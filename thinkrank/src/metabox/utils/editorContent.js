@@ -82,3 +82,27 @@ export const getEditorContent = () => {
 	const textarea = classicTextarea();
 	return textarea ? textarea.value || '' : '';
 };
+
+/**
+ * Whether the content this screen sends is the post's whole body.
+ *
+ * True in the block editor and in a Classic Editor that is on screen, where
+ * an empty body means the author cleared the post. False on builder screens,
+ * where the body lives in the builder's own storage and the edit screen holds
+ * nothing (Oxygen keeps an empty, hidden `#content`), so the server reads the
+ * saved post instead of grading an empty one.
+ *
+ * @since 2.22.0
+ *
+ * @return {boolean} True when '' from this editor really means empty.
+ */
+export const editorHoldsBody = () => {
+	if (isBlockEditor()) {
+		return true;
+	}
+	const wrap = document.getElementById('postdivrich');
+	if (!wrap || wrap.getClientRects().length === 0) {
+		return false;
+	}
+	return Boolean(classicVisualEditor() || classicTextarea());
+};

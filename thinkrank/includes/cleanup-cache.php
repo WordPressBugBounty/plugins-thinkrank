@@ -58,3 +58,25 @@ if (!function_exists('thinkrank_flush_cache_groups')) {
         }
     }
 }
+
+if (!function_exists('thinkrank_cache_only_groups')) {
+    /**
+     * The manifest's cache groups minus the ones that hold data.
+     *
+     * Deactivation and the purge-caches ability empty caches only: the
+     * traffic buffer and the beacon rate limiter in `state_groups` are not
+     * caches, and flushing them loses hits or reopens the limiter (#1454).
+     * Uninstall flushes the full `cache_groups` list instead.
+     *
+     * @since 2.22.0
+     *
+     * @param array{cache_groups: string[], state_groups?: string[]} $manifest The cleanup manifest.
+     * @return string[]
+     */
+    function thinkrank_cache_only_groups(array $manifest): array {
+        return array_values(array_diff(
+            (array) ($manifest['cache_groups'] ?? []),
+            (array) ($manifest['state_groups'] ?? [])
+        ));
+    }
+}

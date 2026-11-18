@@ -28,6 +28,7 @@ import BrokenLinksTab from './BrokenLinksTab';
 import WooCommerceTab from './WooCommerceTab';
 import SEOAnalyzerTab from './SEOAnalyzerTab';
 import FocusPagesTab from './FocusPagesTab';
+import SectionChecklist from '../goals/SectionChecklist';
 
 const SectionBreadcrumb = memo(({ section, item }) => {
 	const navStructure = useMemo(() => getNavigationStructure(), []);
@@ -193,6 +194,13 @@ const ContentArea = memo(({ activeSection, activeItem, onNavigate }) => {
 		<div>
 			<SectionBreadcrumb section={activeSection} item={activeItem} />
 			<AdvancedScreenNotice section={activeSection} item={activeItem} />
+			{/* The Goals screen is the full list; a checklist above it would repeat it. */}
+			{'seo-analyzer' !== activeSection && (
+				<SectionChecklist
+					section={activeSection}
+					onNavigate={onNavigate}
+				/>
+			)}
 			<ContentRouter
 				section={activeSection}
 				item={activeItem}

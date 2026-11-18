@@ -87,6 +87,13 @@ export const getDefaultSettings = (contextType = 'site') => {
 		person_works_for: '',
 		person_same_as: [],
 
+		// Organization relationships (#768). Subs are divisions or separate
+		// legal entities; brands are the names the organization sells under,
+		// which is where products and apps belong.
+		organization_parent: {},
+		organization_subs: [],
+		organization_brands: [],
+
 		// Removed FAQPage schema settings (now handled at post/page level)
 	};
 
@@ -190,6 +197,13 @@ export const getArraySettings = () => [
 	'software_operating_systems',
 	'software_features',
 	'howto_supply',
+	'person_same_as',
+	// organization_subs and organization_brands are lists; organization_parent
+	// is deliberately absent, because it is a single object and
+	// normalizeSettingsDataTypes() replaces anything here that is not an array
+	// with [] — which would wipe the parent on every save.
+	'organization_subs',
+	'organization_brands',
 ];
 
 /**

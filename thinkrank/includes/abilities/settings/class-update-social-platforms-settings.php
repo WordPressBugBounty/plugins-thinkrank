@@ -11,6 +11,7 @@ namespace ThinkRank\Abilities\Settings;
 
 use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\Core\Settings;
+use ThinkRank\SEO\Social_Meta_Manager;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -22,7 +23,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Mirrors `POST /thinkrank/v1/social-platforms/settings`: accepts any subset of
  * the public platform IDs and sensitive verification codes, sanitizes them, and
  * persists only the non-empty allowed keys via the Settings store (which
- * encrypts the sensitive verification codes at rest). Returns the resulting
+ * encrypts the sensitive verification codes at rest). The four search-engine
+ * verification codes share the route's write contract through
+ * Social_Meta_Manager::sanitize_verification_codes(): an empty value clears
+ * the code and a pasted meta tag is reduced to it. Returns the resulting
  * settings with sensitive codes masked.
  */
 class Update_Social_Platforms_Settings extends Ability_Base {
@@ -34,6 +38,13 @@ class Update_Social_Platforms_Settings extends Ability_Base {
 		'facebook_admins',
 		'youtube_channel_id',
 		'whatsapp_business_id',
+		// Search-engine verification (#631). PUBLIC, not sensitive: each is
+		// printed in the page head, so masking it would hide from an agent a
+		// value it can read by fetching the page.
+		'google_site_verification',
+		'bing_site_verification',
+		'yandex_site_verification',
+		'baidu_site_verification',
 	];
 
 	/**
@@ -51,7 +62,7 @@ class Update_Social_Platforms_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/update-social-platforms-settings';
 		$this->label       = __( 'Update ThinkRank Social Platform Settings', 'thinkrank' );
-		$this->description = __( 'Update ThinkRank social platform verification settings: public platform IDs (Facebook, YouTube, WhatsApp) and sensitive site-verification codes (Pinterest, Instagram, TikTok). Only non-empty provided keys are saved; sensitive codes are stored encrypted. Read the current values with get-social-platforms-settings first.', 'thinkrank' );
+		$this->description = __( 'Update ThinkRank social platform verification settings: public platform IDs (Facebook, YouTube, WhatsApp), search-engine verification codes (Google, Bing, Yandex, Baidu) and sensitive site-verification codes (Pinterest, Instagram, TikTok). Only non-empty provided keys are saved, except that an empty search-engine code removes it; a pasted verification meta tag is reduced to its code. Sensitive codes are stored encrypted. Read the current values with get-social-platforms-settings first.', 'thinkrank' );
 	}
 
 	/**
@@ -95,6 +106,10 @@ class Update_Social_Platforms_Settings extends Ability_Base {
 						'facebook_admins'             => [ 'type' => 'string' ],
 						'youtube_channel_id'          => [ 'type' => 'string' ],
 						'whatsapp_business_id'        => [ 'type' => 'string' ],
+						'google_site_verification'    => [ 'type' => 'string' ],
+						'bing_site_verification'      => [ 'type' => 'string' ],
+						'yandex_site_verification'    => [ 'type' => 'string' ],
+						'baidu_site_verification'     => [ 'type' => 'string' ],
 						'pinterest_site_verification' => [ 'type' => 'string' ],
 						'instagram_verification'      => [ 'type' => 'string' ],
 						'tiktok_verification'         => [ 'type' => 'string' ],
@@ -146,12 +161,45 @@ class Update_Social_Platforms_Settings extends Ability_Base {
 		$allowed = array_merge( self::PUBLIC_KEYS, self::SENSITIVE_KEYS );
 		$found   = false;
 
+		// The four search-engine codes follow the REST route's contract, not
+		// the rule below: a pasted tag is reduced to its code instead of being
+		// sanitised into attribute soup, and an explicit empty string removes
+		// the code, since otherwise an agent asked to take a verification tag
+		// off the page reports success while the tag stays.
+		$codes  = Social_Meta_Manager::sanitize_verification_codes( $settings );
+		$errors = Social_Meta_Manager::unusable_verification_codes( $settings );
+
+		foreach ( $codes as $key => $code ) {
+			$error = Social_Meta_Manager::validate_platform_field( $key, $code );
+
+			if ( null !== $error ) {
+				$errors[ $key ] = $error;
+			}
+		}
+
+		if ( ! empty( $errors ) ) {
+			return new \WP_Error(
+				'thinkrank_invalid_social_platforms_settings',
+				__( 'One or more social platform values are in an invalid format.', 'thinkrank' ),
+				[
+					'status' => 400,
+					'errors' => $errors,
+				]
+			);
+		}
+
+		foreach ( $codes as $key => $code ) {
+			$store->set( $key, $code );
+			$found = true;
+		}
+
 		foreach ( $allowed as $key ) {
-			if ( ! array_key_exists( $key, $settings ) ) {
+			if ( ! array_key_exists( $key, $settings ) || in_array( $key, Social_Meta_Manager::get_site_verification_keys(), true ) ) {
 				continue;
 			}
 
-			$value = sanitize_text_field( (string) $settings[ $key ] );
+			// A pasted Pinterest tag becomes its code, as on the REST route (#1684).
+			$value = Social_Meta_Manager::sanitize_platform_value( $key, (string) $settings[ $key ] );
 
 			// Mirror the REST endpoint: only persist non-empty values so a
 			// masked/blank round-trip never wipes an existing code.

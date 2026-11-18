@@ -185,10 +185,123 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
      */
     private function read_category(string $category, string $context_type = 'site', ?int $context_id = null): array {
         if ($this->has_seo_manager($category)) {
-            return (array) $this->get_seo_manager($category)->get_settings($context_type, $context_id);
+            $settings = (array) $this->get_seo_manager($category)->get_settings($context_type, $context_id);
+
+            return $this->with_verification_codes($category, $context_type, $settings);
         }
 
         return (array) $this->settings_manager->get_settings($category, $context_type, $context_id);
+    }
+
+    /**
+     * Fill in the search-engine verification codes from the store that holds them.
+     *
+     * The Social Platforms tab saves the four codes to Core Settings
+     * (`thinkrank_google_site_verification` and so on), not to the social_meta
+     * table social_media reads from. The table only ever holds their empty
+     * defaults, so without this a settings export carried four blank codes and
+     * a restore left the site unverified. Resolved the way the head resolves
+     * them in generate_platform_meta_tags(): from Core Settings only.
+     *
+     * @since 2.22.0
+     *
+     * @param string $category     Category key.
+     * @param string $context_type Context type.
+     * @param array  $settings     The category as its manager reported it.
+     * @return array The category with the live verification codes.
+     */
+    private function with_verification_codes(string $category, string $context_type, array $settings): array {
+        if ('social_media' !== $category || 'site' !== $context_type) {
+            return $settings;
+        }
+
+        $core = \ThinkRank\Core\Settings::instance();
+
+        // Core Settings is authoritative, empty included. The table keeps a
+        // copy of any code Settings Management wrote, and letting it stand
+        // when Core is empty would export a code the user has since cleared
+        // from the Social Platforms tab or through the update ability. A key
+        // the manager did not report is only added when Core holds a code, so
+        // a category the manager reports as empty still reads as empty.
+        foreach (Social_Meta_Manager::get_site_verification_keys() as $key) {
+            $value = (string) $core->get($key, '');
+
+            if ('' !== $value || array_key_exists($key, $settings)) {
+                $settings[$key] = $value;
+            }
+        }
+
+        return $settings;
+    }
+
+    /**
+     * Write submitted verification codes to the store the head reads first.
+     *
+     * The other half of with_verification_codes(): an import, restore or update
+     * that carries a code has to reach Core Settings, or the table copy is
+     * shadowed by whatever code Core Settings already holds and the write has
+     * no effect on the page. Same contract as the Social Platforms route: an
+     * absent key is left alone, an empty one clears, a pasted tag is reduced to
+     * its code, and a value that fails the format rule is not written.
+     *
+     * @since 2.22.0
+     *
+     * @param string $category     Category key.
+     * @param string $context_type Context type.
+     * @param array  $settings     Submitted settings for the category.
+     * @return bool|null Null when the payload carries no verification code,
+     *                   otherwise whether every code was stored.
+     */
+    private function persist_verification_codes(string $category, string $context_type, array $settings): ?bool {
+        if ('social_media' !== $category || 'site' !== $context_type) {
+            return null;
+        }
+
+        $codes    = Social_Meta_Manager::sanitize_verification_codes($settings);
+        $unusable = Social_Meta_Manager::unusable_verification_codes($settings);
+
+        if (empty($codes) && empty($unusable)) {
+            return null;
+        }
+
+        $core = \ThinkRank\Core\Settings::instance();
+        // A field submitted with no code in it is a failed write, not a skip.
+        $success = empty($unusable);
+
+        foreach ($codes as $key => $value) {
+            if (null !== Social_Meta_Manager::validate_platform_field($key, $value)) {
+                $success = false;
+                continue;
+            }
+
+            if (!$core->set($key, $value)) {
+                $success = false;
+            }
+        }
+
+        return $success;
+    }
+
+    /**
+     * Whether a category write succeeded across the stores that own it.
+     *
+     * Each store answers true, false, or null for "this category is not mine":
+     * the two registries use different category vocabularies, so most
+     * categories are owned by exactly one store (#371). The write succeeded
+     * when at least one store owned the category and none of the owners
+     * failed. ANDing the raw answers turned a non-owner's null into a failure,
+     * so bulk update, import, restore and reset reported every category a
+     * dedicated manager owns as failed after it had been written (#1634).
+     *
+     * @since 2.22.0
+     *
+     * @param array<int, bool|null> $results Each store's answer.
+     * @return bool
+     */
+    private function stores_succeeded(array $results): bool {
+        $attempted = array_filter($results, static fn($result) => null !== $result);
+
+        return [] !== $attempted && !in_array(false, $attempted, true);
     }
 
     /**
@@ -370,6 +483,10 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
         'google_pagespeed_api_key',
         'google_access_token',
         'google_refresh_token',
+        // The Google, Bing, Yandex and Baidu site-verification codes are
+        // deliberately absent: they are printed in the page head for anyone to
+        // read, Settings keeps them out of $encrypted_keys for the same reason,
+        // and listing them here would strip them from every settings export.
         'pinterest_site_verification',
         'instagram_verification',
         'tiktok_verification',
@@ -538,7 +655,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
 
                 // Get schema if requested
                 if ($include_schema && $this->has_seo_manager($category)) {
-                    $settings_schema[$category] = $this->get_seo_manager($category)->get_settings_schema($category);
+                    $settings_schema[$category] = $this->get_seo_manager($category)->get_settings_schema('site');
                 }
             }
 
@@ -651,13 +768,17 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
 
                 try {
                     // Update using Settings Manager
-                    $update_success = $this->settings_manager->update_settings($category_settings, $category);
+                    $results = [$this->settings_manager->update_settings($category_settings, $category)];
 
                     // Also update through specific SEO manager if available
                     if ($this->has_seo_manager($category)) {
-                        $manager_update = $this->get_seo_manager($category)->save_settings('site', null, $category_settings);
-                        $update_success = $update_success && $manager_update;
+                        $results[] = $this->get_seo_manager($category)->save_settings('site', null, $category_settings);
                     }
+
+                    $results[] = $this->persist_verification_codes($category, 'site', $category_settings);
+
+                    // A store answering null does not own the category (#1634).
+                    $update_success = $this->stores_succeeded($results);
 
                     $update_results[$category] = [
                         'success' => $update_success,
@@ -738,7 +859,7 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             // Get schema if requested
             $schema = [];
             if ($include_schema && $this->has_seo_manager($category)) {
-                $schema = $this->get_seo_manager($category)->get_settings_schema($category);
+                $schema = $this->get_seo_manager($category)->get_settings_schema('site');
             }
 
             // Get category metadata
@@ -885,12 +1006,9 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
             // one store owned the category and none of the owners failed. ANDing the
             // raw values reported 500 for every category the generic store does not
             // know, while the dedicated manager's row had already committed.
-            $attempted = array_filter(
-                [$generic_update, $manager_update],
-                static fn($result) => null !== $result
+            $update_success = $this->stores_succeeded(
+                [$generic_update, $manager_update, $this->persist_verification_codes($category, $context_type, $settings)]
             );
-
-            $update_success = [] !== $attempted && !in_array(false, $attempted, true);
 
             if (!$update_success) {
                 // Name the settings that did not persist. The write is not
@@ -1099,8 +1217,10 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
 
                 if ($this->has_seo_manager($category)) {
                     $schema_data[$category] = [
-                        'schema' => $this->get_seo_manager($category)->get_settings_schema($category),
-                        'defaults' => $this->get_seo_manager($category)->get_default_settings($category),
+                        // The managers take a context type, not a category name
+                        // (#1688); these are the site-wide settings.
+                        'schema' => $this->get_seo_manager($category)->get_settings_schema('site'),
+                        'defaults' => $this->get_seo_manager($category)->get_default_settings('site'),
                         'category_name' => $this->setting_categories[$category]
                     ];
                 } else {
@@ -1313,13 +1433,17 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                     }
 
                     // Import settings
-                    $import_success = $this->settings_manager->update_settings($category_settings, $category);
+                    $results = [$this->settings_manager->update_settings($category_settings, $category)];
 
                     // Also update through specific SEO manager if available
                     if ($this->has_seo_manager($category)) {
-                        $manager_update = $this->get_seo_manager($category)->save_settings('site', null, $category_settings);
-                        $import_success = $import_success && $manager_update;
+                        $results[] = $this->get_seo_manager($category)->save_settings('site', null, $category_settings);
                     }
+
+                    $results[] = $this->persist_verification_codes($category, 'site', $category_settings);
+
+                    // A store answering null does not own the category (#1634).
+                    $import_success = $this->stores_succeeded($results);
 
                     $import_results[$category] = [
                         'success' => $import_success,
@@ -1501,13 +1625,17 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                     $category_settings = $backup_data['settings'][$category];
 
                     // Restore settings
-                    $restore_success = $this->settings_manager->update_settings($category_settings, $category);
+                    $results = [$this->settings_manager->update_settings($category_settings, $category)];
 
                     // Also update through specific SEO manager if available
                     if ($this->has_seo_manager($category)) {
-                        $manager_update = $this->get_seo_manager($category)->save_settings('site', null, $category_settings);
-                        $restore_success = $restore_success && $manager_update;
+                        $results[] = $this->get_seo_manager($category)->save_settings('site', null, $category_settings);
                     }
+
+                    $results[] = $this->persist_verification_codes($category, 'site', $category_settings);
+
+                    // A store answering null does not own the category (#1634).
+                    $restore_success = $this->stores_succeeded($results);
 
                     $restore_results[$category] = [
                         'success' => $restore_success,
@@ -1582,20 +1710,26 @@ class Settings_Management_Endpoint extends WP_REST_Controller {
                 }
 
                 try {
-                    // Get default settings
+                    // Get default settings. The site context's: the argument is
+                    // a context type, and a category name fell through to
+                    // whatever a manager returns for an unknown context, which
+                    // left Performance Monitoring's monthly_reports alone and
+                    // reset Schema Management to no schema types at all (#1688).
                     $default_settings = [];
                     if ($this->has_seo_manager($category)) {
-                        $default_settings = $this->get_seo_manager($category)->get_default_settings($category);
+                        $default_settings = $this->get_seo_manager($category)->get_default_settings('site');
                     }
 
                     // Reset to defaults
-                    $reset_success = $this->settings_manager->update_settings($default_settings, $category);
+                    $results = [$this->settings_manager->update_settings($default_settings, $category)];
 
                     // Also reset through specific SEO manager if available
                     if ($this->has_seo_manager($category)) {
-                        $manager_reset = $this->get_seo_manager($category)->save_settings('site', null, $default_settings);
-                        $reset_success = $reset_success && $manager_reset;
+                        $results[] = $this->get_seo_manager($category)->save_settings('site', null, $default_settings);
                     }
+
+                    // A store answering null does not own the category (#1634).
+                    $reset_success = $this->stores_succeeded($results);
 
                     $reset_results[$category] = [
                         'success' => $reset_success,

@@ -602,6 +602,17 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 :where(.tr-root) [hidden]:where(:not([hidden="until-found"])) {
   display: none;
 }
+.tr-root .tr-sr-only{
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
 .tr-root .tr-pointer-events-none{
   pointer-events: none;
 }
@@ -633,6 +644,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .-tr-top-1{
   top: -0.25rem;
+}
+.tr-root .tr--bottom-5{
+  bottom: -1.25rem;
 }
 .tr-root .tr--left-\[5px\]{
   left: -5px;
@@ -749,6 +763,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-mx-4{
   margin-left: 1rem;
   margin-right: 1rem;
+}
+.tr-root .tr-mx-6{
+  margin-left: 1.5rem;
+  margin-right: 1.5rem;
 }
 .tr-root .tr-mx-auto{
   margin-left: auto;
@@ -905,6 +923,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-grid{
   display: grid;
+}
+.tr-root .tr-contents{
+  display: contents;
 }
 .tr-root .tr-hidden{
   display: none;
@@ -1116,6 +1137,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-w-\[150px\]{
   width: 150px;
 }
+.tr-root .tr-w-\[160px\]{
+  width: 160px;
+}
 .tr-root .tr-w-\[170px\]{
   width: 170px;
 }
@@ -1133,6 +1157,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-w-\[23\%\]{
   width: 23%;
+}
+.tr-root .tr-w-\[240px\]{
+  width: 240px;
 }
 .tr-root .tr-w-\[260px\]{
   width: 260px;
@@ -1160,6 +1187,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-min-w-\[120px\]{
   min-width: 120px;
+}
+.tr-root .tr-min-w-\[150px\]{
+  min-width: 150px;
 }
 .tr-root .tr-min-w-\[16px\]{
   min-width: 16px;
@@ -1342,6 +1372,12 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-grid-cols-\[1\.75rem_1fr\]{
   grid-template-columns: 1.75rem 1fr;
+}
+.tr-root .tr-grid-cols-\[64px_20px_1fr\]{
+  grid-template-columns: 64px 20px 1fr;
+}
+.tr-root .tr-grid-cols-\[max-content_1fr\]{
+  grid-template-columns: max-content 1fr;
 }
 .tr-root .tr-grid-rows-\[0fr\]{
   grid-template-rows: 0fr;
@@ -1612,6 +1648,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-border-brand\/30{
   border-color: rgb(68 81 255 / 0.3);
 }
+.tr-root .tr-border-brand\/40{
+  border-color: rgb(68 81 255 / 0.4);
+}
 .tr-root .tr-border-danger{
   --tw-border-opacity: 1;
   border-color: rgb(146 28 19 / var(--tw-border-opacity, 1));
@@ -1813,6 +1852,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-bg-ink-2\/40{
   background-color: rgb(83 83 83 / 0.4);
 }
+.tr-root .tr-bg-ink-3{
+  --tw-bg-opacity: 1;
+  background-color: rgb(90 92 94 / var(--tw-bg-opacity, 1));
+}
 .tr-root .tr-bg-line{
   --tw-bg-opacity: 1;
   background-color: rgb(213 213 221 / var(--tw-bg-opacity, 1));
@@ -1830,6 +1873,12 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-bg-line-2\/40{
   background-color: rgb(226 230 241 / 0.4);
+}
+.tr-root .tr-bg-line-2\/50{
+  background-color: rgb(226 230 241 / 0.5);
+}
+.tr-root .tr-bg-line-2\/60{
+  background-color: rgb(226 230 241 / 0.6);
 }
 .tr-root .tr-bg-orange-100{
   --tw-bg-opacity: 1;
@@ -1903,6 +1952,18 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-bg-\[linear-gradient\(90deg\,\#4c4cff_58\%\,\#3535b0_118\%\)\]{
   background-image: linear-gradient(90deg,#4c4cff 58%,#3535b0 118%);
 }
+.tr-root .tr-fill-current{
+  fill: currentColor;
+}
+.tr-root .tr-stroke-brand{
+  stroke: #4451FF;
+}
+.tr-root .tr-stroke-line-2{
+  stroke: #E2E6F1;
+}
+.tr-root .tr-stroke-success{
+  stroke: #027A48;
+}
 .tr-root .tr-object-contain{
   object-fit: contain;
 }
@@ -1973,6 +2034,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-px-3{
   padding-left: 0.75rem;
   padding-right: 0.75rem;
+}
+.tr-root .tr-px-3\.5{
+  padding-left: 0.875rem;
+  padding-right: 0.875rem;
 }
 .tr-root .tr-px-4{
   padding-left: 1rem;
@@ -2126,6 +2191,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-pt-2{
   padding-top: 0.5rem;
 }
+.tr-root .tr-pt-3{
+  padding-top: 0.75rem;
+}
 .tr-root .tr-pt-4{
   padding-top: 1rem;
 }
@@ -2227,6 +2295,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-capitalize{
   text-transform: capitalize;
 }
+.tr-root .tr-normal-case{
+  text-transform: none;
+}
 .tr-root .tr-italic{
   font-style: italic;
 }
@@ -2257,6 +2328,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-leading-tight{
   line-height: 1.25;
+}
+.tr-root .tr-tracking-normal{
+  letter-spacing: 0em;
 }
 .tr-root .tr-tracking-wide{
   letter-spacing: 0.025em;
@@ -2479,9 +2553,26 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
   box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
 }
+.tr-root .tr-ring-4{
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
 .tr-root .tr-ring-brand-500{
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(68 81 255 / var(--tw-ring-opacity, 1));
+}
+.tr-root .tr-ring-danger-bg{
+  --tw-ring-opacity: 1;
+  --tw-ring-color: rgb(254 243 242 / var(--tw-ring-opacity, 1));
+}
+.tr-root .tr-ring-line-2{
+  --tw-ring-opacity: 1;
+  --tw-ring-color: rgb(226 230 241 / var(--tw-ring-opacity, 1));
+}
+.tr-root .tr-ring-warning-bg{
+  --tw-ring-opacity: 1;
+  --tw-ring-color: rgb(255 250 235 / var(--tw-ring-opacity, 1));
 }
 .tr-root .tr-ring-white{
   --tw-ring-opacity: 1;
@@ -2748,6 +2839,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   padding-top: 0px;
 }
 
+.tr-root .last\:tr-mb-0:last-child{
+  margin-bottom: 0px;
+}
+
 .tr-root .last\:tr-border-0:last-child{
   border-width: 0px;
 }
@@ -2758,6 +2853,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 
 .tr-root .last\:tr-pb-0:last-child{
   padding-bottom: 0px;
+}
+
+.tr-root .last\:tr-pb-1:last-child{
+  padding-bottom: 0.25rem;
 }
 
 .tr-root .focus-within\:tr-border-brand:focus-within{
@@ -2834,6 +2933,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   background-color: rgb(226 230 241 / 0.3);
 }
 
+.tr-root .hover\:tr-bg-line-2\/40:hover{
+  background-color: rgb(226 230 241 / 0.4);
+}
+
 .tr-root .hover\:tr-bg-line-2\/50:hover{
   background-color: rgb(226 230 241 / 0.5);
 }
@@ -2888,6 +2991,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 
 .tr-root .hover\:tr-opacity-70:hover{
   opacity: 0.7;
+}
+
+.tr-root .hover\:tr-opacity-90:hover{
+  opacity: 0.9;
 }
 
 .tr-root .hover\:tr-shadow-lg:hover{
@@ -3022,6 +3129,16 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   opacity: 0.7;
 }
 
+.tr-root .disabled\:hover\:tr-bg-\[\#EEF0F7\]:hover:disabled{
+  --tw-bg-opacity: 1;
+  background-color: rgb(238 240 247 / var(--tw-bg-opacity, 1));
+}
+
+.tr-root .disabled\:hover\:tr-text-\[\#535353\]:hover:disabled{
+  --tw-text-opacity: 1;
+  color: rgb(83 83 83 / var(--tw-text-opacity, 1));
+}
+
 .tr-root :is(.tr-group[open] .group-open\:tr-rotate-90){
   --tw-rotate: 90deg;
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
@@ -3029,6 +3146,11 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 
 .tr-root :is(.tr-group:focus-within .group-focus-within\:tr-opacity-100){
   opacity: 1;
+}
+
+.tr-root :is(.tr-group:hover .group-hover\:tr-text-brand){
+  --tw-text-opacity: 1;
+  color: rgb(68 81 255 / var(--tw-text-opacity, 1));
 }
 
 .tr-root :is(.tr-group:hover .group-hover\:tr-opacity-100){

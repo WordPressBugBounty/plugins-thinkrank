@@ -186,7 +186,10 @@ const getBaseStructure = () => [
 	{
 		id: 'seo-analyzer',
 		title: __('SEO Analyzer', 'thinkrank'),
-		items: [{ id: 'site-audit', title: __('Site Audit', 'thinkrank') }],
+		items: [
+			{ id: 'goals', title: __('Goals', 'thinkrank') },
+			{ id: 'site-audit', title: __('Site Audit', 'thinkrank') },
+		],
 	},
 	{
 		id: 'author-archives',
@@ -213,6 +216,13 @@ const getBaseStructure = () => [
 		items: [
 			{ id: 'dashboard', title: __('Dashboard', 'thinkrank') },
 			{ id: 'keywords', title: __('Keywords', 'thinkrank') },
+			// Every recorded change that can move traffic, so a drop can be
+			// explained instead of guessed at (#722).
+			{ id: 'timeline', title: __('Timeline', 'thinkrank') },
+			{
+				id: 'title-experiments',
+				title: __('Title Experiments', 'thinkrank'),
+			},
 			{
 				id: 'email-reporting',
 				title: __('Email Reporting', 'thinkrank'),

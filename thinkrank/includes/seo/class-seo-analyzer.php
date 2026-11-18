@@ -247,6 +247,27 @@ class SEO_Analyzer {
     }
 
     /**
+     * Run only the named checks, now, without touching the cached analysis.
+     *
+     * For callers that need the current answer to a few cheap setting checks
+     * (SEO Goals' section checklists) without running or replacing the whole
+     * audit. Results have the same shape as an analysis' `checks`.
+     *
+     * @since 2.22.0
+     *
+     * @param string[] $ids Check ids.
+     * @return array<int, array<string, mixed>> Check results, in definition order.
+     */
+    public function recheck(array $ids): array {
+        $ids = array_values(array_filter(array_map('strval', $ids)));
+        if ([] === $ids) {
+            return [];
+        }
+
+        return $this->run_checks($ids);
+    }
+
+    /**
      * Clear the cached analysis so the next run() recomputes.
      *
      * @return void
@@ -564,11 +585,14 @@ class SEO_Analyzer {
      *
      * @return array<int,array> Normalized check results.
      */
-    private function run_checks(): array {
+    private function run_checks(?array $only = null): array {
         $results = [];
 
         foreach ($this->get_check_definitions() as $def) {
             if (empty($def['callback']) || !is_callable($def['callback'])) {
+                continue;
+            }
+            if (null !== $only && !in_array((string) ($def['id'] ?? ''), $only, true)) {
                 continue;
             }
 
@@ -1789,19 +1813,22 @@ class SEO_Analyzer {
      * ceiling the passage is a preamble an engine has to summarize rather than
      * a sentence it can lift.
      */
-    private const GEO_ANSWER_MIN_WORDS = 20;
-    private const GEO_ANSWER_MAX_WORDS = 120;
+    // Aliases of the thresholds in Answer_Readiness, which owns them since
+    // #677: the editor panel and this audit have to grade a page identically,
+    // and two numbers that merely happen to match today is how they stop.
+    private const GEO_ANSWER_MIN_WORDS = Answer_Readiness::ANSWER_MIN_WORDS;
+    private const GEO_ANSWER_MAX_WORDS = Answer_Readiness::ANSWER_MAX_WORDS;
 
     /**
      * Words below which a page has too little substance to be cited.
      */
-    private const GEO_DEPTH_MIN_WORDS = 300;
+    private const GEO_DEPTH_MIN_WORDS = Answer_Readiness::DEPTH_MIN_WORDS;
 
     /**
      * How long a page can go unrevised before it reads as stale to an engine
      * that prefers recent sources.
      */
-    private const GEO_FRESHNESS_MAX_AGE = 365 * DAY_IN_SECONDS;
+    private const GEO_FRESHNESS_MAX_AGE = Answer_Readiness::FRESHNESS_MAX_AGE;
 
     /**
      * The content sample the GEO checks share, memoized for one analysis.
@@ -2005,8 +2032,9 @@ class SEO_Analyzer {
      *
      * Except on a builder page, where they do not: the words and headings are
      * in builder meta and `post_content` is empty, or, on a Bricks page, holds
-     * blocks Bricks never renders. Those rows read from builder_content(), so
-     * a builder-built site is graded on its pages rather than skipped (#892).
+     * blocks Bricks never renders. Those rows resolve through
+     * Answer_Readiness::post_content(), so a builder-built site is graded on its
+     * pages rather than skipped (#892).
      *
      * @since 2.5.0
      * @return array<int,array{id: int, content: string, text: string, modified: int}>
@@ -2018,8 +2046,8 @@ class SEO_Analyzer {
 
         $post_ids = $this->sample_post_ids();
 
-        // Meta too: builder_content() asks every sampled post whether Bricks
-        // owns it, and one query beats a hundred.
+        // Meta too: Answer_Readiness::post_content() asks every sampled post
+        // whether Bricks owns it, and one query beats a hundred.
         if (function_exists('_prime_post_caches')) {
             _prime_post_caches($post_ids, false, true);
         }
@@ -2032,79 +2060,21 @@ class SEO_Analyzer {
                 continue;
             }
 
-            $modified = isset($post->post_modified_gmt) ? strtotime((string) $post->post_modified_gmt . ' UTC') : false;
-
-            $content = $this->builder_content($post) ?? $this->filtered_post_content($post);
+            // Read the way the editor card and get-post-seo-checks read it,
+            // so the three cannot grade one page from different markup (#1629).
+            $content = Answer_Readiness::post_content($post);
 
             $sample[] = [
                 'id'       => (int) $post->ID,
                 'content'  => $content,
                 'text'     => $this->content_to_text($content),
-                'modified' => is_int($modified) ? $modified : 0,
+                'modified' => Answer_Readiness::modified_time($post),
             ];
         }
 
         $this->content_sample = $sample;
 
         return $sample;
-    }
-
-    /**
-     * A sampled post's stored markup, through `thinkrank_analyzable_content`.
-     *
-     * The filter is documented as the content ThinkRank analyzes, and the
-     * editor score and Thin Content apply it to every post. The sample read
-     * raw `post_content` whenever it was non-empty, so content a site adds
-     * through the filter never reached these checks (#1309). Still the stored
-     * markup, not rendered: see get_content_sample().
-     *
-     * @since 2.18.1
-     *
-     * @param \WP_Post $post Sampled post.
-     * @return string
-     */
-    private function filtered_post_content(\WP_Post $post): string {
-        $raw = (string) $post->post_content;
-
-        /** This filter is documented in includes/seo/class-builder-content.php */
-        return (string) apply_filters('thinkrank_analyzable_content', $raw, $post, $raw);
-    }
-
-    /**
-     * A sampled post's content from its page builder, when that is where it is.
-     *
-     * Null for every post whose `post_content` is what the visitor reads, so
-     * those keep the raw-markup path and never pay for rendering. A post with
-     * an empty `post_content`, or a Bricks page that discards it, resolves
-     * through Builder_Content, the extractor every other server-side scoring
-     * path reads through (#617). With nothing in `post_content` to render, the
-     * resolution only reads stored builder meta: no shortcode or block
-     * renderer runs.
-     *
-     * Guarded like builder_meta_keys(), so a partial checkout degrades to the
-     * raw markup instead of fataling mid-audit.
-     *
-     * @since 2.14.1
-     *
-     * @param \WP_Post $post Sampled post.
-     * @return string|null Resolved content, or null to use `post_content`.
-     */
-    private function builder_content(\WP_Post $post): ?string {
-        if ([] === self::builder_meta_keys()) {
-            return null;
-        }
-
-        if ('' !== trim((string) $post->post_content)
-            && !Builder_Content::bricks_supersedes_post_content((int) $post->ID)
-        ) {
-            return null;
-        }
-
-        try {
-            return Builder_Content::resolve($post);
-        } catch (\Throwable $e) {
-            return null;
-        }
     }
 
     /**
@@ -2271,14 +2241,16 @@ class SEO_Analyzer {
      * @return string
      */
     private function content_to_text(string $content): string {
-        // The reading text Thin Content and the per-post score count (#1309).
-        // The old wp_strip_all_tags() pass deleted tags instead of spacing
-        // them, so "<li>alpha</li><li>beta</li>" read as one word. It also
-        // strips block delimiters and shortcode syntax, and scrubs bytes that
-        // are not valid UTF-8 rather than failing on them, which a check here
-        // must never do: run_checks() would drop it from the audit, weight
-        // and all.
-        return Word_Count_Index::reading_text($content);
+        // Delegated since #677, like the GEO predicates above it, so the editor
+        // panel and this audit count words through one implementation and
+        // cannot grade a page differently. Answer_Readiness in turn reads the
+        // text the way Thin Content and the per-post score do (#1309):
+        // Word_Count_Index::reading_text() spaces tags instead of deleting
+        // them, strips block delimiters and shortcode syntax, and scrubs bytes
+        // that are not valid UTF-8 rather than failing on them, which a check
+        // here must never do: run_checks() would drop it from the audit,
+        // weight and all.
+        return Answer_Readiness::content_to_text($content);
     }
 
     /**
@@ -2289,7 +2261,7 @@ class SEO_Analyzer {
      * @return int
      */
     private function word_count(string $text): int {
-        return Word_Count_Index::count_words($text);
+        return Answer_Readiness::word_count($text);
     }
 
     /**
@@ -3003,8 +2975,18 @@ class SEO_Analyzer {
                 continue;
             }
 
-            if (preg_match('/<h[2-4][^>]*>\s*[^<]*\?\s*<\/h[2-4]>/i', $content)) {
-                return true;
+            if (!preg_match_all('/<h[2-4][^>]*>(.*?)<\/h[2-4]>/is', $content, $headings)) {
+                continue;
+            }
+
+            // The question mark the editor card reads (#1631): a heading that
+            // ends in a full-width or Arabic one is as much a question as one
+            // that ends in `?`. The mark is required here, unlike the card's
+            // check, because this gate decides whether FAQ markup is advice.
+            foreach ($headings[1] as $heading) {
+                if (Answer_Readiness::ends_with_question_mark(Answer_Readiness::content_to_text((string) $heading))) {
+                    return true;
+                }
             }
         }
 
@@ -3391,10 +3373,8 @@ class SEO_Analyzer {
     public function check_direct_answer(): array {
         return $this->coverage_check(
             __('Pages open with a direct answer', 'thinkrank'),
-            function (array $row): bool {
-                $words = $this->word_count($this->opening_passage($row['content']));
-
-                return $words >= self::GEO_ANSWER_MIN_WORDS && $words <= self::GEO_ANSWER_MAX_WORDS;
+            static function (array $row): bool {
+                return Answer_Readiness::has_direct_answer($row['content']);
             },
             /* translators: 1: matching posts, 2: sampled posts. */
             __('%1$d of your %2$d most recent pages open with a concise, quotable answer.', 'thinkrank'),
@@ -3403,71 +3383,6 @@ class SEO_Analyzer {
             __('Open each page with a 40–60 word paragraph that answers its title directly, before any background or introduction.', 'thinkrank'),
             __('No published, indexable content to check yet.', 'thinkrank')
         );
-    }
-
-    /**
-     * The first block of prose in a post, before any heading.
-     *
-     * @since 2.5.0
-     * @param string $content Raw post content.
-     * @return string Plain text of the opening passage.
-     */
-    private function opening_passage(string $content): string {
-        // Cut at the first heading: everything above it is the intro, and an
-        // intro that runs past a heading is not a direct answer either way.
-        $chunks = preg_split('/<h[1-6][^>]*>/i', $content, 3) ?: [];
-        $intro  = (string) ($chunks[0] ?? $content);
-
-        $passage = $this->first_paragraph_text($intro);
-        if ('' !== $passage) {
-            return $passage;
-        }
-
-        $text = $this->content_to_text($intro);
-
-        // A page that opens with its heading has nothing above it, so the chunk
-        // read so far is empty and the answer sits directly under that heading.
-        // Scoring it as a missing opening would fail exactly the pages written
-        // as "question, then answer" — the shape this check exists to reward.
-        if ('' === trim($text) && isset($chunks[1])) {
-            // Drop the heading's own text, which the split left at the head of
-            // the next chunk, so a long heading cannot pose as the answer.
-            $after = preg_replace('/^.*?<\/h[1-6]>/is', '', (string) $chunks[1], 1);
-            $after = null === $after ? (string) $chunks[1] : $after;
-
-            $passage = $this->first_paragraph_text($after);
-            if ('' !== $passage) {
-                return $passage;
-            }
-
-            return $this->content_to_text($after);
-        }
-
-        return $text;
-    }
-
-    /**
-     * The first paragraph of a chunk of content with enough words to be a
-     * passage rather than a caption or a stray line.
-     *
-     * Only the first one counts — a three-paragraph intro is exactly the
-     * preamble the direct-answer check is looking for.
-     *
-     * @since 2.5.0
-     * @param string $chunk Raw content fragment.
-     * @return string Plain text, or '' when the chunk holds no paragraph.
-     */
-    private function first_paragraph_text(string $chunk): string {
-        $paragraphs = preg_split('/<\/p>|\R{2,}/', $chunk) ?: [];
-
-        foreach ($paragraphs as $paragraph) {
-            $candidate = $this->content_to_text((string) $paragraph);
-            if ($this->word_count($candidate) >= 5) {
-                return $candidate;
-            }
-        }
-
-        return '';
     }
 
     /**
@@ -3480,8 +3395,8 @@ class SEO_Analyzer {
     public function check_question_headings(): array {
         return $this->coverage_check(
             __('Headings phrased as questions', 'thinkrank'),
-            function (array $row): bool {
-                return $this->has_question_heading($row['content']);
+            static function (array $row): bool {
+                return Answer_Readiness::has_question_heading($row['content']);
             },
             /* translators: 1: matching posts, 2: sampled posts. */
             __('%1$d of your %2$d most recent pages use question-style headings.', 'thinkrank'),
@@ -3490,42 +3405,6 @@ class SEO_Analyzer {
             __('Phrase at least one H2 or H3 per page as the question it answers: "How does X work?" rather than "Overview".', 'thinkrank'),
             __('No published, indexable content to check yet.', 'thinkrank')
         );
-    }
-
-    /**
-     * Whether any H2/H3 in the content reads as a question.
-     *
-     * @since 2.5.0
-     * @param string $content Raw post content.
-     * @return bool
-     */
-    private function has_question_heading(string $content): bool {
-        if (!preg_match_all('/<h[23][^>]*>(.*?)<\/h[23]>/is', $content, $matches)) {
-            return false;
-        }
-
-        $starters = ['what', 'why', 'how', 'when', 'where', 'who', 'which', 'can', 'do', 'does', 'is', 'are', 'should', 'will'];
-
-        foreach ($matches[1] as $heading) {
-            $text = $this->content_to_text((string) $heading);
-
-            if ('' === $text) {
-                continue;
-            }
-
-            if ('?' === substr($text, -1)) {
-                return true;
-            }
-
-            // A question mark is the reliable signal, but plenty of good
-            // question headings drop it ("How image search works").
-            $first = strtolower((string) strtok($text, " \t\n"));
-            if (in_array($first, $starters, true)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -3538,7 +3417,7 @@ class SEO_Analyzer {
         return $this->coverage_check(
             __('Content uses lists or tables', 'thinkrank'),
             static function (array $row): bool {
-                return (bool) preg_match('/<(ul|ol|table)[\s>]/i', $row['content']);
+                return Answer_Readiness::has_structured_content($row['content']);
             },
             /* translators: 1: matching posts, 2: sampled posts. */
             __('%1$d of your %2$d most recent pages present information in lists or tables.', 'thinkrank'),
@@ -3559,7 +3438,9 @@ class SEO_Analyzer {
         return $this->coverage_check(
             __('Pages have enough depth to cite', 'thinkrank'),
             function (array $row): bool {
-                return $this->sample_word_count($row) >= self::GEO_DEPTH_MIN_WORDS;
+                // The sampled post's resolved length from the word-count index
+                // (#1309), judged by the threshold the editor panel uses (#677).
+                return Answer_Readiness::has_depth_words($this->sample_word_count($row));
             },
             /* translators: 1: matching posts, 2: sampled posts. */
             __('%1$d of your %2$d most recent pages have enough substance for an assistant to cite.', 'thinkrank'),
@@ -3577,12 +3458,10 @@ class SEO_Analyzer {
      * @return array
      */
     public function check_content_freshness(): array {
-        $cutoff = time() - self::GEO_FRESHNESS_MAX_AGE;
-
         return $this->coverage_check(
             __('Content has been updated recently', 'thinkrank'),
-            static function (array $row) use ($cutoff): bool {
-                return $row['modified'] > 0 && $row['modified'] >= $cutoff;
+            static function (array $row): bool {
+                return Answer_Readiness::is_fresh((int) $row['modified']);
             },
             /* translators: 1: matching posts, 2: sampled posts. */
             __('%1$d of your %2$d most recent pages were revised within the last year.', 'thinkrank'),

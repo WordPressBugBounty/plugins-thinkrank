@@ -19,6 +19,7 @@ import { resolvePattern } from '../../utils/resolvePattern';
  * @param {string}   props.value     Current field value (pattern or literal).
  * @param {Object}   props.vars      Token => value map for live preview.
  * @param {string}   props.fallback  Preview shown when the field is empty.
+ * @param {boolean}  props.disabled  The field is locked: chips insert nothing.
  */
 const VariableTags = ({
 	variables = [],
@@ -26,6 +27,7 @@ const VariableTags = ({
 	value = '',
 	vars = {},
 	fallback = '',
+	disabled = false,
 }) => {
 	const preview = value ? resolvePattern(value, vars) : fallback;
 
@@ -39,9 +41,10 @@ const VariableTags = ({
 					<button
 						type="button"
 						key={variable.value}
-						onClick={() => onInsert(variable.value)}
+						disabled={disabled}
+						onClick={() => !disabled && onInsert(variable.value)}
 						title={__('Click to insert', 'thinkrank')}
-						className="tr-inline-flex tr-items-center tr-rounded-full tr-border-0 tr-bg-[#EEF0F7] tr-px-2 tr-py-0.5 tr-text-xs tr-text-[#535353] tr-cursor-pointer hover:tr-bg-brand hover:tr-text-white tr-transition-colors"
+						className="tr-inline-flex tr-items-center tr-rounded-full tr-border-0 tr-bg-[#EEF0F7] tr-px-2 tr-py-0.5 tr-text-xs tr-text-[#535353] tr-cursor-pointer hover:tr-bg-brand hover:tr-text-white tr-transition-colors disabled:tr-cursor-not-allowed disabled:tr-opacity-50 disabled:hover:tr-bg-[#EEF0F7] disabled:hover:tr-text-[#535353]"
 					>
 						{variable.label}
 					</button>

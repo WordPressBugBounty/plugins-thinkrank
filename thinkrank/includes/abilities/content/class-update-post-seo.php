@@ -12,6 +12,7 @@ namespace ThinkRank\Abilities\Content;
 use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\Admin\Metabox_Manager;
 use ThinkRank\Frontend\Schema_Graph;
+use ThinkRank\SEO\Experiments\Title_Experiments;
 use ThinkRank\SEO\Object_Redirect;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -155,6 +156,19 @@ class Update_Post_Seo extends Ability_Base {
 
 		$fields          = $this->map_fields( $settings, $post_id );
 		$has_suppression = array_key_exists( 'schema_suppression', $settings );
+
+		// A running Title Experiment is comparing the page's current title and
+		// description with a variant; changing them mid-test would measure
+		// neither (#719). Refused rather than skipped, so the caller is not
+		// told a save happened when it did not.
+		$locked_keys = array_intersect( array_keys( $fields ), [ 'thinkrank_seo_title', 'thinkrank_meta_description' ] );
+		if ( [] !== $locked_keys && class_exists( Title_Experiments::class ) && ( new Title_Experiments() )->is_locked( $post_id ) ) {
+			return new \WP_Error(
+				'thinkrank_experiment_running',
+				__( 'A title experiment is running on this post, so its SEO title and meta description are locked until it finishes. Stop it with stop-title-experiment first, or leave these two fields out.', 'thinkrank' ),
+				[ 'status' => 409 ]
+			);
+		}
 
 		if ( empty( $fields ) && ! $has_suppression ) {
 			return new \WP_Error(

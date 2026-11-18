@@ -34,6 +34,13 @@ class Get_Social_Platforms_Settings extends Ability_Base {
 		'facebook_admins',
 		'youtube_channel_id',
 		'whatsapp_business_id',
+		// Search-engine verification (#631). PUBLIC, not sensitive: each is
+		// printed in the page head, so masking it would hide from an agent a
+		// value it can read by fetching the page.
+		'google_site_verification',
+		'bing_site_verification',
+		'yandex_site_verification',
+		'baidu_site_verification',
 	];
 
 	/**
@@ -99,6 +106,10 @@ class Get_Social_Platforms_Settings extends Ability_Base {
 						'facebook_admins'             => [ 'type' => 'string' ],
 						'youtube_channel_id'          => [ 'type' => 'string' ],
 						'whatsapp_business_id'        => [ 'type' => 'string' ],
+						'google_site_verification'    => [ 'type' => 'string' ],
+						'bing_site_verification'      => [ 'type' => 'string' ],
+						'yandex_site_verification'    => [ 'type' => 'string' ],
+						'baidu_site_verification'     => [ 'type' => 'string' ],
 						'pinterest_site_verification' => [ 'type' => 'string' ],
 						'instagram_verification'      => [ 'type' => 'string' ],
 						'tiktok_verification'         => [ 'type' => 'string' ],

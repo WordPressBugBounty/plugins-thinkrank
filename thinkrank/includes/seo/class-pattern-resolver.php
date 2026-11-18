@@ -80,12 +80,12 @@ class Pattern_Resolver {
     /**
      * Post meta key holding the per-post SEO title.
      */
-    private const META_TITLE = '_thinkrank_seo_title';
+    public const META_TITLE = '_thinkrank_seo_title';
 
     /**
      * Post meta key holding the per-post meta description.
      */
-    private const META_DESCRIPTION = '_thinkrank_meta_description';
+    public const META_DESCRIPTION = '_thinkrank_meta_description';
 
     /**
      * Resolve the SEO title pattern for a post.

@@ -44,7 +44,7 @@ class Purge_Caches extends Ability_Base {
 		'ai'           => 'AI response cache',
 		'integrations' => 'Google integration responses',
 		'content_type' => 'Content Type Matrix resolution',
-		'transients'   => 'ThinkRank transients',
+		'transients'   => 'ThinkRank transients and object-cache groups',
 		// Not a cache in the same sense — it rebuilds a published file rather
 		// than dropping a stored value — but it is what a caller looking at a
 		// stale sitemap reaches for, and the docblock above already named that
@@ -123,7 +123,7 @@ class Purge_Caches extends Ability_Base {
 				'failed'  => [
 					'type'        => 'array',
 					'items'       => [ 'type' => 'string' ],
-					'description' => __( 'Scopes that exist but could not be cleared or rebuilt. For "sitemap" this means the served sitemap did not change, because another rebuild held the lock or the files could not be written or removed. Try again shortly; the Sitemap settings screen shows any recorded reason.', 'thinkrank' ),
+					'description' => __( 'Scopes that exist but could not be cleared or rebuilt. For "sitemap" this means the served sitemap did not change, because another rebuild held the lock or the files could not be written or removed. Try again shortly; the Sitemap settings screen shows any recorded reason. For "transients" it means the site uses a persistent object cache (Redis, Memcached), where ThinkRank\'s transients live in the cache and cannot be deleted by prefix: its object-cache groups were flushed, and the transients expire on their own.', 'thinkrank' ),
 				],
 			],
 		];
@@ -210,7 +210,14 @@ class Purge_Caches extends Ability_Base {
 
 			case 'transients':
 				$this->purge_transients();
-				return 'cleared';
+
+				// With a persistent object cache, set_transient() writes to the
+				// cache's `transient` group and never to wp_options, so the
+				// prefix sweep above finds nothing there, and the cache has no
+				// way to delete by prefix short of flushing every plugin's
+				// transients. The object-cache groups were still flushed, but
+				// saying the transients were cleared would be untrue.
+				return wp_using_ext_object_cache() ? 'failed' : 'cleared';
 
 			case 'sitemap':
 				if ( ! class_exists( 'ThinkRank\\SEO\\Sitemap_Generator' ) ) {
@@ -230,7 +237,7 @@ class Purge_Caches extends Ability_Base {
 	}
 
 	/**
-	 * Delete ThinkRank's prefixed transients.
+	 * Delete ThinkRank's prefixed transients and its object-cache groups.
 	 *
 	 * Mirrors the sweep Deactivator runs, so the two cannot disagree about what
 	 * counts as a ThinkRank transient.
@@ -251,8 +258,27 @@ class Purge_Caches extends Ability_Base {
 			)
 		);
 
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'thinkrank' );
-		}
+		// Every cache group from the cleanup manifest, not just `thinkrank`:
+		// the SEO module settings sit in `thinkrank_seo` with no expiry and the
+		// bulk settings in `thinkrank_settings`, so on Redis or Memcached a row
+		// changed outside the managers stayed stale through a purge (#1454).
+		// No full-flush fallback, same as deactivation: emptying every other
+		// plugin's cache is out of proportion for a scoped purge.
+		require_once THINKRANK_PLUGIN_DIR . 'includes/cleanup-cache.php';
+		thinkrank_flush_cache_groups( self::cache_groups(), false );
+	}
+
+	/**
+	 * The object-cache groups the transients scope flushes.
+	 *
+	 * @return string[]
+	 */
+	private static function cache_groups(): array {
+		$manifest = require THINKRANK_PLUGIN_DIR . 'includes/cleanup-manifest.php';
+
+		// Minus the manifest's state_groups: the traffic buffer and the
+		// beacon limiter hold data, not a cache, so a purge keeps them. The
+		// same list keeps them through deactivation (#1454).
+		return thinkrank_cache_only_groups( $manifest );
 	}
 }

@@ -19,6 +19,7 @@ import {
 	calculateContentQuality,
 	resolveEditorContent,
 } from './utils/contentAnalysis';
+import { editorHoldsBody } from '../../../metabox/utils/editorContent';
 
 // The last live score of each post this session (post id => { key, keywords,
 // data }, key being the SEO title and description it was scored with and
@@ -159,6 +160,9 @@ export const requestLiveScore = async ({
 			target_keywords: keywordList,
 			save_score: saveScore,
 			live_content: htmlContent,
+			// Lets the server tell a cleared body from a builder screen
+			// that has none to send.
+			live_content_is_body: editorHoldsBody(),
 			// Score the SEO fields as they currently stand in the editor.
 			// Without these the endpoint falls back to the saved meta, so an
 			// applied title scored against the old value until the post was

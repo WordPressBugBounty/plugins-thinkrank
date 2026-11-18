@@ -5,6 +5,7 @@ import logger from '../../../shared/utils/logger';
 import { SkeletonCard } from '../ui';
 import WelcomeCard from '../dashboard/WelcomeCard';
 import SiteHealthAudit from '../dashboard/SiteHealthAudit';
+import NextGoalsCard from '../dashboard/NextGoalsCard';
 import RecentPostsHealth from '../dashboard/RecentPostsHealth';
 import ProSlot from '../dashboard/ProSlot';
 import QuickAccess from '../dashboard/QuickAccess';
@@ -92,6 +93,7 @@ export default function Dashboard() {
 			{/* ── Main column ──────────────────────────── */}
 			<div className="tr-flex tr-flex-col tr-gap-6 tr-min-w-0">
 				<WelcomeCard />
+				<NextGoalsCard />
 				<SiteHealthAudit
 					siteDescription={siteDescription}
 					onRefresh={load}

@@ -972,6 +972,11 @@ class SEO_Manager {
             return $title;
         }
 
+        $served = $this->served_override('title');
+        if (null !== $served) {
+            return self::with_page_suffix($served);
+        }
+
         // First priority: Post-specific ThinkRank metadata
         if ($this->has_thinkrank_metadata() && !empty($this->current_metadata['title'])) {
             return self::with_page_suffix($this->current_metadata['title']);
@@ -1133,6 +1138,11 @@ class SEO_Manager {
             return $title;
         }
 
+        $served = $this->served_override('title');
+        if (null !== $served) {
+            return self::with_page_suffix($served . ($sep ? " $sep " : ' | ') . get_bloginfo('name'));
+        }
+
         // First priority: Post-specific ThinkRank metadata
         if ($this->has_thinkrank_metadata() && !empty($this->current_metadata['title'])) {
             $site_name = \ThinkRank\SEO\Site_Identity_Manager::site_name();
@@ -1148,6 +1158,41 @@ class SEO_Manager {
         }
 
         return $title;
+    }
+
+    /**
+     * What to print as this page's `<title>` or meta description instead of
+     * its stored value, if anything.
+     *
+     * Deliberately narrow: the stored SEO fields are not touched, and nothing
+     * built from them — Open Graph, Twitter cards, schema, breadcrumbs,
+     * oEmbed — sees the override. Title Experiments use it to serve a variant
+     * to search engines while the page keeps everything else (#719).
+     *
+     * @since 2.22.0
+     *
+     * @param string $field `title` or `description`.
+     * @return string|null The override, or null to print the stored value.
+     */
+    private function served_override(string $field): ?string {
+        if (!is_singular()) {
+            return null;
+        }
+
+        /**
+         * Filter the document title / meta description served for one
+         * singular page. Return a non-empty string to override it, or null.
+         *
+         * Hooks: `thinkrank_served_title`, `thinkrank_served_description`.
+         *
+         * @since 2.22.0
+         *
+         * @param string|null $value   Override, null by default.
+         * @param int         $post_id The page being served.
+         */
+        $value = apply_filters('thinkrank_served_' . $field, null, (int) get_queried_object_id());
+
+        return is_string($value) && '' !== trim($value) ? $value : null;
     }
 
     /**
@@ -1189,6 +1234,11 @@ class SEO_Manager {
         }
 
         $description = $this->get_meta_description();
+
+        $served = $this->served_override('description');
+        if (null !== $served) {
+            $description = $served;
+        }
 
         if ($description) {
             // Output main ThinkRank SEO header comment (only once)
@@ -3976,8 +4026,9 @@ class SEO_Manager {
 
                 // A deployed node is a snapshot from Deploy time and outranks
                 // the automatic node, so page and article types would publish
-                // a frozen excerpt instead of the description the head
-                // resolves. Give them the live one, as the automatic node has.
+                // a frozen excerpt, publish date, modified date and headline
+                // instead of the post's current ones (#1707). Give them the
+                // live values, as the automatic node has.
                 $context_post = get_post($context_id);
 
                 foreach ($page_specific_schemas as $schema_type => $schema_info) {
@@ -3992,7 +4043,7 @@ class SEO_Manager {
                     $node = $schema_info['data'];
 
                     if ($this->global_seo_schema && $context_post instanceof \WP_Post) {
-                        $node = $this->global_seo_schema->refresh_deployed_description($node, (string) $schema_type, $context_post);
+                        $node = $this->global_seo_schema->refresh_deployed_node($node, (string) $schema_type, $context_post);
                     }
 
                     Schema_Graph::instance()->add_primary($node, (string) $schema_type, 'schema_manager');

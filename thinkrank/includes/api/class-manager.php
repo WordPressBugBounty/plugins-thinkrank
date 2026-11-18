@@ -674,6 +674,22 @@ class Manager {
             // Site SEO Analyzer endpoint registration failed
         }
 
+        // SEO Goals (#728): one prioritised to-do list from what ThinkRank knows
+        try {
+            $goals_endpoint = new \ThinkRank\API\Goals_Endpoint();
+            $goals_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // SEO Goals endpoint registration failed
+        }
+
+        // Title Experiments (#719): test SEO titles on real Search Console CTR
+        try {
+            $title_experiments_endpoint = new \ThinkRank\API\Title_Experiments_Endpoint();
+            $title_experiments_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Title Experiments endpoint registration failed
+        }
+
         // Register SEO Analytics endpoints
         try {
             $seo_analytics_endpoint = new \ThinkRank\API\SEO_Analytics_Endpoint();
@@ -2911,6 +2927,13 @@ class Manager {
         }
 
         try {
+            $timeline_endpoint = new Timeline_Endpoint();
+            $timeline_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register Timeline endpoint
+        }
+
+        try {
             $performance_endpoint = new Performance_Endpoint();
             $performance_endpoint->register_routes();
         } catch (\Exception $e) {
@@ -3003,6 +3026,15 @@ class Manager {
             $thin_content_endpoint->register_routes();
         } catch (\Exception $e) {
             // Failed to register Thin Content endpoint
+        }
+
+        try {
+            // Orphan page report (#566): also under global-seo/, so the same
+            // Bulk SEO Optimization capability covers it.
+            $orphan_pages_endpoint = new \ThinkRank\API\Orphan_Pages_Endpoint();
+            $orphan_pages_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Failed to register Orphan Pages endpoint
         }
 
         try {

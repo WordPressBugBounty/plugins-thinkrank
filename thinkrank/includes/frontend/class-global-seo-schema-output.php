@@ -996,7 +996,8 @@ class Global_SEO_Schema_Output {
                 ? trim((string) $entity['acceptedAnswer']['text'])
                 : '';
 
-            if ($question === '' || $answer === '' || strpos($question, '?') === false) {
+            // Any question mark the audit reads, not only ASCII `?` (#1686).
+            if ($question === '' || $answer === '' || !\ThinkRank\SEO\Answer_Readiness::has_question_mark($question)) {
                 continue;
             }
 
@@ -2075,6 +2076,179 @@ class Global_SEO_Schema_Output {
         }
 
         return $node;
+    }
+
+    /**
+     * Types whose deployed node takes its dates from the post.
+     *
+     * Schema_Builder fills datePublished and dateModified for these from the
+     * post's own dates and nothing else: the post-described types, and Review,
+     * whose datePublished is the post's (its form has no date field).
+     *
+     * @since 2.22.0
+     * @var string[]
+     */
+    private const POST_DATED_TYPES = [
+        'WebPage', 'AboutPage', 'ContactPage', 'ProfilePage',
+        'Article', 'BlogPosting', 'NewsArticle', 'TechnicalArticle', 'ScholarlyArticle', 'Report',
+        'Review',
+    ];
+
+    /**
+     * Longest headline Schema_Builder writes, in characters.
+     *
+     * @since 2.22.0
+     * @var int
+     */
+    private const DEPLOYED_HEADLINE_LENGTH = 110;
+
+    /**
+     * Headlines built from each post's past titles, memoised per request.
+     *
+     * @since 2.22.0
+     * @var array<int, string[]>
+     */
+    private array $past_title_headlines = [];
+
+    /**
+     * Bring a deployed node up to date with the post it describes.
+     *
+     * A deployed node is a snapshot from Deploy time, and nothing redeploys it
+     * when the post is saved. So besides the description
+     * (refresh_deployed_description()), it kept the publish date, modified
+     * date and headline it was deployed with: a post edited, re-dated or
+     * retitled after Deploy told search engines it never changed (#1707).
+     *
+     * The dates always come from the post, as the automatic node's do: they
+     * are facts about the post, not something the author wrote. The headline
+     * is refreshed only when it is provably one the post's own title produced;
+     * see refresh_deployed_headline().
+     *
+     * @since 2.22.0
+     *
+     * @param array    $node        Deployed schema node.
+     * @param string   $schema_type Deployed schema type.
+     * @param \WP_Post $post        Post the node was deployed on.
+     * @return array
+     */
+    public function refresh_deployed_node(array $node, string $schema_type, \WP_Post $post): array {
+        $node = $this->refresh_deployed_description($node, $schema_type, $post);
+
+        $type = '' !== $schema_type ? $schema_type : (string) ($node['@type'] ?? '');
+
+        if (!in_array($type, self::POST_DATED_TYPES, true) || !$this->describes_queried_object($post)) {
+            return $node;
+        }
+
+        // ISO 8601 with an offset, as Schema_Builder writes them (#465). Only
+        // keys the snapshot already carries: a node deployed without one is
+        // not given a property its type's builder never set.
+        $dates = [
+            'datePublished' => get_the_date('c', $post),
+            'dateModified'  => get_the_modified_date('c', $post),
+        ];
+
+        foreach ($dates as $key => $value) {
+            if (array_key_exists($key, $node) && is_string($value) && '' !== $value) {
+                $node[$key] = $value;
+            }
+        }
+
+        return $this->refresh_deployed_headline($node, $post);
+    }
+
+    /**
+     * Give a deployed headline the post's current title, when it came from a past one.
+     *
+     * The title the headline was built from at Deploy time is not stored, and
+     * a headline can be written by hand (the Schema tab imports and edits raw
+     * JSON-LD). Overwriting every headline that differs from the title would
+     * throw those away. So the headline is replaced only when it equals,
+     * after the builder's own normalising and 110-character cut, a title the
+     * post has had: its current title, or the title of one of its revisions.
+     * Anything else (a hand-written headline, one built from an SEO title, a
+     * post with revisions switched off) keeps the stored value.
+     *
+     * @since 2.22.0
+     *
+     * @param array    $node Deployed schema node.
+     * @param \WP_Post $post Post the node describes.
+     * @return array
+     */
+    private function refresh_deployed_headline(array $node, \WP_Post $post): array {
+        if (!isset($node['headline']) || !is_string($node['headline'])) {
+            return $node;
+        }
+
+        $current = self::deployed_headline((string) $post->post_title);
+        $stored  = trim($node['headline']);
+
+        if ('' === $current || $stored === $current) {
+            return $node;
+        }
+
+        if (in_array($stored, $this->past_title_headlines((int) $post->ID), true)) {
+            $node['headline'] = $current;
+        }
+
+        return $node;
+    }
+
+    /**
+     * The headline Schema_Builder writes for a title.
+     *
+     * @since 2.22.0
+     *
+     * @param string $title Raw post title.
+     * @return string
+     */
+    private static function deployed_headline(string $title): string {
+        return \ThinkRank\Core\Seo_Text::trim_to_length(
+            \ThinkRank\Core\Seo_Text::normalize_schema_text($title),
+            self::DEPLOYED_HEADLINE_LENGTH
+        );
+    }
+
+    /**
+     * Headlines the post's revision titles would have produced.
+     *
+     * One query for the distinct titles rather than wp_get_post_revisions(),
+     * which loads every revision's full content. Asked only when the stored
+     * headline differs from the current title, and once per post per request.
+     *
+     * @since 2.22.0
+     *
+     * @param int $post_id Post ID.
+     * @return string[]
+     */
+    private function past_title_headlines(int $post_id): array {
+        if (isset($this->past_title_headlines[$post_id])) {
+            return $this->past_title_headlines[$post_id];
+        }
+
+        global $wpdb;
+
+        $titles = [];
+        if ($post_id > 0 && isset($wpdb) && is_object($wpdb) && method_exists($wpdb, 'get_col')) {
+            $titles = (array) $wpdb->get_col(
+                $wpdb->prepare(
+                    "SELECT DISTINCT post_title FROM {$wpdb->posts} WHERE post_parent = %d AND post_type = 'revision'",
+                    $post_id
+                )
+            );
+        }
+
+        $headlines = [];
+        foreach ($titles as $title) {
+            $headline = self::deployed_headline((string) $title);
+            if ('' !== $headline) {
+                $headlines[] = $headline;
+            }
+        }
+
+        $this->past_title_headlines[$post_id] = array_values(array_unique($headlines));
+
+        return $this->past_title_headlines[$post_id];
     }
 
     /**

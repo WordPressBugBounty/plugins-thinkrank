@@ -8,11 +8,13 @@
  */
 
 import { __ } from '@wordpress/i18n';
+import { useState } from '@wordpress/element';
 import Select from '../../../admin/components/ui/Select';
 import Button from '../../../admin/components/ui/Button';
 import PanelCard from '../ui/PanelCard';
 import { IconSparkle } from '../ui/icons';
 import SEOScoreCalculator from '../../../admin/components/seo/SEOScoreCalculator';
+import AnswerReadinessCard from './AnswerReadinessCard';
 import QuestionCoverageCard from './QuestionCoverageCard';
 import {
 	isBlockEditor,
@@ -87,6 +89,11 @@ const AnalysisPanel = ({
 }) => {
 	const aiConfigured = Boolean(window.thinkrankMetabox?.aiConfigured);
 	const hasTitle = Boolean(postTitle && postTitle.trim());
+	// The response the score calculator is showing right now. It re-scores on
+	// its own while the author types, and the card has to follow those
+	// results, not only the one from the last "Analyze Content".
+	const [shownScoreData, setShownScoreData] = useState(null);
+	const readinessSource = shownScoreData || scoreData;
 
 	return (
 		<div className="tr-flex tr-flex-col tr-gap-4">
@@ -191,6 +198,7 @@ const AnalysisPanel = ({
 				contentFull={contentFull}
 				scoreData={scoreData}
 				onScoreChange={onScoreChange}
+				onScoreDataChange={setShownScoreData}
 				seoTitle={formData.thinkrank_seo_title}
 				contentType={formData.thinkrank_content_type}
 				tone={formData.thinkrank_tone}
@@ -201,6 +209,12 @@ const AnalysisPanel = ({
 					onFieldChange('thinkrank_meta_description', description)
 				}
 				onApplyContent={appendEditorContent}
+			/>
+
+			{/* Rides on the same response the score does, so it needs no fetch
+			    of its own and cannot disagree with the audit (#677). */}
+			<AnswerReadinessCard
+				answerReadiness={readinessSource?.answer_readiness || null}
 			/>
 		</div>
 	);

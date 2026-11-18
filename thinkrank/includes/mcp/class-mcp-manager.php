@@ -164,6 +164,17 @@ final class Mcp_Manager {
 
 		// Daily retention prune for the activity log (#717).
 		Mcp_Audit::init();
+
+		// A ThinkRank Hub connection that switched MCP on and was never
+		// finished switches it back off. Registered whatever the switch says,
+		// since settling is what reads it (#1293).
+		add_action( Mcp_Hub::SETTLE_HOOK, [ Mcp_Hub::class, 'settle_opened_mcp' ] );
+		// And on a ThinkRank screen before it loads, so the settings it
+		// reads already show the settled switch.
+		add_action( 'admin_init', [ Mcp_Hub::class, 'settle_on_admin_screen' ] );
+		// A change of the switch made anywhere else is the owner's own, and
+		// a pending settle must not undo it.
+		Mcp_Hub::watch_switch();
 	}
 
 	/**
@@ -208,7 +219,9 @@ final class Mcp_Manager {
 	 * Connecting to ThinkRank Hub calls this (thinkrank#1002). There is
 	 * deliberately no counterpart that turns the switch off from the hub: the
 	 * owner's other assistants may rely on it, and ending the hub's grant is
-	 * what Disconnect does.
+	 * what Disconnect does. The one exception is a connection that switched it
+	 * on and was never finished, with nothing else connected since, which
+	 * leaves the switch as it found it (Mcp_Hub::settle_opened_mcp(), #1293).
 	 *
 	 * @since 2.15.0
 	 *

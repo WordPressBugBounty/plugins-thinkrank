@@ -237,6 +237,76 @@ final class Plan_Config {
     }
 
     /**
+     * Capability map for SEO Goals.
+     *
+     * The list itself — goals, done/ignore, section checklists — is FREE and
+     * stays free (#728). What Pro adds is memory: when each goal opened and
+     * was completed, "goals completed this month", and goals fed by Pro-only
+     * signals (index drops, rank drops, decaying content, Focus Pages).
+     *
+     * Schema:
+     *   history bool Goal openings and completions are recorded over time.
+     *
+     * @since 2.22.0
+     *
+     * @return array Capability map.
+     */
+    public static function seo_goals(): array {
+        $defaults = [
+            'history' => false,
+        ];
+
+        /**
+         * Filter the SEO Goals capability map.
+         *
+         * @since 2.22.0
+         *
+         * @param array $defaults Capability map (see schema above).
+         */
+        $caps = apply_filters('thinkrank_seo_goals_capabilities', $defaults);
+
+        return array_merge($defaults, is_array($caps) ? $caps : []);
+    }
+
+    /**
+     * Capability map for Title Experiments.
+     *
+     * One experiment at a time, the original against one variant, measured
+     * on Search Console and kept with one click, is FREE (#719): it is a
+     * complete, honest test on one page. Pro runs many at once, tests up to
+     * four variants, applies winners on its own and keeps the history.
+     *
+     * Schema:
+     *   concurrent   int  Experiments that may run at once.
+     *   max_variants int  Variants per experiment, the original included.
+     *   auto_apply   bool Winners are applied without a click.
+     *   history      bool Finished experiments are kept.
+     *
+     * @since 2.22.0
+     *
+     * @return array Capability map.
+     */
+    public static function title_experiments(): array {
+        $defaults = [
+            'concurrent'   => 1,
+            'max_variants' => 2,
+            'auto_apply'   => false,
+            'history'      => false,
+        ];
+
+        /**
+         * Filter the Title Experiments capability map.
+         *
+         * @since 2.22.0
+         *
+         * @param array $defaults Capability map (see schema above).
+         */
+        $caps = apply_filters('thinkrank_title_experiments_capabilities', $defaults);
+
+        return array_merge($defaults, is_array($caps) ? $caps : []);
+    }
+
+    /**
      * Check a single capability for a given feature.
      *
      * Adding a feature means adding a switch case to capabilities_for() that
@@ -268,6 +338,10 @@ final class Plan_Config {
                 return self::duplicate_snippets();
             case 'thin_content':
                 return self::thin_content();
+            case 'seo_goals':
+                return self::seo_goals();
+            case 'title_experiments':
+                return self::title_experiments();
             default:
                 return [];
         }

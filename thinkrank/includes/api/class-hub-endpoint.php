@@ -21,8 +21,10 @@ if (!defined('ABSPATH')) {
  * The owner's side of the optional ThinkRank Hub connection: reading where
  * the hub is and what it holds, changing where it is, starting a connection
  * and ending one. Starting a connection turns the MCP switch on through its
- * own setter, as the settings route does, and never turns it off: the owner's
- * other assistants may rely on it.
+ * own setter, as the settings route does. It turns it back off only when the
+ * switch was off before, the connection was never finished, and nothing else
+ * has connected since (#1293); otherwise the owner's other assistants may
+ * rely on it.
  *
  * Every route needs `manage_options`, whatever the Role Manager delegates
  * elsewhere: handing this site to the hub is an administrator's decision.
@@ -130,6 +132,9 @@ class Hub_Endpoint {
      * @return WP_REST_Response
      */
     public function get_state(): WP_REST_Response {
+        // Where WP-Cron is off, an unfinished connection is settled here.
+        Mcp_Hub::settle_opened_mcp();
+
         return new WP_REST_Response(self::state(), 200);
     }
 
@@ -178,12 +183,18 @@ class Hub_Endpoint {
             );
         }
 
+        // The public hub turns away a local or private address after the
+        // whole round trip, so it is said here, before anything is on.
+        $local = Mcp_Hub::local_reason();
+        if ('' !== $local) {
+            return new WP_Error('thinkrank_hub_local', $local, ['status' => 409]);
+        }
+
         $access = Mcp_Hub::ACCESS_READ === (string) $request->get_param('access') ? Mcp_Hub::ACCESS_READ : Mcp_Hub::ACCESS_WRITE;
 
-        // On, through the setter, and never off from here.
-        Mcp_Manager::enable();
-
-        $ticket = Mcp_Hub::mint_ticket(get_current_user_id(), $access);
+        // On, through the setter, with the ticket; off again only if this
+        // connection is never finished and nothing else connects (#1293).
+        $ticket = Mcp_Hub::start(get_current_user_id(), $access);
 
         return new WP_REST_Response([
             'redirect' => Mcp_Hub::connect_url($ticket, $access, (string) $request->get_param('from')),
@@ -243,6 +254,8 @@ class Hub_Endpoint {
             'pin_invalid' => Mcp_Hub::pin_is_invalid(),
             'enabled'     => Mcp_Manager::is_enabled(),
             'staging'     => Mcp_Hub::is_staging(),
+            // Why the hub would turn this site away, or '' (#1293).
+            'local'       => Mcp_Hub::local_reason(),
             'connected'   => [] !== $apps,
             'reachable'   => [] === $refused_by,
             'refused_by'  => $refused_by,

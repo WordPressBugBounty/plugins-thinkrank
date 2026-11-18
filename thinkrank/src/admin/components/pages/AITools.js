@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import Tabs, { TabPanel } from '../ui/Tabs';
 import ContentPlannerTab from '../ai-tools/ContentPlannerTab';
@@ -8,14 +8,19 @@ import MCP from './MCP';
 import MCPHubConnect from './MCPHubConnect';
 import { TAB_EVENT } from '../../utils/hubStatus';
 
-const TABS = [
+const ALL_TABS = [
 	{ id: 'content-planner', label: __('Content Planner', 'thinkrank') },
 	{ id: 'metadata-generator', label: __('Metadata Generator', 'thinkrank') },
 	{ id: 'mcp', label: __('MCP', 'thinkrank') },
 	{ id: 'hub', label: __('ThinkRank Hub', 'thinkrank') },
 ];
 
-const VALID_TABS = TABS.map((t) => t.id);
+// Connecting a site to the hub is an administrator's decision, and every hub
+// route needs `manage_options`, so only administrators get the tab, as only
+// they get the header's Hub chip (#1293).
+const tabsFor = (isAdmin) =>
+	ALL_TABS.filter((tab) => tab.id !== 'hub' || isAdmin);
+
 const DEFAULT_TAB = 'content-planner';
 
 /**
@@ -34,6 +39,9 @@ const writeTabToUrl = (tabId) => {
 };
 
 const AITools = () => {
+	// Who may see the Hub tab doesn't change while the page is open.
+	const [TABS] = useState(() => tabsFor(!!window.thinkrankAdmin?.isAdmin));
+	const VALID_TABS = useMemo(() => TABS.map((t) => t.id), [TABS]);
 	const [activeTab, setActiveTab] = useState(DEFAULT_TAB);
 	// The hub's grant is listed among the MCP tab's connected apps, so a hub
 	// disconnect tells that list to read itself again. Both panels stay
@@ -53,7 +61,7 @@ const AITools = () => {
 		} catch (e) {
 			// Fall back to default on URL parse failure
 		}
-	}, []);
+	}, [VALID_TABS]);
 
 	const handleTabChange = useCallback((tabId) => {
 		setActiveTab(tabId);
@@ -69,7 +77,7 @@ const AITools = () => {
 		};
 		window.addEventListener(TAB_EVENT, onTab);
 		return () => window.removeEventListener(TAB_EVENT, onTab);
-	}, [handleTabChange]);
+	}, [handleTabChange, VALID_TABS]);
 
 	return (
 		<div>
@@ -88,20 +96,22 @@ const AITools = () => {
 			<TabPanel tabId="mcp" activeTab={activeTab}>
 				<MCP appsRefreshSignal={hubDisconnects} />
 			</TabPanel>
-			<TabPanel tabId="hub" activeTab={activeTab}>
-				{/* Mounted only while open, so the card reads the hub state
-				    again each time, after MCP access was switched on the MCP
-				    tab, for example. */}
-				{activeTab === 'hub' && (
-					<Card padding={false} className="tr-overflow-hidden">
-						<MCPHubConnect
-							onDisconnected={() =>
-								setHubDisconnects((count) => count + 1)
-							}
-						/>
-					</Card>
-				)}
-			</TabPanel>
+			{VALID_TABS.includes('hub') && (
+				<TabPanel tabId="hub" activeTab={activeTab}>
+					{/* Mounted only while open, so the card reads the hub state
+					    again each time, after MCP access was switched on the MCP
+					    tab, for example. */}
+					{activeTab === 'hub' && (
+						<Card padding={false} className="tr-overflow-hidden">
+							<MCPHubConnect
+								onDisconnected={() =>
+									setHubDisconnects((count) => count + 1)
+								}
+							/>
+						</Card>
+					)}
+				</TabPanel>
+			)}
 		</div>
 	);
 };

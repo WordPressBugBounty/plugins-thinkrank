@@ -13,6 +13,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { Input, SkeletonCard } from '../ui';
 import { navigate, getPageUrl, isPlainLeftClick } from '../../utils/router';
 import notify from '../../utils/notify';
+import { AUDIT_EVENT } from '../goals/useGoals';
 
 // Deep link to the full analyzer page (Essential SEO › SEO Analyzer › Site Audit).
 const DETAILS_PARAMS = { nav_section: 'seo-analyzer', nav_item: 'site-audit' };
@@ -1132,6 +1133,14 @@ const SiteHealthAudit = ({ onRefresh, compact = true }) => {
 			cancelled = true;
 		};
 	}, []);
+
+	// The goals list is built from this audit. Say when it changes (first
+	// load, Re-analyze, a fix, an ignore) so a list on the same page follows.
+	useEffect(() => {
+		if (data && typeof CustomEvent === 'function') {
+			window.dispatchEvent(new CustomEvent(AUDIT_EVENT));
+		}
+	}, [data]);
 
 	const handleReanalyze = () =>
 		runExclusive(async () => {

@@ -14,6 +14,8 @@ declare(strict_types=1);
 
 namespace ThinkRank\Admin;
 
+use ThinkRank\SEO\Experiments\Title_Experiments;
+
 // Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
@@ -144,6 +146,8 @@ class Seo_Quick_Edit_Ajax {
             'effective_description' => \ThinkRank\Core\Seo_Text::as_displayed(\ThinkRank\SEO\Pattern_Resolver::effective_description($post_id)),
             'focus_keywords'        => \ThinkRank\SEO\Focus_Keywords::get($post_id),
             'edit_link'             => get_edit_post_link($post_id, 'raw'),
+            // A running title experiment locks these two fields (#1636).
+            'locked'                => class_exists(Title_Experiments::class) && Title_Experiments::locks($post_id),
         ]);
     }
 
@@ -182,6 +186,25 @@ class Seo_Quick_Edit_Ajax {
             wp_send_json_error([
                 'message' => __('Nothing to save.', 'thinkrank'),
             ], 400);
+        }
+
+        // The shared writer drops a locked title or description, which this
+        // handler used to report as "SEO fields updated." (#1636). Compared
+        // as submitted: sanitize_text_field() reads a %date% tag as
+        // percent-encoding, so a resent stored value would look edited.
+        // phpcs:disable WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified in authorize(); compared, never stored.
+        $submitted = [];
+        if (isset($_POST['seo_title'])) {
+            $submitted['thinkrank_seo_title'] = (string) wp_unslash($_POST['seo_title']);
+        }
+        if (isset($_POST['meta_description'])) {
+            $submitted['thinkrank_meta_description'] = (string) wp_unslash($_POST['meta_description']);
+        }
+        // phpcs:enable WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+        if (class_exists(Title_Experiments::class) && [] !== Title_Experiments::locked_changes($post_id, $submitted)) {
+            wp_send_json_error([
+                'message' => Title_Experiments::locked_message(),
+            ], 409);
         }
 
         (new Metabox_Manager())->save_seo_fields($post_id, $fields);

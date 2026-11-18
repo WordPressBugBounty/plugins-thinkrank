@@ -549,15 +549,7 @@ final class Content_Access {
      * @return array<string,int>
      */
     private static function builder_words(\WP_Post $post): array {
-        $owned = false;
-        foreach (Builder_Content::builder_meta_keys() as $key) {
-            if ('' !== (string) get_post_meta((int) $post->ID, (string) $key, true)) {
-                $owned = true;
-                break;
-            }
-        }
-
-        if (!$owned) {
+        if (!self::has_builder_data((int) $post->ID)) {
             return [];
         }
 
@@ -568,6 +560,36 @@ final class Content_Access {
         } catch (\Throwable $e) {
             return [];
         }
+    }
+
+    /**
+     * Whether a builder keeps data of its own for this post.
+     *
+     * Read without a string cast: Beaver Builder stores its layout as an
+     * array, and casting one raises a warning on every view of the page and
+     * reads an empty array as data (#1621).
+     *
+     * @param int $post_id Post ID.
+     * @return bool
+     */
+    private static function has_builder_data(int $post_id): bool {
+        foreach (Builder_Content::builder_meta_keys() as $key) {
+            $value = get_post_meta($post_id, (string) $key, true);
+
+            if (is_array($value)) {
+                $held = [] !== $value;
+            } elseif (is_scalar($value)) {
+                $held = '' !== trim((string) $value);
+            } else {
+                $held = null !== $value;
+            }
+
+            if ($held) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

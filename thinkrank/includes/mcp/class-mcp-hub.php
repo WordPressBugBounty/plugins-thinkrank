@@ -59,6 +59,17 @@ final class Mcp_Hub {
 	public const TICKET_TTL = 900;
 
 	/**
+	 * When a connection switched MCP on, as a unix timestamp: set only when
+	 * the switch was off, and cleared once the connection settles (#1293).
+	 */
+	public const OPENED_OPTION = 'thinkrank_hub_opened_mcp';
+
+	/**
+	 * The WP-Cron hook that settles it, once no ticket can be spent.
+	 */
+	public const SETTLE_HOOK = 'thinkrank_hub_settle_opened_mcp';
+
+	/**
 	 * How many tickets may be outstanding at once.
 	 */
 	private const MAX_TICKETS = 5;
@@ -790,6 +801,284 @@ final class Mcp_Hub {
 		}
 
 		return $refusals;
+	}
+
+	/**
+	 * Why ThinkRank Hub would turn this site away, or '' when it would not.
+	 *
+	 * The public hub reads a site from the internet, over https on the
+	 * standard port or 8443, and refuses a local or private address after the
+	 * whole round trip. Said here first, from this site's own address, so
+	 * nothing is switched on for a connection that cannot finish. A hub the
+	 * host chose or pinned may take what the public one won't, so only the
+	 * public hub's rule is applied (#1293).
+	 *
+	 * @since 2.22.0
+	 *
+	 * @return string
+	 */
+	public static function local_reason(): string {
+		if ( self::DEFAULT_URL !== self::url() ) {
+			return '';
+		}
+
+		$parts  = wp_parse_url( home_url( '/' ) );
+		$scheme = strtolower( (string) ( $parts['scheme'] ?? '' ) );
+		$host   = strtolower( trim( (string) ( $parts['host'] ?? '' ), '[]' ) );
+		$port   = isset( $parts['port'] ) ? (int) $parts['port'] : 443;
+
+		if ( 'https' !== $scheme ) {
+			return __( 'This site’s address is not https, and ThinkRank Hub reads sites only over https. Connect the live site from its https address.', 'thinkrank' );
+		}
+
+		if ( 443 !== $port && 8443 !== $port ) {
+			return __( 'This site’s address uses a port ThinkRank Hub doesn’t read from. It reads sites on the standard https port or 8443.', 'thinkrank' );
+		}
+
+		if ( self::host_is_local( $host ) ) {
+			return __( 'This site runs on a local or private address that ThinkRank Hub can’t reach from the internet. Connect the live site instead.', 'thinkrank' );
+		}
+
+		return '';
+	}
+
+	/**
+	 * Whether a host names this computer, a private network or a name that
+	 * never resolves on the internet.
+	 *
+	 * @param string $host Lower-case host, without brackets.
+	 * @return bool
+	 */
+	private static function host_is_local( string $host ): bool {
+		// A single label, such as `localhost` or a machine name, resolves only nearby.
+		if ( '' === $host || ( false === strpos( $host, '.' ) && false === strpos( $host, ':' ) ) ) {
+			return true;
+		}
+
+		if ( false !== filter_var( $host, FILTER_VALIDATE_IP ) ) {
+			return self::ip_is_local( $host );
+		}
+
+		foreach ( [ 'localhost', 'local', 'test', 'example', 'invalid', 'internal', 'lan', 'home.arpa' ] as $suffix ) {
+			if ( $host === $suffix || str_ends_with( $host, '.' . $suffix ) ) {
+				return true;
+			}
+		}
+
+		// Public names that point every subdomain at this computer, which the
+		// local development tools hand out: DDEV, Lando, and the loopback
+		// helpers people use for https on a laptop. Their DNS answers from the
+		// internet, so a name rule is the only one that catches them.
+		foreach ( [ 'ddev.site', 'lndo.site', 'localtest.me', 'lvh.me' ] as $suffix ) {
+			if ( $host === $suffix || str_ends_with( $host, '.' . $suffix ) ) {
+				return true;
+			}
+		}
+
+		// Wildcard DNS that answers with the address written into the name,
+		// `10.0.0.5.nip.io` for one: local exactly when that address is.
+		foreach ( [ 'nip.io', 'sslip.io' ] as $suffix ) {
+			if ( str_ends_with( $host, '.' . $suffix )
+				&& preg_match( '/(?:^|[.-])(\d{1,3}(?:[.-]\d{1,3}){3})\.' . preg_quote( $suffix, '/' ) . '$/', $host, $match ) ) {
+				$ip = str_replace( '-', '.', $match[1] );
+
+				return false !== filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) && self::ip_is_local( $ip );
+			}
+		}
+
+		// Deliberately not resolved. A live server often maps its own name to
+		// 127.0.0.1 in /etc/hosts for loopback requests, and reading that as
+		// local would hold the switch on a site the hub can reach.
+		return false;
+	}
+
+	/**
+	 * Whether an address is one the internet cannot reach: private,
+	 * reserved, or carrier-grade NAT (100.64.0.0/10, which Tailscale uses).
+	 *
+	 * @since 2.22.0
+	 *
+	 * @param string $ip IP address.
+	 * @return bool
+	 */
+	private static function ip_is_local( string $ip ): bool {
+		if ( false === filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+			return true;
+		}
+
+		if ( false === filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+			return false;
+		}
+
+		// 100.64.0.0/10: the first octet is 100 and the second 64 to 127.
+		$octets = array_map( 'intval', explode( '.', $ip ) );
+
+		return 100 === $octets[0] && $octets[1] >= 64 && $octets[1] <= 127;
+	}
+
+	// -- MCP switched on for a connection --------------------------------
+
+	/**
+	 * Turn MCP on for a connection, minting its ticket, and remember when the
+	 * switch was off before, so a connection that is never finished leaves it
+	 * as it was (#1293).
+	 *
+	 * Under the lock the exchange spends tickets in, so a settle running at
+	 * the same moment can't switch MCP off between this turning it on and
+	 * the ticket that keeps it on.
+	 *
+	 * @since 2.22.0
+	 *
+	 * @param int    $user_id The administrator starting the connection.
+	 * @param string $access  ACCESS_READ or ACCESS_WRITE.
+	 * @return string The ticket.
+	 */
+	public static function start( int $user_id, string $access ): string {
+		return (string) Mcp_OAuth::with_lock(
+			static function () use ( $user_id, $access ): string {
+				if ( ! Mcp_Manager::is_enabled() ) {
+					// Switched on first: any change of the switch forgets the
+					// marker (forget_opened_mcp()), this one included, so it is
+					// written after. A second press while the first is still
+					// open finds the switch on and leaves the first moment.
+					Mcp_Manager::enable();
+					update_option( self::OPENED_OPTION, time(), false );
+				}
+
+				$ticket = self::mint_ticket( $user_id, $access );
+
+				if ( (int) get_option( self::OPENED_OPTION, 0 ) > 0 ) {
+					self::schedule_settle( time() + self::TICKET_TTL );
+				}
+
+				return $ticket;
+			}
+		);
+	}
+
+	/**
+	 * Switch MCP back off when a connection switched it on and was never
+	 * finished, and nothing else has connected since.
+	 *
+	 * Waits while a ticket can still be spent, looking again once it can't.
+	 * Leaves MCP on once anything holds a grant, the hub's included, or the
+	 * site's own token has been used since: someone relies on it then. A
+	 * switch turned off by hand is simply forgotten. Run by WP-Cron, and
+	 * when the Hub card reads the state, where WP-Cron is off.
+	 *
+	 * @since 2.22.0
+	 *
+	 * @return void
+	 */
+	public static function settle_opened_mcp(): void {
+		if ( (int) get_option( self::OPENED_OPTION, 0 ) <= 0 ) {
+			return;
+		}
+
+		Mcp_OAuth::with_lock(
+			static function (): void {
+				$opened = (int) get_option( self::OPENED_OPTION, 0 );
+				if ( $opened <= 0 ) {
+					return;
+				}
+
+				if ( ! Mcp_Manager::is_enabled() ) {
+					delete_option( self::OPENED_OPTION );
+					return;
+				}
+
+				$live = self::locked_tickets();
+				if ( [] !== $live ) {
+					self::schedule_settle( max( array_column( $live, 'expires' ) ) );
+					return;
+				}
+
+				// Only reliance that began after the switch was opened counts.
+				// A grant that already existed while MCP was off was blocked by
+				// the switch, and keeping MCP on for it would quietly restore
+				// access the owner had switched off.
+				$in_use = (int) get_option( Mcp_Pairing::LAST_USED_OPTION, 0 ) >= $opened;
+				foreach ( Mcp_OAuth::connected_apps() as $app ) {
+					if ( (int) ( $app['connected_at'] ?? 0 ) >= $opened || (int) ( $app['last_used'] ?? 0 ) >= $opened ) {
+						$in_use = true;
+						break;
+					}
+				}
+
+				if ( ! $in_use ) {
+					\ThinkRank\Core\Settings::instance()->set( 'enable_mcp', false );
+				}
+
+				delete_option( self::OPENED_OPTION );
+			}
+		);
+	}
+
+	/**
+	 * Settle on a ThinkRank admin screen, before the screen reads anything.
+	 *
+	 * The admin app loads `/settings` and `/hub` side by side. Settled only
+	 * inside `/hub`, the switch went off after `/settings` had already
+	 * answered "on", and the app kept that answer cached for minutes, so the
+	 * MCP tab showed MCP on while it was off. Settling here, while the page
+	 * itself is built, means every read the page makes sees the settled
+	 * switch.
+	 *
+	 * @since 2.22.0
+	 *
+	 * @return void
+	 */
+	public static function settle_on_admin_screen(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Only names the screen; nothing is written from it.
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		if ( 0 !== strpos( $page, 'thinkrank' ) || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		self::settle_opened_mcp();
+	}
+
+	/**
+	 * Watch the MCP switch, so a change made anywhere else forgets that a
+	 * connection opened it (#1293).
+	 *
+	 * @since 2.22.0
+	 *
+	 * @return void
+	 */
+	public static function watch_switch(): void {
+		$option = 'thinkrank_enable_mcp';
+		add_action( 'add_option_' . $option, [ self::class, 'forget_opened_mcp' ] );
+		add_action( 'update_option_' . $option, [ self::class, 'forget_opened_mcp' ] );
+		add_action( 'delete_option_' . $option, [ self::class, 'forget_opened_mcp' ] );
+	}
+
+	/**
+	 * Forget that a connection switched MCP on.
+	 *
+	 * Runs whenever the switch itself changes. An owner who turns MCP off and
+	 * on again before the connection settles has made the choice their own,
+	 * and settling must not switch it off behind them. start() writes the
+	 * marker after its own change of the switch, so only its transition is
+	 * remembered.
+	 *
+	 * @since 2.22.0
+	 *
+	 * @return void
+	 */
+	public static function forget_opened_mcp(): void {
+		delete_option( self::OPENED_OPTION );
+	}
+
+	/**
+	 * Settle again a minute after a ticket can no longer be spent.
+	 *
+	 * @param int $expires When the newest ticket expires.
+	 * @return void
+	 */
+	private static function schedule_settle( int $expires ): void {
+		wp_clear_scheduled_hook( self::SETTLE_HOOK );
+		wp_schedule_single_event( $expires + MINUTE_IN_SECONDS, self::SETTLE_HOOK );
 	}
 
 	// -- The session ---------------------------------------------------------

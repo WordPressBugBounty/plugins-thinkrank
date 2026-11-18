@@ -14,11 +14,12 @@
 import { __ } from '@wordpress/i18n';
 
 import SiteHealthAudit from '../dashboard/SiteHealthAudit';
+import GoalsTab from './GoalsTab';
 import ProGatedTab from '../pro/ProGatedTab';
 import ProTeaser from '../pro/ProTeaser';
 import { AuditHistoryIllustration } from '../pro/pro-teaser-illustrations';
 
-const SEOAnalyzerTab = () => (
+const SiteAuditTab = () => (
 	<div className="tr-flex tr-flex-col tr-gap-4">
 		<SiteHealthAudit compact={false} />
 		<ProGatedTab
@@ -50,5 +51,12 @@ const SEOAnalyzerTab = () => (
 		/>
 	</div>
 );
+
+const SEOAnalyzerTab = ({ activeSubSection, onNavigate }) =>
+	'goals' === activeSubSection ? (
+		<GoalsTab onNavigate={onNavigate} />
+	) : (
+		<SiteAuditTab />
+	);
 
 export default SEOAnalyzerTab;

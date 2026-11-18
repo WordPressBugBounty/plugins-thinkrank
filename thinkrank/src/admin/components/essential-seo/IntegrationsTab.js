@@ -8,7 +8,7 @@
  * @since 1.0.0
  */
 
-import { useState, useEffect } from '@wordpress/element';
+import { useState, useEffect, useRef } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import {
 	SkeletonCard,
@@ -33,6 +33,12 @@ import ProTeaser from '../pro/ProTeaser';
 import { GoogleAnalyticsIllustration } from '../pro/pro-teaser-illustrations';
 import logger from '../../../shared/utils/logger';
 import { getGoogleConnectUrl, RECONNECT_REASON } from '../../utils/googleOAuth';
+import {
+	adoptStoredSocialSettings,
+	buildSocialPlatformCardPayload,
+	settledSocialPlatformKeys,
+	socialPlatformSaveErrors,
+} from './socialPlatformCardPayload';
 
 /**
  * Why the site needs to re-authorize with Google. Keyed by the reason PHP
@@ -84,6 +90,14 @@ const getDefaultIntegrationsSettings = () => ({
  * DRY: Reuse existing social media settings structure
  */
 const getDefaultSocialSettings = () => ({
+	// Search-engine site verification. Plain values, not masked: every one of
+	// these is printed in the page head, so hiding it here would only stop the
+	// user checking what is stored (#631).
+	google_site_verification: '',
+	bing_site_verification: '',
+	yandex_site_verification: '',
+	baidu_site_verification: '',
+
 	// Facebook settings
 	facebook_app_id: '',
 	facebook_admins: '',
@@ -116,6 +130,12 @@ const getDefaultSocialSettings = () => ({
  * and persist one platform at a time from its header Save button.
  */
 const SOCIAL_PLATFORM_CARDS = {
+	'search-engines': [
+		'google_site_verification',
+		'bing_site_verification',
+		'yandex_site_verification',
+		'baidu_site_verification',
+	],
 	facebook: ['facebook_app_id', 'facebook_admins'],
 	pinterest: ['pinterest_site_verification'],
 	instagram: ['instagram_verification'],
@@ -123,6 +143,20 @@ const SOCIAL_PLATFORM_CARDS = {
 	youtube: ['youtube_channel_id'],
 	whatsapp: ['whatsapp_business_id'],
 };
+
+/**
+ * The four search-engine verification fields, which are the only ones an empty
+ * value is allowed to clear.
+ *
+ * Every other field here is dropped when empty so an untouched (and, for the
+ * encrypted ones, masked) value cannot clobber what is stored. A verification
+ * code has to be removable though: once a property is gone from Search Console
+ * the tag has to come off the page. So an emptied one of these is forwarded,
+ * but only when the user actually edited it — a failed settings load falls back
+ * to all-empty defaults, and a section save after that must not wipe four codes
+ * nobody touched.
+ */
+const SITE_VERIFICATION_KEYS = SOCIAL_PLATFORM_CARDS['search-engines'];
 
 /**
  * Share-nodes mark for the Social Platforms hero, drawn in the same line-icon
@@ -154,6 +188,7 @@ const IconSocial = () => (
  * translatable.
  */
 const SOCIAL_PLATFORM_TABS = [
+	{ id: 'search-engines', label: 'Search Engines' },
 	{ id: 'facebook', label: 'Facebook' },
 	{ id: 'pinterest', label: 'Pinterest' },
 	{ id: 'instagram', label: 'Instagram' },
@@ -178,6 +213,10 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 	const [socialSettings, setSocialSettings] = useState(
 		getDefaultSocialSettings()
 	);
+	// The values as of the latest render, so a save that resolves later can
+	// tell which fields were edited while its request was in flight.
+	const socialSettingsRef = useRef(socialSettings);
+	socialSettingsRef.current = socialSettings;
 	const [hasChanges, setHasChanges] = useState(false);
 	const [notice, setNotice] = useState(null);
 	const [connectionStatus, setConnectionStatus] = useState(null);
@@ -289,33 +328,60 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 	 * Save a single Social Platforms card's fields.
 	 *
 	 * Sends only this card's keys, dropping empty and still-masked values so an
-	 * untouched (encrypted) secret is never clobbered by its placeholder. Clears
-	 * the card's dirty state on success.
+	 * untouched (encrypted) secret is never clobbered by its placeholder; an
+	 * emptied verification code is sent as a removal. Clears the dirty state of
+	 * the fields it sent on success. An emptied field this route cannot clear is
+	 * reported and left dirty, never settled as if it had saved.
 	 * @param {string} cardId Key in SOCIAL_PLATFORM_CARDS.
 	 * @param {string} label  Platform name for the notice.
 	 */
 	const saveSocialPlatformCard = async (cardId, label) => {
 		const keys = SOCIAL_PLATFORM_CARDS[cardId] || [];
+		const snapshot = socialSettings;
 
-		const settings = {};
-		keys.forEach((key) => {
-			const value = socialSettings[key];
-			if (!value || !value.trim() || value.includes('XXXX')) {
-				return;
-			}
-			settings[key] = value;
-		});
+		const { settings, unsentRemovals } = buildSocialPlatformCardPayload(
+			keys,
+			socialSettings,
+			dirtyKeys,
+			SITE_VERIFICATION_KEYS
+		);
 
-		const clearDirty = () =>
+		// Settle only what was sent, plus the untouched masked placeholders that
+		// had nothing to send. A removal that could not be sent stays dirty, and
+		// so does a field edited again while the request was in flight.
+		const clearDirty = () => {
+			const settled = settledSocialPlatformKeys(
+				keys,
+				socialSettingsRef.current,
+				snapshot,
+				unsentRemovals
+			);
 			setDirtyKeys((prev) => {
 				const next = new Set(prev);
-				keys.forEach((key) => next.delete(key));
+				settled.forEach((key) => next.delete(key));
 				return next;
 			});
+		};
 
-		// Nothing new to persist (all empty or unchanged/masked) — just settle the
-		// dirty state; the endpoint rejects an empty settings payload.
+		const reportUnsentRemovals = () =>
+			toast.error(
+				sprintf(
+					// translators: %s: social platform name.
+					__(
+						'%s: an emptied field cannot be cleared here, so the saved value was kept. Enter a new value to replace it.',
+						'thinkrank'
+					),
+					label
+				)
+			);
+
+		// Nothing to persist. Unchanged masked placeholders just settle; an
+		// emptied field that cannot be cleared is an error, not a save.
 		if (Object.keys(settings).length === 0) {
+			if (unsentRemovals.length > 0) {
+				reportUnsentRemovals();
+				return;
+			}
 			clearDirty();
 			return;
 		}
@@ -330,6 +396,25 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 			});
 
 			if (response.success) {
+				// Adopt what the server stored, not what was typed. The save
+				// route normalises: a whole <meta> tag pasted into a
+				// verification field is stored as the code inside it, and
+				// leaving the tag sitting in the box afterwards reads as a save
+				// that did not take (#631). This is what a reload would show,
+				// so the two agree. Only this card's sent fields are adopted,
+				// and only where they were not edited again meanwhile: the
+				// response holds every platform, and merging all of it threw
+				// away unsaved edits on the other cards.
+				const stored = response?.data?.settings;
+				setSocialSettings((current) =>
+					adoptStoredSocialSettings(
+						current,
+						snapshot,
+						settings,
+						stored
+					)
+				);
+
 				clearDirty();
 				toast.success(
 					sprintf(
@@ -338,20 +423,31 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 						label
 					)
 				);
+				if (unsentRemovals.length > 0) {
+					reportUnsentRemovals();
+				}
 			} else {
 				throw new Error('Failed to save social platform settings');
 			}
 		} catch (error) {
 			logger.error('Save error:', error);
+			const reason = socialPlatformSaveErrors(error);
 			toast.error(
-				sprintf(
-					// translators: %s: social platform name.
-					__(
-						'Failed to save %s settings. Please try again.',
-						'thinkrank'
-					),
-					label
-				)
+				reason
+					? sprintf(
+							// translators: 1: social platform name, 2: why the value was refused.
+							__('%1$s not saved: %2$s', 'thinkrank'),
+							label,
+							reason
+						)
+					: sprintf(
+							// translators: %s: social platform name.
+							__(
+								'Failed to save %s settings. Please try again.',
+								'thinkrank'
+							),
+							label
+						)
 			);
 		} finally {
 			setSavingCard(null);
@@ -447,7 +543,18 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 				}
 			} else if (activeSubSection === 'social-platforms') {
 				// Save Social Platforms settings only
+				const snapshot = socialSettings;
 				const socialData = { ...socialSettings };
+
+				// An empty verification field only clears the stored code when
+				// the user emptied it. A failed load leaves these at their
+				// all-empty defaults, and a section save after that must not
+				// take four codes off the page nobody asked about.
+				SITE_VERIFICATION_KEYS.forEach((key) => {
+					if (!socialData[key]?.trim() && !dirtyKeys.has(key)) {
+						delete socialData[key];
+					}
+				});
 
 				// Remove empty or still-masked verification codes to avoid
 				// overwriting existing encrypted codes. Codes are loaded masked
@@ -480,6 +587,23 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 				});
 
 				if (response.success) {
+					// Adopt what the server stored, not what was typed. The
+					// save route normalises: a whole <meta> tag pasted into a
+					// verification field is stored as the code inside it, and
+					// leaving the tag sitting in the box afterwards reads as a
+					// save that did not take (#631). This is also what a page
+					// reload would show, so the two agree. A field edited
+					// while the request was in flight keeps the new edit.
+					const stored = response?.data?.settings;
+					setSocialSettings((current) =>
+						adoptStoredSocialSettings(
+							current,
+							snapshot,
+							socialData,
+							stored
+						)
+					);
+
 					setHasChanges(false);
 					toast.success(
 						__(
@@ -493,8 +617,18 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 			}
 		} catch (error) {
 			logger.error('Save error:', error);
+			const reason = socialPlatformSaveErrors(error);
 			toast.error(
-				__('Failed to save settings. Please try again.', 'thinkrank')
+				reason
+					? sprintf(
+							// translators: %s: why a value was refused.
+							__('Settings not saved: %s', 'thinkrank'),
+							reason
+						)
+					: __(
+							'Failed to save settings. Please try again.',
+							'thinkrank'
+						)
 			);
 		} finally {
 			setIsSaving(false);
@@ -928,7 +1062,7 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 	const renderSocialPlatforms = () => (
 		<div className="thinkrank-tab-content">
 			<Container direction="column" gap={4}>
-				{/* Social platform verification — hero header */}
+				{/* Site verification — hero header */}
 				<Card padding={false} className="tr-overflow-hidden">
 					<div className="tr-flex tr-items-start tr-gap-4 tr-p-6">
 						<span className="tr-flex tr-items-center tr-justify-center tr-w-11 tr-h-11 tr-rounded-xl tr-bg-brand-bg tr-text-brand tr-shrink-0">
@@ -937,10 +1071,7 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 						<div className="tr-flex-1 tr-min-w-0">
 							<div className="tr-flex tr-items-center tr-gap-2.5 tr-flex-wrap">
 								<h2 className="tr-m-0 tr-text-base tr-font-semibold tr-text-primary">
-									{__(
-										'Social platform verification',
-										'thinkrank'
-									)}
+									{__('Site verification', 'thinkrank')}
 								</h2>
 								{(() => {
 									const total = SOCIAL_PLATFORM_TABS.length;
@@ -979,7 +1110,7 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 							</div>
 							<p className="tr-mt-1 tr-mb-0 tr-text-sm tr-text-secondary tr-max-w-2xl">
 								{__(
-									'Confirm site ownership with each network by adding the ID or verification code from its business account. Codes are stored encrypted and output as verification meta tags in your site’s HTML head. Configure each platform in its tab below.',
+									'Confirm site ownership by adding the verification code each search engine or social network gives you. Every code is output as a meta tag in your site’s HTML head. Social codes are stored encrypted; search engine codes are not, since the tag publishes them anyway. Configure each one in its tab below.',
 									'thinkrank'
 								)}
 							</p>
@@ -1085,6 +1216,182 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 						{cardSaveFooter(
 							'facebook',
 							__('Facebook', 'thinkrank')
+						)}
+					</TabPanel>
+
+					<TabPanel
+						tabId="search-engines"
+						activeTab={activePlatformTab}
+					>
+						<Container
+							direction="column"
+							gap={6}
+							className="tr-px-6 tr-py-6 tr-divide-y tr-divide-line-2"
+						>
+							<FormField
+								id="tr-soc-gsv"
+								label={__('Google Search Console', 'thinkrank')}
+								description={
+									<>
+										{__(
+											'The content value of the google-site-verification tag. Paste the whole meta tag if that is easier; the code is taken out of it. ',
+											'thinkrank'
+										)}
+										<a
+											href="https://support.google.com/webmasters/answer/9008080"
+											target="_blank"
+											rel="noopener noreferrer"
+										>
+											{__(
+												'Get verification code →',
+												'thinkrank'
+											)}
+										</a>
+									</>
+								}
+							>
+								<Input
+									id="tr-soc-gsv"
+									value={
+										socialSettings.google_site_verification
+									}
+									onChange={(e) =>
+										handleSocialSettingChange(
+											'google_site_verification',
+											e.target.value
+										)
+									}
+									type="text"
+									placeholder={__(
+										'e.g., dBw5CvburAxi537Rp9qi5uG2174Vb6JwHwIRwPSLIK8',
+										'thinkrank'
+									)}
+								/>
+							</FormField>
+							<FormField
+								id="tr-soc-bsv"
+								label={__('Bing Webmaster Tools', 'thinkrank')}
+								description={
+									<>
+										{__(
+											'The content value of the msvalidate.01 tag. Paste the whole meta tag if that is easier. ',
+											'thinkrank'
+										)}
+										<a
+											href="https://www.bing.com/webmasters/help/add-and-verify-site-12184f8b"
+											target="_blank"
+											rel="noopener noreferrer"
+										>
+											{__(
+												'Get verification code →',
+												'thinkrank'
+											)}
+										</a>
+									</>
+								}
+							>
+								<Input
+									id="tr-soc-bsv"
+									value={
+										socialSettings.bing_site_verification
+									}
+									onChange={(e) =>
+										handleSocialSettingChange(
+											'bing_site_verification',
+											e.target.value
+										)
+									}
+									type="text"
+									placeholder={__(
+										'e.g., B2D8B7B1E5E0E1E7C0A1F2B3C4D5E6F7',
+										'thinkrank'
+									)}
+								/>
+							</FormField>
+							<FormField
+								id="tr-soc-ysv"
+								label={__('Yandex Webmaster', 'thinkrank')}
+								description={
+									<>
+										{__(
+											'The content value of the yandex-verification tag. Paste the whole meta tag if that is easier. ',
+											'thinkrank'
+										)}
+										<a
+											href="https://yandex.com/support/webmaster/service/rights.html"
+											target="_blank"
+											rel="noopener noreferrer"
+										>
+											{__(
+												'Get verification code →',
+												'thinkrank'
+											)}
+										</a>
+									</>
+								}
+							>
+								<Input
+									id="tr-soc-ysv"
+									value={
+										socialSettings.yandex_site_verification
+									}
+									onChange={(e) =>
+										handleSocialSettingChange(
+											'yandex_site_verification',
+											e.target.value
+										)
+									}
+									type="text"
+									placeholder={__(
+										'e.g., a1b2c3d4e5f6a7b8',
+										'thinkrank'
+									)}
+								/>
+							</FormField>
+							<FormField
+								id="tr-soc-bdsv"
+								label={__('Baidu Webmaster', 'thinkrank')}
+								description={
+									<>
+										{__(
+											'The content value of the baidu-site-verification tag. Paste the whole meta tag if that is easier. ',
+											'thinkrank'
+										)}
+										<a
+											href="https://ziyuan.baidu.com/site/index"
+											target="_blank"
+											rel="noopener noreferrer"
+										>
+											{__(
+												'Get verification code →',
+												'thinkrank'
+											)}
+										</a>
+									</>
+								}
+							>
+								<Input
+									id="tr-soc-bdsv"
+									value={
+										socialSettings.baidu_site_verification
+									}
+									onChange={(e) =>
+										handleSocialSettingChange(
+											'baidu_site_verification',
+											e.target.value
+										)
+									}
+									type="text"
+									placeholder={__(
+										'e.g., codeva-A1b2C3d4E5',
+										'thinkrank'
+									)}
+								/>
+							</FormField>
+						</Container>
+						{cardSaveFooter(
+							'search-engines',
+							__('Search Engines', 'thinkrank')
 						)}
 					</TabPanel>
 

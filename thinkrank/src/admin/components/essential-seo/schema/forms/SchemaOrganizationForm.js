@@ -11,6 +11,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import { Badge, Card, Input, Textarea, Select } from '../../../ui';
 import MediaPicker from '../../../common/MediaPicker';
 import SchemaDisabledNotice from '../SchemaDisabledNotice';
+import SchemaOrganizationRelations from './SchemaOrganizationRelations';
 import {
 	getOrganizationTypeOptions,
 	getContactTypeOptions,
@@ -598,6 +599,13 @@ const SchemaOrganizationForm = ({
 					</div>
 				</div>
 			</Card>
+
+			{/* ── Relationships ────────────────────────────────────────── */}
+			<SchemaOrganizationRelations
+				settings={settings}
+				onSettingChange={onSettingChange}
+				disabled={disabled}
+			/>
 		</div>
 	);
 };

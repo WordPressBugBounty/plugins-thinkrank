@@ -1088,19 +1088,43 @@ class Permalinks {
      * @return int|mixed
      */
     public function filter_oembed_product_id($post_id, $url) {
-        if (!empty($post_id) || !is_string($url) || !self::settings()['remove_product_base'] || !post_type_exists('product')
-            || !self::pretty_permalinks() || !self::url_is_below_home($url)) {
+        if (!empty($post_id) || !is_string($url)) {
             return $post_id;
+        }
+
+        $product_id = self::base_free_product_id($url);
+
+        return $product_id > 0 ? $product_id : $post_id;
+    }
+
+    /**
+     * The published product a base-free product URL on this site names, or 0.
+     *
+     * url_to_postid() cannot answer it: the URL is served by filter_request(),
+     * which core runs only for a real request, so `/shirt/` reads as a page
+     * named "shirt" that does not exist. The oEmbed endpoint and the internal
+     * link index both need the product behind it (#1510, #1675).
+     *
+     * @since 2.22.0
+     *
+     * @param string $url Absolute URL.
+     * @return int Product ID, or 0 when the switch is off, the URL is not a
+     *             base-free product URL on this site, or something else holds it.
+     */
+    public static function base_free_product_id(string $url): int {
+        if (!self::settings()['remove_product_base'] || !post_type_exists('product')
+            || !self::pretty_permalinks() || !self::url_is_below_home($url)) {
+            return 0;
         }
 
         $slug = self::path_of($url);
         if (null === $slug || '' === $slug || false !== strpos($slug, '/') || self::product_keeps_base($slug)) {
-            return $post_id;
+            return 0;
         }
 
         $product = self::find_product_by_slug($slug);
 
-        return null !== $product && 'publish' === $product->post_status ? (int) $product->ID : $post_id;
+        return null !== $product && 'publish' === $product->post_status ? (int) $product->ID : 0;
     }
 
     /**

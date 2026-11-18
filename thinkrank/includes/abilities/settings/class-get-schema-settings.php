@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace ThinkRank\Abilities\Settings;
 
 use ThinkRank\Abilities\Ability_Base;
+use ThinkRank\SEO\Organization_Relations;
 use ThinkRank\SEO\Schema_Management_System;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -53,6 +54,18 @@ class Get_Schema_Settings extends Ability_Base {
 		'enabled_schema_types',
 		'business_opening_hours',
 		'person_same_as',
+	];
+
+	/**
+	 * Structured organization-relationship keys.
+	 *
+	 * Held apart from ARRAY_KEYS because their shape matters: the parent is an
+	 * object, and running array_values() over it would strip its field names.
+	 */
+	private const RELATION_KEYS = [
+		Organization_Relations::SETTING_PARENT,
+		Organization_Relations::SETTING_SUBS,
+		Organization_Relations::SETTING_BRANDS,
 	];
 
 	/**
@@ -105,7 +118,7 @@ class Get_Schema_Settings extends Ability_Base {
 	public function __construct() {
 		$this->id          = 'thinkrank/get-schema-settings';
 		$this->label       = __( 'Get ThinkRank Schema Settings', 'thinkrank' );
-		$this->description = __( 'Retrieve ThinkRank structured-data (schema) settings, including organization, website, local business, and person markup. Use update-schema-settings to change them.', 'thinkrank' );
+		$this->description = __( 'Retrieve ThinkRank structured-data (schema) settings, including organization, website, local business, and person markup, plus the organization\'s parent company, sub-organizations and brands. Use update-schema-settings to change them.', 'thinkrank' );
 	}
 
 	/**
@@ -144,7 +157,7 @@ class Get_Schema_Settings extends Ability_Base {
 			$props[ $key ] = [ 'type' => 'string' ];
 		}
 
-		return $props;
+		return array_merge( $props, Organization_Relations::json_schema_properties() );
 	}
 
 	/**
@@ -200,6 +213,17 @@ class Get_Schema_Settings extends Ability_Base {
 		foreach ( self::STRING_KEYS as $key ) {
 			$out[ $key ] = (string) ( $s[ $key ] ?? '' );
 		}
+
+		// Reported through the same sanitizer the store uses, so what an agent
+		// reads back is what will actually be emitted rather than whatever an
+		// older save happened to leave behind.
+		foreach ( self::RELATION_KEYS as $key ) {
+			$out[ $key ] = Organization_Relations::sanitize_setting( $key, $s[ $key ] ?? [] );
+		}
+
+		// The parent is typed `object`; with none set it must still reach a
+		// strict client as `{}`, not `[]` (#1089).
+		$out[ Organization_Relations::SETTING_PARENT ] = self::object_value( $out[ Organization_Relations::SETTING_PARENT ] );
 
 		return [ 'settings' => $out ];
 	}

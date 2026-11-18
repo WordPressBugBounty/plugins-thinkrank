@@ -537,6 +537,7 @@ class Post_List_Columns {
                         data-effective-description="<?php echo esc_attr($seo_data['effective_description']); ?>"
                         data-focus-keywords="<?php echo esc_attr($seo_data['focus_keyword_value']); ?>"
                         data-edit-link="<?php echo esc_url(get_edit_post_link($post_id, 'raw') ?? ''); ?>"
+                        data-locked="<?php echo esc_attr(class_exists(\ThinkRank\SEO\Experiments\Title_Experiments::class) && \ThinkRank\SEO\Experiments\Title_Experiments::locks((int) $post_id) ? '1' : '0'); ?>"
                         aria-label="<?php esc_attr_e('Quick Edit SEO', 'thinkrank'); ?>"
                         title="<?php esc_attr_e('Quick Edit SEO', 'thinkrank'); ?>">
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -773,6 +774,7 @@ class Post_List_Columns {
                     'focusKeywords' => __('Focus Keywords', 'thinkrank'),
                     'focusKeywordsHelp' => __('Separate keywords with commas. The first keyword is primary.', 'thinkrank'),
                     'inheritedHint' => __('Leave empty to inherit from your Global SEO pattern.', 'thinkrank'),
+                    'lockedByExperiment' => __('Locked while a title experiment runs on this page, together with the meta description. Stop the experiment in the editor to edit them.', 'thinkrank'),
                     'save' => __('Save', 'thinkrank'),
                     'saving' => __('Saving…', 'thinkrank'),
                     'cancel' => __('Cancel', 'thinkrank'),

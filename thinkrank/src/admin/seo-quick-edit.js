@@ -249,6 +249,18 @@
 			helpers: [i18n.focusKeywordsHelp],
 		});
 
+		// A running title experiment compares the stored title and
+		// description with a variant, so both stay as they are until it
+		// ends (#1636). The server refuses an edit either way.
+		const locked = !!data.locked;
+		if (locked) {
+			title.control.disabled = true;
+			description.control.disabled = true;
+			title.wrap.appendChild(
+				el('p', 'thinkrank-qe-help', i18n.lockedByExperiment)
+			);
+		}
+
 		body.appendChild(title.wrap);
 		body.appendChild(description.wrap);
 		body.appendChild(keywords.wrap);
@@ -284,12 +296,16 @@
 			save.textContent = i18n.saving;
 			error.hidden = true;
 
-			post(config.actionSave, {
+			const payload = {
 				post_id: state.postId,
-				seo_title: title.control.value,
-				meta_description: description.control.value,
 				focus_keywords: keywords.control.value,
-			})
+			};
+			if (!locked) {
+				payload.seo_title = title.control.value;
+				payload.meta_description = description.control.value;
+			}
+
+			post(config.actionSave, payload)
 				.then(function (response) {
 					if (!response || !response.success) {
 						throw new Error(
@@ -317,7 +333,7 @@
 		actions.appendChild(save);
 		footer.appendChild(actions);
 
-		title.control.focus();
+		(locked ? keywords : title).control.focus();
 		title.control.setSelectionRange(
 			title.control.value.length,
 			title.control.value.length
@@ -365,6 +381,7 @@
 			effective_description: d.effectiveDescription || '',
 			focus_keywords: keywords,
 			edit_link: d.editLink || '',
+			locked: '1' === d.locked,
 		};
 	}
 

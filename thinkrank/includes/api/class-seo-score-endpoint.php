@@ -102,6 +102,15 @@ class SEOScoreEndpoint {
                     'type' => 'string',
                     'sanitize_callback' => 'wp_kses_post',
                 ],
+                // True when `live_content` is the editor's whole post body, so
+                // an empty string means the author cleared it. Builder screens
+                // send '' because their body lives elsewhere, and they leave
+                // this off, so '' alone still means "read the saved post".
+                'live_content_is_body' => [
+                    'required' => false,
+                    'type' => 'boolean',
+                    'default' => false,
+                ],
                 // Unsaved SEO title/description straight from the editor. Both
                 // are scored factors, and without them an "Apply" that changes
                 // the title scores against the stale saved value — the score
@@ -361,6 +370,37 @@ class SEOScoreEndpoint {
                 }
             }
 
+            // Answer-engine readiness (#677). Carried beside the score, never
+            // inside it: the thirteen scoring factors sum to 100 and every
+            // stored score is built from them, so adding a fourteenth would
+            // silently re-score every post on the site.
+            //
+            // It rides on this request rather than a route of its own because
+            // the editor already posts its unsaved content here on every
+            // change. A second endpoint would double the traffic to answer a
+            // question about content this request already holds, and the two
+            // answers would disagree whenever the author typed between them.
+            //
+            // Added AFTER save_score() on purpose: what is stored is the
+            // score, and a signal derived from content the user may not have
+            // saved has no business in that row.
+            // The editor's unsaved content when it sent any, else the stored
+            // content. An empty body the editor says it really holds is
+            // graded as empty: the author cleared the post, and the card must
+            // not keep passing on the saved copy (#812 review).
+            $has_live_content = '' !== trim((string) $live_content)
+                || $this->editor_cleared_body((int) $post_id, $request);
+            // The saved content is read the way the site audit samples it,
+            // so a builder page whose words live in builder meta is graded
+            // rather than reported as empty (#1629).
+            $saved_post = get_post((int) $post_id);
+            $score_data['answer_readiness'] = \ThinkRank\SEO\Answer_Readiness::evaluate(
+                $has_live_content || !$saved_post instanceof \WP_Post
+                    ? (string) $live_content
+                    : \ThinkRank\SEO\Answer_Readiness::post_content($saved_post),
+                \ThinkRank\SEO\Answer_Readiness::modified_time($post_id)
+            );
+
             return new WP_REST_Response([
                 'success' => true,
                 'data' => $score_data,
@@ -400,6 +440,42 @@ class SEOScoreEndpoint {
             // unsaved keyword edits live.
             'focus_keywords' => \ThinkRank\SEO\Focus_Keywords::get($post_id),
         ];
+    }
+
+    /**
+     * Whether the editor sent an empty body that it really holds.
+     *
+     * Only the block editor and a visible Classic Editor set
+     * `live_content_is_body`, and only a post whose body is `post_content`
+     * qualifies: on a builder page (Bricks, Oxygen, Elementor, Breakdance,
+     * Beaver) the edit screen's body is not the page, so an empty one there
+     * still means "read the saved post".
+     *
+     * @since 2.22.0
+     *
+     * @param int             $post_id Post ID.
+     * @param WP_REST_Request $request The request.
+     * @return bool True when '' is the author's own empty body.
+     */
+    private function editor_cleared_body(int $post_id, WP_REST_Request $request): bool {
+        if (true !== rest_sanitize_boolean($request->get_param('live_content_is_body'))
+            || null === $request->get_param('live_content')
+            || '' !== trim((string) $request->get_param('live_content'))) {
+            return false;
+        }
+
+        if (\ThinkRank\SEO\Builder_Content::bricks_supersedes_post_content($post_id)) {
+            return false;
+        }
+
+        foreach (\ThinkRank\SEO\Builder_Content::builder_meta_keys() as $key) {
+            $value = get_post_meta($post_id, $key, true);
+            if (!empty($value)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

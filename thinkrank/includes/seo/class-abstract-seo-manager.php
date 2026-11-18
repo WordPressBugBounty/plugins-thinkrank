@@ -88,6 +88,14 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
     protected array $supported_contexts = ['site', 'post', 'page', 'product'];
 
     /**
+     * Schema-declared boolean keys, per context (see schema_boolean_keys()).
+     *
+     * @since 2.22.0
+     * @var array<string,array<string,true>>
+     */
+    private array $schema_boolean_keys = [];
+
+    /**
      * Constructor
      *
      * @since 1.0.0
@@ -210,6 +218,7 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
         );
 
         $settings = [];
+        $declared = $this->schema_boolean_keys($context_type);
         foreach ((array) $results as $row) {
             $value = maybe_unserialize($row['setting_value']);
 
@@ -221,6 +230,14 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
                 } elseif (is_numeric($value)) {
                     $value = (bool) $value;
                 }
+            } elseif (isset($declared[$row['setting_key']])) {
+                // A key the schema declares boolean but boolean_setting_keys()
+                // does not list. The row holds "1" or "" (maybe_serialize()
+                // stores a bool that way), and handing that back unconverted
+                // failed the manager's own is_bool() validation, so an export
+                // could not be imported again (#1685). Only a recognisable
+                // boolean is converted: any other stored string is left as is.
+                $value = self::stored_boolean($value);
             }
 
             // Ensure cache_duration is an integer
@@ -296,6 +313,16 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
         // Sanitize settings
         $sanitized_settings = $this->sanitize_settings($settings, $context_type);
 
+        // What was in effect before this write, so listeners can tell the keys
+        // that changed from the whole payload a screen sends on every save.
+        // Defaults are merged in because the screens post the merged settings
+        // back: a key never stored but sent at its default changed nothing,
+        // and without them every such key read as changed on its first save.
+        $previous_settings = array_merge(
+            $this->get_default_settings($context_type),
+            $this->get_stored_settings($context_type, $context_id)
+        );
+
         $success = true;
         foreach ($sanitized_settings as $key => $value) {
             $sanitized_key = sanitize_key($key);
@@ -357,13 +384,17 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
          * @param array    $settings     The sanitized settings that were written.
          * @param string   $context_type Context type.
          * @param int|null $context_id   Context ID.
+         * @param array    $previous     The settings in effect before this
+         *                               write: stored values over the
+         *                               defaults. Since 2.22.0.
          */
         do_action(
             'thinkrank_seo_settings_saved',
             $this->manager_type,
             $sanitized_settings,
             $context_type,
-            $context_id
+            $context_id,
+            $previous_settings
         );
 
         return $success;
@@ -803,6 +834,68 @@ abstract class Abstract_SEO_Manager implements SEO_Manager_Interface {
             'media_ai_caption',
             'media_ai_description',
         ];
+    }
+
+    /**
+     * Keys this manager's settings schema declares as boolean, for a context.
+     *
+     * Memoised per context: get_stored_settings() asks on every uncached read.
+     *
+     * @since 2.22.0
+     *
+     * @param string $context_type Context type.
+     * @return array<string,true> Key => true.
+     */
+    protected function schema_boolean_keys(string $context_type): array {
+        if (!isset($this->schema_boolean_keys[$context_type])) {
+            $keys = [];
+
+            try {
+                foreach ($this->get_settings_schema($context_type) as $key => $field) {
+                    if (is_string($key) && is_array($field) && 'boolean' === ($field['type'] ?? null)) {
+                        $keys[$key] = true;
+                    }
+                }
+            } catch (\Throwable $e) {
+                $keys = [];
+            }
+
+            $this->schema_boolean_keys[$context_type] = $keys;
+        }
+
+        return $this->schema_boolean_keys[$context_type];
+    }
+
+    /**
+     * A stored boolean as a bool, or the value untouched when it is not one.
+     *
+     * @since 2.22.0
+     *
+     * @param mixed $value Unserialised stored value.
+     * @return mixed
+     */
+    private static function stored_boolean($value) {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value) && in_array($value, [0, 1], true)) {
+            return 1 === $value;
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+
+            if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
+                return true;
+            }
+
+            if (in_array($normalized, ['', '0', 'false', 'no', 'off'], true)) {
+                return false;
+            }
+        }
+
+        return $value;
     }
 
     protected function get_cache_key(string $context_type, ?int $context_id): string {

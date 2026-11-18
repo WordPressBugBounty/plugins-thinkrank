@@ -80,7 +80,15 @@ class Social_Platforms_Endpoint extends WP_REST_Controller {
         'facebook_app_id',
         'facebook_admins',
         'youtube_channel_id',
-        'whatsapp_business_id'
+        'whatsapp_business_id',
+        // Search-engine verification (#631). Public, not sensitive: each one
+        // is printed in the page head, so masking it in the editor would hide
+        // a value the user can read by viewing source — and an encrypted key
+        // is stripped from ThinkRank's own export.
+        'google_site_verification',
+        'bing_site_verification',
+        'yandex_site_verification',
+        'baidu_site_verification'
     ];
 
     /**
@@ -178,7 +186,10 @@ class Social_Platforms_Endpoint extends WP_REST_Controller {
             // (otherwise every save of this tab would 400 once a code is set).
             $sanitized_settings = $this->strip_masked_sensitive_values($sanitized_settings);
 
-            $validation_errors = $this->validate_settings_format($sanitized_settings);
+            // A field that held something but no code was left out above;
+            // refuse it like a malformed code rather than report a save.
+            $validation_errors = \ThinkRank\SEO\Social_Meta_Manager::unusable_verification_codes($settings)
+                + $this->validate_settings_format($sanitized_settings);
             if (!empty($validation_errors)) {
                 return new WP_REST_Response([
                     'success' => false,
@@ -245,14 +256,28 @@ class Social_Platforms_Endpoint extends WP_REST_Controller {
     private function save_social_platform_settings(array $settings): bool {
         $success = true;
         
+        $verification_keys = \ThinkRank\SEO\Social_Meta_Manager::get_site_verification_keys();
+
         // Save each setting individually using the Settings class
         // This ensures proper encryption for sensitive verification codes
         foreach ($settings as $key => $value) {
-            // Only save if the key is in our allowed lists and has a value
-            if (in_array($key, array_merge($this->public_keys, $this->sensitive_keys), true) && !empty($value)) {
-                if (!$this->settings->set($key, $value)) {
-                    $success = false;
-                }
+            if (!in_array($key, array_merge($this->public_keys, $this->sensitive_keys), true)) {
+                continue;
+            }
+
+            // An emptied site-verification field is a removal, not a no-op:
+            // sanitize_settings() only keeps '' for these four keys, and
+            // dropping it again here would report a successful save while the
+            // tag stayed on the page. Every other key keeps the old rule, so a
+            // missing or empty value still leaves the stored one alone.
+            $clearing = '' === $value && in_array($key, $verification_keys, true);
+
+            if (!$clearing && empty($value)) {
+                continue;
+            }
+
+            if (!$this->settings->set($key, $value)) {
+                $success = false;
             }
         }
         
@@ -267,19 +292,38 @@ class Social_Platforms_Endpoint extends WP_REST_Controller {
      * @return array Sanitized settings
      */
     private function sanitize_settings(array $settings): array {
-        $sanitized = [];
+        $verification_keys = \ThinkRank\SEO\Social_Meta_Manager::get_site_verification_keys();
+
+        // A site-verification code has to be removable, and a pasted <meta>
+        // tag has to become its code: once a property is gone from Search
+        // Console or Bing the tag has to come off the page, and search engines
+        // hand out a whole element to copy. The contract is shared with the
+        // update ability and Settings Management, so it lives in one place.
+        // The other public IDs keep the existing behaviour: only a non-empty
+        // value is an edit.
+        $sanitized = \ThinkRank\SEO\Social_Meta_Manager::sanitize_verification_codes($settings);
 
         // Sanitize public IDs (only if not empty)
         foreach ($this->public_keys as $key) {
+            if (in_array($key, $verification_keys, true)) {
+                continue;
+            }
+
             if (!empty($settings[$key])) {
                 $sanitized[$key] = sanitize_text_field($settings[$key]);
             }
         }
 
-        // Sanitize sensitive verification codes (only if not empty)
+        // Sanitize sensitive verification codes (only if not empty). A pasted
+        // Pinterest tag is reduced to its code first: sanitising the element
+        // itself left '' and the field was skipped (#1684).
         foreach ($this->sensitive_keys as $key) {
-            if (!empty($settings[$key])) {
-                $sanitized[$key] = sanitize_text_field($settings[$key]);
+            if (!empty($settings[$key]) && is_scalar($settings[$key])) {
+                $value = \ThinkRank\SEO\Social_Meta_Manager::sanitize_platform_value($key, (string) $settings[$key]);
+
+                if ('' !== $value) {
+                    $sanitized[$key] = $value;
+                }
             }
         }
 

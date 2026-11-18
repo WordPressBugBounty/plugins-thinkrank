@@ -1854,7 +1854,9 @@ class Schema_Builder {
         $pairs = [];
         foreach ($headings as $heading) {
             $question = self::faq_text($heading->textContent);
-            if (false === strpos($question, '?')) {
+            // Every mark the audit reads, so a CJK or Arabic question heading
+            // is extracted too (#1686).
+            if (!Answer_Readiness::has_question_mark($question)) {
                 continue;
             }
 
@@ -1983,7 +1985,7 @@ class Schema_Builder {
         $answer   = [];
 
         foreach ($lines as $line) {
-            if ('?' === substr($line, -1)) {
+            if (Answer_Readiness::ends_with_question_mark($line)) {
                 if ('' !== $question) {
                     $pairs[] = [$question, implode(' ', $answer)];
                 }
@@ -2007,7 +2009,7 @@ class Schema_Builder {
      * @since 2.18.1
      *
      * @param array<int, array{0: string, 1: string}> $pairs      Question, answer.
-     * @param bool                                    $needs_mark Require "?" in the question.
+     * @param bool                                    $needs_mark Require a question mark in the question.
      * @return array<int, array{question: string, answer: string}>
      */
     private static function usable_faq_pairs(array $pairs, bool $needs_mark): array {
@@ -2017,7 +2019,7 @@ class Schema_Builder {
             if ('' === $question || '' === $answer) {
                 continue;
             }
-            if ($needs_mark && false === strpos($question, '?')) {
+            if ($needs_mark && !Answer_Readiness::has_question_mark($question)) {
                 continue;
             }
 

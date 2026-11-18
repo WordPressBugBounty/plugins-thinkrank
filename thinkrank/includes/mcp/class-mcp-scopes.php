@@ -85,6 +85,7 @@ final class Mcp_Scopes {
 		'list-snippet-issues'              => 'content',
 		'get-duplicate-snippets'           => 'content',
 		'get-thin-content'                 => 'content',
+		'get-orphan-pages'                 => 'content',
 		'get-keyword-map'                  => 'content',
 		'list-images'                      => 'content',
 		'get-image-alt-text'               => 'content',
@@ -100,6 +101,10 @@ final class Mcp_Scopes {
 		'update-pillar-content'            => 'content',
 		'generate-content-brief'           => 'content',
 		'bulk-analyze-and-save'            => 'content',
+		// Title experiments serve a page a different title while they run.
+		'get-title-experiments'            => 'content',
+		'create-title-experiment'          => 'content',
+		'stop-title-experiment'            => 'content',
 
 		// Settings: site-wide configuration.
 		'get-global-settings'              => 'settings',
@@ -169,9 +174,12 @@ final class Mcp_Scopes {
 		'analyze-question-coverage'        => 'analytics',
 		'get-question-coverage'            => 'analytics',
 		'get-term-seo-checks'              => 'analytics',
+		'get-seo-timeline'                 => 'analytics',
 		'get-topical-relevance'            => 'analytics',
 		'get-seo-score-history'            => 'analytics',
 		'get-mcp-activity'                 => 'analytics',
+		'get-seo-goals'                    => 'analytics',
+		'update-seo-goal'                  => 'analytics',
 		'get-ai-insights'                  => 'analytics',
 	];
 

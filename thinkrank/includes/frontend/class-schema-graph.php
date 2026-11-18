@@ -1543,9 +1543,20 @@ class Schema_Graph {
             } elseif ('WebSite' === $type) {
                 $node = $this->assign_id($node, home_url('/#website'), $used_ids);
                 $website_id = $node['@id'];
-            } elseif ('Organization' === $type) {
+            } elseif ($this->is_organization_type($type)) {
+                // Organization or one of the subtypes organization_type offers
+                // (Corporation, NGO, ...). The site's organization is published
+                // under whichever one is configured, and it is the same entity
+                // with the same @id either way; matching only the literal
+                // "Organization" sent a Corporation to the page-scoped branch
+                // below and left its relations out of the graph.
                 $node = $this->assign_id($node, $site_org_ref, $used_ids);
-                $organization_nodes[] = $node;
+
+                // Guarding on the canonical @id keeps publisher linking pointed
+                // at the site's own entity, not a second organization node.
+                if (home_url('/#organization') === $node['@id']) {
+                    $organization_nodes[] = $node;
+                }
 
                 if ($is_site && '' === $site_org_id) {
                     $site_org_id = $node['@id'];
@@ -1600,6 +1611,32 @@ class Schema_Graph {
                 // the site, see $claims_site_org above.
                 if ($claims_site_org && '' === $site_org_id) {
                     $site_org_id = $node['@id'];
+                }
+            }
+
+            // The relationships go on the site's own organization, which is
+            // the node holding the canonical @id. Two producers build it, the
+            // Schema Manager's deployed snapshot and the Site Identity
+            // fallback, and this is the one point both reach, which is why the
+            // relationships are attached here rather than in either of them
+            // (#768).
+            //
+            // Keyed on the @id rather than the type, because organization_type
+            // also offers LocalBusiness and its subtypes: the fallback then
+            // publishes a LocalBusiness that still claims /#organization, and
+            // it is placed by the LocalBusiness slot above, not the
+            // organization branch. Pro's locations carry their own @id, so
+            // they are never wired.
+            //
+            // The parent and sub-organizations this adds are Organization
+            // nodes too, but they go straight into the graph rather than back
+            // through this loop.
+            if (home_url('/#organization') === ($node['@id'] ?? '')) {
+                $attached = $this->attach_organization_relations($node, $used_ids);
+                $node     = $attached['organization'];
+
+                foreach ($attached['nodes'] as $relation_index => $relation) {
+                    $nodes['organization_relation_' . $relation_index] = $relation;
                 }
             }
 
@@ -1709,6 +1746,22 @@ class Schema_Graph {
         }
 
         return ['winner' => array_shift($kept), 'siblings' => array_values($kept)];
+    }
+
+    /**
+     * Whether a node type is one the site's organization can be published as.
+     *
+     * The organization_type values other than LocalBusiness and its subtypes,
+     * which have their own site-level slot ({@see site_level_slot()}).
+     *
+     * @since 2.22.0
+     *
+     * @param mixed $type The node's @type.
+     * @return bool
+     */
+    private function is_organization_type($type): bool {
+        return is_string($type)
+            && in_array($type, \ThinkRank\Config\Schema_Settings_Config::ORGANIZATION_TYPES, true);
     }
 
     /**
@@ -1841,6 +1894,51 @@ class Schema_Graph {
         $node['@id'] = $id;
 
         return $node;
+    }
+
+    /**
+     * Attach parentOrganization / subOrganization / brand, with their nodes.
+     *
+     * Loaded defensively for the same reason the Bricks resolver is: this class
+     * runs in contexts where the SEO-namespace autoloader is not guaranteed.
+     *
+     * @since 2.22.0
+     * @param array               $node The site's Organization node.
+     * @param array<string, bool> $used Identifiers already claimed in this graph.
+     * @return array{organization: array, nodes: array<int, array>}
+     */
+    private function attach_organization_relations(array $node, array &$used): array {
+        $unchanged = ['organization' => $node, 'nodes' => []];
+
+        if (!class_exists('ThinkRank\\SEO\\Organization_Relations')) {
+            $file = THINKRANK_PLUGIN_DIR . 'includes/seo/class-organization-relations.php';
+            if (!file_exists($file)) {
+                return $unchanged;
+            }
+            require_once $file;
+        }
+
+        if (!class_exists('ThinkRank\\SEO\\Schema_Management_System')) {
+            return $unchanged;
+        }
+
+        $settings = (new \ThinkRank\SEO\Schema_Management_System())->get_settings('site', null);
+
+        if (!is_array($settings)) {
+            return $unchanged;
+        }
+
+        $attached = \ThinkRank\SEO\Organization_Relations::attach($node, $settings);
+
+        // Claim each relation's @id so a later node cannot be assigned the same
+        // one and quietly become a second entity with the same identity.
+        foreach ($attached['nodes'] as $relation) {
+            if (isset($relation['@id']) && is_string($relation['@id'])) {
+                $used[$relation['@id']] = true;
+            }
+        }
+
+        return $attached;
     }
 
     /**

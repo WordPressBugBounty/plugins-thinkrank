@@ -13,6 +13,7 @@ namespace ThinkRank\Abilities\Content;
 use ThinkRank\Abilities\Ability_Base;
 use ThinkRank\AI\SEOScoreCalculator;
 use ThinkRank\Core\Database;
+use ThinkRank\SEO\Experiments\Title_Experiments;
 use ThinkRank\SEO\Focus_Keywords;
 use ThinkRank\SEO\Global_SEO_Post_Types;
 use ThinkRank\SEO\Post_Content_Editor;
@@ -322,6 +323,16 @@ class Update_Post_Slug extends Ability_Base {
 				'thinkrank_post_type_not_supported',
 				__( 'ThinkRank does not manage this content type. Use list-content-types to see the types it does.', 'thinkrank' ),
 				[ 'status' => 422 ]
+			);
+		}
+
+		// A running title experiment is measured on the URL it started on;
+		// a new slug would move its clicks to another URL (#1638).
+		if ( class_exists( Title_Experiments::class ) && Title_Experiments::locks( $id ) ) {
+			return new \WP_Error(
+				'thinkrank_experiment_running',
+				__( 'A title experiment is running on this post and is measured on its current URL, so the slug is locked until it finishes. Stop it with stop-title-experiment first.', 'thinkrank' ),
+				[ 'status' => 409 ]
 			);
 		}
 

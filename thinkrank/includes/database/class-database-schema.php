@@ -51,7 +51,7 @@ class Database_Schema {
      * @since 1.0.0
      * @var string
      */
-    private string $db_version = '1.11.1';
+    private string $db_version = '1.11.2';
 
     /**
      * Widest single indexed COLUMN InnoDB accepts on a COMPACT/REDUNDANT row
@@ -301,6 +301,19 @@ class Database_Schema {
             'foreign_keys' => []
         ],
 
+        // === TIMELINE TABLES (1) ===
+        'timeline_events' => [
+            'description' => 'Chronological record of site changes that can move search traffic',
+            'primary_key' => 'id',
+            'indexes' => ['occurred_at', 'event_type', 'severity'],
+            'composite_indexes' => [
+                'recent_by_type' => ['event_type', 'occurred_at'],
+                'recent_by_severity' => ['severity', 'occurred_at'],
+                'object_history' => ['object_type', 'object_id', 'occurred_at'],
+            ],
+            'foreign_keys' => []
+        ],
+
         // === AI VISIBILITY TABLES (1) ===
         'ai_traffic' => [
             'description' => 'Daily aggregate counters for AI referral traffic, AI crawler hits, and the all-traffic baseline',
@@ -316,6 +329,14 @@ class Database_Schema {
             'description' => 'Activity log of AI-agent calls made through the ThinkRank MCP server',
             'primary_key' => 'id',
             'indexes' => ['ts', 'tool'],
+            'foreign_keys' => []
+        ],
+
+        // === LINK GRAPH TABLES (1) ===
+        'internal_links' => [
+            'description' => 'One row per internal link between two posts, the edge list behind orphan detection',
+            'primary_key' => 'source_id, target_id',
+            'indexes' => ['target_id'],
             'foreign_keys' => []
         ],
 
@@ -350,7 +371,9 @@ class Database_Schema {
         'reporting' => ['email_report_logs'],
         'ai_visibility' => ['ai_traffic'],
         'governance' => ['mcp_audit'],
-        'keywords' => ['post_keywords']
+        'keywords' => ['post_keywords'],
+        'links' => ['internal_links'],
+        'timeline' => ['timeline_events']
     ];
 
     /**
@@ -1012,10 +1035,15 @@ class Database_Schema {
                 // AI Visibility Tables
             case 'ai_traffic':
                 return $this->get_ai_traffic_table_sql($full_table_name, $charset_collate);
+            case 'timeline_events':
+                return $this->get_timeline_events_table_sql($full_table_name, $charset_collate);
 
                 // Governance Tables
             case 'mcp_audit':
                 return $this->get_mcp_audit_table_sql($full_table_name, $charset_collate);
+                // Link Graph Tables
+            case 'internal_links':
+                return $this->get_internal_links_table_sql($full_table_name, $charset_collate);
                 // Keyword Governance Tables
             case 'post_keywords':
                 return $this->get_post_keywords_table_sql($full_table_name, $charset_collate);
@@ -1437,6 +1465,33 @@ class Database_Schema {
      * @param string $charset_collate Charset and collation.
      * @return string SQL for table creation.
      */
+    private function get_timeline_events_table_sql(string $table_name, string $charset_collate): string {
+        // `summary` is the rendered sentence and `meta` the structured detail,
+        // because the two are read at different times: the list renders
+        // thousands of summaries and nothing else, and an expanded row reads
+        // one meta blob. Keeping the sentence denormalised means the screen
+        // never has to know how to phrase an event type it has not met.
+        //
+        // No secret ever reaches this table; see Event_Recorder::redact().
+        return "CREATE TABLE `{$table_name}` (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            occurred_at datetime NOT NULL,
+            event_type varchar(60) NOT NULL,
+            severity varchar(20) NOT NULL DEFAULT 'info',
+            object_type varchar(40) NOT NULL DEFAULT '',
+            object_id bigint(20) unsigned NOT NULL DEFAULT 0,
+            actor varchar(100) NOT NULL DEFAULT '',
+            summary varchar(255) NOT NULL DEFAULT '',
+            meta longtext NULL,
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_occurred (occurred_at),
+            KEY idx_type (event_type),
+            KEY idx_severity (severity),
+            KEY idx_object (object_type, object_id, occurred_at)
+        ) {$charset_collate};";
+    }
+
     private function get_email_report_logs_table_sql(string $table_name, string $charset_collate): string {
         return "CREATE TABLE `{$table_name}` (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -2158,6 +2213,42 @@ class Database_Schema {
             KEY idx_tool (tool),
             KEY idx_kind_day (kind, day),
             KEY idx_target (target_type, target_id)
+        ) {$charset_collate};";
+    }
+
+    /**
+     * Get SQL for the internal link graph table
+     *
+     * One row per edge rather than a list per post, because the question the
+     * table exists to answer runs the other way: an orphan is a post nothing
+     * links *to*, and a list of outbound targets stored per post can only be
+     * inverted by loading the whole site into PHP. As an edge list with an
+     * index on `target_id` the same answer is one indexed query, and site
+     * structure gets its edges from the same rows.
+     *
+     * No `AUTO_INCREMENT` id: the pair is the identity. That makes the primary
+     * key double as the guard against writing the same link twice when a post
+     * links to the same target from three places, and it is also the key the
+     * per-source delete uses when an entry is rebuilt.
+     *
+     * Rows are derived data, rebuilt from post content, so nothing here is
+     * worth a foreign key: {@see \ThinkRank\SEO\Link_Index::on_post_deleted()}
+     * drops a deleted post's rows in both directions before the post goes, and
+     * ON DELETE CASCADE would make the table depend on `wp_posts` using the
+     * same engine and collation, which is not something a plugin may assume.
+     *
+     * @since 2.22.0
+     *
+     * @param string $table_name    Full table name
+     * @param string $charset_collate Charset and collation
+     * @return string SQL for table creation
+     */
+    private function get_internal_links_table_sql(string $table_name, string $charset_collate): string {
+        return "CREATE TABLE `{$table_name}` (
+            source_id bigint(20) unsigned NOT NULL,
+            target_id bigint(20) unsigned NOT NULL,
+            PRIMARY KEY (source_id, target_id),
+            KEY idx_target (target_id)
         ) {$charset_collate};";
     }
 

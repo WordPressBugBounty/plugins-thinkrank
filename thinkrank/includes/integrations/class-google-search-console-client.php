@@ -248,6 +248,61 @@ class Google_Search_Console_Client extends Google_API_Base_Client {
     }
 
     /**
+     * Clicks, impressions and average position for the whole site, or for one
+     * page, over explicit dates — the raw numbers a Title Experiment compares
+     * (#719).
+     *
+     * `dataState: final` rather than `all`: the experiment's windows end days
+     * before they are measured, and fresh data that is still being processed
+     * would move a verdict after it was given.
+     *
+     * The page filter is an exact match on the URL Google indexed, which is
+     * the post's permalink for a page that canonicalises to itself.
+     *
+     * @since 2.22.0
+     *
+     * @param string $site_url   Search Console property.
+     * @param string $start_date Start date (Y-m-d).
+     * @param string $end_date   End date (Y-m-d).
+     * @param string $page_url   Page to filter to, or '' for the whole property.
+     * @return array{clicks: int, impressions: int, position: float}
+     * @throws \Exception If the API request fails.
+     */
+    public function get_totals_by_dates(string $site_url, string $start_date, string $end_date, string $page_url = ''): array {
+        $request_body = [
+            'startDate'  => $start_date,
+            'endDate'    => $end_date,
+            'dimensions' => [],
+            'rowLimit'   => 1,
+            'dataState'  => 'final',
+        ];
+
+        if ('' !== $page_url) {
+            $request_body['dimensionFilterGroups'] = [[
+                'filters' => [[
+                    'dimension'  => 'page',
+                    'operator'   => 'equals',
+                    'expression' => $page_url,
+                ]],
+            ]];
+        }
+
+        $response = $this->make_request(
+            self::API_BASE_URL . '/sites/' . rawurlencode($site_url) . '/searchAnalytics/query',
+            $request_body,
+            'POST'
+        );
+
+        $row = $response['rows'][0] ?? [];
+
+        return [
+            'clicks'      => (int) ($row['clicks'] ?? 0),
+            'impressions' => (int) ($row['impressions'] ?? 0),
+            'position'    => round((float) ($row['position'] ?? 0), 2),
+        ];
+    }
+
+    /**
      * Get query-level search performance for explicit start/end dates
      *
      * @param string $site_url   Site URL to get data for

@@ -129,6 +129,23 @@ class Prompt_Builder {
     }
 
     /**
+     * Build the Title Experiments variants prompt (#719).
+     *
+     * @since 2.22.0
+     *
+     * @param string $content             Page content.
+     * @param string $current_title       Current title.
+     * @param string $current_description Current description.
+     * @param string $target_keyword      Focus keyword.
+     * @param int    $count               Candidates wanted.
+     * @param string $language            Target output language.
+     * @return string
+     */
+    public function build_title_variants_prompt(string $content, string $current_title, string $current_description, string $target_keyword, int $count, string $language = ''): string {
+        return $this->get_seo_prompts()->build_title_variants_prompt($content, $current_title, $current_description, $target_keyword, $count, $language);
+    }
+
+    /**
      * Build a focused meta-description improvement prompt.
      *
      * @since 1.14.0

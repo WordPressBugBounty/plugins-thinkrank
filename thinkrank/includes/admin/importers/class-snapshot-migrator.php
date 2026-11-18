@@ -145,6 +145,10 @@ class Snapshot_Migrator {
         'sitemap_settings',
         'analytics_connected',
         'focus_pages',
+        // Every code in it is applied since #631 — Google, Bing, Yandex and
+        // Baidu alongside the Pinterest one that was already handled — so the
+        // bucket no longer holds anything unapplied, and cleanup unblocks.
+        'webmaster_tools',
         // Applied by migrate_woocommerce_settings() (#1478, thinkrank-pro#481).
         // pro_woocommerce only while Pro is active; a cleanup without Pro
         // removes a few switches, never content.
@@ -2288,10 +2292,10 @@ class Snapshot_Migrator {
             $processed++;
         }
 
-        // Pinterest site verification — the only webmaster-tools code
-        // ThinkRank renders today. The rest of extended.webmaster_tools stays
-        // preserved in the snapshot (and gates cleanup).
-        if ($this->migrate_pinterest_verification($extended)) {
+        // Site-verification codes: Pinterest, and since #631 the four
+        // search-engine ones the importers had always captured and nothing
+        // had ever applied.
+        if ($this->migrate_verification_codes($extended)) {
             $processed++;
         }
 
@@ -2989,27 +2993,67 @@ class Snapshot_Migrator {
     }
 
     /**
-     * Migrate the source plugin's Pinterest site-verification code into
-     * ThinkRank's core `pinterest_site_verification` setting. Never overwrites
-     * a configured code.
+     * The `extended.webmaster_tools` key each verification code arrives under,
+     * mapped to the ThinkRank setting that renders it.
+     *
+     * Every importer already writes all five (see each exporter's
+     * `webmaster_tools` block); until #631 only the Pinterest one had anywhere
+     * to go, so a migrating user silently lost their Search Console, Bing,
+     * Yandex and Baidu verification — and, if they then removed the old
+     * plugin, their Search Console access with it.
+     *
+     * @since 2.22.0
+     *
+     * @var array<string,string>
+     */
+    private const VERIFICATION_SETTING_KEYS = [
+        'pinterest' => 'pinterest_site_verification',
+        'google'    => 'google_site_verification',
+        'bing'      => 'bing_site_verification',
+        'yandex'    => 'yandex_site_verification',
+        'baidu'     => 'baidu_site_verification',
+    ];
+
+    /**
+     * Migrate the source plugin's site-verification codes into ThinkRank's
+     * own settings. Never overwrites a configured code.
      *
      * @param array $extended Canonical settings `extended` payload
-     * @return bool True if written
+     * @return bool True if anything was written
      */
-    private function migrate_pinterest_verification(array $extended): bool {
-        $code = trim((string) ($extended['webmaster_tools']['pinterest'] ?? ''));
-        if ($code === '' || !class_exists('ThinkRank\\Core\\Settings')) {
+    private function migrate_verification_codes(array $extended): bool {
+        $codes = $extended['webmaster_tools'] ?? null;
+        if (!is_array($codes) || empty($codes) || !class_exists('ThinkRank\\Core\\Settings')) {
             return false;
         }
 
         $settings = \ThinkRank\Core\Settings::instance();
-        if ((string) $settings->get('pinterest_site_verification', '') !== '') {
-            return false;
+        $written  = false;
+
+        foreach (self::VERIFICATION_SETTING_KEYS as $source => $setting) {
+            $code = trim((string) ($codes[$source] ?? ''));
+
+            // Non-destructive, like every other migrate_* here: a code the
+            // user has already entered in ThinkRank outranks one carried over
+            // from the plugin they are leaving.
+            if ('' === $code || '' !== (string) $settings->get($setting, '')) {
+                continue;
+            }
+
+            // The source plugin may have stored a whole <meta> tag, because
+            // its own field accepted one. Store the code either way, but not
+            // a tag named for another engine, which would publish that
+            // engine's code under this one's name (#1633).
+            $code = \ThinkRank\SEO\Social_Meta_Manager::extract_verification_code($code, $setting);
+            if ('' === $code) {
+                continue;
+            }
+
+            $settings->set($setting, $code);
+            $written = true;
         }
 
-        $settings->set('pinterest_site_verification', $code);
-
-        return true;
+        return $written;
     }
 
     /**

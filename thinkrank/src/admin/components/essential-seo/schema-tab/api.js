@@ -138,12 +138,25 @@ export const saveSettings = async (ctx) => {
 		});
 
 		if (response.success) {
-			// What the server now holds, whatever the form shows since.
-			ctx.safeSetState(ctx.setSavedSettings, normalizedSettings);
+			// What the server now holds, whatever the form shows since. The
+			// organization relationships drop entries that fail validation, so
+			// that is the stored settings, not what was posted (#768).
+			const stored = response.data?.settings
+				? { ...normalizedSettings, ...response.data.settings }
+				: normalizedSettings;
+			ctx.safeSetState(ctx.setSavedSettings, stored);
 			// Clean only if nothing was edited while the request was out: a
 			// later edit is still unsaved, and Generate and Deploy must keep
 			// waiting for it rather than run from this older snapshot (#1007).
 			if (revision === ctx.settingsRevisionRef?.current) {
+				// Adopt what the server stored, so a dropped relationship row
+				// does not stay on screen until the next reload (#768).
+				if (response.data?.settings) {
+					ctx.safeSetState(ctx.setSettings, (previous) => ({
+						...previous,
+						...response.data.settings,
+					}));
+				}
 				ctx.safeSetState(ctx.setHasChanges, false);
 			}
 			// The save redeploys the site schema on the server, and anything

@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.21.4
+Stable tag: 2.22.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -114,7 +114,7 @@ Yes. The MCP server is off by default and only an administrator can turn it on. 
 
 = What is ThinkRank Hub? =
 
-ThinkRank Hub (hub.thinkrank.ai) is an optional service for people who look after several sites. Connect a site from ThinkRank > AI Tools > ThinkRank Hub, or from the Setup Wizard, and approve it on your own site the way you approve any AI app, choosing Read or Read & Write per area. The Hub then shows every connected site's SEO reports in one view and lets one AI connection work across all of them. No license key, AI key or Google token is shared, the Hub never stores your posts' content, and Disconnect ends its access at any time. Every ThinkRank feature works without it.
+ThinkRank Hub (hub.thinkrank.ai) is an optional service for people who look after several sites, free for as many sites as you manage. You sign in to it with your email, Google or a passkey. Connect a site from ThinkRank > AI Tools > ThinkRank Hub, or from the Setup Wizard, and approve it on your own site the way you approve any AI app, choosing Read or Read & Write per area. The Hub then shows every connected site's SEO reports in one view and lets one AI connection work across all of them. No license key, AI key or Google token is shared, the Hub never stores your posts' content, and Disconnect ends its access at any time. Every ThinkRank feature works without it.
 
 = Is ThinkRank beginner friendly? =
 
@@ -263,6 +263,22 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.22.0 =
+Release Date: 2026-11-18
+
+- New: SEO Goals ranks what to do next on your site, with a Dashboard card and section checklists
+- New: Title Experiments test a new SEO title on a page and let real Google clicks pick the winner
+- New: SEO Timeline records the changes that can move search traffic, newest first
+- New: The editor shows whether a post is ready to be quoted by AI assistants, check by check
+- New: Verification tags for Google, Bing, Yandex and Baidu, kept when you import from another plugin
+- New: Organization schema can name a parent company, sub-organizations and brands
+- New: AI assistants can list orphan pages, read your goals and the timeline, and run title experiments
+- Improved: The ThinkRank Hub tab says what the hub is and costs before you connect
+- Fixed: Pinterest domain verification now prints the tag Pinterest looks for
+- Fixed: Deployed post schema keeps its dates and headline current after the post is edited
+- Fixed: Deactivating the plugin no longer loses AI visits that were not saved yet
+- Fixed: Minor cache purge, Beaver Builder, FAQ schema, settings import and ThinkRank Hub issues
+
 = 2.21.4 =
 Release Date: 2026-11-15
 
@@ -311,26 +327,12 @@ Release Date: 2026-11-05
 - Fixed: Unsaved SEO drafts no longer carry over between sites sharing one domain
 - Fixed: Minor archive title, import, shop schema, permalink and plugin compatibility issues
 
-= 2.21.0 =
-Release Date: 2026-11-02
-
-- New: Title and description templates for every taxonomy and post type archive
-- New: Remove the product, product category and category bases from URLs, with 301 redirects
-- New: %currentyear% and %taxonomy(slug)% variables for live dates and a post's terms in titles
-- New: WooCommerce Store settings for brand taxonomy, shop archive schema and the generator tag
-- New: Product weight, dimensions and gallery images in schema and the image sitemap
-- New: TikTok in the Organization's Social Media Profiles
-- New: The Migration screen restores date variables that older imports froze
-- Improved: Migrations carry archive templates, URL settings, GTINs, author SEO and WooCommerce settings
-- Fixed: The shop page uses its own SEO, social and robots values and the product archive template
-- Fixed: Search and filtered shop titles, plus minor sitemap, permalink, taxonomy title and preview issues
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.22.0 =
+Rank what to fix next with SEO Goals, test page titles on real Google clicks with Title Experiments, and see every change that can move traffic in the SEO Timeline. Adds Google, Bing, Yandex and Baidu verification tags. Recommended for all sites.
+
 = 2.21.4 =
 Connected apps stay connected after a lost token renewal, and category embeds and feeds work with the category base removed. Recommended for all sites.
-
-= 2.21.3 =
-Find out which questions a post answers with Question Coverage, see where each AI platform sends visitors, and check that links and buttons are named for AI agents. Recommended for all sites.

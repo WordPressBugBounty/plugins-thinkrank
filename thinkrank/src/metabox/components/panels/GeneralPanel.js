@@ -6,6 +6,7 @@
  * actual form submission happens via hidden inputs rendered by MetaboxApp.
  */
 
+import { useState, useCallback } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import Input, { Textarea } from '../../../admin/components/ui/Input';
 import CharacterCounter from '../../../admin/components/ui/CharacterCounter';
@@ -17,7 +18,16 @@ import KeywordUsageNotice from '../KeywordUsageNotice';
 import SerpPreview from '../SerpPreview';
 import VariableTags from '../ui/VariableTags';
 import { resolvePattern } from '../../utils/resolvePattern';
+import TitleExperimentCard from '../TitleExperimentCard';
 import CustomFieldStatus from '../ui/CustomFieldStatus';
+
+// Fields a running title experiment locks (#719), the slug included: the
+// test is measured on the URL it started on (#1638).
+const LOCKED_FIELDS = [
+	'thinkrank_seo_title',
+	'thinkrank_meta_description',
+	'thinkrank_post_slug',
+];
 
 // Variable tags offered per field — mirrors the Bulk SEO Optimization UI.
 const TITLE_VARIABLES = [
@@ -96,12 +106,44 @@ const GeneralPanel = ({
 	homeUrl,
 	patternPreviews = {},
 	patternVariables = {},
+	postId = 0,
 	customFieldStatus = 'idle',
 	customFieldError = '',
 	onRetryCustomFields,
 }) => {
+	// A running title experiment compares the current title and description
+	// with a variant; editing them mid-test would measure neither (#719).
+	// The card reports why the fields are locked: 'loading' until it knows,
+	// 'unknown' when it could not find out, 'experiment' while a test runs,
+	// '' when they are free. Locked from the first render, so the fields
+	// never open before the answer is in.
+	const [lockReason, setLockReason] = useState(postId ? 'loading' : '');
+	const onLockChange = useCallback(
+		(reason) => setLockReason(reason || ''),
+		[]
+	);
+	const locked = '' !== lockReason;
+
+	const lockMessage = {
+		loading: __(
+			'Checking whether a title experiment is running on this page.',
+			'thinkrank'
+		),
+		unknown: __(
+			'Locked because it could not be checked whether a title experiment is running on this page. Use Try again in the Title experiment card below.',
+			'thinkrank'
+		),
+		experiment: __(
+			'Locked while a title experiment runs on this page, because it is the title being compared. Stop the experiment below to edit it.',
+			'thinkrank'
+		),
+	}[lockReason];
+
 	// Append a %tag% to a field, keeping a space between tokens.
 	const insertVariable = (field, token) => {
+		if (locked && LOCKED_FIELDS.includes(field)) {
+			return;
+		}
 		const current = formData[field] || '';
 		const next =
 			current && !current.endsWith(' ')
@@ -148,6 +190,7 @@ const GeneralPanel = ({
 				>
 					<Input
 						id="thinkrank_seo_title"
+						disabled={locked}
 						value={formData.thinkrank_seo_title}
 						onChange={(e) =>
 							onFieldChange('thinkrank_seo_title', e.target.value)
@@ -161,11 +204,17 @@ const GeneralPanel = ({
 							)
 						}
 					/>
+					{locked && (
+						<p className="tr-text-xs tr-text-secondary tr-m-0">
+							{lockMessage}
+						</p>
+					)}
 					<VariableTags
 						variables={variablesFor(TITLE_VARIABLES)}
 						onInsert={(token) =>
 							insertVariable('thinkrank_seo_title', token)
 						}
+						disabled={locked}
 						value={formData.thinkrank_seo_title}
 						vars={patternVariables}
 						fallback={patternPreviews.seo_title}
@@ -184,6 +233,7 @@ const GeneralPanel = ({
 				>
 					<Textarea
 						id="thinkrank_meta_description"
+						disabled={locked}
 						rows="3"
 						maxLength="160"
 						value={formData.thinkrank_meta_description}
@@ -206,6 +256,7 @@ const GeneralPanel = ({
 						onInsert={(token) =>
 							insertVariable('thinkrank_meta_description', token)
 						}
+						disabled={locked}
 						value={formData.thinkrank_meta_description}
 						vars={patternVariables}
 						fallback={patternPreviews.meta_description}
@@ -221,13 +272,21 @@ const GeneralPanel = ({
 							max={75}
 						/>
 					}
-					help={__(
-						'The URL slug for this content. Leave blank to keep the auto-generated slug.',
-						'thinkrank'
-					)}
+					help={
+						'experiment' === lockReason
+							? __(
+									'Locked while a title experiment runs on this page, because the test is measured on this URL. Stop the experiment below to change it.',
+									'thinkrank'
+								)
+							: __(
+									'The URL slug for this content. Leave blank to keep the auto-generated slug.',
+									'thinkrank'
+								)
+					}
 				>
 					<Input
 						id="thinkrank_post_slug"
+						disabled={locked}
 						value={formData.thinkrank_post_slug || ''}
 						onChange={(e) =>
 							onFieldChange('thinkrank_post_slug', e.target.value)
@@ -254,6 +313,13 @@ const GeneralPanel = ({
 					keywords={formData.thinkrank_focus_keywords}
 				/>
 			</PanelCard>
+
+			{!!postId && (
+				<TitleExperimentCard
+					postId={postId}
+					onLockChange={onLockChange}
+				/>
+			)}
 
 			<SerpPreview
 				title={resolvedTitle}

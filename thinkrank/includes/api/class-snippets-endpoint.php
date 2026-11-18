@@ -21,6 +21,7 @@ use ThinkRank\Core\Capability_Manager;
 use ThinkRank\Core\Seo_Text;
 use ThinkRank\Core\Settings;
 use ThinkRank\SEO\Duplicate_Snippets;
+use ThinkRank\SEO\Experiments\Title_Experiments;
 use ThinkRank\SEO\Focus_Keywords;
 use ThinkRank\SEO\Global_SEO_Post_Types;
 use ThinkRank\SEO\Snippet_Index;
@@ -570,6 +571,12 @@ class Snippets_Endpoint {
 
         if (empty($fields)) {
             return self::row_error($post_id, __('Nothing to save for this post.', 'thinkrank'));
+        }
+
+        // A running title experiment locks the title and description, and
+        // the shared writer drops them; say so instead of "saved" (#1636).
+        if (class_exists(Title_Experiments::class) && [] !== Title_Experiments::locked_changes($post_id, $fields)) {
+            return self::row_error($post_id, Title_Experiments::locked_message());
         }
 
         $manager->save_seo_fields($post_id, $fields);

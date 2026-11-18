@@ -1303,6 +1303,13 @@ class Schema_Management_System extends Abstract_SEO_Manager {
      * value an importer or an older MCP write left behind would otherwise put
      * a type no schema.org consumer knows on every page (#1344).
      *
+     * The organization relationships are validated here too. The generic
+     * array sanitizer keeps whatever shape it is handed, which for these three
+     * would store a relative URL, a duplicate name or the site's own URL as
+     * its own parent. Every writer (the REST route, the MCP ability and the
+     * admin UI) reaches the store through here, so validating at this one
+     * point means none of them can get it wrong separately (#768).
+     *
      * @since 2.18.1
      *
      * @param array  $settings     Settings to save.
@@ -1314,6 +1321,12 @@ class Schema_Management_System extends Abstract_SEO_Manager {
 
         if (array_key_exists('organization_type', $sanitized) && !Schema_Settings_Config::is_organization_type($sanitized['organization_type'])) {
             $sanitized['organization_type'] = 'Organization';
+        }
+
+        foreach (Organization_Relations::setting_keys() as $key) {
+            if (array_key_exists($key, $sanitized)) {
+                $sanitized[$key] = Organization_Relations::sanitize_setting($key, $sanitized[$key]);
+            }
         }
 
         return $sanitized;

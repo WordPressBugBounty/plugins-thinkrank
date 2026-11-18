@@ -2158,10 +2158,20 @@ class Schema_Endpoint extends WP_REST_Controller {
                 );
             }
 
+            // Read back rather than echoing the submission. The manager drops
+            // what does not survive sanitization — an organization relationship
+            // with no name, a duplicate one, a relative URL, an entry naming
+            // this site as its own parent — and echoing the input would show
+            // the user a saved entry that is not there until they reload (#768).
+            $stored = $this->schema_manager->get_settings($context_type, $context_id);
+            $stored = is_array($stored)
+                ? array_intersect_key($stored, $settings)
+                : $settings;
+
             return new WP_REST_Response([
                 'success' => true,
                 'data' => [
-                    'settings' => $settings,
+                    'settings' => $stored,
                     'context_type' => $context_type,
                     'context_id' => $context_id,
                     'validation' => $validation

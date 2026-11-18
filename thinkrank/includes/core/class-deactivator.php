@@ -169,10 +169,12 @@ class Deactivator {
         // Every object-cache group the plugin writes to, not just `thinkrank`
         // (#1328). No full-flush fallback here: the settings are kept on
         // deactivation, so nothing stale is served, and emptying every other
-        // plugin's cache for it would be out of proportion.
+        // plugin's cache for it would be out of proportion. The state groups
+        // (the traffic buffer and the beacon limiter) are kept: they hold data,
+        // and flushing the buffer would lose hits not yet saved (#1454).
         require_once THINKRANK_PLUGIN_DIR . 'includes/cleanup-cache.php';
         $manifest = require THINKRANK_PLUGIN_DIR . 'includes/cleanup-manifest.php';
-        thinkrank_flush_cache_groups($manifest['cache_groups'], false);
+        thinkrank_flush_cache_groups(thinkrank_cache_only_groups($manifest), false);
     }
     
     /**

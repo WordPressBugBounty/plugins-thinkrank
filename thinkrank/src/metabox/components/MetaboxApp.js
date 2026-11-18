@@ -53,6 +53,7 @@ import {
 	writeDraft,
 } from '../utils/metaboxDraft';
 import useCustomFieldVariables from '../utils/useCustomFieldVariables';
+import { editorHoldsBody } from '../utils/editorContent';
 
 // Nav icons
 import {
@@ -1438,6 +1439,11 @@ const MetaboxApp = ({
 					target_keywords: formData.thinkrank_focus_keywords,
 					save_score: true,
 					live_content: liveContent,
+					// A builder's resolver owns the body, so '' from it is not
+					// a cleared post.
+					live_content_is_body:
+						typeof contentResolver !== 'function' &&
+						editorHoldsBody(),
 					// Score the fields as they stand in the editor, not as they
 					// were last saved.
 					live_title: liveTitle,
@@ -1826,6 +1832,7 @@ const MetaboxApp = ({
 									homeUrl={homeUrl}
 									patternPreviews={patternPreviews}
 									patternVariables={patternVariables}
+									postId={postId}
 									customFieldStatus={customFieldStatus}
 									customFieldError={customFieldError}
 									onRetryCustomFields={retryCustomFields}

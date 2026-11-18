@@ -33,6 +33,13 @@ import notify from '../../utils/notify';
 
 const HUB = '/thinkrank/v1/hub';
 
+// What the Hub is, for a person deciding whether to connect (#1293).
+const HUB_DOCS = 'https://thinkrank.ai/docs/ai-tools/thinkrank-hub/';
+
+// The connected sites in the Hub, from the hub address the state names.
+const hubSitesUrl = (hub) =>
+	`${String(hub?.url || hub?.default_url || 'https://hub.thinkrank.ai').replace(/\/+$/, '')}/sites`;
+
 // Connected the way the card means it: a grant the state still lists.
 const isConnected = (state) =>
 	Boolean(state?.connected && (state.apps || []).length);
@@ -327,6 +334,7 @@ const MCPHubConnect = ({ onNavigate, onDisconnected, from = '' }) => {
 		hub.pin_invalid ||
 		(connected && paused && refusal) ||
 		(!connected && hub.staging) ||
+		(!connected && !hub.staging && hub.local) ||
 		(connected && armed);
 
 	return (
@@ -347,6 +355,24 @@ const MCPHubConnect = ({ onNavigate, onDisconnected, from = '' }) => {
 					<p className="tr-mt-1 tr-mb-0 tr-text-sm tr-text-secondary tr-max-w-2xl">
 						{description}
 					</p>
+					{/* What connecting asks of the person, said before the
+					    switch rather than on the hub (#1293). */}
+					{!connected && (
+						<p className="tr-mt-2 tr-mb-0 tr-text-sm tr-text-secondary tr-max-w-2xl">
+							{__(
+								'Free for as many sites as you manage. You sign in to ThinkRank Hub with your email, Google or a passkey, and it keeps this site’s SEO reports, never your posts’ content.',
+								'thinkrank'
+							)}{' '}
+							<a
+								href={HUB_DOCS}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="tr-text-brand tr-font-medium"
+							>
+								{__('What is ThinkRank Hub?', 'thinkrank')}
+							</a>
+						</p>
+					)}
 				</div>
 				<div className="tr-flex tr-flex-col tr-items-end tr-gap-1 tr-shrink-0">
 					{/* A switch, like Enable MCP access: on starts the
@@ -360,7 +386,8 @@ const MCPHubConnect = ({ onNavigate, onDisconnected, from = '' }) => {
 						disabled={
 							disabled ||
 							armed ||
-							(!connected && (hub.pin_invalid || hub.staging))
+							(!connected &&
+								(hub.pin_invalid || hub.staging || hub.local))
 						}
 						label={__('Connect to ThinkRank Hub', 'thinkrank')}
 					/>
@@ -370,9 +397,22 @@ const MCPHubConnect = ({ onNavigate, onDisconnected, from = '' }) => {
 						</span>
 					)}
 					{busy !== 'connect' && !connected && !hub.enabled && (
-						<span className="tr-text-xs tr-text-tertiary">
-							{__('Connecting turns on MCP access.', 'thinkrank')}
+						<span className="tr-text-xs tr-text-tertiary tr-text-right tr-max-w-xs">
+							{__(
+								'Connecting turns on MCP access, and turns it off again if the connection isn’t finished.',
+								'thinkrank'
+							)}
 						</span>
+					)}
+					{connected && (
+						<a
+							href={hubSitesUrl(hub)}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="tr-inline-flex tr-items-center tr-justify-center tr-gap-2 tr-h-8 tr-px-3 tr-mt-2 tr-rounded-md tr-border tr-border-primary tr-bg-white tr-text-xs tr-font-medium tr-text-secondary tr-no-underline tr-transition-colors tr-duration-150 hover:tr-bg-white"
+						>
+							{__('Open ThinkRank Hub', 'thinkrank')}
+						</a>
 					)}
 				</div>
 			</div>
@@ -407,6 +447,12 @@ const MCPHubConnect = ({ onNavigate, onDisconnected, from = '' }) => {
 								'thinkrank'
 							)}
 						</Alert>
+					)}
+
+					{/* The hub would turn this address away after the whole
+					    round trip, so the switch is held here (#1293). */}
+					{!connected && !hub.staging && hub.local && (
+						<Alert variant="warning">{hub.local}</Alert>
 					)}
 
 					{connected && armed && (

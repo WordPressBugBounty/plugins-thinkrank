@@ -387,4 +387,45 @@ Format your response as JSON:
   ]
 }";
     }
+
+    /**
+     * Build the prompt for Title Experiments variants (#719): several
+     * genuinely different title + description pairs for the same page, each
+     * a different angle, to test against the current pair on real clicks.
+     *
+     * One request for all candidates — asking the same prompt N times at a
+     * low temperature returns N copies of one idea.
+     *
+     * @since 2.22.0
+     *
+     * @param string $content             Page content (for context).
+     * @param string $current_title       The title Google shows now.
+     * @param string $current_description The description Google shows now.
+     * @param string $target_keyword      Focus keyword, if any.
+     * @param int    $count               Candidates wanted.
+     * @param string $language            Target output language (empty = infer).
+     * @return string
+     */
+    public function build_title_variants_prompt(string $content, string $current_title, string $current_description, string $target_keyword, int $count, string $language = ''): string {
+        $keyword_line = $target_keyword !== ''
+            ? "Keep the focus keyword \"{$target_keyword}\" in every title."
+            : 'Keep the page\'s main topic in every title.';
+
+        return "You are an expert SEO copywriter. This page already ranks on Google, but too few searchers click it. Write {$count} alternative SEO title and meta description pairs to test against the current ones, to see which earns more clicks at the same ranking position.{$this->language_directive($language)}
+
+Current SEO title: \"{$current_title}\"
+Current meta description: \"{$current_description}\"
+
+Content (for context):
+{$content}
+
+Requirements:
+- Each pair takes a DIFFERENT angle (for example: the benefit, a specific number or result, the question the searcher asked, what makes this page different). Do not write minor rewordings of each other or of the current title.
+- Titles: 35 to 60 characters (60 is the hard maximum). {$keyword_line} Front-load the words that match the search.
+- Descriptions: 120 to 160 characters, a concrete reason to click, no quotes.
+- Stay accurate to the content. No clickbait, no ALL CAPS, no promises the page does not keep.
+
+Format your response as JSON:
+{\"variants\": [{\"title\": \"...\", \"description\": \"...\"}]}";
+    }
 }

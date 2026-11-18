@@ -83,6 +83,13 @@ const TTL_RULES = [
 	// response returned the same `pending` to every poll, and the scan froze
 	// after its first batch on any site with more than 50 pages (#565).
 	['/thinkrank/v1/global-seo/thin-content', 0],
+	// SEO Goals are rebuilt server-side (cached an hour, dropped on any
+	// settings or content change) from state other screens write — a cached
+	// copy here would keep "Connect Search Console" up after connecting (#728).
+	['/thinkrank/v1/goals', 0],
+	// Title experiments advance on a daily event and start from the editor;
+	// a cached copy here would show yesterday's state (#719).
+	['/thinkrank/v1/title-experiments', 0],
 	// The Bulk SEO template preview resolves each sample item's own price
 	// and custom fields, which change out-of-band (a product edit, a sale
 	// starting), and it is asked again as the template is typed (#1277).
@@ -100,6 +107,10 @@ const TTL_RULES = [
 	// also change through MCP. Both reads are local (#1488).
 	['/thinkrank/v1/permalinks/', 0],
 	['/thinkrank-pro/v1/woocommerce/', 0],
+	// The SEO Timeline lists changes made everywhere else: Reading settings, a
+	// post save, a plugin update. None of them is a write here, so a cached
+	// copy hid every new event for five minutes. The read is local (#722).
+	['/thinkrank/v1/analytics/timeline', 0],
 	['/thinkrank/v1/seo-analytics/', HOUR],
 	['/thinkrank/v1/performance/history', 30 * MINUTE],
 	['/thinkrank/v1/performance/', 10 * MINUTE],
@@ -276,6 +287,20 @@ const inFlight = new Map();
  */
 export const purgeApiCache = purgeAll;
 
+/**
+ * Event fired after a ThinkRank write settles, so views built from data the
+ * write may have changed (SEO Goals' section checklists) can refetch
+ * instead of waiting for a reload. `detail.path` is the write's path.
+ */
+export const WRITE_EVENT = 'thinkrank:data-written';
+
+const announceWrite = (path) => {
+	if (typeof window === 'undefined' || typeof CustomEvent !== 'function') {
+		return;
+	}
+	window.dispatchEvent(new CustomEvent(WRITE_EVENT, { detail: { path } }));
+};
+
 apiFetch.use((options, next) => {
 	const { path, method = 'GET' } = options;
 
@@ -316,7 +341,10 @@ apiFetch.use((options, next) => {
 		if (path.startsWith('/thinkrank-pro/v1/url-inspection/')) {
 			return next(options);
 		}
-		return next(options).finally(purgeAll);
+		return next(options).finally(() => {
+			purgeAll();
+			announceWrite(path);
+		});
 	}
 
 	// Callers that need raw Response objects bypass the cache.

@@ -88,7 +88,9 @@ class Content_Optimization_Manager extends Abstract_SEO_Manager {
         // Validate optimization weights
         if (isset($settings['optimization_weights']) && is_array($settings['optimization_weights'])) {
             $total_weight = array_sum($settings['optimization_weights']);
-            if ($total_weight !== 100) {
+            // A tolerance, not !==: weights read back as floats (d:26 in the
+            // row) sum to 100.0, which never equals the int 100 (#1685).
+            if (abs((float) $total_weight - 100) > 0.01) {
                 $validation['errors'][] = 'Optimization weights must total 100%';
                 $validation['valid'] = false;
             }

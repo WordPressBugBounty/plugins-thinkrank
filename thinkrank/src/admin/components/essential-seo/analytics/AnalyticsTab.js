@@ -52,7 +52,9 @@ import SetupSection from './SetupSection';
 import DashboardSection from './DashboardSection';
 import OpportunitiesSection from './OpportunitiesSection';
 import KeywordsSection from './KeywordsSection';
+import TimelineSection from './TimelineSection';
 import EmailReportingPanel from '../email-reporting/EmailReportingPanel';
+import TitleExperimentsTab from './TitleExperimentsTab';
 import ProTeaser from '../../pro/ProTeaser';
 import {
 	RankTrackerIllustration,
@@ -576,6 +578,20 @@ const AnalyticsTab = ({ activeSubSection = 'setup', onNavigate }) => {
 		// enabling the parent Analytics integration.
 		if (activeSubSection === 'email-reporting') {
 			return <EmailReportingPanel onNavigate={onNavigate} />;
+		}
+
+		// Title Experiments check Search Console themselves and say so; they
+		// do not need the Analytics dashboard switched on (#719).
+		if (activeSubSection === 'title-experiments') {
+			return <TitleExperimentsTab onNavigate={onNavigate} />;
+		}
+
+		// Same reasoning, and more so: the Timeline is recorded from WordPress
+		// itself and needs no Google connection, and the moment it is most
+		// needed is the moment somebody is hunting for a cause — the worst
+		// possible time to be told to connect something first (#722).
+		if (activeSubSection === 'timeline') {
+			return <TimelineSection />;
 		}
 
 		// Question Coverage reads the editor's per-post results, not Google:

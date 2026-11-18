@@ -97,7 +97,8 @@ class AI_Content_Analyzer extends Abstract_SEO_Manager {
         // Validate scoring weights
         if (isset($settings['scoring_weights']) && is_array($settings['scoring_weights'])) {
             $total_weight = array_sum($settings['scoring_weights']);
-            if ($total_weight !== 100) {
+            // Floats read back from the row sum to 100.0, not the int 100 (#1685).
+            if (abs((float) $total_weight - 100) > 0.01) {
                 $validation['warnings'][] = 'Scoring weights should total 100%';
             }
         }

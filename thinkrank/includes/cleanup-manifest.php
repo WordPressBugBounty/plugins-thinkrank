@@ -49,11 +49,16 @@ return [
         'thinkrank_regenerate_sitemap',
         'thinkrank_regenerate_sitemap_settings',
         'thinkrank_ai_traffic_prune',
+        'thinkrank_timeline_prune',
         'thinkrank_mcp_audit_prune',
         'thinkrank_mcp_audit_prune_more',
+        // Switches MCP back off after a ThinkRank Hub connection that turned
+        // it on and was never finished (#1293).
+        'thinkrank_hub_settle_opened_mcp',
         'thinkrank_instant_indexing_reconcile',
         'thinkrank_instant_indexing_submit',
         'thinkrank_email_report_tick',
+        'thinkrank_title_experiments_advance',
         // Retired with the Brand Visibility feature. Still listed so deactivation
         // and uninstall clear events a site scheduled before it was removed.
         'thinkrank_bv_tick',
@@ -115,6 +120,20 @@ return [
         'thinkrank_settings',
         'thinkrank_ai',
         'thinkrank_schema',
+        'thinkrank_traffic',
+        'thinkrank_ai_beacon',
+    ],
+
+    /*
+     * The cache groups above that hold data rather than a cache.
+     * `thinkrank_traffic` buffers AI-traffic hits that have not been written
+     * to the database yet, so flushing it loses them; `thinkrank_ai_beacon` is
+     * the beacon's site-wide rate limiter, so flushing it reopens the window.
+     * Uninstall flushes them with everything else. Deactivation and the
+     * purge-caches ability keep them, through thinkrank_cache_only_groups()
+     * (#1454).
+     */
+    'state_groups' => [
         'thinkrank_traffic',
         'thinkrank_ai_beacon',
     ],

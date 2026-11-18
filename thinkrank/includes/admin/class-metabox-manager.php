@@ -22,6 +22,7 @@ use ThinkRank\SEO\Absolute_Url;
 use ThinkRank\SEO\Focus_Keywords;
 use ThinkRank\SEO\Object_Redirect;
 use ThinkRank\SEO\Pattern_Resolver;
+use ThinkRank\SEO\Experiments\Title_Experiments;
 
 // Prevent direct access
 if (!defined('ABSPATH')) {
@@ -819,6 +820,17 @@ class Metabox_Manager {
      * @return void
      */
     private function persist_metadata(int $post_id, array $src): void {
+        // A running title experiment compares the stored title and
+        // description with a variant, and stopping it must serve them again
+        // exactly. Every form-shaped write (editor, Quick Edit, snippets)
+        // comes through here, so the lock is enforced here rather than only
+        // in the editor UI (#719).
+        if (class_exists(Title_Experiments::class) && Title_Experiments::locks($post_id)) {
+            // The slug too: the test is measured on the URL it started on
+            // (#1638).
+            unset($src['thinkrank_seo_title'], $src['thinkrank_meta_description'], $src['thinkrank_post_slug'], $src['thinkrank_post_slug_baseline']);
+        }
+
         $indexability_before = $this->indexability_snapshot($post_id, $src);
 
         // Title & meta description are handled separately below: they can be

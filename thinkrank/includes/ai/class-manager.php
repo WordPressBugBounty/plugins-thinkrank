@@ -559,6 +559,102 @@ class Manager {
     }
 
     /**
+     * Candidate title + description pairs for a Title Experiment (#719).
+     *
+     * Suggestions only — nothing is saved. The owner picks one to test.
+     *
+     * @since 2.22.0
+     *
+     * @param string $content Post content for context.
+     * @param array  $options {
+     *     @type string $current_title       The title Google shows now.
+     *     @type string $current_description The description Google shows now.
+     *     @type string $target_keyword      Focus keyword.
+     *     @type string $language            Output language.
+     *     @type int    $count               Candidates wanted (1–3).
+     * }
+     * @return array<int, array{title: string, description: string}>
+     * @throws \Exception If the AI client is unavailable or returns nothing usable.
+     */
+    public function suggest_title_variants(string $content, array $options = []): array {
+        if (!$this->client) {
+            $this->initialize_client();
+        }
+        if (!$this->client || !$this->has_provider_credentials()) {
+            throw new \Exception(wp_kses_post($this->get_client_unavailable_message()));
+        }
+        if (!$this->check_rate_limit()) {
+            throw new \Exception('Rate limit exceeded. Please try again later.');
+        }
+
+        $count  = max(1, min(3, (int) ($options['count'] ?? 3)));
+        $prompt = (new Prompt_Builder())->build_title_variants_prompt(
+            mb_substr($content, 0, 5000),
+            (string) ($options['current_title'] ?? ''),
+            (string) ($options['current_description'] ?? ''),
+            (string) ($options['target_keyword'] ?? ''),
+            $count,
+            (string) ($options['language'] ?? '')
+        );
+
+        $completion = $this->request_completion($prompt, 4096);
+        $variants   = self::parse_title_variants($completion['ai_text']);
+
+        if ([] === $variants) {
+            // One retry, as the other generators do: a reasoning model can
+            // spend the first budget thinking and truncate the JSON.
+            $completion = $this->request_completion($prompt, 4096);
+            $variants   = self::parse_title_variants($completion['ai_text']);
+        }
+
+        if ([] === $variants) {
+            throw new \Exception('The AI did not return usable titles. Please try again.');
+        }
+
+        $this->log_ai_usage(get_current_user_id(), 'Title Experiment Variants', (int) $completion['tokens'], $this->client->get_model(), $completion['ai_text']);
+
+        return array_slice($variants, 0, $count);
+    }
+
+    /**
+     * Pull `{"variants": [{title, description}]}` out of a model reply, which
+     * may wrap the JSON in prose or a code fence. Titles are held to 60
+     * characters; a pair without letters or digits in its title is dropped.
+     *
+     * @since 2.22.0
+     *
+     * @param string $ai_text Model reply.
+     * @return array<int, array{title: string, description: string}>
+     */
+    public static function parse_title_variants(string $ai_text): array {
+        $start = strpos($ai_text, '{');
+        $end   = strrpos($ai_text, '}');
+        if (false === $start || false === $end || $end < $start) {
+            return [];
+        }
+
+        $decoded = json_decode(substr($ai_text, $start, $end - $start + 1), true);
+        $rows    = is_array($decoded['variants'] ?? null) ? $decoded['variants'] : [];
+
+        $out = [];
+        foreach ($rows as $row) {
+            $title = is_array($row) ? trim((string) ($row['title'] ?? '')) : '';
+            if (!preg_match('/[\p{L}\p{N}]/u', $title)) {
+                continue;
+            }
+            if (mb_strlen($title) > 60) {
+                $title = rtrim(mb_substr($title, 0, 60));
+            }
+            $out[] = [
+                'title'       => $title,
+                'description' => trim((string) ($row['description'] ?? '')),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * Run a single title-generation request: call the provider, extract the
      * title text across provider response shapes, and clamp it to 60 characters.
      *

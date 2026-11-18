@@ -203,6 +203,12 @@ class ThinkRank_Uninstaller {
             // three Brand Visibility tables are no longer created, but sites
             // that used the feature before it was removed still have them.
             $wpdb->prefix . 'thinkrank_ai_traffic',
+            // The internal link graph behind the orphan page report. Derived
+            // data, rebuilt from post content, so nothing is lost by dropping
+            // it — but it is a table, and a table left behind is a table left
+            // behind.
+            $wpdb->prefix . 'thinkrank_internal_links',
+            $wpdb->prefix . 'thinkrank_timeline_events',
             // The focus keyword index behind the keyword map. Derived data,
             // rebuilt from post meta, so nothing is lost by dropping it - but
             // a table left behind is a table left behind.
