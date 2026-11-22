@@ -14,6 +14,8 @@
 import { __ } from '@wordpress/i18n';
 
 import SiteHealthAudit from '../dashboard/SiteHealthAudit';
+import RegressionGuardTab from './RegressionGuardTab';
+import DuplicateTagsTab from './DuplicateTagsTab';
 import GoalsTab from './GoalsTab';
 import ProGatedTab from '../pro/ProGatedTab';
 import ProTeaser from '../pro/ProTeaser';
@@ -52,11 +54,17 @@ const SiteAuditTab = () => (
 	</div>
 );
 
-const SEOAnalyzerTab = ({ activeSubSection, onNavigate }) =>
-	'goals' === activeSubSection ? (
-		<GoalsTab onNavigate={onNavigate} />
-	) : (
-		<SiteAuditTab />
-	);
+const SEOAnalyzerTab = ({ activeSubSection, onNavigate }) => {
+	if ('goals' === activeSubSection) {
+		return <GoalsTab onNavigate={onNavigate} />;
+	}
+	if ('regression-guard' === activeSubSection) {
+		return <RegressionGuardTab />;
+	}
+	if ('duplicate-tags' === activeSubSection) {
+		return <DuplicateTagsTab />;
+	}
+	return <SiteAuditTab />;
+};
 
 export default SEOAnalyzerTab;

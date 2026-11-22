@@ -2,21 +2,21 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: ThinkRank 2.22.0\n"
+"Project-Id-Version: ThinkRank 2.23.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/thinkrank\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-18T11:24:42+00:00\n"
+"POT-Creation-Date: 2026-11-22T10:24:00+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: thinkrank\n"
 
 #. Plugin Name of the plugin
 #: thinkrank.php
-#: includes/abilities/class-abilities-registrar.php:356
+#: includes/abilities/class-abilities-registrar.php:360
 #: includes/admin/class-bulk-action-manager.php:82
 #: includes/admin/class-manager.php:235
 #: includes/admin/class-manager.php:236
@@ -88,12 +88,20 @@ msgstr ""
 msgid "Unknown post type: %s."
 msgstr ""
 
+#: includes/abilities/analysis/class-check-page-head.php:31
+msgid "Check ThinkRank Page Head"
+msgstr ""
+
+#: includes/abilities/analysis/class-check-page-head.php:32
+msgid "Load a page now, the way a logged-out visitor and Google get it, and compare its SEO output with the previous Regression Guard check. Use it before and after a plugin, theme or core update, or a theme switch, to see whether the update changed what the page serves: a noindex that appeared, a canonical that moved, a structured data type that vanished. Returns the same shape as get-page-head-snapshot, and the new check becomes the baseline for the next one. The first check of a page has nothing to compare with, so result is null; check again after the change. Only published, public content can be checked. Use post_id 0 for the homepage; find other ids with list-content-items. If error is set the page could not be loaded - often a host that blocks the site from requesting itself - and the previous check is kept."
+msgstr ""
+
 #: includes/abilities/analysis/class-fix-seo-check.php:72
 msgid "Fix Site SEO Analyzer Check"
 msgstr ""
 
 #: includes/abilities/analysis/class-fix-seo-check.php:73
-msgid "Apply the Site SEO Analyzer's one-click fix for one check, as the Fix button on the audit does: search_visibility, xml_sitemap, schema, image_alt_text, ai_crawler_access or llms_txt. Read get-seo-analyzer first, fix only a check whose can_auto_fix is true, and show the person its fix_label and fix_warning before applying it. search_visibility makes the whole site visible to search engines and cannot be undone: it is refused unless the site is production, and needs confirm true, sent only after the person agreed to its fix_warning. Returns fixed, message and data; image_alt_text fills one batch per call, so call again while data.remaining is above zero. A fix that saved its change but found something else still in the way answers fixed true with that in the message; only a fix that changed nothing answers an error. undo is the existing write that puts back what the fix changed, with the arguments read just before it ran (update-sitemap-settings for xml_sitemap, update-site-identity-settings for ai_crawler_access), or null where no tool can, as the audit's fix_undoable says beforehand. Call run-seo-analyzer afterwards for the updated audit."
+msgid "Apply the Site SEO Analyzer's one-click fix for one check, as the Fix button on the audit does: search_visibility, xml_sitemap, schema, image_alt_text, ai_crawler_access, llms_txt or duplicate_head_tags. Read get-seo-analyzer first, fix only a check whose can_auto_fix is true, and show the person its fix_label and fix_warning before applying it. search_visibility makes the whole site visible to search engines and cannot be undone: it is refused unless the site is production, and needs confirm true, sent only after the person agreed to its fix_warning. Returns fixed, message and data; image_alt_text fills one batch per call, so call again while data.remaining is above zero. A fix that saved its change but found something else still in the way answers fixed true with that in the message; only a fix that changed nothing answers an error. undo is the existing write that puts back what the fix changed, with the arguments read just before it ran (update-sitemap-settings for xml_sitemap, update-site-identity-settings for ai_crawler_access), or null where no tool can, as the audit's fix_undoable says beforehand. Call run-seo-analyzer afterwards for the updated audit."
 msgstr ""
 
 #: includes/abilities/analysis/class-fix-seo-check.php:118
@@ -216,6 +224,50 @@ msgstr ""
 msgid "Report ThinkRank integration health: plugin/Pro versions and active state, Abilities API availability and the count + names of registered ThinkRank abilities, MCP server toggle and endpoints, the connection doctor's last verdict (mcp_server.doctor: which checks passed, including whether the host blocks AI-client user agents) and, when called over MCP, which areas this connection may read or change (mcp_server.credential.levels), the current user and their ThinkRank capabilities, home/siteurl/REST URL scheme agreement and HTTPS state, the site icon URL (urls.icon_url, empty when none is set), custom database-table status, and scoring availability. Never returns API keys, OAuth tokens, or connection tokens."
 msgstr ""
 
+#: includes/abilities/analysis/class-get-duplicate-tags.php:34
+msgid "Get ThinkRank Duplicate Head Tags"
+msgstr ""
+
+#: includes/abilities/analysis/class-get-duplicate-tags.php:35
+msgid "Find the SEO tags printed more than once in the <head> of the home page and the latest post - a second <title>, canonical, robots or meta description, duplicate Open Graph or Twitter card tags, or a schema type published twice - as a logged-out visitor gets the pages. Each duplicate says how many copies ThinkRank printed and how many came from another plugin or the theme, a best guess at which plugin, and whether ThinkRank can remove the foreign copies (removable: ThinkRank prints the same tag). Also returns the Duplicate Tag Guard switches per tag family and what the guard already removed. Cached for an hour; set refresh to fetch the pages again. Turn removal on with thinkrank/update-duplicate-tag-guard."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-duplicate-tags.php:66
+msgid "Fetch the pages again instead of using the last hour's check."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-duplicate-tags.php:80
+msgid "The <title> tag and the meta description."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-duplicate-tags.php:81
+msgid "The canonical link."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-duplicate-tags.php:82
+msgid "The robots meta tag (and googlebot / bingbot)."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-duplicate-tags.php:83
+msgid "Open Graph (og:*, article:*) and Twitter card tags."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-duplicate-tags.php:84
+msgid "JSON-LD blocks whose every page-level type ThinkRank already publishes."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-duplicate-tags.php:142
+msgid "Tags the guard removed on this page, by family."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-duplicate-tags.php:151
+msgid "The tag: \"title\", \"meta:description\", \"link:canonical\", \"meta:robots\", an Open Graph or Twitter property such as \"og:title\", or \"schema:<Type>\"."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-duplicate-tags.php:165
+msgid "Best guess at who printed the other copies; empty when unknown (another plugin or the theme)."
+msgstr ""
+
 #: includes/abilities/analysis/class-get-integrations-status.php:34
 msgid "Get Integrations Status"
 msgstr ""
@@ -262,6 +314,38 @@ msgstr ""
 
 #: includes/abilities/analysis/class-get-mcp-activity.php:116
 msgid "False until the activity table has been created, which happens the next time an administrator loads the WordPress admin."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-page-head-snapshot.php:29
+msgid "Get ThinkRank Page Head Snapshot"
+msgstr ""
+
+#: includes/abilities/analysis/class-get-page-head-snapshot.php:30
+msgid "Read the last Regression Guard check of a page without loading it again: the SEO output the page actually served (title, meta description, robots and X-Robots-Tag, canonical, hreflang, Open Graph, Twitter card, JSON-LD types with price, availability and rating, HTTP status, H1 count) and what changed since the check before it. Each change has a severity - critical (noindex appeared, not 200, now redirects, canonical points elsewhere, a structured data type disappeared, title empty), warning or info - and the result says whether the changes were expected, meaning the post, the term or a ThinkRank or WordPress setting was edited between the two checks. Unexpected critical changes are the ones a plugin, theme or core update caused. Use post_id 0 for the homepage; find other ids with list-content-items. snapshot is null when the page was never checked - run check-page-head to check it now."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-page-head-snapshot.php:62
+msgid "Published post, page or product id. 0 is the homepage."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-page-head-snapshot.php:100
+msgid "Unix time of the stored check, or null if the page was never checked."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-page-head-snapshot.php:104
+msgid "Unix time of the check the result compares against. Null when the stored check is the first one."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-page-head-snapshot.php:108
+msgid "What the page served. noindex is true when the robots meta or X-Robots-Tag header blocks indexing."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-page-head-snapshot.php:112
+msgid "Null for a first check, which has nothing to compare with."
+msgstr ""
+
+#: includes/abilities/analysis/class-get-page-head-snapshot.php:139
+msgid "Set when the page could not be loaded. Nothing was compared and the previous check is kept."
 msgstr ""
 
 #: includes/abilities/analysis/class-get-performance-data.php:34
@@ -540,6 +624,7 @@ msgstr ""
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:411
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:835
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1462
+#: src/admin/components/regression-guard/HeadCheckResult.js:233
 #: src/admin/components/seo/KeywordGauges.js:25
 #: src/admin/components/seo/SEOScoreSummary.js:537
 msgid "Meta description"
@@ -663,6 +748,20 @@ msgstr ""
 msgid "Run a fresh whole-site SEO audit (Site SEO Analyzer), bypassing and refreshing the hourly cache. Returns the same payload as get-seo-analyzer: overall 0-100 score, grade, summary counts, and per-check results across Basic, Advanced, Content, Performance, Security and GEO/AEO. A failing per-item check (meta descriptions, image alt text, and the content-sampled GEO checks) lists what fails it in affected_posts (id, title, type, edit_url, url), with affected_total counting every failing item when the list is capped. A check whose can_auto_fix is true can be fixed with fix-seo-check, and fix_undoable says whether that change can be put back afterwards. A check the site owner chose not to count has ignored: true and the ignore_reason they gave. It keeps its real status but is left out of the score, the category scores and the passed, warning and failed counts; summary.ignored counts these checks. Do not report an ignored check as a problem or offer to fix it unless the person asks about it."
 msgstr ""
 
+#: includes/abilities/analysis/class-update-duplicate-tag-guard.php:34
+msgid "Update ThinkRank Duplicate Tag Guard"
+msgstr ""
+
+#: includes/abilities/analysis/class-update-duplicate-tag-guard.php:35
+msgid "Turn removal of duplicate head tags on or off, per tag family: title (the <title> and meta description), canonical, robots, social (Open Graph and Twitter cards) and schema (JSON-LD). With a family on, when another plugin or the theme prints a tag ThinkRank also prints, the other copy is taken out of the page and ThinkRank's is kept; tags ThinkRank does not print are never touched. Only the families you send change. Returns the stored switches. Check what is duplicated first with thinkrank/get-duplicate-tags, whose removable_families lists the families worth turning on."
+msgstr ""
+
+#. translators: %s: comma-separated tag families.
+#: includes/abilities/analysis/class-update-duplicate-tag-guard.php:89
+#, php-format
+msgid "Send at least one of: %s."
+msgstr ""
+
 #: includes/abilities/analysis/class-update-seo-goal.php:30
 msgid "Update ThinkRank SEO Goal"
 msgstr ""
@@ -675,7 +774,7 @@ msgstr ""
 msgid "Goal id from get-seo-goals."
 msgstr ""
 
-#: includes/abilities/class-abilities-registrar.php:357
+#: includes/abilities/class-abilities-registrar.php:361
 msgid "SEO settings, metadata, and analysis abilities powered by ThinkRank."
 msgstr ""
 
@@ -3584,7 +3683,7 @@ msgstr ""
 #: includes/admin/class-manager.php:248
 #: thinkrank.php:163
 #: src/admin/components/App.js:101
-#: src/admin/components/essential-seo/SidebarNavigation.js:217
+#: src/admin/components/essential-seo/SidebarNavigation.js:225
 #: src/admin/components/layout/TopNav.js:584
 msgid "Dashboard"
 msgstr ""
@@ -3617,11 +3716,11 @@ msgstr ""
 
 #: includes/admin/class-manager.php:287
 #: includes/admin/class-manager.php:288
-#: includes/mcp/class-mcp-scopes.php:591
+#: includes/mcp/class-mcp-scopes.php:597
 #: src/admin/components/App.js:125
 #: src/admin/components/essential-seo/analytics/TimelineSection.js:215
-#: src/admin/components/essential-seo/SidebarNavigation.js:197
-#: src/admin/components/essential-seo/SidebarNavigation.js:443
+#: src/admin/components/essential-seo/SidebarNavigation.js:205
+#: src/admin/components/essential-seo/SidebarNavigation.js:451
 #: src/admin/components/import-export/ExportProgress.js:20
 #: src/admin/components/import-export/MigrateProgress.js:17
 #: src/admin/components/import-export/NativeExportCard.js:29
@@ -4256,7 +4355,7 @@ msgstr ""
 
 #: includes/admin/importers/class-snapshot-migrator.php:3946
 #: includes/core/class-capability-manager.php:122
-#: src/admin/components/essential-seo/SidebarNavigation.js:342
+#: src/admin/components/essential-seo/SidebarNavigation.js:350
 #: src/admin/components/import-export/ExportProgress.js:17
 #: src/admin/components/import-export/importTypes.js:27
 #: src/admin/components/import-export/PluginImportCard.js:39
@@ -4511,6 +4610,7 @@ msgstr ""
 #: includes/ai/class-question-coverage-analyzer.php:232
 #: includes/ai/class-question-coverage-analyzer.php:265
 #: includes/seo/class-topical-relevance.php:150
+#: includes/seo/regression/class-regression-guard.php:145
 msgid "That post does not exist."
 msgstr ""
 
@@ -4807,6 +4907,10 @@ msgstr ""
 msgid "Send only robots_state and its expected_robots_state fingerprint for an exact robots change."
 msgstr ""
 
+#: includes/api/class-duplicate-tags-endpoint.php:120
+msgid "You cannot manage duplicate head tags."
+msgstr ""
+
 #: includes/api/class-email-report-endpoint.php:98
 #: includes/api/class-email-report-endpoint.php:118
 #: includes/api/class-email-report-endpoint.php:145
@@ -4883,276 +4987,276 @@ msgstr ""
 msgid "Failed to clear history"
 msgstr ""
 
-#: includes/api/class-manager.php:814
-#: includes/api/class-manager.php:882
-#: includes/api/class-manager.php:912
-#: includes/api/class-manager.php:976
-#: includes/api/class-manager.php:1402
+#: includes/api/class-manager.php:830
+#: includes/api/class-manager.php:898
+#: includes/api/class-manager.php:928
+#: includes/api/class-manager.php:992
+#: includes/api/class-manager.php:1418
 #: includes/api/class-seo-analyzer-endpoint.php:221
 msgid "You must be logged in to access this endpoint."
 msgstr ""
 
-#: includes/api/class-manager.php:822
+#: includes/api/class-manager.php:838
 #: includes/api/class-setup-wizard-endpoint.php:730
 msgid "You do not have permission to access this endpoint."
 msgstr ""
 
-#: includes/api/class-manager.php:864
+#: includes/api/class-manager.php:880
 msgid "Rate limit exceeded. Please wait a moment and try again."
 msgstr ""
 
-#: includes/api/class-manager.php:890
+#: includes/api/class-manager.php:906
 msgid "You do not have permission to manage settings."
 msgstr ""
 
-#: includes/api/class-manager.php:920
+#: includes/api/class-manager.php:936
 msgid "You do not have permission to manage ThinkRank settings."
 msgstr ""
 
-#: includes/api/class-manager.php:984
+#: includes/api/class-manager.php:1000
 msgid "You do not have permission to access this ThinkRank feature."
 msgstr ""
 
-#: includes/api/class-manager.php:1207
 #: includes/api/class-manager.php:1223
+#: includes/api/class-manager.php:1239
 msgid "Only an administrator can configure a custom AI endpoint."
 msgstr ""
 
-#: includes/api/class-manager.php:1240
+#: includes/api/class-manager.php:1256
 msgid "Only an administrator can turn the MCP server on or off."
 msgstr ""
 
-#: includes/api/class-manager.php:1356
+#: includes/api/class-manager.php:1372
 msgid "Settings saved successfully"
 msgstr ""
 
-#: includes/api/class-manager.php:1414
+#: includes/api/class-manager.php:1430
 msgid "You cannot edit this item."
 msgstr ""
 
-#: includes/api/class-manager.php:1537
+#: includes/api/class-manager.php:1553
 msgid "SEO metadata generated successfully"
 msgstr ""
 
-#: includes/api/class-manager.php:1589
+#: includes/api/class-manager.php:1605
 msgid "SEO title improved successfully"
 msgstr ""
 
-#: includes/api/class-manager.php:1639
+#: includes/api/class-manager.php:1655
 msgid "Meta description generated successfully"
 msgstr ""
 
-#: includes/api/class-manager.php:1691
+#: includes/api/class-manager.php:1707
 msgid "Explanation generated successfully"
 msgstr ""
 
-#: includes/api/class-manager.php:1737
+#: includes/api/class-manager.php:1753
 msgid "Added an authoritative source link"
 msgstr ""
 
-#: includes/api/class-manager.php:1786
+#: includes/api/class-manager.php:1802
 msgid "Added a keyword-focused paragraph"
 msgstr ""
 
-#: includes/api/class-manager.php:1814
+#: includes/api/class-manager.php:1830
 #: includes/api/class-snippets-endpoint.php:531
 #: includes/api/class-snippets-endpoint.php:606
 msgid "Post not found."
 msgstr ""
 
-#: includes/api/class-manager.php:1854
+#: includes/api/class-manager.php:1870
 msgid "Schema was already enabled for this post type."
 msgstr ""
 
 #. translators: %s: schema type.
-#: includes/api/class-manager.php:1856
+#: includes/api/class-manager.php:1872
 #, php-format
 msgid "Enabled %s schema for this post type."
 msgstr ""
 
 #. translators: %s: the unrecognised provider value.
-#: includes/api/class-manager.php:1931
+#: includes/api/class-manager.php:1947
 #, php-format
 msgid "Unknown AI provider: %s"
 msgstr ""
 
-#: includes/api/class-manager.php:1975
+#: includes/api/class-manager.php:1991
 msgid "No API key provided or saved for the selected provider."
 msgstr ""
 
-#: includes/api/class-manager.php:2029
+#: includes/api/class-manager.php:2045
 msgid "Enter the model id your endpoint should use, for example llama3.1 or gpt-4o."
 msgstr ""
 
 #. translators: %s: transport error, e.g. "cURL error 7: Connection refused".
 #. translators: %s: transport error.
-#: includes/api/class-manager.php:2069
-#: includes/api/class-manager.php:2372
+#: includes/api/class-manager.php:2085
+#: includes/api/class-manager.php:2388
 #, php-format
 msgid "Could not reach the endpoint: %s"
 msgstr ""
 
 #. translators: 1: HTTP status code, 2: the URL the endpoint redirected to.
-#: includes/api/class-manager.php:2088
+#: includes/api/class-manager.php:2104
 #, php-format
 msgid "The endpoint redirected (%1$d) to %2$s. Redirects are refused so your API key cannot follow them. Enter the final URL instead, for example https:// in place of http://."
 msgstr ""
 
 #. translators: %d: HTTP status code.
-#: includes/api/class-manager.php:2094
+#: includes/api/class-manager.php:2110
 #, php-format
 msgid "The endpoint redirected (%d). Redirects are refused so your API key cannot follow them. Enter the final URL instead, for example https:// in place of http://."
 msgstr ""
 
-#: includes/api/class-manager.php:2106
+#: includes/api/class-manager.php:2122
 msgid "The endpoint sent more than ThinkRank will read for a connection test (128 KB). It is misconfigured or is not answering with a chat completion."
 msgstr ""
 
 #. translators: 1: HTTP status code, 2: error message from the server.
-#: includes/api/class-manager.php:2125
+#: includes/api/class-manager.php:2141
 #, php-format
 msgid "The endpoint answered %1$d: %2$s"
 msgstr ""
 
-#: includes/api/class-manager.php:2156
+#: includes/api/class-manager.php:2172
 msgid "The endpoint replied, but with no completion text. Check that the model id is one this server serves."
 msgstr ""
 
 #. translators: 1: model id, 2: latency in milliseconds.
-#: includes/api/class-manager.php:2170
+#: includes/api/class-manager.php:2186
 #, php-format
 msgid "Connected: \"%1$s\" answered in %2$d ms. It is a reasoning model: it thinks before replying, so generation will be slower and may need a higher timeout."
 msgstr ""
 
 #. translators: 1: model id, 2: latency in milliseconds, 3: the model's reply.
-#: includes/api/class-manager.php:2176
+#: includes/api/class-manager.php:2192
 #, php-format
 msgid "Connected: \"%1$s\" replied in %2$d ms: %3$s"
 msgstr ""
 
 #. translators: 1: model id, 2: HTTP status code, 3: error message from the server.
-#: includes/api/class-manager.php:2248
+#: includes/api/class-manager.php:2264
 #, php-format
 msgid "Connected to \"%1$s\", but the endpoint rejected JSON mode (%2$d: %3$s). Turn off \"Force valid JSON answers\": generation still works, but each request is sent twice."
 msgstr ""
 
-#: includes/api/class-manager.php:2310
+#: includes/api/class-manager.php:2326
 msgid "Only an administrator can test an AI endpoint other than the saved one. Ask an administrator to save this endpoint first."
 msgstr ""
 
 #. translators: %d: HTTP status code.
-#: includes/api/class-manager.php:2383
+#: includes/api/class-manager.php:2399
 #, php-format
 msgid "This endpoint does not list its models (HTTP %d). Type the model id by hand instead."
 msgstr ""
 
-#: includes/api/class-manager.php:2413
+#: includes/api/class-manager.php:2429
 msgid "The endpoint answered, but listed no models. Type the model id by hand instead."
 msgstr ""
 
-#: includes/api/class-manager.php:2453
+#: includes/api/class-manager.php:2469
 msgid "Failed to connect to OpenAI API: "
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2471
+#: includes/api/class-manager.php:2487
 #, php-format
 msgid "API key works, but the model \"%s\" is not available to this account."
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2481
+#: includes/api/class-manager.php:2497
 #, php-format
 msgid "OpenAI API connection successful. Model \"%s\" is available."
 msgstr ""
 
-#: includes/api/class-manager.php:2482
+#: includes/api/class-manager.php:2498
 msgid "OpenAI API connection successful!"
 msgstr ""
 
-#: includes/api/class-manager.php:2490
-#: includes/api/class-manager.php:2567
-#: includes/api/class-manager.php:2689
-#: includes/api/class-manager.php:2776
+#: includes/api/class-manager.php:2506
+#: includes/api/class-manager.php:2583
+#: includes/api/class-manager.php:2705
+#: includes/api/class-manager.php:2792
 msgid "Unknown API error"
 msgstr ""
 
-#: includes/api/class-manager.php:2494
+#: includes/api/class-manager.php:2510
 msgid "OpenAI API Error: "
 msgstr ""
 
-#: includes/api/class-manager.php:2514
+#: includes/api/class-manager.php:2530
 msgid "Invalid OpenRouter API key format. Should start with \"sk-or-\""
 msgstr ""
 
-#: includes/api/class-manager.php:2534
+#: includes/api/class-manager.php:2550
 msgid "Failed to connect to OpenRouter API: "
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2559
+#: includes/api/class-manager.php:2575
 #, php-format
 msgid "OpenRouter API connection successful. Model \"%s\" is available."
 msgstr ""
 
-#: includes/api/class-manager.php:2560
+#: includes/api/class-manager.php:2576
 msgid "OpenRouter API connection successful!"
 msgstr ""
 
-#: includes/api/class-manager.php:2571
+#: includes/api/class-manager.php:2587
 msgid "OpenRouter API Error: "
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2614
+#: includes/api/class-manager.php:2630
 #, php-format
 msgid "API key works, but \"%s\" is not a model OpenRouter offers."
 msgstr ""
 
-#: includes/api/class-manager.php:2630
+#: includes/api/class-manager.php:2646
 msgid "Invalid Claude API key format. Should start with \"sk-ant-\""
 msgstr ""
 
-#: includes/api/class-manager.php:2672
+#: includes/api/class-manager.php:2688
 msgid "Failed to connect to Claude API: "
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2685
+#: includes/api/class-manager.php:2701
 #, php-format
 msgid "Claude API connection successful. Model \"%s\" is available."
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2699
-#: includes/api/class-manager.php:2786
+#: includes/api/class-manager.php:2715
+#: includes/api/class-manager.php:2802
 #, php-format
 msgid "API key works, but the model \"%s\" was not found."
 msgstr ""
 
 #. translators: %1$d: HTTP status code, %2$s: error message from Claude API
-#: includes/api/class-manager.php:2707
+#: includes/api/class-manager.php:2723
 #, php-format
 msgid "Claude API error (%1$d): %2$s"
 msgstr ""
 
-#: includes/api/class-manager.php:2759
+#: includes/api/class-manager.php:2775
 msgid "Failed to connect to Gemini API: "
 msgstr ""
 
 #. translators: %s: the model id that was tested.
-#: includes/api/class-manager.php:2772
+#: includes/api/class-manager.php:2788
 #, php-format
 msgid "Gemini API connection successful. Model \"%s\" is available."
 msgstr ""
 
 #. translators: %1$d: HTTP status code, %2$s: error message from Gemini API
-#: includes/api/class-manager.php:2794
+#: includes/api/class-manager.php:2810
 #, php-format
 msgid "Gemini API error (%1$d): %2$s"
 msgstr ""
 
-#: includes/api/class-manager.php:2867
+#: includes/api/class-manager.php:2883
 msgid "Content analyzed successfully"
 msgstr ""
 
@@ -5186,6 +5290,10 @@ msgstr ""
 
 #: includes/api/class-pillar-content-endpoint.php:99
 msgid "Invalid Post ID"
+msgstr ""
+
+#: includes/api/class-regression-guard-endpoint.php:177
+msgid "You do not have permission to check this page."
 msgstr ""
 
 #. translators: %s: comma-separated list of schema types.
@@ -5490,16 +5598,16 @@ msgstr ""
 #: includes/seo/timeline/class-event-recorder.php:883
 #: src/admin/components/essential-seo/analytics/TimelineSection.js:89
 #: src/admin/components/essential-seo/SidebarNavigation.js:177
-#: src/admin/components/essential-seo/SidebarNavigation.js:483
+#: src/admin/components/essential-seo/SidebarNavigation.js:491
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:62
 #: src/admin/components/essential-seo/SiteIdentityTab.js:77
 msgid "Site Identity"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:109
-#: includes/mcp/class-mcp-scopes.php:599
-#: src/admin/components/essential-seo/SidebarNavigation.js:215
-#: src/admin/components/essential-seo/SidebarNavigation.js:503
+#: includes/mcp/class-mcp-scopes.php:605
+#: src/admin/components/essential-seo/SidebarNavigation.js:223
+#: src/admin/components/essential-seo/SidebarNavigation.js:511
 #: src/admin/setup-wizard/SetupWizard.js:91
 msgid "Analytics"
 msgstr ""
@@ -5508,85 +5616,85 @@ msgstr ""
 #: includes/seo/timeline/class-event-recorder.php:893
 #: src/admin/components/essential-seo/analytics/TimelineSection.js:99
 #: src/admin/components/essential-seo/performance/CWVSection.js:407
-#: src/admin/components/essential-seo/SidebarNavigation.js:254
-#: src/admin/components/essential-seo/SidebarNavigation.js:508
+#: src/admin/components/essential-seo/SidebarNavigation.js:262
+#: src/admin/components/essential-seo/SidebarNavigation.js:516
 #: src/admin/components/seo/ImprovementSuggestions.js:371
 msgid "Performance"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:111
-#: src/admin/components/essential-seo/SidebarNavigation.js:280
-#: src/admin/components/essential-seo/SidebarNavigation.js:518
+#: src/admin/components/essential-seo/SidebarNavigation.js:288
+#: src/admin/components/essential-seo/SidebarNavigation.js:526
 msgid "Bulk SEO Optimization"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:112
 #: includes/seo/timeline/class-event-recorder.php:886
 #: src/admin/components/essential-seo/analytics/TimelineSection.js:92
-#: src/admin/components/essential-seo/SidebarNavigation.js:285
-#: src/admin/components/essential-seo/SidebarNavigation.js:528
+#: src/admin/components/essential-seo/SidebarNavigation.js:293
+#: src/admin/components/essential-seo/SidebarNavigation.js:536
 #: src/admin/components/pages/MCP.js:32
 msgid "Image SEO"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:113
-#: src/admin/components/essential-seo/SidebarNavigation.js:295
-#: src/admin/components/essential-seo/SidebarNavigation.js:543
+#: src/admin/components/essential-seo/SidebarNavigation.js:303
+#: src/admin/components/essential-seo/SidebarNavigation.js:551
 msgid "Schema Manager"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:114
 #: includes/seo/timeline/class-event-recorder.php:885
 #: src/admin/components/essential-seo/analytics/TimelineSection.js:91
-#: src/admin/components/essential-seo/SidebarNavigation.js:376
-#: src/admin/components/essential-seo/SidebarNavigation.js:548
+#: src/admin/components/essential-seo/SidebarNavigation.js:384
+#: src/admin/components/essential-seo/SidebarNavigation.js:556
 msgid "Social Media"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:115
-#: src/admin/components/essential-seo/SidebarNavigation.js:396
+#: src/admin/components/essential-seo/SidebarNavigation.js:404
 msgid "Crawling & AI Indexing"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:116
-#: src/admin/components/essential-seo/SidebarNavigation.js:439
+#: src/admin/components/essential-seo/SidebarNavigation.js:447
 msgid "Instant Indexing"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:117
 #: src/admin/components/essential-seo/AuthorArchivesTab.js:271
-#: src/admin/components/essential-seo/SidebarNavigation.js:196
-#: src/admin/components/essential-seo/SidebarNavigation.js:523
+#: src/admin/components/essential-seo/SidebarNavigation.js:204
+#: src/admin/components/essential-seo/SidebarNavigation.js:531
 msgid "Author Archives"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:119
 #: src/admin/components/essential-seo/ai-insights/AIInsightsTab.js:1077
-#: src/admin/components/essential-seo/SidebarNavigation.js:270
-#: src/admin/components/essential-seo/SidebarNavigation.js:513
+#: src/admin/components/essential-seo/SidebarNavigation.js:278
+#: src/admin/components/essential-seo/SidebarNavigation.js:521
 msgid "AI Insights"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:120
-#: src/admin/components/essential-seo/SidebarNavigation.js:321
+#: src/admin/components/essential-seo/SidebarNavigation.js:329
 msgid "Internal Links"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:121
 #: includes/seo/timeline/class-event-recorder.php:887
 #: src/admin/components/essential-seo/analytics/TimelineSection.js:93
-#: src/admin/components/essential-seo/SidebarNavigation.js:332
+#: src/admin/components/essential-seo/SidebarNavigation.js:340
 msgid "External Links"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:123
-#: src/admin/components/essential-seo/SidebarNavigation.js:353
+#: src/admin/components/essential-seo/SidebarNavigation.js:361
 msgid "Broken Links"
 msgstr ""
 
 #: includes/core/class-capability-manager.php:124
-#: src/admin/components/essential-seo/SidebarNavigation.js:364
-#: src/admin/components/essential-seo/SidebarNavigation.js:563
+#: src/admin/components/essential-seo/SidebarNavigation.js:372
+#: src/admin/components/essential-seo/SidebarNavigation.js:571
 msgid "WooCommerce"
 msgstr ""
 
@@ -5730,7 +5838,7 @@ msgstr ""
 msgid "If you allow it, we collect your site URL and name, your admin email address, WordPress, PHP &amp; server versions, active and inactive plugins, active theme, and which ThinkRank features you use. This lets us keep ThinkRank compatible with the most popular plugins and themes, and we may email you ThinkRank news and offers. No spam, we promise."
 msgstr ""
 
-#: includes/diagnostics/class-foreign-schema-detector.php:403
+#: includes/diagnostics/class-foreign-schema-detector.php:460
 msgid "an unidentified plugin or theme"
 msgstr ""
 
@@ -6021,6 +6129,7 @@ msgstr ""
 #: includes/editor/bricks/class-toc-element.php:103
 #: includes/editor/elementor/class-howto-widget.php:61
 #: includes/editor/elementor/class-toc-widget.php:63
+#: src/admin/components/regression-guard/HeadCheckResult.js:228
 #: src/admin/components/seo/ImprovementSuggestions.js:361
 #: src/admin/components/seo/SEOScoreSummary.js:536
 #: src/metabox/components/SocialTab.js:304
@@ -6555,7 +6664,7 @@ msgstr ""
 msgid "MCP Client"
 msgstr ""
 
-#: includes/mcp/class-mcp-scopes.php:587
+#: includes/mcp/class-mcp-scopes.php:593
 #: includes/seo/class-seo-analyzer.php:142
 #: src/admin/components/seo/ImprovementSuggestions.js:365
 #: src/admin/components/seo/SEOScoreSummary.js:538
@@ -6565,32 +6674,32 @@ msgstr ""
 msgid "Content"
 msgstr ""
 
-#: includes/mcp/class-mcp-scopes.php:588
+#: includes/mcp/class-mcp-scopes.php:594
 msgid "Post and term SEO, post bodies and URL slugs, image alt text, FAQ and pillar content."
 msgstr ""
 
-#: includes/mcp/class-mcp-scopes.php:592
+#: includes/mcp/class-mcp-scopes.php:598
 msgid "Global defaults, site identity, schema, social, sitemaps and imports."
 msgstr ""
 
-#: includes/mcp/class-mcp-scopes.php:595
-#: src/admin/components/essential-seo/SidebarNavigation.js:558
+#: includes/mcp/class-mcp-scopes.php:601
+#: src/admin/components/essential-seo/SidebarNavigation.js:566
 msgid "Indexing"
 msgstr ""
 
-#: includes/mcp/class-mcp-scopes.php:596
+#: includes/mcp/class-mcp-scopes.php:602
 msgid "robots.txt, IndexNow submissions and llms.txt."
 msgstr ""
 
-#: includes/mcp/class-mcp-scopes.php:600
+#: includes/mcp/class-mcp-scopes.php:606
 msgid "SEO scores, audits, Search Console data and the MCP activity log."
 msgstr ""
 
-#: includes/mcp/class-mcp-scopes.php:603
+#: includes/mcp/class-mcp-scopes.php:609
 msgid "Pro modules"
 msgstr ""
 
-#: includes/mcp/class-mcp-scopes.php:604
+#: includes/mcp/class-mcp-scopes.php:610
 msgid "Redirects, locations, rank tracking and the other ThinkRank Pro tools."
 msgstr ""
 
@@ -6966,7 +7075,7 @@ msgid "Steps, comparisons and specifications are extracted far more reliably fro
 msgstr ""
 
 #: includes/seo/class-answer-readiness.php:156
-#: includes/seo/class-seo-analyzer.php:3426
+#: includes/seo/class-seo-analyzer.php:3515
 msgid "Break steps, comparisons and specifications out of the paragraphs into list or table blocks."
 msgstr ""
 
@@ -7929,137 +8038,157 @@ msgstr ""
 msgid "Publishes /llms.txt from your saved LLMs.txt settings. It needs those fields filled in first."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:214
+#: includes/seo/class-seo-analyzer-fixer.php:118
+msgid "Remove the duplicate copies"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:119
+msgid "Turns on removal for the tag families found duplicated. Another plugin's or your theme's copies of tags ThinkRank prints are taken out of the page; ThinkRank's are kept. Switch any family back off under SEO Analyzer → Duplicate Tags."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:219
 msgid "This issue cannot be fixed automatically."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:247
+#: includes/seo/class-seo-analyzer-fixer.php:254
 msgid "No handler is registered for this fix."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:302
+#: includes/seo/class-seo-analyzer-fixer.php:271
+msgid "None of the duplicates are copies of tags ThinkRank prints, so there is nothing ThinkRank can safely remove. Switch off the extra output in the plugin or theme printing it."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:280
+msgid "Duplicate tags are now removed. Each tag on the pages checked is printed once."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:281
+msgid "Removal is on, but some duplicates remain: they are not copies of tags ThinkRank prints, or a page cache is still serving the old page."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer-fixer.php:338
 msgid "The Allow Search Engines setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:333
+#: includes/seo/class-seo-analyzer-fixer.php:369
 msgid "Search engines can now index this site."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:346
+#: includes/seo/class-seo-analyzer-fixer.php:382
 msgid "This site is not marked as production, so ThinkRank will not make it visible to search engines. A staging, local or development copy should stay hidden. On the live site, untick \"Discourage search engines from indexing this site\" under Settings → Reading."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:362
+#: includes/seo/class-seo-analyzer-fixer.php:398
 msgid "Search engines are allowed in your settings, but the robots.txt file ThinkRank wrote in your site root could not be rewritten and still blocks them. Check that the file is writable, then save the Robots.txt settings again."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:365
+#: includes/seo/class-seo-analyzer-fixer.php:401
 msgid "Search engines are allowed in your settings, but the robots.txt file in your site root still blocks them. Your web server serves that file directly, so edit or remove it."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:369
+#: includes/seo/class-seo-analyzer-fixer.php:405
 msgid "Search engine access was turned on, but the setting did not stick. Another plugin may be changing it back."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:373
+#: includes/seo/class-seo-analyzer-fixer.php:409
 msgid "Search engines are allowed in your settings, but ThinkRank's site-wide robots meta default is still set to No Index. Tick Index under Essential SEO → Crawling and AI Indexing → Global Robot Meta, then save."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:376
+#: includes/seo/class-seo-analyzer-fixer.php:412
 msgid "Search engines are allowed in your settings, but your custom robots.txt content still blocks them. Remove the \"Disallow: /\" rule under Essential SEO → Crawling and AI Indexing → Robots.txt."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:415
+#: includes/seo/class-seo-analyzer-fixer.php:451
 msgid "The sitemap setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
 #. translators: %s: URL of WordPress core's sitemap index.
-#: includes/seo/class-seo-analyzer-fixer.php:421
+#: includes/seo/class-seo-analyzer-fixer.php:457
 #, php-format
 msgid "Your XML sitemap is now enabled. It replaces WordPress core's sitemap at %s, which ThinkRank switches off while its own is on."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:424
+#: includes/seo/class-seo-analyzer-fixer.php:460
 msgid "Your XML sitemap is now enabled."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:442
+#: includes/seo/class-seo-analyzer-fixer.php:478
 msgid "The schema module is unavailable."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:472
+#: includes/seo/class-seo-analyzer-fixer.php:508
 msgid "The schema setting could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:477
+#: includes/seo/class-seo-analyzer-fixer.php:513
 msgid "Automatic structured data is now enabled."
 msgstr ""
 
 #. translators: %d: images left without descriptive alt text.
-#: includes/seo/class-seo-analyzer-fixer.php:527
+#: includes/seo/class-seo-analyzer-fixer.php:563
 #, php-format
 msgid "%d image was left without descriptive alt text because your alt text format would only give it filler: a number, a word like \"image\", or a default name such as \"IMG_1234\" or \"Screenshot\". Add it by hand, or switch the alt text source to AI."
 msgid_plural "%d images were left without descriptive alt text because your alt text format would only give them filler: a number, a word like \"image\", or a default name such as \"IMG_1234\" or \"Screenshot\". Add them by hand, or switch the alt text source to AI."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:565
+#: includes/seo/class-seo-analyzer-fixer.php:601
 msgid "Every image in your media library already has alt text."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:601
+#: includes/seo/class-seo-analyzer-fixer.php:637
 msgid "No images could be filled automatically. Check your alt text format under Essential SEO → Image SEO, or add alt text manually in the Media Library."
 msgstr ""
 
 #. translators: 1: images updated in this batch, 2: images still to process.
-#: includes/seo/class-seo-analyzer-fixer.php:613
+#: includes/seo/class-seo-analyzer-fixer.php:649
 #, php-format
 msgid "Added alt text to %1$d images. %2$d still to go. Run the fix again to continue."
 msgstr ""
 
 #. translators: %d: number of images updated.
-#: includes/seo/class-seo-analyzer-fixer.php:619
+#: includes/seo/class-seo-analyzer-fixer.php:655
 #, php-format
 msgid "Added alt text to %d images. Your media library is done."
 msgstr ""
 
 #. translators: 1: number of images, 2: the AI provider's error message.
-#: includes/seo/class-seo-analyzer-fixer.php:629
+#: includes/seo/class-seo-analyzer-fixer.php:665
 #, php-format
 msgid "The AI could not describe %1$d of them: %2$s"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:693
+#: includes/seo/class-seo-analyzer-fixer.php:729
 msgid "The AI crawler rules could not be saved. Check the PHP error log for the ThinkRank line naming the cause."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer-fixer.php:714
+#: includes/seo/class-seo-analyzer-fixer.php:750
 #, php-format
 msgid "The crawler rules were saved, but your robots.txt still blocks %s. That block comes from your own robots.txt content, a robots.txt file in your site root, or the site-wide search-engine setting. Edit it under Essential SEO → Crawling and AI Indexing."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:723
+#: includes/seo/class-seo-analyzer-fixer.php:759
 msgid "AI answer engines can now crawl and cite your site."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:744
+#: includes/seo/class-seo-analyzer-fixer.php:780
 msgid "The llms.txt module is unavailable."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:754
+#: includes/seo/class-seo-analyzer-fixer.php:790
 msgid "llms.txt is turned off in ThinkRank. Turn it on under Essential SEO → Crawling and AI Indexing → LLMs.txt first if you want it published."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:765
+#: includes/seo/class-seo-analyzer-fixer.php:801
 msgid "llms.txt could not be published because its settings are incomplete. Fill in Website Description, Key Features and Target Audience under Essential SEO → Crawling and AI Indexing → LLMs.txt, then try again."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:778
+#: includes/seo/class-seo-analyzer-fixer.php:814
 msgid "llms.txt could not be written. Check that your site root is writable."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer-fixer.php:785
+#: includes/seo/class-seo-analyzer-fixer.php:821
 msgid "Your llms.txt is now published at /llms.txt."
 msgstr ""
 
@@ -8083,330 +8212,390 @@ msgstr ""
 msgid "AI Search (GEO)"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:504
+#: includes/seo/class-seo-analyzer.php:510
 msgid "That check does not exist."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:786
-#: includes/seo/class-seo-analyzer.php:794
+#: includes/seo/class-seo-analyzer.php:793
+#: includes/seo/class-seo-analyzer.php:801
 msgid "Site title is set"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:788
+#: includes/seo/class-seo-analyzer.php:795
 msgid "Your site has no title. Search engines and browsers use it as your brand name."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:789
+#: includes/seo/class-seo-analyzer.php:796
 msgid "Set a site title under Settings → General → Site Title."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:796
+#: includes/seo/class-seo-analyzer.php:803
 msgid "Your site title is configured."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:813
-#: includes/seo/class-seo-analyzer.php:821
+#: includes/seo/class-seo-analyzer.php:820
+#: includes/seo/class-seo-analyzer.php:828
 msgid "Tagline is customized"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:815
+#: includes/seo/class-seo-analyzer.php:822
 msgid "Your tagline is blank or still the WordPress default. Search engines may use it as your homepage description."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:816
+#: includes/seo/class-seo-analyzer.php:823
 msgid "Write a descriptive tagline under Settings → General → Tagline."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:823
+#: includes/seo/class-seo-analyzer.php:830
 msgid "Your tagline is set and ready to describe your site."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:892
+#: includes/seo/class-seo-analyzer.php:899
 msgid "Site is visible to search engines"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:899
+#: includes/seo/class-seo-analyzer.php:906
 msgid "Your site allows search engines to index it."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:907
+#: includes/seo/class-seo-analyzer.php:914
 msgid "Your site is telling search engines not to index it, so it will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:908
+#: includes/seo/class-seo-analyzer.php:915
 msgid "Untick \"Discourage search engines from indexing this site\" under Settings → Reading."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:912
+#: includes/seo/class-seo-analyzer.php:919
 msgid "ThinkRank's Allow Search Engines setting is off, so your robots.txt blocks every crawler and your site will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:913
+#: includes/seo/class-seo-analyzer.php:920
 msgid "Turn on Allow Search Engines under Essential SEO → Crawling and AI Indexing → Robots.txt."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:922
+#: includes/seo/class-seo-analyzer.php:929
 #, php-format
 msgid "The robots.txt file ThinkRank wrote in your site root is out of date and still blocks %s from the whole site, so your pages will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:923
+#: includes/seo/class-seo-analyzer.php:930
 msgid "Use Fix, or save the Robots.txt settings under Essential SEO → Crawling and AI Indexing → Robots.txt, to rewrite the file from your current settings."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:928
+#: includes/seo/class-seo-analyzer.php:935
 #, php-format
 msgid "The robots.txt file in your site root blocks %s from the whole site, so your pages will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:929
+#: includes/seo/class-seo-analyzer.php:936
 msgid "Edit or remove the robots.txt file in your site root. Your web server serves that file directly, so ThinkRank's robots.txt settings do not apply while it is there."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:933
+#: includes/seo/class-seo-analyzer.php:940
 msgid "ThinkRank's site-wide robots meta default is set to No Index, so your pages tell search engines not to index them and will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:934
+#: includes/seo/class-seo-analyzer.php:941
 msgid "Tick Index (and untick No Index) under Essential SEO → Crawling and AI Indexing → Global Robot Meta, then save."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:939
+#: includes/seo/class-seo-analyzer.php:946
 #, php-format
 msgid "Your custom robots.txt content blocks %s from the whole site, so your pages will not appear in search results."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:940
+#: includes/seo/class-seo-analyzer.php:947
 msgid "Remove the \"Disallow: /\" rule from your robots.txt content under Essential SEO → Crawling and AI Indexing → Robots.txt."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1134
+#: includes/seo/class-seo-analyzer.php:1141
 msgid "every crawler (User-agent: *)"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1156
-#: includes/seo/class-seo-analyzer.php:1164
+#: includes/seo/class-seo-analyzer.php:1163
+#: includes/seo/class-seo-analyzer.php:1171
 msgid "Search-friendly permalinks"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1158
+#: includes/seo/class-seo-analyzer.php:1165
 msgid "Your site uses plain, numeric URLs (e.g. ?p=123). Descriptive URLs are easier for search engines and users."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1159
+#: includes/seo/class-seo-analyzer.php:1166
 msgid "Choose a pretty permalink structure (e.g. Post name) under Settings → Permalinks."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1166
+#: includes/seo/class-seo-analyzer.php:1173
 msgid "Your permalinks are search-friendly."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1203
-#: includes/seo/class-seo-analyzer.php:1214
-#: includes/seo/class-seo-analyzer.php:1222
+#: includes/seo/class-seo-analyzer.php:1210
+#: includes/seo/class-seo-analyzer.php:1221
+#: includes/seo/class-seo-analyzer.php:1229
 msgid "XML sitemap is enabled"
 msgstr ""
 
 #. translators: %s: URL of WordPress core's sitemap index.
-#: includes/seo/class-seo-analyzer.php:1207
+#: includes/seo/class-seo-analyzer.php:1214
 #, php-format
 msgid "ThinkRank's XML sitemap is off, and WordPress core's sitemap is served at %s, so search engines still have one."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1216
+#: includes/seo/class-seo-analyzer.php:1223
 msgid "No XML sitemap is served. ThinkRank's sitemap is off and WordPress core's is not served either. Search engines rely on a sitemap to discover new pages quickly."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1217
+#: includes/seo/class-seo-analyzer.php:1224
 msgid "Enable the XML sitemap under Essential SEO → Crawling & AI Indexing → XML Sitemap."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1224
+#: includes/seo/class-seo-analyzer.php:1231
 msgid "Your XML sitemap is enabled and pointing crawlers to your content."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1263
+#: includes/seo/class-seo-analyzer.php:1270
 msgid "Structured data configured"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1269
+#: includes/seo/class-seo-analyzer.php:1276
 msgid "Structured data is configured for your content."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1280
+#: includes/seo/class-seo-analyzer.php:1287
 msgid "Structured data is running on ThinkRank's built-in defaults. Reviewing the schema type for each post type gives you control over how rich results appear."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1281
+#: includes/seo/class-seo-analyzer.php:1288
 msgid "Choose a schema type for each post type under Essential SEO → Bulk SEO Optimization."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1288
+#: includes/seo/class-seo-analyzer.php:1295
 msgid "No schema/structured data is configured or emitted. Schema powers rich results in search."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1289
+#: includes/seo/class-seo-analyzer.php:1296
 msgid "Turn on automatic structured data, or choose a schema type for each post type under Essential SEO → Bulk SEO Optimization."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1469
+#: includes/seo/class-seo-analyzer.php:1309
+msgid "No duplicate head tags"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1319
+msgid "Your pages could not be fetched, so duplicate tags could not be checked."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1320
+msgid "The check fetches your home page from this server, like WordPress's own Site Health loopback test. A firewall or maintenance mode that blocks it will block this check too."
+msgstr ""
+
+#. translators: %d: number of tags
+#: includes/seo/class-seo-analyzer.php:1330
+#, php-format
+msgid "Each SEO tag is printed once. ThinkRank removed %d duplicate tag another plugin or your theme printed."
+msgid_plural "Each SEO tag is printed once. ThinkRank removed %d duplicate tags other plugins or your theme printed."
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/seo/class-seo-analyzer.php:1331
+msgid "Each SEO tag on your pages is printed once."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1343
+msgid "Another plugin or your theme prints its own copies of tags ThinkRank already prints. Turn on removal for those tags under SEO Analyzer → Duplicate Tags, or switch off that output in the other plugin or theme."
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1344
+msgid "These tags are printed twice by other plugins or your theme, not by ThinkRank, so ThinkRank cannot tell which to keep. Switch off the extra output in the plugin or theme printing it."
+msgstr ""
+
+#. translators: %s: list like "2 × og:title (/hello/)"
+#: includes/seo/class-seo-analyzer.php:1353
+#, php-format
+msgid "Some tags are printed more than once: %s."
+msgstr ""
+
+#. translators: %s: schema.org type
+#. translators: %s: schema.org type.
+#: includes/seo/class-seo-analyzer.php:1370
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:86
+#, php-format,js-format
+msgid "%s schema"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1375
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:90
+msgid "meta description"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1376
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:91
+msgid "canonical"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1379
+msgid "meta tag"
+msgstr ""
+
+#: includes/seo/class-seo-analyzer.php:1558
 msgid "Content has meta descriptions"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1478
-#: includes/seo/class-seo-analyzer.php:3384
-#: includes/seo/class-seo-analyzer.php:3406
-#: includes/seo/class-seo-analyzer.php:3427
-#: includes/seo/class-seo-analyzer.php:3450
-#: includes/seo/class-seo-analyzer.php:3471
+#: includes/seo/class-seo-analyzer.php:1567
+#: includes/seo/class-seo-analyzer.php:3473
+#: includes/seo/class-seo-analyzer.php:3495
+#: includes/seo/class-seo-analyzer.php:3516
+#: includes/seo/class-seo-analyzer.php:3539
+#: includes/seo/class-seo-analyzer.php:3560
 msgid "No published, indexable content to check yet."
 msgstr ""
 
 #. translators: 1: items with a meta description, 2: sampled items.
-#: includes/seo/class-seo-analyzer.php:1515
+#: includes/seo/class-seo-analyzer.php:1604
 #, php-format
 msgid "%1$d of your %2$d most recent indexable items have a meta description."
 msgstr ""
 
 #. translators: 1: items missing a meta description, 2: sampled items.
-#: includes/seo/class-seo-analyzer.php:1524
+#: includes/seo/class-seo-analyzer.php:1613
 #, php-format
 msgid "%1$d of your %2$d most recent indexable items are missing a meta description. Search engines fall back to arbitrary page text for their snippets."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1525
+#: includes/seo/class-seo-analyzer.php:1614
 msgid "Add meta descriptions in the ThinkRank SEO panel when editing each item, or use Bulk SEO Optimization to generate them with AI."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1538
+#: includes/seo/class-seo-analyzer.php:1627
 msgid "Images have alt text"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1553
+#: includes/seo/class-seo-analyzer.php:1642
 msgid "No images in your media library to check yet."
 msgstr ""
 
 #. translators: 1: images with alt text, 2: total images.
-#: includes/seo/class-seo-analyzer.php:1571
+#: includes/seo/class-seo-analyzer.php:1660
 #, php-format
 msgid "%1$d of your %2$d images have alt text."
 msgstr ""
 
 #. translators: 1: images missing alt text, 2: total images.
-#: includes/seo/class-seo-analyzer.php:1580
+#: includes/seo/class-seo-analyzer.php:1669
 #, php-format
 msgid "%1$d of your %2$d images are missing alt text or have alt text that describes nothing, such as a number or \"image\". Alt text drives image search rankings and is an accessibility requirement."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1581
+#: includes/seo/class-seo-analyzer.php:1670
 msgid "Under Essential SEO → Image SEO, turn on \"Save alt text to the Media Library\" and run \"Fill missing alt text\" to populate them from your format, or add alt text manually in the Media Library."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1621
-#: includes/seo/class-seo-analyzer.php:1631
+#: includes/seo/class-seo-analyzer.php:1710
+#: includes/seo/class-seo-analyzer.php:1720
 msgid "Supported PHP version"
 msgstr ""
 
 #. translators: %s: current PHP version.
-#: includes/seo/class-seo-analyzer.php:1624
+#: includes/seo/class-seo-analyzer.php:1713
 #, php-format
 msgid "You are running PHP %s, which no longer receives active support. Newer PHP is faster and more secure."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1625
+#: includes/seo/class-seo-analyzer.php:1714
 msgid "Ask your host to upgrade to PHP 8.1 or newer."
 msgstr ""
 
 #. translators: %s: current PHP version.
-#: includes/seo/class-seo-analyzer.php:1634
+#: includes/seo/class-seo-analyzer.php:1723
 #, php-format
 msgid "You are running a supported PHP version (%s)."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1648
-#: includes/seo/class-seo-analyzer.php:1655
+#: includes/seo/class-seo-analyzer.php:1737
+#: includes/seo/class-seo-analyzer.php:1744
 msgid "Persistent object cache"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1650
+#: includes/seo/class-seo-analyzer.php:1739
 msgid "A persistent object cache is active, reducing database load."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1657
+#: includes/seo/class-seo-analyzer.php:1746
 msgid "No persistent object cache is active. On busier sites this means more database queries per request."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1658
+#: includes/seo/class-seo-analyzer.php:1747
 msgid "Enable a persistent object cache (e.g. Redis or Memcached) via your host or a caching plugin."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1682
-#: includes/seo/class-seo-analyzer.php:1690
+#: includes/seo/class-seo-analyzer.php:1771
+#: includes/seo/class-seo-analyzer.php:1779
 msgid "Site uses HTTPS (SSL)"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1684
+#: includes/seo/class-seo-analyzer.php:1773
 msgid "Your site URL is not served over HTTPS. HTTPS is a confirmed ranking signal and required for user trust."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1685
+#: includes/seo/class-seo-analyzer.php:1774
 msgid "Install an SSL certificate and set your WordPress Address / Site Address to https:// under Settings → General."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1692
+#: includes/seo/class-seo-analyzer.php:1781
 msgid "Your site is served securely over HTTPS."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1705
-#: includes/seo/class-seo-analyzer.php:1712
+#: includes/seo/class-seo-analyzer.php:1794
+#: includes/seo/class-seo-analyzer.php:1801
 msgid "File editing disabled"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1707
+#: includes/seo/class-seo-analyzer.php:1796
 msgid "The dashboard plugin/theme file editor is disabled, reducing your attack surface."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1714
+#: includes/seo/class-seo-analyzer.php:1803
 msgid "The built-in file editor is enabled. If an admin account is compromised, an attacker could edit your PHP files from wp-admin."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1715
+#: includes/seo/class-seo-analyzer.php:1804
 msgid "Add define('DISALLOW_FILE_EDIT', true); to your wp-config.php."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1734
-#: includes/seo/class-seo-analyzer.php:1742
+#: includes/seo/class-seo-analyzer.php:1823
+#: includes/seo/class-seo-analyzer.php:1831
 msgid "Errors not shown publicly"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1736
+#: includes/seo/class-seo-analyzer.php:1825
 msgid "Debug output is displayed on the front end. Visible PHP errors can leak server paths and internals."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1737
+#: includes/seo/class-seo-analyzer.php:1826
 msgid "Set define('WP_DEBUG_DISPLAY', false); (or turn off WP_DEBUG) in wp-config.php on production."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:1744
+#: includes/seo/class-seo-analyzer.php:1833
 msgid "PHP errors are not displayed to visitors."
 msgstr ""
 
 #. translators: %d: number of sampled pages.
-#: includes/seo/class-seo-analyzer.php:2142
+#: includes/seo/class-seo-analyzer.php:2231
 #, php-format
 msgid "ThinkRank found no readable text on the %d page it sampled, so this could not be checked."
 msgid_plural "ThinkRank found no readable text on any of the %d pages it sampled, so this could not be checked."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/seo/class-seo-analyzer.php:2150
+#: includes/seo/class-seo-analyzer.php:2239
 msgid "Pages built only from shortcodes, or with a page builder ThinkRank does not support, have no text it can read. Publish pages with written content, or check that your page builder is supported."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2225
+#: includes/seo/class-seo-analyzer.php:2314
 #: includes/seo/timeline/class-event-recorder.php:1229
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1374
 #: src/admin/components/essential-seo/bulk-snippets/BulkSnippetsTab.js:1438
@@ -8415,215 +8604,215 @@ msgstr ""
 msgid "(no title)"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2324
+#: includes/seo/class-seo-analyzer.php:2413
 msgid "AI answer engines can crawl your site"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2330
+#: includes/seo/class-seo-analyzer.php:2419
 msgid "ChatGPT, Claude, Perplexity, Le Chat and Google Search with its AI Overviews can all reach your content and cite it."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2358
+#: includes/seo/class-seo-analyzer.php:2447
 msgid "Your robots.txt blocks Googlebot, which removes your site from Google Search and from Google AI Overviews and AI Mode."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:2361
+#: includes/seo/class-seo-analyzer.php:2450
 #, php-format
 msgid "Your robots.txt blocks Googlebot, which removes your site from Google Search and from Google AI Overviews and AI Mode. It also blocks these AI answer engines: %s."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2364
+#: includes/seo/class-seo-analyzer.php:2453
 msgid "Remove the \"Disallow: /\" rule that applies to Googlebot (or to every crawler, under \"User-agent: *\") from your robots.txt. Check the robots.txt content and the \"Allow Search Engines\" switch under Essential SEO → Crawling & AI Indexing → Robots.txt, \"Search engine visibility\" under Settings → Reading, and any robots.txt file in your site root. If this is a staging site, the block is intended."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:2392
+#: includes/seo/class-seo-analyzer.php:2481
 #, php-format
 msgid "Your robots.txt blocks every AI answer engine (%s), so your pages cannot be cited in AI answers at all."
 msgstr ""
 
 #. translators: %s: comma-separated crawler names.
-#: includes/seo/class-seo-analyzer.php:2394
+#: includes/seo/class-seo-analyzer.php:2483
 #, php-format
 msgid "Your robots.txt blocks these AI answer engines: %s. Their assistants cannot read or cite your pages."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2514
+#: includes/seo/class-seo-analyzer.php:2603
 msgid "The robots.txt file in your site root blocks them. Your web server serves that file directly, so ThinkRank's crawler rules do not apply while it is there. Edit or remove it."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2517
+#: includes/seo/class-seo-analyzer.php:2606
 msgid "Your site is set to discourage search engines, so robots.txt blocks every crawler. Untick \"Discourage search engines from indexing this site\" under Settings → Reading."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2520
+#: includes/seo/class-seo-analyzer.php:2609
 msgid "ThinkRank's Allow Search Engines setting is off, so robots.txt blocks every crawler. Turn it on under Essential SEO → Crawling and AI Indexing → Robots.txt."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2523
+#: includes/seo/class-seo-analyzer.php:2612
 msgid "Your robots.txt content blocks them outside the AI crawler rules, for example with a \"User-agent: *\" group that disallows \"/\". Remove that rule under Essential SEO → Crawling and AI Indexing → Robots.txt."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2526
+#: includes/seo/class-seo-analyzer.php:2615
 msgid "Under Essential SEO → Crawling & AI Indexing → Robots.txt, set the answer-engine crawlers to Allow. Blocking the training-only crawlers (GPTBot, ClaudeBot, CCBot, Google-Extended) is a separate choice and does not cost you citations."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2734
+#: includes/seo/class-seo-analyzer.php:2823
 #: includes/seo/goals/providers/class-setup-provider.php:95
 msgid "llms.txt is published"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2740
+#: includes/seo/class-seo-analyzer.php:2829
 msgid "The llms.txt module is unavailable, so this could not be checked."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2754
+#: includes/seo/class-seo-analyzer.php:2843
 msgid "llms.txt is turned off in ThinkRank, so this check is not scored."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2762
+#: includes/seo/class-seo-analyzer.php:2851
 msgid "Your llms.txt is published, so AI assistants have a summary of your site and its key pages."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2770
+#: includes/seo/class-seo-analyzer.php:2859
 msgid "No llms.txt is published. It is the file AI assistants read to learn what your site is about and which pages matter."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2771
+#: includes/seo/class-seo-analyzer.php:2860
 msgid "Fill in the fields under Essential SEO → Crawling & AI Indexing → LLMs.txt and publish it."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2804
+#: includes/seo/class-seo-analyzer.php:2893
 msgid "Answer-ready structured data"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2810
+#: includes/seo/class-seo-analyzer.php:2899
 msgid "Your site publishes FAQ, How-To or Q&A structured data, which AI answers can quote question-and-answer pairs from directly."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2822
+#: includes/seo/class-seo-analyzer.php:2911
 msgid "Add a ThinkRank FAQ or How-To block, widget or element to the pages that answer questions, or enable the FAQPage / HowTo schema types under Essential SEO → Schema."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2823
+#: includes/seo/class-seo-analyzer.php:2912
 msgid "Only mark up question-and-answer content you already publish. If this site does not answer discrete questions, answer-shaped schema does not apply and there is nothing to fix here."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2831
+#: includes/seo/class-seo-analyzer.php:2920
 msgid "Your pages publish Article or WebPage structured data, but no FAQ, How-To or Q&A schema. Those are the types AI answers quote from."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:2839
+#: includes/seo/class-seo-analyzer.php:2928
 msgid "Your pages publish no structured data at all, so an AI assistant has to infer what each page is from its prose."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3375
+#: includes/seo/class-seo-analyzer.php:3464
 msgid "Pages open with a direct answer"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3380
+#: includes/seo/class-seo-analyzer.php:3469
 #, php-format
 msgid "%1$d of your %2$d most recent pages open with a concise, quotable answer."
 msgstr ""
 
 #. translators: 1: posts without one, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3382
+#: includes/seo/class-seo-analyzer.php:3471
 #, php-format
 msgid "%1$d of your %2$d most recent pages do not open with a concise answer. AI assistants quote the first self-contained passage they find, and a long preamble gives them nothing to lift."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3383
+#: includes/seo/class-seo-analyzer.php:3472
 msgid "Open each page with a 40–60 word paragraph that answers its title directly, before any background or introduction."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3397
+#: includes/seo/class-seo-analyzer.php:3486
 msgid "Headings phrased as questions"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3402
+#: includes/seo/class-seo-analyzer.php:3491
 #, php-format
 msgid "%1$d of your %2$d most recent pages use question-style headings."
 msgstr ""
 
 #. translators: 1: posts without one, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3404
+#: includes/seo/class-seo-analyzer.php:3493
 #, php-format
 msgid "%1$d of your %2$d most recent pages have no question-style heading. Assistants match a user's question against your headings first."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3405
+#: includes/seo/class-seo-analyzer.php:3494
 msgid "Phrase at least one H2 or H3 per page as the question it answers: \"How does X work?\" rather than \"Overview\"."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3418
+#: includes/seo/class-seo-analyzer.php:3507
 msgid "Content uses lists or tables"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3423
+#: includes/seo/class-seo-analyzer.php:3512
 #, php-format
 msgid "%1$d of your %2$d most recent pages present information in lists or tables."
 msgstr ""
 
 #. translators: 1: posts without one, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3425
+#: includes/seo/class-seo-analyzer.php:3514
 #, php-format
 msgid "%1$d of your %2$d most recent pages are unbroken prose. Steps, comparisons and specifications are extracted far more reliably from a list or table."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3439
+#: includes/seo/class-seo-analyzer.php:3528
 msgid "Pages have enough depth to cite"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3446
+#: includes/seo/class-seo-analyzer.php:3535
 #, php-format
 msgid "%1$d of your %2$d most recent pages have enough substance for an assistant to cite."
 msgstr ""
 
 #. translators: 1: thin posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3448
+#: includes/seo/class-seo-analyzer.php:3537
 #, php-format
 msgid "%1$d of your %2$d most recent pages are under 300 words. An assistant with a choice of sources rarely quotes the thinnest one."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3449
+#: includes/seo/class-seo-analyzer.php:3538
 msgid "Expand thin pages so each one answers its topic completely, or merge them into a page that does."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3462
+#: includes/seo/class-seo-analyzer.php:3551
 msgid "Content has been updated recently"
 msgstr ""
 
 #. translators: 1: matching posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3467
+#: includes/seo/class-seo-analyzer.php:3556
 #, php-format
 msgid "%1$d of your %2$d most recent pages were revised within the last year."
 msgstr ""
 
 #. translators: 1: stale posts, 2: sampled posts.
-#: includes/seo/class-seo-analyzer.php:3469
+#: includes/seo/class-seo-analyzer.php:3558
 #, php-format
 msgid "%1$d of your %2$d most recent pages have not been revised in over a year. AI answers favour sources that look current."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3470
+#: includes/seo/class-seo-analyzer.php:3559
 msgid "Review your most important pages, update what has changed, and save them so their modified date reflects the revision."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3492
+#: includes/seo/class-seo-analyzer.php:3581
 msgid "Links and buttons have names an agent can read"
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3507
+#: includes/seo/class-seo-analyzer.php:3596
 msgid "The sampled pages have no links or buttons to check."
 msgstr ""
 
 #. translators: 1: interactive elements checked, 2: pages sampled.
-#: includes/seo/class-seo-analyzer.php:3517
+#: includes/seo/class-seo-analyzer.php:3606
 #, php-format
 msgid "All %1$d links and buttons on the %2$d sampled page have a name."
 msgid_plural "All %1$d links and buttons across the %2$d sampled pages have a name."
@@ -8631,21 +8820,21 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: unnamed elements, 2: elements checked, 3: pages sampled.
-#: includes/seo/class-seo-analyzer.php:3541
+#: includes/seo/class-seo-analyzer.php:3630
 #, php-format
 msgid "%1$d of %2$d links and buttons across %3$d sampled pages have no name. An agent or screen reader cannot tell what they do."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3546
+#: includes/seo/class-seo-analyzer.php:3635
 msgid "Give each one words. Add visible text, or an aria-label on the element, or alt text on the image inside it. An icon on its own is not a name."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3565
+#: includes/seo/class-seo-analyzer.php:3654
 msgid "No interactive element is hidden from agents"
 msgstr ""
 
 #. translators: %d: pages sampled.
-#: includes/seo/class-seo-analyzer.php:3582
+#: includes/seo/class-seo-analyzer.php:3671
 #, php-format
 msgid "Nothing interactive is hidden from the accessibility tree on the %d sampled page."
 msgid_plural "Nothing interactive is hidden from the accessibility tree across the %d sampled pages."
@@ -8653,7 +8842,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of elements.
-#: includes/seo/class-seo-analyzer.php:3599
+#: includes/seo/class-seo-analyzer.php:3688
 #, php-format
 msgid "%d link or button sits inside aria-hidden markup, so it is clickable but invisible to an agent."
 msgid_plural "%d links or buttons sit inside aria-hidden markup, so they are clickable but invisible to an agent."
@@ -8661,18 +8850,18 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of elements.
-#: includes/seo/class-seo-analyzer.php:3612
+#: includes/seo/class-seo-analyzer.php:3701
 #, php-format
 msgid "%d element points aria-labelledby at an id that is not on the page, so it ends up with no name."
 msgid_plural "%d elements point aria-labelledby at an id that is not on the page, so they end up with no name."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/seo/class-seo-analyzer.php:3629
+#: includes/seo/class-seo-analyzer.php:3718
 msgid "Move aria-hidden onto the decorative icon rather than the control around it, and check that every aria-labelledby names an id that exists on the same page."
 msgstr ""
 
-#: includes/seo/class-seo-analyzer.php:3751
+#: includes/seo/class-seo-analyzer.php:3840
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:780
 #: src/admin/components/essential-seo/instant-indexing/History.js:374
 #: src/admin/components/seo/ImprovementSuggestions.js:369
@@ -8860,6 +9049,12 @@ msgstr ""
 
 #: includes/seo/class-topical-relevance.php:432
 msgid "The page came back empty."
+msgstr ""
+
+#. translators: %d: HTTP status code
+#: includes/seo/duplicate-tags/class-duplicate-tag-detector.php:281
+#, php-format
+msgid "The page answered with HTTP %d, so it could not be checked."
 msgstr ""
 
 #: includes/seo/email-report-sections/class-ai-search-section.php:118
@@ -9535,6 +9730,219 @@ msgstr ""
 msgid "Check a few pages, then deactivate %s."
 msgstr ""
 
+#. translators: 1: number of tags, 2: tag name such as og:title
+#: includes/seo/regression/class-head-differ.php:128
+#, php-format
+msgid "The page now prints %1$d %2$s tags. Another plugin or the theme may have started printing its own; Duplicate Tag Guard can remove the extra copy."
+msgstr ""
+
+#. translators: %s: tag name such as og:title
+#: includes/seo/regression/class-head-differ.php:139
+#, php-format
+msgid "%s is printed once again."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:179
+msgid "The redirect now goes somewhere else."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:190
+msgid "The page now redirects. Search engines will index the destination instead."
+msgstr ""
+
+#. translators: %d: HTTP status code
+#: includes/seo/regression/class-head-differ.php:196
+#, php-format
+msgid "The page stopped loading: it now answers HTTP %d instead of 200."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:202
+msgid "The page loads normally again."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:205
+msgid "The page answers with a different HTTP status."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:223
+msgid "The page no longer has a title."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:226
+msgid "The title changed."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:244
+msgid "The meta description is gone. Google will write its own snippet."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:247
+msgid "The meta description changed."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:264
+msgid "The page now tells search engines not to index it (noindex)."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:267
+msgid "The page no longer carries noindex."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:270
+msgid "The robots directives changed."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:293
+msgid "The canonical now points to a different URL. Search engines may drop this page in favour of that one."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:295
+msgid "The canonical points at this page again."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:297
+msgid "The canonical tag is gone."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:299
+msgid "The canonical URL changed."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:301
+msgid "The canonical URL changed form (scheme or trailing slash) but names the same page."
+msgstr ""
+
+#. translators: %d: number of canonical tags
+#: includes/seo/regression/class-head-differ.php:310
+#, php-format
+msgid "The page now prints %d canonical tags. Search engines may ignore all of them."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:318
+msgid "The page prints a single canonical tag again."
+msgstr ""
+
+#. translators: %s: schema.org type, e.g. Product
+#: includes/seo/regression/class-head-differ.php:341
+#, php-format
+msgid "%s structured data is gone from the page."
+msgstr ""
+
+#. translators: 1: schema.org type, 2: number of entities
+#: includes/seo/regression/class-head-differ.php:350
+#, php-format
+msgid "The page now has %2$d %1$s entities. Two sources are likely printing the same structured data."
+msgstr ""
+
+#. translators: 1: schema.org type, 2: number of entities now
+#: includes/seo/regression/class-head-differ.php:360
+#, php-format
+msgid "The page is down to %2$d %1$s entity where it had more than one."
+msgstr ""
+
+#. translators: 1: property label, 2: schema.org type
+#: includes/seo/regression/class-head-differ.php:378
+#, php-format
+msgid "%1$s is missing from the %2$s structured data. The rich result that shows it may stop appearing."
+msgstr ""
+
+#. translators: 1: property label, 2: schema.org type
+#: includes/seo/regression/class-head-differ.php:386
+#, php-format
+msgid "%1$s changed in the %2$s structured data."
+msgstr ""
+
+#. translators: %s: schema.org type
+#: includes/seo/regression/class-head-differ.php:397
+#, php-format
+msgid "%s structured data was added."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:405
+msgid "A structured data block no longer parses as JSON. Search engines ignore it."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:433
+msgid "og:image is gone. Shares of this page will show no picture."
+msgstr ""
+
+#. translators: %s: tag name, e.g. og:title
+#: includes/seo/regression/class-head-differ.php:439
+#, php-format
+msgid "%s changed."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:465
+msgid "The language alternates (hreflang) changed."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:483
+msgid "The page no longer has an H1 heading."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:486
+msgid "The number of H1 headings changed."
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:583
+msgid "The name"
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:584
+msgid "The price"
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:585
+#: src/admin/components/essential-seo/schema/forms/SchemaProductForm.js:226
+#: src/admin/components/essential-seo/schema/forms/SchemaSoftwareForm.js:445
+msgid "Availability"
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:586
+msgid "The rating"
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:587
+msgid "The review count"
+msgstr ""
+
+#: includes/seo/regression/class-head-differ.php:588
+msgid "The number of items"
+msgstr ""
+
+#: includes/seo/regression/class-head-snapshotter.php:118
+msgid "Regression Guard only checks URLs on this site."
+msgstr ""
+
+#. translators: %d: HTTP status code
+#: includes/seo/regression/class-head-snapshotter.php:166
+#, php-format
+msgid "The server refused its own request with HTTP %d."
+msgstr ""
+
+#: includes/seo/regression/class-regression-guard.php:138
+#: src/admin/components/common/TitlePreview.js:82
+#: src/admin/components/essential-seo/RegressionGuardTab.js:483
+#: src/admin/components/essential-seo/RegressionGuardTab.js:512
+msgid "Homepage"
+msgstr ""
+
+#: includes/seo/regression/class-regression-guard.php:154
+msgid "Only published, publicly viewable content can be checked: the check loads the page the way a logged-out visitor does."
+msgstr ""
+
+#. translators: %s: technical detail
+#: includes/seo/regression/class-regression-guard.php:532
+#, php-format
+msgid "The page could not be read (%s). Either it is behind a login, password or firewall for logged-out visitors, or the host blocks the site from loading its own pages. Nothing was compared, and the last check is kept."
+msgstr ""
+
+#. translators: %s: technical detail
+#: includes/seo/regression/class-regression-guard.php:538
+#, php-format
+msgid "The server could not load its own page (%s). Some hosts block a site from requesting itself; ask your host to allow loopback requests. Nothing was compared, and the last check is kept."
+msgstr ""
+
 #: includes/seo/timeline/class-event-recorder.php:274
 msgid "Search engines were discouraged from indexing this site"
 msgstr ""
@@ -9704,11 +10112,11 @@ msgstr ""
 msgid "ThinkRank requires WordPress 6.0 or higher. Please upgrade your WordPress installation."
 msgstr ""
 
-#: thinkrank.php:531
+#: thinkrank.php:532
 msgid "ThinkRank activation failed. Please check your server logs."
 msgstr ""
 
-#: thinkrank.php:532
+#: thinkrank.php:533
 msgid "Plugin Activation Error"
 msgstr ""
 
@@ -9961,7 +10369,7 @@ msgid "Copy focus keyword"
 msgstr ""
 
 #: src/admin/components/ai/MetadataGenerator.js:591
-#: src/admin/components/essential-seo/SidebarNavigation.js:325
+#: src/admin/components/essential-seo/SidebarNavigation.js:333
 #: src/admin/components/essential-seo/SiteIdentityTab.js:957
 msgid "AI Suggestions"
 msgstr ""
@@ -10296,7 +10704,7 @@ msgstr ""
 #: src/admin/components/common/ModeSwitch.js:39
 #: src/admin/components/essential-seo/schema/forms/SchemaHowToForm.js:53
 #: src/metabox/components/MetaboxApp.js:445
-#: src/metabox/components/panels/AdvancedPanel.js:33
+#: src/metabox/components/panels/AdvancedPanel.js:35
 #: src/term-seo/components/TermSeoPanel.js:109
 msgid "Advanced"
 msgstr ""
@@ -10381,10 +10789,6 @@ msgstr ""
 #: src/admin/components/essential-seo/ImageSEOTab.js:805
 #: src/admin/components/essential-seo/ImageSEOTab.js:896
 msgid "This feature is disabled. Enable it to access configuration options."
-msgstr ""
-
-#: src/admin/components/common/TitlePreview.js:82
-msgid "Homepage"
 msgstr ""
 
 #: src/admin/components/common/TitlePreview.js:86
@@ -10972,7 +11376,7 @@ msgstr ""
 #: src/admin/components/content-brief/KeywordInput.js:17
 #: src/admin/components/essential-seo/analytics/DashboardSection.js:1725
 #: src/admin/components/essential-seo/schema/forms/SchemaProductForm.js:302
-#: src/admin/components/essential-seo/SidebarNavigation.js:218
+#: src/admin/components/essential-seo/SidebarNavigation.js:226
 #: src/admin/components/seo/ImprovementSuggestions.js:364
 msgid "Keywords"
 msgstr ""
@@ -11240,6 +11644,7 @@ msgstr ""
 
 #: src/admin/components/dashboard/SiteHealthAudit.js:95
 #: src/admin/components/essential-seo/analytics/TimelineSection.js:48
+#: src/admin/components/regression-guard/HeadCheckResult.js:19
 msgid "Warning"
 msgstr ""
 
@@ -11585,7 +11990,7 @@ msgstr ""
 
 #: src/admin/components/essential-seo/ai-insights/AIInsightsTab.js:713
 #: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:123
-#: src/admin/components/essential-seo/SidebarNavigation.js:422
+#: src/admin/components/essential-seo/SidebarNavigation.js:430
 msgid "Markdown for AI"
 msgstr ""
 
@@ -11685,7 +12090,7 @@ msgid "No AI crawler hits recorded yet."
 msgstr ""
 
 #: src/admin/components/essential-seo/ai-insights/AIInsightsTab.js:1067
-#: src/admin/components/essential-seo/SidebarNavigation.js:274
+#: src/admin/components/essential-seo/SidebarNavigation.js:282
 msgid "AI Traffic"
 msgstr ""
 
@@ -11727,6 +12132,7 @@ msgstr ""
 
 #. translators: %d: number of days.
 #: src/admin/components/essential-seo/ai-insights/guidance.js:33
+#: src/admin/components/essential-seo/RegressionGuardTab.js:93
 #, js-format
 msgid "%d day ago"
 msgid_plural "%d days ago"
@@ -11825,7 +12231,7 @@ msgid "Failed to refresh analytics data. Please try again."
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/AnalyticsTab.js:606
-#: src/admin/components/essential-seo/SidebarNavigation.js:247
+#: src/admin/components/essential-seo/SidebarNavigation.js:255
 msgid "Question Coverage"
 msgstr ""
 
@@ -11846,7 +12252,7 @@ msgid "Find the questions most often missing across your content"
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/AnalyticsTab.js:680
-#: src/admin/components/essential-seo/SidebarNavigation.js:232
+#: src/admin/components/essential-seo/SidebarNavigation.js:240
 msgid "Rank Tracker"
 msgstr ""
 
@@ -11867,7 +12273,7 @@ msgid "Follow your progress over time to prove your SEO results"
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/AnalyticsTab.js:710
-#: src/admin/components/essential-seo/SidebarNavigation.js:237
+#: src/admin/components/essential-seo/SidebarNavigation.js:245
 msgid "Traffic Recovery"
 msgstr ""
 
@@ -11888,7 +12294,7 @@ msgid "Apply an optimized title and meta description, then re-score in one click
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/AnalyticsTab.js:744
-#: src/admin/components/essential-seo/SidebarNavigation.js:242
+#: src/admin/components/essential-seo/SidebarNavigation.js:250
 msgid "Index Status"
 msgstr ""
 
@@ -12261,16 +12667,20 @@ msgid "Toggle the \"Enable SEO Analytics\" switch above to start collecting data
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/TimelineSection.js:42
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:238
 #: src/admin/components/essential-seo/performance/OpportunitiesSection.js:67
+#: src/admin/components/regression-guard/HeadCheckResult.js:18
 msgid "Critical"
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/TimelineSection.js:54
+#: src/admin/components/regression-guard/HeadCheckResult.js:20
 msgid "Info"
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/TimelineSection.js:69
-#: src/metabox/components/panels/AdvancedPanel.js:38
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:45
+#: src/metabox/components/panels/AdvancedPanel.js:40
 #: src/term-seo/components/TermSeoPanel.js:550
 msgid "Canonical URL"
 msgstr ""
@@ -12601,7 +13011,7 @@ msgid "Title experiments could not be loaded."
 msgstr ""
 
 #: src/admin/components/essential-seo/analytics/TitleExperimentsTab.js:301
-#: src/admin/components/essential-seo/SidebarNavigation.js:224
+#: src/admin/components/essential-seo/SidebarNavigation.js:232
 msgid "Title Experiments"
 msgstr ""
 
@@ -13368,7 +13778,7 @@ msgid "Metas"
 msgstr ""
 
 #: src/admin/components/essential-seo/ContentTypeMatrix.js:69
-#: src/admin/components/essential-seo/SidebarNavigation.js:378
+#: src/admin/components/essential-seo/SidebarNavigation.js:386
 msgid "Open Graph"
 msgstr ""
 
@@ -13606,7 +14016,7 @@ msgstr ""
 #: src/admin/components/essential-seo/schema/forms/SchemaOrganizationRelations.js:294
 #: src/admin/components/essential-seo/schema/forms/SchemaOrganizationRelations.js:354
 #: src/admin/components/essential-seo/schema/forms/SchemaOrganizationRelations.js:440
-#: src/admin/components/essential-seo/SidebarNavigation.js:305
+#: src/admin/components/essential-seo/SidebarNavigation.js:313
 #: src/admin/components/essential-seo/SocialMediaTab.js:1212
 msgid "Website"
 msgstr ""
@@ -14832,6 +15242,7 @@ msgid "Checked:"
 msgstr ""
 
 #: src/admin/components/essential-seo/crawling-ai-indexing/sitemap/SitemapGeneration.js:1263
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:367
 msgid "Checking…"
 msgstr ""
 
@@ -14981,7 +15392,7 @@ msgid "Directory traversal not allowed in sitemap URL"
 msgstr ""
 
 #: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:88
-#: src/admin/components/essential-seo/SidebarNavigation.js:413
+#: src/admin/components/essential-seo/SidebarNavigation.js:421
 msgid "Publisher Sitemaps"
 msgstr ""
 
@@ -15018,7 +15429,7 @@ msgid "Your HTML page stays canonical, so nothing about your SEO changes"
 msgstr ""
 
 #: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:158
-#: src/admin/components/essential-seo/SidebarNavigation.js:427
+#: src/admin/components/essential-seo/SidebarNavigation.js:435
 msgid "AI Usage Policy"
 msgstr ""
 
@@ -15043,7 +15454,7 @@ msgid "Published at the top of llms.txt, where crawlers look first"
 msgstr ""
 
 #: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:197
-#: src/admin/components/essential-seo/SidebarNavigation.js:432
+#: src/admin/components/essential-seo/SidebarNavigation.js:440
 msgid "llms-full.txt"
 msgstr ""
 
@@ -15066,6 +15477,217 @@ msgstr ""
 #: src/admin/components/essential-seo/CrawlingAIIndexingTab.js:224
 #: src/admin/components/essential-seo/InstantIndexing.js:72
 msgid "Please select a sub-section from the navigation."
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:37
+msgid "Title and meta description"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:38
+msgid "A theme that prints its own <title>, or a second meta description."
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:46
+msgid "With two canonicals, search engines may ignore both."
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:53
+msgid "Robots meta tag"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:54
+msgid "A second robots tag can quietly add noindex or nofollow."
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:61
+msgid "Open Graph and Twitter cards"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:62
+msgid "Two og:image tags and Facebook may show the wrong picture."
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:69
+msgid "Structured data (JSON-LD)"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:70
+msgid "Removes another plugin’s block only when ThinkRank already publishes every type in it."
+msgstr ""
+
+#. translators: %s: meta tag name such as robots.
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:99
+#, js-format
+msgid "%s meta tag"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:155
+msgid "Not checked"
+msgstr ""
+
+#. translators: %d: number of critical duplicates.
+#. translators: %d: number of critical changes.
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:162
+#: src/admin/components/essential-seo/RegressionGuardTab.js:221
+#, js-format
+msgid "%d critical"
+msgid_plural "%d critical"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of duplicated tags.
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:172
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:491
+#, js-format
+msgid "%d found"
+msgid_plural "%d found"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:178
+msgid "Cleaned up"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:181
+msgid "No duplicates"
+msgstr ""
+
+#. translators: 1: copies in all, 2: ThinkRank's copies, 3: other copies.
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:221
+#, js-format
+msgid "%1$d copies: ThinkRank %2$d, others %3$d"
+msgstr ""
+
+#. translators: %s: plugin names.
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:231
+#, js-format
+msgid "probably %s"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:234
+msgid "another plugin or your theme"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:242
+msgid "Not ours to remove"
+msgstr ""
+
+#. translators: %d: number of duplicated tags.
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:277
+#, js-format
+msgid "%d duplicate"
+msgid_plural "%d duplicates"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:288
+msgid "Clean"
+msgstr ""
+
+#. translators: %d: number of tags.
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:294
+#, js-format
+msgid "%d removed"
+msgid_plural "%d removed"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:346
+#: src/admin/components/essential-seo/SidebarNavigation.js:198
+msgid "Duplicate Tags"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:353
+msgid "Themes and other plugins often print their own title, canonical or Open Graph tags next to ThinkRank’s. Two canonicals and Google may ignore both; two og:image tags and Facebook may pick the wrong one."
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:368
+#: src/admin/components/essential-seo/RegressionGuardTab.js:435
+#: src/admin/components/essential-seo/RegressionGuardTab.js:516
+#: src/metabox/components/panels/QuestionCoverageCard.js:580
+msgid "Check again"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:374
+msgid "Tags printed twice"
+msgstr ""
+
+#. translators: %d: number of critical duplicates.
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:385
+#, js-format
+msgid "%d of them critical"
+msgid_plural "%d of them critical"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of pages checked.
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:395
+#, js-format
+msgid "On %d page checked"
+msgid_plural "Across %d pages checked"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:406
+msgid "Removed by ThinkRank"
+msgstr ""
+
+#. translators: 1: switches on, 2: switches in all.
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:415
+#, js-format
+msgid "%1$d of %2$d switches on"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:421
+#: src/admin/components/essential-seo/RegressionGuardTab.js:614
+msgid "Last check"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:425
+#: src/admin/components/essential-seo/RegressionGuardTab.js:618
+#: src/admin/components/import-export/SnapshotInfo.js:58
+msgid "Never"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:436
+msgid "THINKRANK_DISABLE_DUPLICATE_TAG_GUARD is set in wp-config.php, so nothing is removed whatever these switches say."
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:460
+msgid "Remove duplicates"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:461
+msgid "Switch a family on to take the other copies out of your pages. ThinkRank’s own tags are always kept, and tags ThinkRank does not print are never touched."
+msgstr ""
+
+#. translators: %s: tag family.
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:511
+#, js-format
+msgid "Duplicate %s tags are now removed. A page cache may serve the old page until it refreshes."
+msgstr ""
+
+#. translators: %s: tag family.
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:519
+#, js-format
+msgid "Duplicate %s tags are no longer removed."
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:551
+msgid "Couldn’t save the setting."
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:569
+msgid "Duplicate tags could not be checked."
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:611
+#: src/admin/components/essential-seo/RegressionGuardTab.js:587
+msgid "Pages checked"
+msgstr ""
+
+#: src/admin/components/essential-seo/DuplicateTagsTab.js:612
+msgid "The home page and the latest post, fetched the way a visitor sees them."
 msgstr ""
 
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:108
@@ -15121,7 +15743,7 @@ msgid "Loading email report settings…"
 msgstr ""
 
 #: src/admin/components/essential-seo/email-reporting/EmailReportingPanel.js:335
-#: src/admin/components/essential-seo/SidebarNavigation.js:228
+#: src/admin/components/essential-seo/SidebarNavigation.js:236
 msgid "Email Reporting"
 msgstr ""
 
@@ -15337,8 +15959,8 @@ msgid "Save Exceptions"
 msgstr ""
 
 #: src/admin/components/essential-seo/FocusPagesTab.js:23
-#: src/admin/components/essential-seo/SidebarNavigation.js:385
-#: src/admin/components/essential-seo/SidebarNavigation.js:493
+#: src/admin/components/essential-seo/SidebarNavigation.js:393
+#: src/admin/components/essential-seo/SidebarNavigation.js:501
 msgid "Focus Pages"
 msgstr ""
 
@@ -15881,7 +16503,7 @@ msgid "Format used for the new title attribute values."
 msgstr ""
 
 #: src/admin/components/essential-seo/ImageSEOTab.js:760
-#: src/admin/components/essential-seo/SidebarNavigation.js:289
+#: src/admin/components/essential-seo/SidebarNavigation.js:297
 msgid "Image SEO Settings"
 msgstr ""
 
@@ -16198,7 +16820,7 @@ msgstr ""
 #: src/admin/components/essential-seo/instant-indexing/History.js:362
 #: src/admin/components/essential-seo/instant-indexing/SubmitURLs.js:418
 #: src/admin/components/essential-seo/instant-indexing/SubmitURLs.js:479
-#: src/admin/components/essential-seo/SidebarNavigation.js:447
+#: src/admin/components/essential-seo/SidebarNavigation.js:455
 msgid "Submit URLs"
 msgstr ""
 
@@ -17202,6 +17824,189 @@ msgstr ""
 msgid "Automatically log every 404 and fix broken URLs in one click"
 msgstr ""
 
+#: src/admin/components/essential-seo/RegressionGuardTab.js:73
+msgid "Just now"
+msgstr ""
+
+#. translators: %d: number of minutes.
+#: src/admin/components/essential-seo/RegressionGuardTab.js:79
+#, js-format
+msgid "%d minute ago"
+msgid_plural "%d minutes ago"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of hours.
+#: src/admin/components/essential-seo/RegressionGuardTab.js:87
+#, js-format
+msgid "%d hour ago"
+msgid_plural "%d hours ago"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:138
+#: src/admin/components/essential-seo/RegressionGuardTab.js:499
+msgid "Not checked yet"
+msgstr ""
+
+#. translators: %d: number of critical changes.
+#: src/admin/components/essential-seo/RegressionGuardTab.js:146
+#, js-format
+msgid "%d critical change"
+msgid_plural "%d critical changes"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of warnings.
+#: src/admin/components/essential-seo/RegressionGuardTab.js:161
+#: src/admin/components/essential-seo/RegressionGuardTab.js:235
+#, js-format
+msgid "%d warning"
+msgid_plural "%d warnings"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:167
+msgid "Baseline saved"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:170
+#: src/admin/components/essential-seo/RegressionGuardTab.js:212
+msgid "No changes"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:207
+msgid "First check"
+msgstr ""
+
+#. translators: %d: number of informational changes.
+#: src/admin/components/essential-seo/RegressionGuardTab.js:249
+#, js-format
+msgid "%d info"
+msgid_plural "%d info"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:255
+msgid "Expected"
+msgstr ""
+
+#. translators: %s: page name.
+#: src/admin/components/essential-seo/RegressionGuardTab.js:278
+#, js-format
+msgid "%s checked. Check it again after an update to see what changed."
+msgstr ""
+
+#. translators: 1: page name, 2: number of critical changes.
+#: src/admin/components/essential-seo/RegressionGuardTab.js:291
+#, js-format
+msgid "%1$s: %2$d critical change since the last check."
+msgid_plural "%1$s: %2$d critical changes since the last check."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: 1: page name, 2: number of changes.
+#: src/admin/components/essential-seo/RegressionGuardTab.js:308
+#, js-format
+msgid "%1$s: %2$d change since the last check."
+msgid_plural "%1$s: %2$d changes since the last check."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: page name.
+#: src/admin/components/essential-seo/RegressionGuardTab.js:324
+#, js-format
+msgid "%s: nothing changed since the last check."
+msgstr ""
+
+#. translators: %s: page name.
+#: src/admin/components/essential-seo/RegressionGuardTab.js:347
+#, js-format
+msgid "%s could not be checked."
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:393
+msgid "The last check could not be loaded."
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:448
+msgid "Hide changes"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:449
+msgid "Show changes"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:517
+#: src/metabox/components/HeadCheckPanel.js:39
+msgid "Check now"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:569
+#: src/admin/components/essential-seo/SidebarNavigation.js:194
+msgid "Regression Guard"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:576
+msgid "Plugin, theme and WordPress updates can quietly change what your pages serve to Google: a noindex, a canonical pointing elsewhere, structured data that disappears. ThinkRank compares each check with the one before it and shows exactly what changed."
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:589
+msgid "Homepage and pages checked from the editor"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:595
+msgid "Critical changes"
+msgstr ""
+
+#. translators: %d: number of warnings.
+#: src/admin/components/essential-seo/RegressionGuardTab.js:602
+#, js-format
+msgid "and %d warning"
+msgid_plural "and %d warnings"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:610
+msgid "In each page’s last check"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:646
+msgid "Checked pages"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:647
+msgid "Check a page before and after an update to see what changed. To add a post, page or product, open it in the editor: ThinkRank panel → Advanced → What this page serves."
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:692
+msgid "The checked pages could not be loaded."
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:739
+msgid "Automatic checks after every update"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:743
+msgid "A manual check only helps if you remember to run it. Pro checks your key pages every night and right after any plugin, theme or WordPress update, and tells you when something changed that nobody asked for."
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:748
+msgid "Checks after every update and theme switch, plus nightly"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:752
+msgid "Covers Focus Pages, the homepage and one page of every content type"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:756
+msgid "Email or Slack alert only for unexpected critical changes"
+msgstr ""
+
+#: src/admin/components/essential-seo/RegressionGuardTab.js:760
+msgid "History of every check, grouped by the update that caused the change"
+msgstr ""
+
 #: src/admin/components/essential-seo/RoleManagerTab.js:56
 msgid "Failed to load roles."
 msgstr ""
@@ -17219,8 +18024,8 @@ msgid "Loading roles…"
 msgstr ""
 
 #: src/admin/components/essential-seo/RoleManagerTab.js:116
-#: src/admin/components/essential-seo/SidebarNavigation.js:457
-#: src/admin/components/essential-seo/SidebarNavigation.js:568
+#: src/admin/components/essential-seo/SidebarNavigation.js:465
+#: src/admin/components/essential-seo/SidebarNavigation.js:576
 msgid "Role Manager"
 msgstr ""
 
@@ -17465,7 +18270,7 @@ msgstr ""
 #: src/admin/components/essential-seo/schema/forms/SchemaLocalBusinessForm.js:254
 #: src/admin/components/essential-seo/schema/forms/SchemaReviewForm.js:40
 #: src/admin/components/essential-seo/schema/forms/SchemaSoftwareForm.js:79
-#: src/admin/components/essential-seo/SidebarNavigation.js:302
+#: src/admin/components/essential-seo/SidebarNavigation.js:310
 #: src/admin/config/schema-settings-config.js:222
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:126
 msgid "Organization"
@@ -18519,11 +19324,6 @@ msgstr ""
 msgid "e.g., 29.99"
 msgstr ""
 
-#: src/admin/components/essential-seo/schema/forms/SchemaProductForm.js:226
-#: src/admin/components/essential-seo/schema/forms/SchemaSoftwareForm.js:445
-msgid "Availability"
-msgstr ""
-
 #: src/admin/components/essential-seo/schema/forms/SchemaProductForm.js:235
 msgid "Current product availability status"
 msgstr ""
@@ -18687,7 +19487,7 @@ msgid "The review text"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/forms/SchemaSoftwareForm.js:78
-#: src/admin/components/essential-seo/SidebarNavigation.js:304
+#: src/admin/components/essential-seo/SidebarNavigation.js:312
 #: src/admin/setup-wizard/steps/Step3SiteSetup.js:117
 msgid "Person"
 msgstr ""
@@ -19133,7 +19933,7 @@ msgid "Deploy Schema"
 msgstr ""
 
 #: src/admin/components/essential-seo/schema/SchemaDeployment.js:295
-#: src/admin/components/essential-seo/SidebarNavigation.js:316
+#: src/admin/components/essential-seo/SidebarNavigation.js:324
 msgid "Deployment"
 msgstr ""
 
@@ -19488,23 +20288,23 @@ msgstr ""
 msgid "Refresh property list"
 msgstr ""
 
-#: src/admin/components/essential-seo/SEOAnalyzerTab.js:30
+#: src/admin/components/essential-seo/SEOAnalyzerTab.js:32
 msgid "Audit history"
 msgstr ""
 
-#: src/admin/components/essential-seo/SEOAnalyzerTab.js:31
+#: src/admin/components/essential-seo/SEOAnalyzerTab.js:33
 msgid "Re-running the audit replaces the old result, so a score on its own never tells you whether the site improved. Pro keeps every run and shows what changed between any two of them."
 msgstr ""
 
-#: src/admin/components/essential-seo/SEOAnalyzerTab.js:36
+#: src/admin/components/essential-seo/SEOAnalyzerTab.js:38
 msgid "A score trend across your recent audits"
 msgstr ""
 
-#: src/admin/components/essential-seo/SEOAnalyzerTab.js:40
+#: src/admin/components/essential-seo/SEOAnalyzerTab.js:42
 msgid "Compare two runs side by side, check by check"
 msgstr ""
 
-#: src/admin/components/essential-seo/SEOAnalyzerTab.js:44
+#: src/admin/components/essential-seo/SEOAnalyzerTab.js:46
 msgid "See exactly which checks improved and which regressed"
 msgstr ""
 
@@ -19532,7 +20332,7 @@ msgid "Breadcrumbs"
 msgstr ""
 
 #: src/admin/components/essential-seo/SidebarNavigation.js:188
-#: src/admin/components/essential-seo/SidebarNavigation.js:488
+#: src/admin/components/essential-seo/SidebarNavigation.js:496
 msgid "SEO Analyzer"
 msgstr ""
 
@@ -19544,129 +20344,129 @@ msgstr ""
 msgid "Site Audit"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:201
-#: src/admin/components/essential-seo/SidebarNavigation.js:498
+#: src/admin/components/essential-seo/SidebarNavigation.js:209
+#: src/admin/components/essential-seo/SidebarNavigation.js:506
 msgid "Integrations"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:205
+#: src/admin/components/essential-seo/SidebarNavigation.js:213
 msgid "Google Services"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:209
+#: src/admin/components/essential-seo/SidebarNavigation.js:217
 msgid "Social Platforms"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:221
+#: src/admin/components/essential-seo/SidebarNavigation.js:229
 msgid "Timeline"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:258
+#: src/admin/components/essential-seo/SidebarNavigation.js:266
 msgid "Core Web Vitals"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:262
+#: src/admin/components/essential-seo/SidebarNavigation.js:270
 msgid "Opportunities"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:264
+#: src/admin/components/essential-seo/SidebarNavigation.js:272
 msgid "Historical Data"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:265
+#: src/admin/components/essential-seo/SidebarNavigation.js:273
 msgid "Diagnostics"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:299
+#: src/admin/components/essential-seo/SidebarNavigation.js:307
 msgid "Schema Settings"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:301
+#: src/admin/components/essential-seo/SidebarNavigation.js:309
 msgid "Schema Types"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:303
+#: src/admin/components/essential-seo/SidebarNavigation.js:311
 msgid "LocalBusiness"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:308
+#: src/admin/components/essential-seo/SidebarNavigation.js:316
 msgid "Custom Schema"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:313
+#: src/admin/components/essential-seo/SidebarNavigation.js:321
 msgid "Custom Fields"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:336
+#: src/admin/components/essential-seo/SidebarNavigation.js:344
 msgid "Link Attributes"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:346
+#: src/admin/components/essential-seo/SidebarNavigation.js:354
 msgid "Redirects & 404s"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:357
+#: src/admin/components/essential-seo/SidebarNavigation.js:365
 msgid "Link Report"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:370
+#: src/admin/components/essential-seo/SidebarNavigation.js:378
 msgid "Product SEO"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:379
+#: src/admin/components/essential-seo/SidebarNavigation.js:387
 msgid "Twitter Cards"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:380
+#: src/admin/components/essential-seo/SidebarNavigation.js:388
 #: src/admin/components/essential-seo/SocialMediaTab.js:1606
 #: src/metabox/components/SocialTab.js:463
 #: src/metabox/components/SocialTab.js:524
 msgid "Preview"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:389
+#: src/admin/components/essential-seo/SidebarNavigation.js:397
 msgid "Diagnosis"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:400
+#: src/admin/components/essential-seo/SidebarNavigation.js:408
 msgid "Global Robots Meta"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:404
+#: src/admin/components/essential-seo/SidebarNavigation.js:412
 #: src/admin/components/essential-seo/site-identity/SiteIdentityOptimization.js:58
 #: src/admin/components/essential-seo/SiteIdentityTab.js:90
 msgid "Robots.txt"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:408
+#: src/admin/components/essential-seo/SidebarNavigation.js:416
 msgid "Permalinks"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:410
+#: src/admin/components/essential-seo/SidebarNavigation.js:418
 msgid "XML Sitemap"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:418
+#: src/admin/components/essential-seo/SidebarNavigation.js:426
 msgid "LLMs.txt for AI"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:451
+#: src/admin/components/essential-seo/SidebarNavigation.js:459
 msgid "History"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:461
+#: src/admin/components/essential-seo/SidebarNavigation.js:469
 msgid "Access Control"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:533
+#: src/admin/components/essential-seo/SidebarNavigation.js:541
 msgid "Link Manager"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:553
+#: src/admin/components/essential-seo/SidebarNavigation.js:561
 msgid "Crawling"
 msgstr ""
 
-#: src/admin/components/essential-seo/SidebarNavigation.js:726
+#: src/admin/components/essential-seo/SidebarNavigation.js:734
 msgid "Settings navigation"
 msgstr ""
 
@@ -22211,10 +23011,6 @@ msgstr[1] ""
 msgid "Partial"
 msgstr ""
 
-#: src/admin/components/import-export/SnapshotInfo.js:58
-msgid "Never"
-msgstr ""
-
 #: src/admin/components/import-export/SnapshotInfo.js:114
 msgid "Snapshot details"
 msgstr ""
@@ -24255,6 +25051,123 @@ msgstr ""
 
 #: src/admin/components/pro/ProLicenseNotice.js:89
 msgid "ThinkRank Pro is installed on this site, but its license has not been activated yet. Add your license key to unlock this feature."
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:24
+msgid "this page was edited"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:25
+msgid "this archive’s term was edited"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:26
+msgid "ThinkRank or WordPress settings changed"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:54
+#: src/admin/components/regression-guard/HeadCheckResult.js:193
+msgid "(none)"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:61
+msgid "Before:"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:67
+msgid "Now:"
+msgstr ""
+
+#. translators: %s: date and time of the previous check.
+#: src/admin/components/regression-guard/HeadCheckResult.js:126
+#, js-format
+msgid "Nothing changed since the check on %s."
+msgstr ""
+
+#. translators: 1: number of changes, 2: date and time of the previous check.
+#: src/admin/components/regression-guard/HeadCheckResult.js:136
+#, js-format
+msgid "%1$d change since the check on %2$s"
+msgid_plural "%1$d changes since the check on %2$s"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:149
+msgid " and "
+msgstr ""
+
+#. translators: %s: what was edited, e.g. "this page was edited".
+#: src/admin/components/regression-guard/HeadCheckResult.js:154
+#, js-format
+msgid "Probably expected: %s between the two checks. Make sure each change below is one you meant."
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:169
+msgid "Nobody edited this page or its settings in between, so something else made these changes: usually a plugin, theme or WordPress update."
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:219
+msgid "HTTP status"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:237
+msgid "Robots"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:240
+msgid "not indexed"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:246
+msgid "Canonical"
+msgstr ""
+
+#. translators: %d: number of canonical tags.
+#: src/admin/components/regression-guard/HeadCheckResult.js:251
+#, js-format
+msgid "%d tags"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:258
+msgid "Structured data"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:260
+msgid "og:image"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:264
+msgid "hreflang"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:268
+msgid "H1 headings"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:297
+msgid "The page could not be checked"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:305
+msgid "Not checked yet. The first check records what the page serves; each check after it shows what changed."
+msgstr ""
+
+#. translators: %s: date and time of the check.
+#: src/admin/components/regression-guard/HeadCheckResult.js:316
+#, js-format
+msgid "First check saved on %s. Check again after an update to see whether anything changed."
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:344
+msgid "Hide what the page serves"
+msgstr ""
+
+#: src/admin/components/regression-guard/HeadCheckResult.js:345
+msgid "Show what the page serves"
+msgstr ""
+
+#: src/admin/components/regression-guard/useHeadCheck.js:23
+msgid "The check could not be loaded. Try again."
 msgstr ""
 
 #: src/admin/components/seo/ImprovementSuggestions.js:335
@@ -26516,6 +27429,14 @@ msgstr ""
 msgid "Press Enter or comma to add. The first keyword is primary."
 msgstr ""
 
+#: src/metabox/components/HeadCheckPanel.js:26
+msgid "What this page serves"
+msgstr ""
+
+#: src/metabox/components/HeadCheckPanel.js:27
+msgid "Check the live page before and after an update to see whether anything changed."
+msgstr ""
+
 #. translators: %d: number of other posts
 #: src/metabox/components/KeywordUsageNotice.js:76
 #, js-format
@@ -26975,80 +27896,80 @@ msgstr ""
 msgid "This post will not be indexed by search engines."
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:16
+#: src/metabox/components/panels/AdvancedPanel.js:18
 msgid "301 (Permanent)"
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:17
+#: src/metabox/components/panels/AdvancedPanel.js:19
 msgid "302 (Temporary)"
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:18
+#: src/metabox/components/panels/AdvancedPanel.js:20
 msgid "307 (Temporary, keeps method)"
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:34
+#: src/metabox/components/panels/AdvancedPanel.js:36
 msgid "Canonical URL and content settings."
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:40
+#: src/metabox/components/panels/AdvancedPanel.js:42
 msgid "Override the canonical URL for this post. Leave empty to use the default permalink."
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:52
+#: src/metabox/components/panels/AdvancedPanel.js:54
 msgid "https://example.com/canonical-url"
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:60
+#: src/metabox/components/panels/AdvancedPanel.js:62
 msgid "Redirect this post to"
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:64
+#: src/metabox/components/panels/AdvancedPanel.js:66
 msgid "Visitors who open this post are sent here instead. Leave empty for no redirect."
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:68
+#: src/metabox/components/panels/AdvancedPanel.js:70
 msgid "Available with ThinkRank Pro. The redirect is stored as a rule in Redirections, where you can edit it later."
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:85
+#: src/metabox/components/panels/AdvancedPanel.js:87
 msgid "https://example.com/replacement-page"
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:97
+#: src/metabox/components/panels/AdvancedPanel.js:99
 #: src/term-seo/components/TermSeoPanel.js:590
 msgid "Redirect type"
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:99
+#: src/metabox/components/panels/AdvancedPanel.js:101
 msgid "Use 301 when the move is permanent. Search engines pass ranking signals on to the destination."
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:123
+#: src/metabox/components/panels/AdvancedPanel.js:125
 msgid "These control this site only. Search engines are handled separately, under Robots Meta below."
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:134
+#: src/metabox/components/panels/AdvancedPanel.js:136
 msgid "Hide from this site's search results"
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:138
+#: src/metabox/components/panels/AdvancedPanel.js:140
 msgid "Visitors searching your site will not see this post. It stays published and reachable at its own address."
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:149
+#: src/metabox/components/panels/AdvancedPanel.js:151
 msgid "Hide from archive pages"
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:150
+#: src/metabox/components/panels/AdvancedPanel.js:152
 msgid "Keeps this post off category, tag, author and date listings, and off the blog home."
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:164
+#: src/metabox/components/panels/AdvancedPanel.js:166
 msgid "This post is Pillar Content"
 msgstr ""
 
-#: src/metabox/components/panels/AdvancedPanel.js:165
+#: src/metabox/components/panels/AdvancedPanel.js:167
 msgid "Mark cornerstone content to power internal link suggestions."
 msgstr ""
 
@@ -27243,10 +28164,6 @@ msgstr ""
 
 #: src/metabox/components/panels/QuestionCoverageCard.js:577
 msgid "Run the check"
-msgstr ""
-
-#: src/metabox/components/panels/QuestionCoverageCard.js:580
-msgid "Check again"
 msgstr ""
 
 #: src/metabox/components/panels/QuestionCoverageCard.js:581

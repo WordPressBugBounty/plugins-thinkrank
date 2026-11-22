@@ -703,3 +703,52 @@ export const LocalSeoIllustration = () => (
 		<circle cx="75" cy="58" r="3.5" fill={W} />
 	</svg>
 );
+
+/* Regression Guard — a page head before and after an update, a shield over the
+   one line that changed. */
+export const RegressionGuardIllustration = () => (
+	<svg
+		viewBox="0 0 120 120"
+		fill="none"
+		xmlns="http://www.w3.org/2000/svg"
+		style={frame}
+		aria-hidden="true"
+	>
+		<rect
+			x="12"
+			y="20"
+			width="60"
+			height="76"
+			rx="6"
+			fill={W}
+			stroke={S}
+			strokeWidth="3"
+		/>
+		<path
+			d="M22 34h40M22 46h30M22 70h36M22 82h24"
+			stroke={S}
+			strokeWidth="3"
+			strokeLinecap="round"
+		/>
+		<path
+			d="M22 58h40"
+			stroke={A}
+			strokeWidth="3.5"
+			strokeLinecap="round"
+		/>
+		<path
+			d="M84 42l18 7v14c0 12-8 21-18 25-10-4-18-13-18-25V49l18-7z"
+			fill={W}
+			stroke={A}
+			strokeWidth="3.5"
+			strokeLinejoin="round"
+		/>
+		<path
+			d="M76 64l6 6 11-13"
+			stroke={M}
+			strokeWidth="3.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		/>
+	</svg>
+);

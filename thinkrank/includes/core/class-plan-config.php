@@ -237,6 +237,46 @@ final class Plan_Config {
     }
 
     /**
+     * Capability map for Regression Guard.
+     *
+     * Checking a page by hand and seeing what changed since the last check is
+     * FREE and stays free (#720). What Pro adds is the unattended half: checks
+     * that run nightly and right after a plugin, theme or core update, across
+     * a set of key pages, with a history of every check and an alert when a
+     * change nobody made turns up.
+     *
+     * Nothing in the free plugin schedules anything, so these only ever report
+     * what Pro has arranged.
+     *
+     * Schema:
+     *   scheduled    bool Pages are checked without the user asking.
+     *   history_runs int  Checks kept per page (0 = only the last one).
+     *   alerts       bool Unexpected critical changes are reported by email.
+     *
+     * @since 2.23.0
+     *
+     * @return array Capability map.
+     */
+    public static function regression_guard(): array {
+        $defaults = [
+            'scheduled'    => false,
+            'history_runs' => 0,
+            'alerts'       => false,
+        ];
+
+        /**
+         * Filter the Regression Guard capability map.
+         *
+         * @since 2.23.0
+         *
+         * @param array $defaults Capability map (see schema above).
+         */
+        $caps = apply_filters('thinkrank_regression_guard_capabilities', $defaults);
+
+        return array_merge($defaults, is_array($caps) ? $caps : []);
+    }
+
+    /**
      * Capability map for SEO Goals.
      *
      * The list itself — goals, done/ignore, section checklists — is FREE and
@@ -338,6 +378,8 @@ final class Plan_Config {
                 return self::duplicate_snippets();
             case 'thin_content':
                 return self::thin_content();
+            case 'regression_guard':
+                return self::regression_guard();
             case 'seo_goals':
                 return self::seo_goals();
             case 'title_experiments':

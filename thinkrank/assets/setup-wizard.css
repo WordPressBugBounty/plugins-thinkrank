@@ -1023,6 +1023,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 .tr-root .tr-min-w-\[940px\]{
   min-width: 940px;
 }
+.tr-root .tr-min-w-\[9rem\]{
+  min-width: 9rem;
+}
 .tr-root .tr-max-w-2xl{
   max-width: 42rem;
 }
@@ -1061,6 +1064,12 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-shrink-0{
   flex-shrink: 0;
+}
+.tr-root .tr-basis-60{
+  flex-basis: 15rem;
+}
+.tr-root .tr-basis-80{
+  flex-basis: 20rem;
 }
 .tr-root .tr-border-collapse{
   border-collapse: collapse;
@@ -1180,6 +1189,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 .tr-root .tr-grid-cols-\[64px_20px_1fr\]{
   grid-template-columns: 64px 20px 1fr;
+}
+.tr-root .tr-grid-cols-\[8rem_1fr\]{
+  grid-template-columns: 8rem 1fr;
 }
 .tr-root .tr-grid-cols-\[max-content_1fr\]{
   grid-template-columns: max-content 1fr;
@@ -2887,6 +2899,10 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   --tw-ring-color: rgb(68 81 255 / var(--tw-ring-opacity, 1));
 }
 
+.tr-root .disabled\:tr-cursor-default:disabled{
+  cursor: default;
+}
+
 .tr-root .disabled\:tr-cursor-not-allowed:disabled{
   cursor: not-allowed;
 }
@@ -2978,6 +2994,9 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   .tr-root .sm\:tr-grid-cols-2{
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .tr-root .sm\:tr-grid-cols-3{
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
   .tr-root .sm\:tr-grid-cols-4{
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -2986,6 +3005,16 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   }
   .tr-root .sm\:tr-flex-nowrap{
     flex-wrap: nowrap;
+  }
+  .tr-root :is(.sm\:tr-divide-x > :not([hidden]) ~ :not([hidden])){
+    --tw-divide-x-reverse: 0;
+    border-right-width: calc(1px * var(--tw-divide-x-reverse));
+    border-left-width: calc(1px * calc(1 - var(--tw-divide-x-reverse)));
+  }
+  .tr-root :is(.sm\:tr-divide-y-0 > :not([hidden]) ~ :not([hidden])){
+    --tw-divide-y-reverse: 0;
+    border-top-width: calc(0px * calc(1 - var(--tw-divide-y-reverse)));
+    border-bottom-width: calc(0px * var(--tw-divide-y-reverse));
   }
 }
 

@@ -261,6 +261,63 @@ class Foreign_Schema_Detector {
     }
 
     /**
+     * The page-level `@type`s in one decoded JSON-LD block — the types this
+     * detector compares, for the Duplicate Tag Guard to judge blocks by the
+     * same rule (#733).
+     *
+     * @since 2.23.0
+     *
+     * @param array<mixed> $decoded Decoded JSON-LD.
+     * @return string[]
+     */
+    public static function page_level_types(array $decoded): array {
+        $detector = new self();
+
+        return $detector->unique_types($detector->page_level_only($detector->collect_types($decoded)));
+    }
+
+    /**
+     * The page-level `@type`s a decoded JSON-LD block publishes as entities
+     * of their own: the block's root, each item of a bare list, and each
+     * item of `@graph`. A type that only appears inside another entity (a
+     * BlogPosting's `publisher`, its `mainEntityOfPage`) is a reference to
+     * that thing, not a publication of it, and is left out.
+     *
+     * The Duplicate Tag Guard reads ThinkRank's own block this way, so it
+     * never takes out another plugin's Organization or WebPage on the
+     * strength of a nested stub (#733).
+     *
+     * @since 2.23.0
+     *
+     * @param array<mixed> $decoded Decoded JSON-LD.
+     * @return string[]
+     */
+    public static function entity_types(array $decoded): array {
+        $detector = new self();
+
+        // A bare list holds the entities themselves; anything else is one
+        // entity, a wrapper around `@graph`, or both.
+        $entities = array_key_exists(0, $decoded) ? $decoded : [$decoded];
+        if (isset($decoded['@graph']) && is_array($decoded['@graph'])) {
+            $entities = array_merge($entities, $decoded['@graph']);
+        }
+
+        $types = [];
+        foreach ($entities as $entity) {
+            if (!is_array($entity) || !isset($entity['@type'])) {
+                continue;
+            }
+            foreach ((array) $entity['@type'] as $type) {
+                if (is_string($type) && '' !== $type) {
+                    $types[] = $type;
+                }
+            }
+        }
+
+        return $detector->unique_types($detector->page_level_only($types));
+    }
+
+    /**
      * Pull every `application/ld+json` block out of a document.
      *
      * Regex rather than DOMDocument: the scan runs against whatever a third

@@ -674,6 +674,22 @@ class Manager {
             // Site SEO Analyzer endpoint registration failed
         }
 
+        // Regression Guard (#720): what a page serves, compared with its last check
+        try {
+            $regression_guard_endpoint = new \ThinkRank\API\Regression_Guard_Endpoint();
+            $regression_guard_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Regression Guard endpoint registration failed
+        }
+
+        // Duplicate Tag Guard (#733): head tags printed twice, and the switches that remove the copies
+        try {
+            $duplicate_tags_endpoint = new \ThinkRank\API\Duplicate_Tags_Endpoint();
+            $duplicate_tags_endpoint->register_routes();
+        } catch (\Exception $e) {
+            // Duplicate Tag Guard endpoint registration failed
+        }
+
         // SEO Goals (#728): one prioritised to-do list from what ThinkRank knows
         try {
             $goals_endpoint = new \ThinkRank\API\Goals_Endpoint();

@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.22.0
+Stable tag: 2.23.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -263,6 +263,16 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.23.0 =
+Release Date: 2026-11-22
+
+- New: Regression Guard checks what a page serves to Google and shows what changed since last check
+- New: Check any post from the editor before and after an update, under Advanced
+- New: Duplicate Tags finds title, canonical, robots, social and schema tags printed twice
+- New: Switch on removal of the copies another plugin or your theme prints, one tag family at a time
+- New: The Site Audit flags duplicate head tags and offers a one-click fix
+- New: AI assistants can check what a page serves and read or manage duplicate tags
+
 = 2.22.0 =
 Release Date: 2026-11-18
 
@@ -313,26 +323,12 @@ Release Date: 2026-11-09
 - Improved: AI assistants respect a post open in the editor, and the MCP log marks plans and repeats
 - Improved: Security Enhancement
 
-= 2.21.1 =
-Release Date: 2026-11-05
-
-- Improved: The SEO Analyzer grades indexable content of every public post type, not just recent posts
-- Improved: SEO Analyzer answers over MCP are about half the size
-- Fixed: The search visibility check fails when the site-wide robots meta is set to No Index
-- Fixed: The Setup Wizard keeps the old SEO plugin active when a migration leaves items behind
-- Fixed: Imports flag items that need ThinkRank Pro and convert Rank Math variables with arguments
-- Fixed: Each sitemap in the index carries its own date, and sitemaps rebuild after permalink changes
-- Fixed: Removing the category base no longer redirects filtered date, author, shop or search pages
-- Fixed: An AI visit that passes through a redirect is counted once
-- Fixed: Unsaved SEO drafts no longer carry over between sites sharing one domain
-- Fixed: Minor archive title, import, shop schema, permalink and plugin compatibility issues
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.23.0 =
+Regression Guard compares what a page serves to Google with its last check, so a noindex or lost schema after an update is caught. Duplicate Tags finds head tags printed twice and can remove the copies another plugin prints. Recommended for all sites.
+
 = 2.22.0 =
 Rank what to fix next with SEO Goals, test page titles on real Google clicks with Title Experiments, and see every change that can move traffic in the SEO Timeline. Adds Google, Bing, Yandex and Baidu verification tags. Recommended for all sites.
-
-= 2.21.4 =
-Connected apps stay connected after a lost token renewal, and category embeds and feeds work with the category base removed. Recommended for all sites.

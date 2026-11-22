@@ -13,6 +13,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
 
+use ThinkRank\Abilities\Analysis\Check_Page_Head;
+use ThinkRank\Abilities\Analysis\Get_Duplicate_Tags;
+use ThinkRank\Abilities\Analysis\Get_Page_Head_Snapshot;
+use ThinkRank\Abilities\Analysis\Update_Duplicate_Tag_Guard;
 use ThinkRank\Abilities\Analysis\Get_Post_Seo_Checks;
 use ThinkRank\Abilities\Analysis\Get_Seo_Goals;
 use ThinkRank\Abilities\Analysis\Update_Seo_Goal;
@@ -455,6 +459,10 @@ class Abilities_Registrar {
 			new Get_Ai_Insights(),
 			new Get_Topical_Relevance(),
 			new Run_Seo_Analyzer(),
+			new Get_Page_Head_Snapshot(),
+			new Check_Page_Head(),
+			new Get_Duplicate_Tags(),
+			new Update_Duplicate_Tag_Guard(),
 			new Get_Seo_Goals(),
 			new Update_Seo_Goal(),
 			new Fix_Seo_Check(),

@@ -1,5 +1,6 @@
 /**
- * Advanced panel — canonical URL, redirect, pillar content, and robots meta.
+ * Advanced panel — canonical URL, redirect, pillar content, robots meta, and
+ * Regression Guard's check of what the page serves.
  */
 
 import { __ } from '@wordpress/i18n';
@@ -11,6 +12,7 @@ import Field from '../ui/Field';
 import { IconSliders } from '../ui/icons';
 import PillarContentSuggestions from '../PillarContentSuggestions';
 import MetaboxRobotsTab from '../MetaboxRobotsTab';
+import HeadCheckPanel from '../HeadCheckPanel';
 
 const REDIRECT_TYPE_LABELS = {
 	301: __('301 (Permanent)', 'thinkrank'),
@@ -179,6 +181,8 @@ const AdvancedPanel = ({
 			advancedRobotsMeta={formData.thinkrank_advanced_robots_meta}
 			onChange={onRobotsChange}
 		/>
+
+		{!!postId && <HeadCheckPanel postId={postId} />}
 	</div>
 );
 

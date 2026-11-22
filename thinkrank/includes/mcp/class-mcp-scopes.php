@@ -148,6 +148,8 @@ final class Mcp_Scopes {
 		// The analyzer's one-click fixes are settings changes. Each call also
 		// needs the area of the fix it names: see ARGUMENT_AREAS.
 		'fix-seo-check'                    => 'settings',
+		// Duplicate Tag Guard switches decide which foreign head tags are removed.
+		'update-duplicate-tag-guard'       => 'settings',
 
 		// Indexing: what crawlers and search engines are told.
 		'get-robots-txt'                   => 'indexing',
@@ -178,6 +180,9 @@ final class Mcp_Scopes {
 		'get-topical-relevance'            => 'analytics',
 		'get-seo-score-history'            => 'analytics',
 		'get-mcp-activity'                 => 'analytics',
+		'get-page-head-snapshot'           => 'analytics',
+		'check-page-head'                  => 'analytics',
+		'get-duplicate-tags'               => 'analytics',
 		'get-seo-goals'                    => 'analytics',
 		'update-seo-goal'                  => 'analytics',
 		'get-ai-insights'                  => 'analytics',
@@ -228,6 +233,7 @@ final class Mcp_Scopes {
 				'image_alt_text'    => 'content',
 				'ai_crawler_access' => 'indexing',
 				'llms_txt'          => 'indexing',
+				'duplicate_head_tags' => 'settings',
 			],
 		],
 		'update-site-identity-settings' => [

@@ -83,6 +83,19 @@ const TTL_RULES = [
 	// response returned the same `pending` to every poll, and the scan froze
 	// after its first batch on any site with more than 50 pages (#565).
 	['/thinkrank/v1/global-seo/thin-content', 0],
+	// Regression Guard checks are stored by whoever ran them — the editor
+	// panel, the check-page-head ability, Pro's scheduled run — none of which
+	// purges this browser's cache, and the read is a single option or meta row
+	// (#720).
+	['/thinkrank/v1/regression-guard', 0],
+	// Pro's monitoring panel reads the same kind of state: a check queued by a
+	// plugin update on the Plugins screen, the nightly run, its alerts. A cached
+	// overview hid the queued check and new runs for five minutes.
+	['/thinkrank-pro/v1/regression-guard', 0],
+	// The duplicate tag report changes when the analyzer's one-click fix or
+	// the update-duplicate-tag-guard ability flips a switch, neither of which
+	// purges this browser's cache (#733).
+	['/thinkrank/v1/duplicate-tags', 0],
 	// SEO Goals are rebuilt server-side (cached an hour, dropped on any
 	// settings or content change) from state other screens write — a cached
 	// copy here would keep "Connect Search Console" up after connecting (#728).

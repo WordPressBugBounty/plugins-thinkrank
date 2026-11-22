@@ -208,6 +208,12 @@ class SEO_Analyzer {
             }
         }
 
+        // A forced run is asked to look again, so the head tag check fetches
+        // the pages again rather than answering from its own hour of cache.
+        if ($force) {
+            Duplicate_Tags\Duplicate_Tag_Detector::flush_cache();
+        }
+
         // A forced run is the user asking for a fresh answer, usually after
         // fixing something, so it re-reads the rendered pages too. The stored
         // sample outlives the analysis on purpose (Page_Sampler::CACHE_TTL),
@@ -711,6 +717,7 @@ class SEO_Analyzer {
             // Advanced SEO
             ['id' => 'xml_sitemap', 'category' => 'advanced', 'weight' => 2, 'callback' => [$this, 'check_sitemap']],
             ['id' => 'schema', 'category' => 'advanced', 'weight' => 2, 'callback' => [$this, 'check_schema']],
+            ['id' => 'duplicate_head_tags', 'category' => 'advanced', 'weight' => 1.5, 'callback' => [$this, 'check_duplicate_head_tags']],
 
             // Content (bounded sample of published content)
             ['id' => 'meta_descriptions', 'category' => 'content', 'weight' => 2, 'callback' => [$this, 'check_meta_descriptions']],
@@ -1288,6 +1295,88 @@ class SEO_Analyzer {
             'message'    => __('No schema/structured data is configured or emitted. Schema powers rich results in search.', 'thinkrank'),
             'how_to_fix' => __('Turn on automatic structured data, or choose a schema type for each post type under Essential SEO → Bulk SEO Optimization.', 'thinkrank'),
         ];
+    }
+
+    /**
+     * Each head tag printed once: one title, one canonical, one set of Open
+     * Graph tags (#733). Reads what the home page and the latest post
+     * actually serve, so a theme or plugin printing its own copy is caught.
+     *
+     * @since 2.23.0
+     * @return array
+     */
+    public function check_duplicate_head_tags(): array {
+        $label  = __('No duplicate head tags', 'thinkrank');
+        $report = (new Duplicate_Tags\Duplicate_Tag_Detector())->scan();
+        $sum    = $report['summary'];
+
+        if (0 === $sum['checked']) {
+            $error = (string) ($report['pages'][0]['error'] ?? '');
+
+            return [
+                'label'      => $label,
+                'status'     => self::WARNING,
+                'message'    => __('Your pages could not be fetched, so duplicate tags could not be checked.', 'thinkrank') . ('' !== $error ? ' ' . $error : ''),
+                'how_to_fix' => __('The check fetches your home page from this server, like WordPress\'s own Site Health loopback test. A firewall or maintenance mode that blocks it will block this check too.', 'thinkrank'),
+            ];
+        }
+
+        if (0 === $sum['duplicates']) {
+            return [
+                'label'   => $label,
+                'status'  => self::PASSED,
+                'message' => $sum['removed'] > 0
+                    /* translators: %d: number of tags */
+                    ? sprintf(_n('Each SEO tag is printed once. ThinkRank removed %d duplicate tag another plugin or your theme printed.', 'Each SEO tag is printed once. ThinkRank removed %d duplicate tags other plugins or your theme printed.', $sum['removed'], 'thinkrank'), $sum['removed'])
+                    : __('Each SEO tag on your pages is printed once.', 'thinkrank'),
+            ];
+        }
+
+        $found = [];
+        foreach ($report['pages'] as $page) {
+            foreach ($page['duplicates'] as $row) {
+                $found[] = sprintf('%d × %s', $row['count'], self::duplicate_key_label($row['key'])) . ' (' . wp_make_link_relative($page['url']) . ')';
+            }
+        }
+
+        $how = [] !== $sum['removable_families']
+            ? __('Another plugin or your theme prints its own copies of tags ThinkRank already prints. Turn on removal for those tags under SEO Analyzer → Duplicate Tags, or switch off that output in the other plugin or theme.', 'thinkrank')
+            : __('These tags are printed twice by other plugins or your theme, not by ThinkRank, so ThinkRank cannot tell which to keep. Switch off the extra output in the plugin or theme printing it.', 'thinkrank');
+
+        return [
+            'label'      => $label,
+            // Two titles, canonicals or robots tags leave a search engine to
+            // pick one or ignore both. A second og:title costs a share preview.
+            'status'     => $sum['critical'] > 0 ? self::FAILED : self::WARNING,
+            'message'    => sprintf(
+                /* translators: %s: list like "2 × og:title (/hello/)" */
+                __('Some tags are printed more than once: %s.', 'thinkrank'),
+                implode(', ', array_slice($found, 0, 8))
+            ),
+            'how_to_fix' => $how,
+            'value'      => $sum['duplicates'],
+        ];
+    }
+
+    /**
+     * A duplicate's key as a reader knows it.
+     *
+     * @param string $key Key from Head_Tags.
+     * @return string
+     */
+    private static function duplicate_key_label(string $key): string {
+        if (0 === strpos($key, 'schema:')) {
+            /* translators: %s: schema.org type */
+            return sprintf(__('%s schema', 'thinkrank'), substr($key, 7));
+        }
+
+        $labels = [
+            'title'            => '<title>',
+            'meta:description' => __('meta description', 'thinkrank'),
+            'link:canonical'   => __('canonical', 'thinkrank'),
+        ];
+
+        return $labels[$key] ?? (0 === strpos($key, 'meta:') ? substr($key, 5) . ' ' . __('meta tag', 'thinkrank') : $key);
     }
 
     /**

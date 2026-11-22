@@ -189,6 +189,14 @@ const getBaseStructure = () => [
 		items: [
 			{ id: 'goals', title: __('Goals', 'thinkrank') },
 			{ id: 'site-audit', title: __('Site Audit', 'thinkrank') },
+			{
+				id: 'regression-guard',
+				title: __('Regression Guard', 'thinkrank'),
+			},
+			{
+				id: 'duplicate-tags',
+				title: __('Duplicate Tags', 'thinkrank'),
+			},
 		],
 	},
 	{

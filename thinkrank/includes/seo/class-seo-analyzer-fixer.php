@@ -114,6 +114,11 @@ class SEO_Analyzer_Fixer {
                 'warning' => __('Publishes /llms.txt from your saved LLMs.txt settings. It needs those fields filled in first.', 'thinkrank'),
                 'undo'    => false,
             ],
+            'duplicate_head_tags' => [
+                'label'   => __('Remove the duplicate copies', 'thinkrank'),
+                'warning' => __('Turns on removal for the tag families found duplicated. Another plugin\'s or your theme\'s copies of tags ThinkRank prints are taken out of the page; ThinkRank\'s are kept. Switch any family back off under SEO Analyzer → Duplicate Tags.', 'thinkrank'),
+                'undo'    => false,
+            ],
         ];
     }
 
@@ -227,6 +232,8 @@ class SEO_Analyzer_Fixer {
                 return $this->fix_ai_crawler_access();
             case 'llms_txt':
                 return $this->fix_llms_txt();
+            case 'duplicate_head_tags':
+                return $this->fix_duplicate_head_tags();
         }
 
         /**
@@ -245,6 +252,35 @@ class SEO_Analyzer_Fixer {
 
         // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
         throw new \Exception(__('No handler is registered for this fix.', 'thinkrank'));
+    }
+
+    /**
+     * Switch on removal for the families the last check found duplicated,
+     * then look again so the answer is what the pages now serve (#733).
+     *
+     * @since 2.23.0
+     * @return array
+     * @throws \Exception When nothing found can be removed by ThinkRank.
+     */
+    private function fix_duplicate_head_tags(): array {
+        $detector = new Duplicate_Tags\Duplicate_Tag_Detector();
+        $families = $detector->scan()['summary']['removable_families'];
+
+        if ([] === $families) {
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text for JSON, see fix().
+            throw new \Exception(__('None of the duplicates are copies of tags ThinkRank prints, so there is nothing ThinkRank can safely remove. Switch off the extra output in the plugin or theme printing it.', 'thinkrank'));
+        }
+
+        $stored = (new Duplicate_Tags\Guard_Settings())->save(array_fill_keys($families, true));
+        $after  = $detector->scan(false)['summary'];
+
+        return [
+            'fixed'   => 0 === $after['duplicates'],
+            'message' => 0 === $after['duplicates']
+                ? __('Duplicate tags are now removed. Each tag on the pages checked is printed once.', 'thinkrank')
+                : __('Removal is on, but some duplicates remain: they are not copies of tags ThinkRank prints, or a page cache is still serving the old page.', 'thinkrank'),
+            'data'    => ['settings' => $stored, 'summary' => $after],
+        ];
     }
 
     /**
