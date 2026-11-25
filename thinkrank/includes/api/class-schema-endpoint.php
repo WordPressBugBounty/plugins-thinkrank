@@ -62,6 +62,20 @@ class Schema_Endpoint extends WP_REST_Controller {
     private const MAX_BULK_ITEMS = 50;
 
     /**
+     * Post meta keys the editor's Schema tab reads and writes through
+     * /schema/post/{id}/settings (#1603).
+     *
+     * @since 2.22.1
+     * @var string[]
+     */
+    private const POST_SETTINGS_META_KEYS = [
+        '_thinkrank_schema_disabled',
+        '_thinkrank_selected_schema_type',
+        '_thinkrank_schema_form_data',
+        '_thinkrank_additional_schemas',
+    ];
+
+    /**
      * Schema Management System instance
      *
      * @since 1.0.0
@@ -290,6 +304,48 @@ class Schema_Endpoint extends WP_REST_Controller {
             ]
         );
 
+        // The editor Schema tab's own post settings (#1603). Core's
+        // /wp/v2/{type}/{id} carries `meta` only for post types that support
+        // custom-fields, and does not exist at all for a type without
+        // show_in_rest, so on those types the tab loaded nothing and its saves
+        // answered 200 having stored nothing. This route works on every post
+        // the metabox shows on. Three segments, so it cannot be taken by the
+        // /schema/{context_type}/{context_id} route above.
+        register_rest_route(
+            $this->namespace,
+            '/' . $this->rest_base . '/post/(?P<post_id>\d+)/settings',
+            [
+                [
+                    'methods' => 'GET',
+                    'callback' => [$this, 'get_post_settings'],
+                    'permission_callback' => [$this, 'check_post_settings_permissions'],
+                    'args' => [
+                        'post_id' => [
+                            'required' => true,
+                            'type' => 'integer',
+                            'minimum' => 1
+                        ]
+                    ]
+                ],
+                [
+                    'methods' => 'POST',
+                    'callback' => [$this, 'save_post_settings'],
+                    'permission_callback' => [$this, 'check_post_settings_permissions'],
+                    'args' => [
+                        'post_id' => [
+                            'required' => true,
+                            'type' => 'integer',
+                            'minimum' => 1
+                        ],
+                        'meta' => [
+                            'required' => true,
+                            'type' => 'object'
+                        ]
+                    ]
+                ]
+            ]
+        );
+
         // Import schema from URL
         register_rest_route(
             $this->namespace,
@@ -309,6 +365,161 @@ class Schema_Endpoint extends WP_REST_Controller {
                 ]
             ]
         );
+    }
+
+    /**
+     * Check permissions for the editor Schema tab's post settings route.
+     *
+     * The Role Manager has already asked for the Schema capability by route
+     * prefix. This adds the post itself: the caller must be able to edit it,
+     * the check core's post route made before (#1603). Writes also need the
+     * REST nonce.
+     *
+     * @since 2.22.1
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return bool|WP_Error Permission status.
+     */
+    public function check_post_settings_permissions(WP_REST_Request $request) {
+        if (!\ThinkRank\Core\Capability_Manager::current_user_can('thinkrank_schema')) {
+            return false;
+        }
+
+        // From the path only. A body or query `post_id` would otherwise shadow
+        // it and check one post while the handler writes another (#1609).
+        $post_id = absint($request->get_url_params()['post_id'] ?? 0);
+        $post    = $post_id ? get_post($post_id) : null;
+
+        if (!$post) {
+            return new WP_Error(
+                'invalid_post',
+                __('The post could not be found.', 'thinkrank'),
+                ['status' => 404]
+            );
+        }
+
+        if (!current_user_can('edit_post', $post_id)) {
+            return false;
+        }
+
+        if ('POST' === $request->get_method()) {
+            return $this->verify_request_nonce($request);
+        }
+
+        return true;
+    }
+
+    /**
+     * Read the editor Schema tab's settings for one post (#1603).
+     *
+     * Answers in the shape core's post route used, `meta` keyed by the meta
+     * key, so the tab reads it the same way on every post type.
+     *
+     * @since 2.22.1
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return WP_REST_Response
+     */
+    public function get_post_settings(WP_REST_Request $request): WP_REST_Response {
+        $post_id = absint($request->get_url_params()['post_id'] ?? 0);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'meta' => $this->read_post_settings($post_id),
+        ], 200);
+    }
+
+    /**
+     * Save the editor Schema tab's settings for one post (#1603).
+     *
+     * Writes only the keys sent, each through the sanitizer its meta
+     * registration uses, straight to post meta. Unknown keys are refused
+     * rather than dropped, so a caller cannot mistake a no-op for a save.
+     *
+     * @since 2.22.1
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return WP_REST_Response|WP_Error
+     */
+    public function save_post_settings(WP_REST_Request $request) {
+        $post_id = absint($request->get_url_params()['post_id'] ?? 0);
+        $meta    = $request->get_param('meta');
+
+        if (!is_array($meta) || empty($meta)) {
+            return new WP_Error(
+                'invalid_meta',
+                __('No schema settings were sent.', 'thinkrank'),
+                ['status' => 400]
+            );
+        }
+
+        $unknown = array_diff(array_keys($meta), self::POST_SETTINGS_META_KEYS);
+        if (!empty($unknown)) {
+            return new WP_Error(
+                'invalid_meta',
+                __('These settings cannot be saved here.', 'thinkrank'),
+                ['status' => 400, 'keys' => array_values($unknown)]
+            );
+        }
+
+        $metabox = new \ThinkRank\Admin\Metabox_Manager();
+
+        foreach ($meta as $key => $value) {
+            if (is_array($value)) {
+                $value = (string) wp_json_encode($value);
+            }
+
+            if (!is_string($value)) {
+                $value = is_scalar($value) ? (string) $value : '';
+            }
+
+            switch ($key) {
+                case '_thinkrank_schema_disabled':
+                    $value = $metabox->sanitize_schema_suppression($value);
+                    break;
+                case '_thinkrank_schema_form_data':
+                    $value = $metabox->sanitize_json_meta_field($value);
+                    break;
+                case '_thinkrank_additional_schemas':
+                    $value = $metabox->sanitize_json_ld_field($value);
+                    break;
+                default:
+                    $value = sanitize_text_field($value);
+            }
+
+            if ('' === $value) {
+                delete_post_meta($post_id, $key);
+                continue;
+            }
+
+            // update_post_meta() unslashes, and these are JSON strings whose
+            // escaped quotes would otherwise lose their backslashes.
+            update_post_meta($post_id, $key, wp_slash($value));
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'meta' => $this->read_post_settings($post_id),
+        ], 200);
+    }
+
+    /**
+     * The stored value of every Schema tab key for a post, '' when unset.
+     *
+     * @since 2.22.1
+     *
+     * @param int $post_id Post ID.
+     * @return array<string,string>
+     */
+    private function read_post_settings(int $post_id): array {
+        $settings = [];
+
+        foreach (self::POST_SETTINGS_META_KEYS as $key) {
+            $value          = get_post_meta($post_id, $key, true);
+            $settings[$key] = is_string($value) ? $value : '';
+        }
+
+        return $settings;
     }
 
     /**

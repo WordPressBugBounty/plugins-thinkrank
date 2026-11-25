@@ -49,6 +49,8 @@ return [
         'thinkrank_regenerate_sitemap',
         'thinkrank_regenerate_sitemap_settings',
         'thinkrank_ai_traffic_prune',
+        // Drains AI Insights buckets no later hit flushed (#1585).
+        'thinkrank_ai_traffic_flush',
         'thinkrank_timeline_prune',
         'thinkrank_mcp_audit_prune',
         'thinkrank_mcp_audit_prune_more',

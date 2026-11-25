@@ -124,6 +124,20 @@ export const loadDeployedSchemas = async (ctx, isInitialLoad = false) => {
 };
 
 /**
+ * Path of this post's Schema tab settings on ThinkRank's own route.
+ *
+ * Core's `/wp/v2/{type}/{id}` only carries `meta` for post types that support
+ * custom-fields, and does not exist for a type hidden from REST. On those the
+ * tab loaded nothing and every save answered 200 having stored nothing, so it
+ * reads and writes here instead (#1603).
+ *
+ * @param {Object} ctx Tab context.
+ * @return {string} REST path, without the root.
+ */
+export const postSettingsPath = (ctx) =>
+	`/thinkrank/v1/schema/post/${ctx.postId}/settings`;
+
+/**
  * Load saved schema form data from post meta
  * @param ctx
  */
@@ -131,10 +145,8 @@ export const loadSchemaFormData = async (ctx) => {
 	if (!ctx.postId) return;
 
 	try {
-		const apiPath = `/wp/v2/${ctx.postRestBase}/${ctx.postId}?context=edit`;
-
 		const response = await apiFetch({
-			path: apiPath,
+			path: postSettingsPath(ctx),
 			method: 'GET',
 		});
 
@@ -203,7 +215,7 @@ export const loadSchemaFormData = async (ctx) => {
  */
 export const loadSchemaSuppression = async (ctx) => {
 	const response = await apiFetch({
-		path: `/wp/v2/${ctx.postRestBase}/${ctx.postId}?context=edit&_fields=meta`,
+		path: postSettingsPath(ctx),
 		method: 'GET',
 	});
 
@@ -224,10 +236,8 @@ export const saveSchemaFormData = async (ctx, formData, schemaType) => {
 	if (!ctx.postId) return;
 
 	try {
-		const apiPath = `/wp/v2/${ctx.postRestBase}/${ctx.postId}`;
-
 		await apiFetch({
-			path: apiPath,
+			path: postSettingsPath(ctx),
 			method: 'POST',
 			data: {
 				meta: {
@@ -252,7 +262,7 @@ export const saveSchemaFormData = async (ctx, formData, schemaType) => {
  * Best-effort by nature — the debounced save during editing is what actually
  * keeps the data safe; this only catches the last few seconds of edits.
  *
- * @param {Object} ctx        API context (postId, postRestBase).
+ * @param {Object} ctx        API context (postId).
  * @param {Object} formData   Schema form data to persist.
  * @param {string} schemaType Selected schema type.
  * @return {boolean} Whether a request was dispatched.
@@ -261,9 +271,9 @@ export const saveSchemaFormDataOnUnload = (ctx, formData, schemaType) => {
 	if (!ctx.postId) return false;
 
 	const config = window.thinkrankMetabox || {};
-	// `restUrl` is rest_url('thinkrank/v1/'); strip our namespace for the root.
-	const root = String(config.restUrl || '').replace(/thinkrank\/v1\/?$/, '');
-	if (!root) return false;
+	// `restUrl` is rest_url('thinkrank/v1/'), which already names our namespace.
+	const base = String(config.restUrl || '').replace(/\/?$/, '/');
+	if (base === '/') return false;
 
 	const body = JSON.stringify({
 		meta: {
@@ -277,7 +287,7 @@ export const saveSchemaFormDataOnUnload = (ctx, formData, schemaType) => {
 	if (body.length > 60000) return false;
 
 	try {
-		fetch(`${root}wp/v2/${ctx.postRestBase}/${ctx.postId}`, {
+		fetch(`${base}schema/post/${ctx.postId}/settings`, {
 			method: 'POST',
 			keepalive: true,
 			credentials: 'same-origin',
@@ -302,10 +312,8 @@ export const saveAdditionalSchemas = async (ctx, schemas) => {
 	if (!ctx.postId) return;
 
 	try {
-		const apiPath = `/wp/v2/${ctx.postRestBase}/${ctx.postId}`;
-
 		await apiFetch({
-			path: apiPath,
+			path: postSettingsPath(ctx),
 			method: 'POST',
 			data: {
 				meta: {
@@ -327,10 +335,9 @@ export const saveAdditionalSchemas = async (ctx, schemas) => {
  * `'all'` emits nothing for the post, a list of @type names drops those nodes and
  * leaves the rest of the graph standing, and `''` clears the setting (#821).
  *
- * The same meta pipeline the rest of this tab uses, so nothing new has to be
- * registered or authorised. The post's deployed schema rows are left as they
- * are: the front end withholds them while the setting is on, and they serve
- * again once it is cleared.
+ * The same settings route the rest of this tab uses. The post's deployed
+ * schema rows are left as they are: the front end withholds them while the
+ * setting is on, and they serve again once it is cleared.
  *
  * @param {Object}          ctx         Tab context.
  * @param {string|string[]} suppression 'all', a list of @type names, or ''.
@@ -345,7 +352,7 @@ export const saveSchemaSuppression = async (ctx, suppression) => {
 
 	try {
 		await apiFetch({
-			path: `/wp/v2/${ctx.postRestBase}/${ctx.postId}`,
+			path: postSettingsPath(ctx),
 			method: 'POST',
 			data: { meta: { _thinkrank_schema_disabled: value } },
 		});

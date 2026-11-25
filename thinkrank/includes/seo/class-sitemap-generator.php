@@ -657,7 +657,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
         // The entries are built first so the <urlset> tag can declare the
         // xhtml namespace only when one of them carries language links.
         // Add homepage, unless its own robots tag says noindex.
-        $xml = $this->homepage_entry();
+        $xml = $this->homepage_entry($settings);
 
         // MEMORY-EFFICIENT: Generate posts using chunked processing.
         // Note: the single "general" sitemap includes every URL (no per-file cap);
@@ -1282,14 +1282,34 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      * so was a latest-posts homepage whose "Blog posts index" row is noindex
      * (#1322). The decision is the one the homepage's robots tag makes.
      *
+     * A static front page also answers to the two rules the page walk applies
+     * to every other page: its ID in Exclude Posts, and a canonical that names
+     * another URL. This entry read neither, so an excluded or canonicalised
+     * front page stayed listed (#1601). A canonical that is the home URL
+     * itself keeps it.
+     *
+     * @since 2.22.1 Takes the sitemap settings.
+     *
+     * @param array $settings Sitemap settings.
      * @return string
      */
-    private function homepage_entry(): string {
+    private function homepage_entry(array $settings): string {
         $front_id = $this->get_homepage_page_id();
         if ($front_id > 0) {
+            if (in_array($front_id, $this->parse_exclude_posts($settings), true)) {
+                return '';
+            }
+
             $front = get_post($front_id);
 
-            if ($front instanceof \WP_Post && (Indexability::is_post_noindexed($front) || Indexability::is_post_redirected($front))) {
+            if (
+                $front instanceof \WP_Post
+                && (
+                    Indexability::is_post_noindexed($front)
+                    || Indexability::is_post_redirected($front)
+                    || Indexability::is_post_canonicalized_away($front)
+                )
+            ) {
                 return '';
             }
         } elseif (Indexability::is_blog_index_noindexed()) {
@@ -1373,15 +1393,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
             return;
         }
 
-        // Parse and validate exclude_posts setting
-        $exclude_ids = [];
-        if (!empty($settings['exclude_posts'])) {
-            try {
-                $exclude_ids = $this->validate_exclude_posts($settings['exclude_posts']);
-            } catch (InvalidArgumentException $e) {
-                // Continue with empty array on validation failure - error details available in exception
-            }
-        }
+        $exclude_ids = $this->parse_exclude_posts($settings);
 
         // The static front page is emitted once as the explicit homepage entry,
         // so exclude it here to avoid a duplicate <loc> (its permalink equals
@@ -5427,7 +5439,7 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 // output) and is emitted first; collect_post_entries_iter()
                 // already excludes the static front page, so there's no duplicate.
                 $entries = (function () use ($settings) {
-                    $home = $this->homepage_entry();
+                    $home = $this->homepage_entry($settings);
                     if ($home !== '') {
                         yield $home;
                     }
@@ -5728,6 +5740,31 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      */
     private function count_urls_in_xml(string $sitemap_xml): int {
         return substr_count($sitemap_xml, '<url>');
+    }
+
+    /**
+     * The post IDs the Exclude Posts setting names, or none when it does not
+     * parse.
+     *
+     * Shared by the post walk and the homepage entry, so both leave out the
+     * same posts (#1601).
+     *
+     * @since 2.22.1
+     *
+     * @param array $settings Sitemap settings.
+     * @return int[]
+     */
+    private function parse_exclude_posts(array $settings): array {
+        if (empty($settings['exclude_posts'])) {
+            return [];
+        }
+
+        try {
+            return $this->validate_exclude_posts($settings['exclude_posts']);
+        } catch (InvalidArgumentException $e) {
+            // An unparseable list excludes nothing, as it always has.
+            return [];
+        }
     }
 
     /**

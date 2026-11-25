@@ -142,9 +142,6 @@ const MetaboxSchemaTab = ({
 
 	// Config from localized data
 	const currentPostType = window.thinkrankMetabox?.postType || 'post';
-	const postRestBase =
-		window.thinkrankMetabox?.postRestBase ||
-		(currentPostType === 'page' ? 'pages' : 'posts');
 
 	// Schema types for posts
 	const postSchemaTypes = [
@@ -331,7 +328,6 @@ const MetaboxSchemaTab = ({
 		formData,
 		showNotice,
 		currentPostType,
-		postRestBase,
 		schemaTypes,
 		selectedSchemaType,
 		schemaFormData,

@@ -78,6 +78,62 @@ class Ai_Traffic_Tracker {
     private const FLUSH_AFTER = 300;
 
     /**
+     * Seconds a drain lock lives if the request holding it dies mid-drain, so
+     * one crashed request cannot stop a bucket draining for good.
+     *
+     * @since 2.22.1
+     */
+    private const DRAIN_LOCK_TTL = 30;
+
+    /**
+     * Cron hook that drains buckets nobody hit again. bump() only checks the
+     * flush bounds when a hit lands, so a bucket that got one hit and then no
+     * more used to wait for good (#1585).
+     *
+     * @since 2.22.1
+     */
+    private const FLUSH_HOOK = 'thinkrank_ai_traffic_flush';
+
+    /**
+     * Key of the counter that numbers pending-bucket entries. Each bucket that
+     * goes from empty to one hit takes the next number and stores who it is
+     * under INDEX_PREFIX . number, so the flush can find it again: an object
+     * cache cannot list its keys. Numbering keeps registration lock-free.
+     *
+     * @since 2.22.1
+     */
+    private const INDEX_SEQ = 'tr_traffic_index_seq';
+
+    /**
+     * Key holding the last index number the flush has handled.
+     *
+     * @since 2.22.1
+     */
+    private const INDEX_CURSOR = 'tr_traffic_index_cursor';
+
+    /**
+     * Key prefix for one pending-bucket entry.
+     *
+     * @since 2.22.1
+     */
+    private const INDEX_PREFIX = 'tr_traffic_index_';
+
+    /**
+     * Key of the lock that lets one flush run at a time.
+     *
+     * @since 2.22.1
+     */
+    private const FLUSH_LOCK = 'tr_traffic_flush_lock';
+
+    /**
+     * Index entries one flush works through, so a backlog is drained over a
+     * few runs rather than in one long request.
+     *
+     * @since 2.22.1
+     */
+    private const FLUSH_BATCH = 500;
+
+    /**
      * Days of history to keep. The dashboard reads 30; keep 6 months so a
      * longer range is possible later without changing collection.
      */
@@ -185,6 +241,7 @@ class Ai_Traffic_Tracker {
         (new Ai_Referral_Beacon($this))->init();
 
         add_action(self::PRUNE_HOOK, [$this, 'prune']);
+        add_action(self::FLUSH_HOOK, [$this, 'flush_pending']);
         if (!wp_next_scheduled(self::PRUNE_HOOK)) {
             wp_schedule_event(time() + DAY_IN_SECONDS, 'daily', self::PRUNE_HOOK);
         }
@@ -545,6 +602,8 @@ class Ai_Traffic_Tracker {
     public function served_markdown_count(int $days = 30): int {
         global $wpdb;
 
+        $this->flush_pending();
+
         $days  = max(1, min(self::RETENTION_DAYS, $days));
         $table = $wpdb->prefix . 'thinkrank_ai_traffic';
         // Same clock as write_bucket(), and counted in calendar days so a
@@ -607,29 +666,339 @@ class Ai_Traffic_Tracker {
         // single row per day: InnoDB took an exclusive row lock on it for every
         // visitor, serialising concurrent anonymous traffic, and made every
         // pageview a write even when the response was fully cacheable (#402).
-        $bucket = self::COUNTER_PREFIX . md5($kind . '|' . $source . '|' . $path);
+        //
+        // The bucket carries the visit's site-local date and hands it to the
+        // write. An undated bucket was written with the date of whichever
+        // request flushed it, so a hit buffered before midnight landed on the
+        // next day, or days later on a quiet page (#1586).
+        $day    = $this->day_key();
+        $bucket = $this->bucket_key($day, $kind, $source, $path);
         $since  = $bucket . '_since';
 
         $hits = wp_cache_incr($bucket, 1, self::COUNTER_GROUP);
 
         if (false === $hits) {
-            wp_cache_add($bucket, 1, self::COUNTER_GROUP, 0);
+            // wp_cache_add() is atomic. When another request created the
+            // bucket between our increment and our add, the add is refused,
+            // so count into theirs rather than dropping this hit (#1587).
+            $hits = wp_cache_add($bucket, 1, self::COUNTER_GROUP, 0)
+                ? 1
+                : wp_cache_incr($bucket, 1, self::COUNTER_GROUP);
             wp_cache_add($since, time(), self::COUNTER_GROUP, 0);
-            $hits = 1;
+
+            // Evicted again in between: write the hit straight through.
+            if (false === $hits) {
+                $this->write_bucket($kind, $source, $path, 1, $day);
+
+                return;
+            }
+        }
+
+        // The first hit of a window, maybe of a new day: land what an earlier
+        // day left in this kind/source/path, under that day's date. Then note
+        // the bucket, which just went from empty to one hit, so the flush
+        // timer drains it even if no other hit ever lands here (#1585).
+        if (1 === (int) $hits) {
+            $this->drain_earlier_day($day, $kind, $source, $path);
+            $this->register_pending($bucket, $kind, $source, $path, $day);
         }
 
         $started = (int) wp_cache_get($since, self::COUNTER_GROUP);
 
         // Flush on either bound, so a busy site writes rarely and a quiet one
         // still lands its hits — an eviction can cost at most one window.
-        if ($hits < self::FLUSH_AT && $started > 0 && (time() - $started) < self::FLUSH_AFTER) {
+        if ((int) $hits < self::FLUSH_AT && $started > 0 && (time() - $started) < self::FLUSH_AFTER) {
             return;
         }
 
-        wp_cache_set($bucket, 0, self::COUNTER_GROUP, 0);
-        wp_cache_set($since, time(), self::COUNTER_GROUP, 0);
+        // An earlier day whose write failed is retried with this window.
+        if (1 !== (int) $hits) {
+            $this->drain_earlier_day($day, $kind, $source, $path);
+        }
 
-        $this->write_bucket($kind, $source, $path, (int) $hits);
+        $this->drain($kind, $source, $path, $bucket, $since, $day);
+    }
+
+    /**
+     * The counter key of one bucket: one visit date, kind, source and path.
+     *
+     * @since 2.22.1
+     *
+     * @param string $day    Site-local visit date, `Y-m-d`.
+     * @param string $kind   'referral' | 'crawler' | 'baseline' | 'markdown'.
+     * @param string $source Platform/bot slug, or 'all' for baseline.
+     * @param string $path   Landing path (referrals only).
+     * @return string
+     */
+    private function bucket_key(string $day, string $kind, string $source, string $path): string {
+        return self::COUNTER_PREFIX . md5($day . '|' . $kind . '|' . $source . '|' . $path);
+    }
+
+    /**
+     * Drain the bucket an earlier day left for this kind/source/path.
+     *
+     * A dated bucket gets no more hits once its day is over, so the next
+     * day's first hit drains it, as the old undated bucket was drained by
+     * that hit, but now under the date its hits happened on. A small marker
+     * per kind/source/path remembers which day's bucket is open, so a gap of
+     * several quiet days is covered too. With no marker yet, the bucket left
+     * by a version that did not date its buckets is drained instead: its
+     * visit dates were never kept, so it lands on today, as it always did.
+     *
+     * @since 2.22.1
+     *
+     * @param string $day    Today's site-local date, `Y-m-d`.
+     * @param string $kind   'referral' | 'crawler' | 'baseline' | 'markdown'.
+     * @param string $source Platform/bot slug, or 'all' for baseline.
+     * @param string $path   Landing path (referrals only).
+     * @return void
+     */
+    private function drain_earlier_day(string $day, string $kind, string $source, string $path): void {
+        $legacy = self::COUNTER_PREFIX . md5($kind . '|' . $source . '|' . $path);
+        $marker = $legacy . '_day';
+        $open   = wp_cache_get($marker, self::COUNTER_GROUP, true);
+
+        if ($open === $day) {
+            return;
+        }
+
+        if (is_string($open) && 1 === preg_match('/^\d{4}-\d{2}-\d{2}$/', $open)) {
+            $old = $this->bucket_key($open, $kind, $source, $path);
+            $this->drain($kind, $source, $path, $old, $old . '_since', $open);
+        } else {
+            $old = $legacy;
+            $this->drain($kind, $source, $path, $old, $old . '_since', $day);
+        }
+
+        // Keep pointing at the earlier day while its hits are still pending
+        // (a failed write, or another request mid-drain), so the next window
+        // retries it rather than stranding it.
+        if ((int) wp_cache_get($old, self::COUNTER_GROUP, true) > 0) {
+            return;
+        }
+
+        // The earlier day is written in full, and no request counts into a
+        // past day, so its keys are never read again. Drop them: dated
+        // buckets would otherwise leave a counter and a window stamp behind
+        // for every kind/source/path on every day, for good, on an object
+        // cache that does not expire keys (Redis Object Cache's default).
+        wp_cache_delete($old, self::COUNTER_GROUP);
+        wp_cache_delete($old . '_since', self::COUNTER_GROUP);
+
+        wp_cache_set($marker, $day, self::COUNTER_GROUP, 0);
+    }
+
+    /**
+     * Move a bucket's buffered hits to its table row, exactly once.
+     *
+     * Every request past a flush bound lands here, often several at once on a
+     * busy site. Each used to write the count its own increment returned and
+     * then zero the bucket, so two requests at 50 and 51 wrote 101 hits for 51,
+     * and a hit counted between one request's read and its reset was wiped
+     * (#1587). Now one request at a time drains, under a lock taken with the
+     * atomic wp_cache_add(), and it takes out only what it read with an atomic
+     * decrement, so hits counted while it writes stay in the bucket for the
+     * next drain. A failed write puts its hits back.
+     *
+     * @since 2.22.1
+     *
+     * @param string $kind   'referral' | 'crawler' | 'baseline'.
+     * @param string $source Platform/bot slug, or 'all' for baseline.
+     * @param string $path   Landing path (referrals only).
+     * @param string $bucket The bucket's counter key.
+     * @param string $since  The key holding when its window opened.
+     * @param string $day    Site-local date the bucket's hits happened on.
+     * @return void
+     */
+    private function drain(string $kind, string $source, string $path, string $bucket, string $since, string $day): void {
+        $lock = $bucket . '_lock';
+
+        // Another request is draining this bucket. This hit is already in the
+        // counter, so that drain or the next one writes it.
+        if (!wp_cache_add($lock, 1, self::COUNTER_GROUP, self::DRAIN_LOCK_TTL)) {
+            return;
+        }
+
+        $hits = (int) wp_cache_get($bucket, self::COUNTER_GROUP, true);
+
+        if ($hits > 0) {
+            wp_cache_decr($bucket, $hits, self::COUNTER_GROUP);
+
+            if ($this->write_bucket($kind, $source, $path, $hits, $day)) {
+                wp_cache_set($since, time(), self::COUNTER_GROUP, 0);
+            } elseif (false === wp_cache_incr($bucket, $hits, self::COUNTER_GROUP) && !wp_cache_add($bucket, $hits, self::COUNTER_GROUP, 0)) {
+                // Put the batch back. Its window stays open, so the next hit
+                // retries the write.
+                wp_cache_incr($bucket, $hits, self::COUNTER_GROUP);
+            }
+
+            // Hits that landed while this drain ran, or a batch put back
+            // after a failed write, never took the bucket from empty to one,
+            // so they were not noted for the flush timer. Note them now.
+            if ((int) wp_cache_get($bucket, self::COUNTER_GROUP, true) > 0) {
+                $this->register_pending($bucket, $kind, $source, $path, $day);
+            }
+        }
+
+        wp_cache_delete($lock, self::COUNTER_GROUP);
+    }
+
+    /**
+     * Note a bucket that holds pending hits, and make sure a flush is due.
+     *
+     * An index entry lives as long as the bucket it points at: no expiry,
+     * like the bucket itself. An entry that expired while its bucket kept a
+     * hit would strand that hit again whenever no request ran WP-Cron and
+     * nobody opened AI Insights for a while.
+     *
+     * What keeps the index from growing without a flush is the bucket's
+     * `_noted` marker, which holds the number of its pending entry. While
+     * that entry is still in the index, nothing new is written, so the index
+     * holds at most about one entry per bucket however many times hits drain
+     * it. An entry the cache lost (an eviction, a reset count) no longer
+     * answers at the marker's number, so the bucket is noted afresh. Two
+     * requests noting the same bucket at once can still both write an entry;
+     * that costs one extra drain of an empty bucket, which writes nothing.
+     *
+     * @since 2.22.1
+     *
+     * The entry keeps the bucket's key and visit date as well as who it is,
+     * since a bucket is dated (#1586) and the flush can't work out an earlier
+     * day's key, or the key of a bucket left by a version that did not date
+     * its buckets, from kind, source and path alone.
+     *
+     * @param string $bucket The bucket's counter key.
+     * @param string $kind   'referral' | 'crawler' | 'baseline' | 'markdown'.
+     * @param string $source Platform/bot slug, or 'all' for baseline.
+     * @param string $path   Landing path (referrals only).
+     * @param string $day    Site-local date the bucket's hits happened on.
+     * @return void
+     */
+    private function register_pending(string $bucket, string $kind, string $source, string $path, string $day): void {
+        $noted  = $bucket . '_noted';
+        $marker = (int) wp_cache_get($noted, self::COUNTER_GROUP, true);
+
+        if ($marker > 0 && false !== wp_cache_get(self::INDEX_PREFIX . $marker, self::COUNTER_GROUP, true)) {
+            // Already in the index and not drained yet.
+            $this->schedule_flush();
+
+            return;
+        }
+
+        $number = wp_cache_incr(self::INDEX_SEQ, 1, self::COUNTER_GROUP);
+
+        if (false === $number) {
+            if (wp_cache_add(self::INDEX_SEQ, 1, self::COUNTER_GROUP, 0)) {
+                // A fresh count starts again at 1, so a cursor from before
+                // it was lost would skip every new entry.
+                wp_cache_delete(self::INDEX_CURSOR, self::COUNTER_GROUP);
+                $number = 1;
+            } else {
+                $number = wp_cache_incr(self::INDEX_SEQ, 1, self::COUNTER_GROUP);
+            }
+        }
+
+        if (false !== $number) {
+            wp_cache_set(self::INDEX_PREFIX . (int) $number, [$kind, $source, $path, $day, $bucket], self::COUNTER_GROUP, 0);
+            wp_cache_set($noted, (int) $number, self::COUNTER_GROUP, 0);
+        }
+
+        $this->schedule_flush();
+    }
+
+    /**
+     * Queue one flush, a window from now, unless one is already queued.
+     *
+     * A single event rather than a recurring one: a site with no buffered
+     * traffic gets no cron runs, and no custom recurrence is needed.
+     *
+     * @since 2.22.1
+     *
+     * @return void
+     */
+    private function schedule_flush(): void {
+        if (!wp_next_scheduled(self::FLUSH_HOOK)) {
+            wp_schedule_single_event(time() + self::FLUSH_AFTER, self::FLUSH_HOOK);
+        }
+    }
+
+    /**
+     * Write every noted bucket's pending hits to the table.
+     *
+     * Runs on the flush timer and before the dashboard reads the table, so a
+     * hit reaches the report within one window even when nothing else lands
+     * on its bucket (#1585). Each bucket goes through drain(), so this never
+     * double-counts against a request draining the same bucket.
+     *
+     * @since 2.22.1
+     *
+     * @return void
+     */
+    public function flush_pending(): void {
+        if (!wp_using_ext_object_cache()) {
+            return;
+        }
+
+        if (!wp_cache_add(self::FLUSH_LOCK, 1, self::COUNTER_GROUP, self::DRAIN_LOCK_TTL * 2)) {
+            return;
+        }
+
+        $last   = (int) wp_cache_get(self::INDEX_SEQ, self::COUNTER_GROUP, true);
+        $cursor = (int) wp_cache_get(self::INDEX_CURSOR, self::COUNTER_GROUP, true);
+
+        // The count was lost and started again below where the cursor stood.
+        if ($cursor > $last) {
+            $cursor = 0;
+        }
+
+        $end  = min($last, $cursor + self::FLUSH_BATCH);
+        $done = [];
+
+        for ($number = $cursor + 1; $number <= $end; $number++) {
+            $key   = self::INDEX_PREFIX . $number;
+            $entry = wp_cache_get($key, self::COUNTER_GROUP, true);
+            wp_cache_delete($key, self::COUNTER_GROUP);
+
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            $entry = array_map('strval', array_values($entry));
+
+            if (5 === count($entry)) {
+                [$kind, $source, $path, $day, $bucket] = $entry;
+            } elseif (3 === count($entry)) {
+                // An entry noted before buckets were dated points at the
+                // undated bucket, whose visit dates were never kept.
+                [$kind, $source, $path] = $entry;
+                $day                    = $this->day_key();
+                $bucket                 = self::COUNTER_PREFIX . md5($kind . '|' . $source . '|' . $path);
+            } else {
+                continue;
+            }
+
+            // This entry is handled, so the bucket's next pending hit has to
+            // be noted again. A marker already pointing at a newer entry is
+            // left for that entry.
+            if ($number === (int) wp_cache_get($bucket . '_noted', self::COUNTER_GROUP, true)) {
+                wp_cache_delete($bucket . '_noted', self::COUNTER_GROUP);
+            }
+
+            if (isset($done[$bucket])) {
+                continue;
+            }
+            $done[$bucket] = true;
+
+            $this->drain($kind, $source, $path, $bucket, $bucket . '_since', $day);
+        }
+
+        wp_cache_set(self::INDEX_CURSOR, $end, self::COUNTER_GROUP, 0);
+        wp_cache_delete(self::FLUSH_LOCK, self::COUNTER_GROUP);
+
+        // A backlog past this batch, or buckets noted again while it ran.
+        if ((int) wp_cache_get(self::INDEX_SEQ, self::COUNTER_GROUP, true) > $end) {
+            $this->schedule_flush();
+        }
     }
 
     /**
@@ -641,11 +1010,17 @@ class Ai_Traffic_Tracker {
      * @param string $source Platform/bot slug, or 'all' for baseline.
      * @param string $path   Landing path (referrals only).
      * @param int    $hits   How many hits to add.
-     * @return void
+     * @param string $day    Site-local date the hits happened on, `Y-m-d`
+     *                       (since 2.22.1). Empty for today.
+     * @return bool False when the database refused the write.
      */
-    private function write_bucket(string $kind, string $source, string $path, int $hits): void {
+    private function write_bucket(string $kind, string $source, string $path, int $hits, string $day = ''): bool {
         if ($hits < 1) {
-            return;
+            return true;
+        }
+
+        if ('' === $day) {
+            $day = $this->day_key();
         }
 
         // `day` is the SITE-LOCAL date (see day_key()), not UTC. The column is
@@ -664,12 +1039,12 @@ class Ai_Traffic_Tracker {
 
         // Aggregate counter upsert; the unique key is the bucket.
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- aggregate counter upsert; table name is prefix-derived.
-        $wpdb->query(
+        $written = $wpdb->query(
             // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a literal, and every value is passed as a placeholder replacement.
             $wpdb->prepare(
                 "INSERT INTO {$table} (day, kind, source, path, hits) VALUES (%s, %s, %s, %s, %d)
                  ON DUPLICATE KEY UPDATE hits = hits + %d",
-                current_time('Y-m-d'),
+                $day,
                 $kind,
                 $source,
                 $path,
@@ -678,6 +1053,8 @@ class Ai_Traffic_Tracker {
             )
         );
             // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+        return false !== $written;
     }
 
     /**
@@ -763,6 +1140,9 @@ class Ai_Traffic_Tracker {
      */
     public function summary(int $days = 30): array {
         global $wpdb;
+
+        // Land buffered hits first, so the report includes them (#1585).
+        $this->flush_pending();
 
         $days  = max(1, min(self::RETENTION_DAYS, $days));
         $table = $wpdb->prefix . 'thinkrank_ai_traffic';

@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.23.0
+Stable tag: 2.23.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -263,6 +263,13 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.23.1 =
+Release Date: 2026-11-25
+
+- Fixed: A static homepage you exclude, or point elsewhere with a canonical, leaves the sitemap
+- Fixed: The editor Schema tab loads and saves on post types without custom fields support
+- Fixed: AI visits are counted once and on the day they happened, on quiet pages too
+
 = 2.23.0 =
 Release Date: 2026-11-22
 
@@ -309,26 +316,12 @@ Release Date: 2026-11-11
 - Fixed: Polylang sites print valid og:locale values for every language
 - Fixed: Minor SEO Analyzer, Search Console and Question Coverage issues
 
-= 2.21.2 =
-Release Date: 2026-11-09
-
-- New: Ignore a Site SEO Audit check that does not apply, so it no longer counts toward the score
-- New: Turn off all structured data on a single post from the SEO panel
-- New: AI can write image captions and descriptions along with the alt text
-- New: Choose where the classic edit screen shows the ThinkRank launcher
-- New: Sitemaps list TranslatePress translations with hreflang alternates
-- New: Usage Breakdown shows token and cost totals for the selected period
-- Improved: SEO analysis counts the text in ACF fields
-- Improved: Imports keep Rank Math IndexNow running and carry WooCommerce identifiers from more plugins
-- Improved: AI assistants respect a post open in the editor, and the MCP log marks plans and repeats
-- Improved: Security Enhancement
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.23.1 =
+Fixes the editor Schema tab not saving on some custom post types, a static homepage staying in the sitemap after it was excluded, and AI visit counts on sites with an object cache. Recommended for all sites.
+
 = 2.23.0 =
 Regression Guard compares what a page serves to Google with its last check, so a noindex or lost schema after an update is caught. Duplicate Tags finds head tags printed twice and can remove the copies another plugin prints. Recommended for all sites.
-
-= 2.22.0 =
-Rank what to fix next with SEO Goals, test page titles on real Google clicks with Title Experiments, and see every change that can move traffic in the SEO Timeline. Adds Google, Bing, Yandex and Baidu verification tags. Recommended for all sites.
