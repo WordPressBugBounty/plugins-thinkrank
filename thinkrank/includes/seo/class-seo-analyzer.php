@@ -1569,8 +1569,9 @@ class SEO_Analyzer {
         }
 
         // Count posts with an *effective* meta description, the same way the
-        // frontend resolves it: a custom _thinkrank_meta_description when set,
-        // otherwise the global SEO pattern fallback (Pattern_Resolver). Counting
+        // frontend resolves it: a custom _thinkrank_meta_description with its
+        // tags resolved, otherwise the global SEO pattern fallback
+        // (Pattern_Resolver::effective_description()). Counting
         // only the custom post-meta produced false negatives — posts that output
         // a valid description via the pattern fallback were wrongly reported as
         // missing. The sample is bounded (CONTENT_SAMPLE_SIZE) so the per-post
@@ -1583,8 +1584,10 @@ class SEO_Analyzer {
         $with_description = 0;
         $without          = [];
         foreach ($post_ids as $post_id) {
-            $custom   = (string) get_post_meta($post_id, '_thinkrank_meta_description', true);
-            $resolved = '' !== $custom ? $custom : Pattern_Resolver::description((int) $post_id);
+            // The value the frontend prints. A custom description is a
+            // template too, and counting the raw string credited a page whose
+            // "%excerpt%" resolved to nothing and printed no tag (#1620).
+            $resolved = Pattern_Resolver::effective_description((int) $post_id);
             if ('' !== trim($resolved)) {
                 $with_description++;
             } else {
@@ -3642,8 +3645,8 @@ class SEO_Analyzer {
      * Interactive elements the accessibility tree cannot see.
      *
      * Two defects reported together because they have one cause and one fix:
-     * a control inside `aria-hidden="true"` is invisible to an agent while
-     * remaining clickable to a mouse, and an `aria-labelledby` naming an id
+     * a control inside `aria-hidden="true"` that the keyboard can still reach
+     * is focused with nothing read out, and an `aria-labelledby` naming an id
      * that is not on the page leaves the browser to concatenate nothing. Both
      * are markup that says a thing has a name when it does not.
      *
@@ -3686,8 +3689,8 @@ class SEO_Analyzer {
             $parts[] = sprintf(
                 /* translators: %d: number of elements. */
                 _n(
-                    '%d link or button sits inside aria-hidden markup, so it is clickable but invisible to an agent.',
-                    '%d links or buttons sit inside aria-hidden markup, so they are clickable but invisible to an agent.',
+                    '%d link or button sits inside aria-hidden markup with nothing in the page HTML keeping it out of keyboard reach, so an agent or screen reader may land on it and hear nothing. Your stylesheet may still hide it; check it in a browser.',
+                    '%d links or buttons sit inside aria-hidden markup with nothing in the page HTML keeping them out of keyboard reach, so an agent or screen reader may land on them and hear nothing. Your stylesheet may still hide them; check them in a browser.',
                     $hidden,
                     'thinkrank'
                 ),
@@ -3715,7 +3718,7 @@ class SEO_Analyzer {
             // cannot change from the editor.
             'status'     => self::WARNING,
             'message'    => implode(' ', $parts),
-            'how_to_fix' => __('Move aria-hidden onto the decorative icon rather than the control around it, and check that every aria-labelledby names an id that exists on the same page.', 'thinkrank'),
+            'how_to_fix' => __('Open each page and press Tab. If focus reaches a listed link while it is hidden, take it out of reach while it is hidden (display:none, visibility:hidden or tabindex="-1"), or remove aria-hidden if the content is meant to be read. A menu or panel that opens is fine when its button has aria-expanded="false" and aria-controls pointing at it while closed; leave that state handling as it is. If aria-hidden sits on the wrapper of an icon button, move it onto the icon. Also check that every aria-labelledby names an id that exists on the same page.', 'thinkrank'),
             'value'      => $this->agent_findings($sample, ['hidden', 'dangling']),
             'affected_posts' => $this->agent_affected_posts($sample, 'hidden'),
         ];

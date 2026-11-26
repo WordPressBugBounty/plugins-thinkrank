@@ -123,6 +123,10 @@ const resultBadge = (row) => {
 			label: __('Already applied', 'thinkrank'),
 		};
 	}
+	// A retried token renewal changed nothing on the site (#1617).
+	if (row.kind === 'token') {
+		return { variant: 'neutral', label: __('Renewed', 'thinkrank') };
+	}
 	if (row.reverted_by) {
 		return { variant: 'neutral', label: __('Undone', 'thinkrank') };
 	}

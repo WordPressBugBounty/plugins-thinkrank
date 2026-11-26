@@ -4,7 +4,7 @@ Tags: seo, ai seo, schema, xml sitemap, google search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.23.1
+Stable tag: 2.24.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -263,6 +263,19 @@ The assets are built from `src/` with `@wordpress/scripts` (webpack), which writ
 
 == Changelog ==
 
+= 2.24.0 =
+Release Date: 2026-11-26
+
+- New: Sitemap settings link to the styled view of each sitemap
+- Changed: Sitemap XML no longer carries the stylesheet line browsers now warn about
+- Fixed: Performance reports follow the selected device, and Refresh Data reloads the open section
+- Fixed: AI image alt text, caption and description requests now appear in Usages
+- Fixed: Thai and other scripts written without spaces are no longer listed as thin content
+- Fixed: The Site Audit no longer flags collapsed menus as hidden interactive controls
+- Fixed: Post list and audit show the description a page prints when its tags resolve empty
+- Fixed: The Google connect card on the free plugin no longer promises Google Analytics data
+- Fixed: Minor sitemap filter, MCP Activity and Performance issues
+
 = 2.23.1 =
 Release Date: 2026-11-25
 
@@ -304,24 +317,12 @@ Release Date: 2026-11-15
 - Fixed: Category embeds, feeds and plugin endpoints keep working after the category base is removed
 - Fixed: Inserting a Question Coverage draft in the Classic Editor keeps heading blocks valid
 
-= 2.21.3 =
-Release Date: 2026-11-11
-
-- New: Question Coverage shows which questions about the focus keyword a post answers
-- New: AI Insights lists the pages each AI platform sends visitors to
-- New: AI Insights shows the state of AI crawler access and llms.txt at a glance
-- New: The SEO Analyzer checks that links and buttons have names AI agents can read
-- New: AI assistants can read AI Insights, map focus keywords and find pages competing for one
-- New: AI assistants can compare a post with competitor pages and list the terms it misses
-- Fixed: Polylang sites print valid og:locale values for every language
-- Fixed: Minor SEO Analyzer, Search Console and Question Coverage issues
-
 [See changelog for all versions](https://thinkrank.ai/changelog/).
 
 == Upgrade Notice ==
 
+= 2.24.0 =
+Sitemaps drop the stylesheet line browsers now warn about, and settings link a styled view of each one. Fixes Performance reports showing the wrong device, AI image requests missing from Usages, and Thai content listed as thin. Recommended for all sites.
+
 = 2.23.1 =
 Fixes the editor Schema tab not saving on some custom post types, a static homepage staying in the sitemap after it was excluded, and AI visit counts on sites with an object cache. Recommended for all sites.
-
-= 2.23.0 =
-Regression Guard compares what a page serves to Google with its last check, so a noindex or lost schema after an update is caught. Duplicate Tags finds head tags printed twice and can remove the copies another plugin prints. Recommended for all sites.

@@ -38,6 +38,7 @@ import {
 	validateSingleSitemap,
 	validateAllSitemaps,
 	pingSearchEngines,
+	styledViewUrl,
 } from './api';
 import useAutosaveSettings from '../../../../hooks/useAutosaveSettings';
 import AdvancedOnly from '../../../common/AdvancedOnly';
@@ -633,6 +634,7 @@ const SitemapGeneration = () => {
 	}
 
 	const siteUrl = window.location.origin;
+	const homeUrl = window.thinkrankAdmin?.siteUrl || siteUrl;
 	const ctx = getApiContext();
 
 	return (
@@ -901,19 +903,46 @@ const SitemapGeneration = () => {
 											(sitemap, index) =>
 												sitemapsAreLive &&
 												!unpublishedHint(sitemap) ? (
-													<a
+													<div
 														key={index}
-														href={`${siteUrl}${sitemap.url}`}
-														target="_blank"
-														rel="noopener noreferrer"
-														className="tr-inline-flex tr-items-center tr-gap-1 tr-text-sm tr-text-brand hover:tr-underline"
+														className="tr-flex tr-flex-wrap tr-items-center tr-gap-x-3 tr-gap-y-1"
 													>
-														{sitemap.url}{' '}
-														<span className="tr-text-tertiary">
-															({sitemap.type})
-														</span>{' '}
-														<IconExternalLink />
-													</a>
+														<a
+															href={`${siteUrl}${sitemap.url}`}
+															target="_blank"
+															rel="noopener noreferrer"
+															className="tr-inline-flex tr-items-center tr-gap-1 tr-text-sm tr-text-brand hover:tr-underline"
+														>
+															{sitemap.url}{' '}
+															<span className="tr-text-tertiary">
+																({sitemap.type})
+															</span>{' '}
+															<IconExternalLink />
+														</a>
+														{/* The XML no longer asks the browser to style
+														    it (#1606), so the styled page is linked here. */}
+														{!!settings.enable_styling &&
+															styledViewUrl(
+																sitemap.url,
+																homeUrl
+															) && (
+																<a
+																	href={styledViewUrl(
+																		sitemap.url,
+																		homeUrl
+																	)}
+																	target="_blank"
+																	rel="noopener noreferrer"
+																	className="tr-inline-flex tr-items-center tr-gap-1 tr-text-xs tr-text-brand hover:tr-underline"
+																>
+																	{__(
+																		'View styled sitemap',
+																		'thinkrank'
+																	)}{' '}
+																	<IconExternalLink />
+																</a>
+															)}
+													</div>
 												) : (
 													<span
 														key={index}
@@ -1331,7 +1360,7 @@ const SitemapGeneration = () => {
 										'thinkrank'
 									)}
 									description={__(
-										'Apply custom CSS styling to make XML sitemaps more readable in browsers',
+										'Publish a styled, readable page for each sitemap. The XML that search engines read stays the same.',
 										'thinkrank'
 									)}
 									checked={!!settings.enable_styling}

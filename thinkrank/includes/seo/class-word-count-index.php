@@ -77,8 +77,13 @@ class Word_Count_Index {
      * Version 5 reads ACF text fields into the resolved content (#827), so a
      * post whose copy lives in ACF had been counted without it, and every
      * version 4 entry is recounted once.
+     *
+     * Version 6 counts English-equivalent words in the words unit, so a run of
+     * Thai, Lao, Khmer, Myanmar, Chinese or Japanese is no longer one "word"
+     * per space-separated phrase on a site whose locale counts words (#1619),
+     * and every version 5 entry is recounted once.
      */
-    public const VERSION = 5;
+    public const VERSION = 6;
 
     /**
      * Short codes for the counting unit, as stored in an entry.
@@ -606,6 +611,13 @@ class Word_Count_Index {
     /**
      * Count a string the way the locale counts it.
      *
+     * The words unit counts English-equivalent words
+     * ({@see self::count_word_equivalents()}), not whitespace tokens. The unit
+     * is the site's, but a post can be in any language: a Thai article on an
+     * en_US site separates phrases, not words, with spaces, and splitting on
+     * them reported a long article as thin (#1619). Text in spaced scripts
+     * counts exactly as count_words() does.
+     *
      * @param string $content HTML or text.
      * @return int
      */
@@ -624,7 +636,7 @@ class Word_Count_Index {
                 return mb_strlen(str_replace(' ', '', $text));
 
             default:
-                return self::count_words($text);
+                return self::count_word_equivalents($text);
         }
     }
 
@@ -641,8 +653,9 @@ class Word_Count_Index {
      * Bengali, Arabic or Cyrillic words still count; a combining mark is part
      * of the letter before it, so a Bengali word keeps its vowel signs.
      *
-     * Only the words unit uses this. The character units count every
-     * character, as core does, which is how CJK locales are counted.
+     * The words unit uses this through count_word_equivalents(). The
+     * character units count every character, as core does, which is how CJK
+     * locales are counted.
      *
      * @since 2.14.2
      *
@@ -698,8 +711,8 @@ class Word_Count_Index {
      * the same length rather than as a handful of "words" (#1291). Text with
      * none of those scripts gets exactly count_words().
      *
-     * Not the locale's unit ({@see self::count_text()}): that is the site's,
-     * while a post can be in any language and mix scripts.
+     * Also what {@see self::count_text()} counts in the words unit, so the
+     * thin content report and the per-post score agree (#1619).
      *
      * contentAnalysis.js calculateWordCount() applies the same rules in the
      * editor.

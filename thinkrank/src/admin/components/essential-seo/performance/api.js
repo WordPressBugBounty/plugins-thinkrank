@@ -10,11 +10,19 @@
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 
+// Monitor loads overlap: a device switch, Refresh Data and the collecting
+// poll can all start one while another is in flight, and each device is its
+// own request. Every load takes a number, and only the newest may commit.
+let latestMonitorRequest = 0;
+
 /**
  * Load performance data
  * @param ctx
  */
 export const loadPerformanceData = async (ctx) => {
+	const request = ++latestMonitorRequest;
+	const isStale = () => request !== latestMonitorRequest;
+
 	try {
 		ctx.setIsLoading(true);
 		ctx.setNotice(null);
@@ -23,6 +31,10 @@ export const loadPerformanceData = async (ctx) => {
 			path: `/thinkrank/v1/performance/monitor?device_type=${ctx.deviceType}`,
 			method: 'GET',
 		});
+
+		if (isStale()) {
+			return;
+		}
 
 		if (response.success) {
 			ctx.setPerformanceData(response.data);
@@ -33,6 +45,9 @@ export const loadPerformanceData = async (ctx) => {
 			);
 		}
 	} catch (error) {
+		if (isStale()) {
+			return;
+		}
 		if (
 			error.message.includes('API key is required') ||
 			error.message.includes('not configured') ||
@@ -69,7 +84,9 @@ export const loadPerformanceData = async (ctx) => {
 		}
 		ctx.setPerformanceData(null);
 	} finally {
-		ctx.setIsLoading(false);
+		if (!isStale()) {
+			ctx.setIsLoading(false);
+		}
 	}
 };
 
@@ -148,14 +165,23 @@ export const loadHistoricalData = async (ctx, period) => {
  * @param ctx
  */
 export const loadOpportunities = async (ctx) => {
+	// The report belongs to the device it was requested for. If the device
+	// changed while it was in flight, drop it instead of showing it.
+	const device = ctx.deviceType;
+	const isStale = () => ctx.isCurrentDevice && !ctx.isCurrentDevice(device);
+
 	ctx.setIsLoadingOpportunities(true);
 	ctx.setOpportunitiesError(null);
 
 	try {
 		const response = await apiFetch({
-			path: `/thinkrank/v1/performance/opportunities?device_type=${ctx.deviceType}`,
+			path: `/thinkrank/v1/performance/opportunities?device_type=${device}`,
 			method: 'GET',
 		});
+
+		if (isStale()) {
+			return;
+		}
 
 		if (response.success) {
 			ctx.setOpportunities(response.data || []);
@@ -170,12 +196,17 @@ export const loadOpportunities = async (ctx) => {
 			});
 		}
 	} catch (error) {
+		if (isStale()) {
+			return;
+		}
 		ctx.setOpportunitiesError({
 			message: __('Unable to connect to performance API', 'thinkrank'),
 			code: '',
 		});
 	} finally {
-		ctx.setIsLoadingOpportunities(false);
+		if (!isStale()) {
+			ctx.setIsLoadingOpportunities(false);
+		}
 	}
 };
 
@@ -184,14 +215,23 @@ export const loadOpportunities = async (ctx) => {
  * @param ctx
  */
 export const loadDiagnostics = async (ctx) => {
+	// The report belongs to the device it was requested for. If the device
+	// changed while it was in flight, drop it instead of showing it.
+	const device = ctx.deviceType;
+	const isStale = () => ctx.isCurrentDevice && !ctx.isCurrentDevice(device);
+
 	ctx.setIsLoadingDiagnostics(true);
 	ctx.setDiagnosticsError(null);
 
 	try {
 		const response = await apiFetch({
-			path: `/thinkrank/v1/performance/diagnostics?device_type=${ctx.deviceType}`,
+			path: `/thinkrank/v1/performance/diagnostics?device_type=${device}`,
 			method: 'GET',
 		});
+
+		if (isStale()) {
+			return;
+		}
 
 		if (response.success) {
 			ctx.setDiagnostics(response.data || []);
@@ -206,11 +246,16 @@ export const loadDiagnostics = async (ctx) => {
 			});
 		}
 	} catch (error) {
+		if (isStale()) {
+			return;
+		}
 		ctx.setDiagnosticsError({
 			message: __('Unable to connect to performance API', 'thinkrank'),
 			code: '',
 		});
 	} finally {
-		ctx.setIsLoadingDiagnostics(false);
+		if (!isStale()) {
+			ctx.setIsLoadingDiagnostics(false);
+		}
 	}
 };

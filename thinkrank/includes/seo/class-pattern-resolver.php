@@ -913,7 +913,9 @@ class Pattern_Resolver {
      * Resolve a raw per-post field to its effective value.
      *
      * When the raw value is non-empty its variable tags are resolved; when it is
-     * empty the field falls back to the rendered Global/Bulk pattern. Exposed so
+     * empty, or its tags resolve to nothing (an "%excerpt%" on a page with no
+     * excerpt or body), the field falls back to the rendered Global/Bulk
+     * pattern, as the frontend does before printing it (#1620). Exposed so
      * callers that already hold a raw value (e.g. the SEO score endpoint scoring
      * unsaved editor input) can route through the same fallback logic.
      *
@@ -924,7 +926,11 @@ class Pattern_Resolver {
      */
     public static function effective_value(string $raw, int $post_id, string $field): string {
         if ($raw !== '') {
-            return self::resolve_value($raw, $post_id);
+            $resolved = self::resolve_value($raw, $post_id);
+
+            if ('' !== trim($resolved)) {
+                return $resolved;
+            }
         }
 
         return 'description' === $field

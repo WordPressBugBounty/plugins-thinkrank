@@ -198,7 +198,7 @@ final class Settings_Key_Map {
 				'maximum'     => 50000,
 			],
 			'custom_url_pattern'         => self::string( __( 'Filename pattern for generated sitemaps, e.g. "sitemap-{type}.xml".', 'thinkrank' ) ),
-			'enable_styling'             => self::boolean( __( 'Whether an XSL stylesheet is attached so the sitemap is readable in a browser.', 'thinkrank' ) ),
+			'enable_styling'             => self::boolean( __( 'Whether each sitemap gets a styled HTML view for reading it in a browser. The XML crawlers read is unchanged.', 'thinkrank' ) ),
 			'ping_search_engines'        => self::boolean( __( 'Whether search engines are notified after the sitemap is regenerated.', 'thinkrank' ) ),
 
 			// How the styled sitemap looks. All four need enable_styling on.

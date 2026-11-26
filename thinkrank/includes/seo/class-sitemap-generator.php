@@ -393,6 +393,38 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     }
 
     /**
+     * The ID restrictions a `thinkrank_sitemap_query_args` callback set.
+     *
+     * The walk hydrates each page by `post__in`, so the callback's own
+     * `post__in` and `post__not_in` are turned into ID sets applied to every
+     * page (#1595). An empty `post__in` restricts nothing, as it does in
+     * WP_Query; `[0]` restricts to nothing, the usual idiom.
+     *
+     * @since 2.22.1
+     *
+     * @param array            $query_args Filtered query arguments.
+     * @param array<int, int>  $excluded   IDs already excluded, as keys.
+     * @return array{0: array<int, int>|null, 1: array<int, int>} Allowed IDs
+     *         as keys (null for no restriction), and every excluded ID as keys.
+     */
+    private function filtered_id_restrictions(array $query_args, array $excluded): array {
+        $to_keys = static function ($ids): array {
+            return array_flip(array_map('intval', array_filter((array) $ids, 'is_numeric')));
+        };
+
+        $allowed = null;
+        if (!empty($query_args['post__in'])) {
+            $allowed = $to_keys($query_args['post__in']);
+        }
+
+        if (!empty($query_args['post__not_in'])) {
+            $excluded += $to_keys($query_args['post__not_in']);
+        }
+
+        return [$allowed, $excluded];
+    }
+
+    /**
      * Filter the args of a sitemap term query.
      *
      * @since 1.23.0
@@ -1429,6 +1461,13 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 'no_found_rows' => true,
             ]);
 
+            // A filter's own post__in and post__not_in cannot reach the
+            // hydration: its post__in is replaced by the page's IDs, and
+            // WP_Query ignores post__not_in next to that. Both are applied to
+            // each page's IDs instead, like exclude_posts (#1595).
+            [$allowed, $skipped] = $this->filtered_id_restrictions($query_args, $excluded);
+            unset($query_args['post__in'], $query_args['post__not_in']);
+
             $cursor = null;
 
             while (true) {
@@ -1450,7 +1489,8 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
                 $full = count($page) >= self::ID_WALK_CHUNK;
                 $ids  = array_values(array_filter(
                     array_map('intval', array_column($page, 'ID')),
-                    static fn(int $id): bool => !isset($excluded[$id])
+                    static fn(int $id): bool => !isset($skipped[$id])
+                        && ($allowed === null || isset($allowed[$id]))
                 ));
                 unset($page, $last);
 
@@ -1686,8 +1726,8 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
     }
 
     /**
-     * The XML declaration, ownership marker and optional stylesheet every
-     * sitemap document opens with.
+     * The XML declaration, ownership marker and optional view placeholder
+     * every sitemap document opens with.
      *
      * The marker is written unconditionally, and that is the point: removal on
      * deactivate and uninstall deletes a web-root sitemap only when the file
@@ -1698,32 +1738,28 @@ class Sitemap_Generator extends Abstract_SEO_Manager {
      *
      * @since 2.1.1
      *
-     * The stylesheet URL is served by {@see Sitemap_Stylesheet}, not read off
-     * disk by the web server, because a static file cannot carry the site's own
-     * logo and colours (#639). It is a fixed URL: the palette is applied per
-     * request, so changing a brand colour needs no regeneration and shows up on
-     * sitemaps published long before.
-     *
-     * Browsers are dropping XSLT (Chrome 158 stops running it on Stable), so
-     * the instruction alone no longer guarantees a readable page. A comment
-     * naming the server-rendered view follows it, because a browser that shows
-     * the raw XML tree instead still shows comments, and that is where a person
-     * who opened the sitemap will look (#1156). The comment names the document
-     * it is in, so it is added by save_sitemap_to_file(), which knows that
-     * name, not here. The instruction is kept: it is ignored by crawlers and
-     * still styles the file in browsers that run it.
+     * Browsers are dropping XSLT (Chrome 158 stops running it on Stable), and
+     * the ones still running it warn about a `<?xml-stylesheet?>` instruction,
+     * so the published XML no longer carries one (#1606). The styled table is
+     * the server-rendered view {@see Sitemap_Stylesheet} answers at its own
+     * URL. With styling on, a placeholder stands where the instruction was, and
+     * save_sitemap_to_file(), which knows the document's name, turns it into a
+     * comment naming that document's view, because a browser that shows the
+     * raw XML tree still shows comments (#1156).
      *
      * @param array  $settings Sitemap settings (read for `enable_styling`).
-     * @param string $variant  Stylesheet variant, `sitemap` or `index`.
+     * @param string $variant  Document kind, `sitemap` or `index`. Unused since
+     *                         the instruction went: the view reads the kind
+     *                         off the root element.
      * @return string Prolog lines, newline-terminated.
      */
     private function xml_prolog(array $settings, string $variant): string {
         $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
         $xml .= THINKRANK_SITEMAP_MARKER . "\n";
 
-        // The stylesheet is presentation only, so it stays opt-in.
+        // The styled view is presentation only, so it stays opt-in.
         if (!empty($settings['enable_styling'])) {
-            $xml .= '<?xml-stylesheet type="text/xsl" href="' . esc_url(Sitemap_Stylesheet::url($variant)) . '"?>' . "\n";
+            $xml .= Sitemap_Stylesheet::VIEW_MARKER . "\n";
         }
 
         return $xml;

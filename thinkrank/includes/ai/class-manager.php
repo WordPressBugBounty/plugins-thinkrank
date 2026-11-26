@@ -1709,6 +1709,34 @@ class Manager {
      * @return void
      */
     private function log_ai_usage(int $user_id, string $action, int $tokens_used, ?string $actual_model = null, ?string $raw_response = null): void {
+        self::record_usage(
+            $user_id,
+            $action,
+            $tokens_used,
+            (string) $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE),
+            $actual_model,
+            $raw_response
+        );
+    }
+
+    /**
+     * Write one row to the AI usage table, which the Usages page totals.
+     *
+     * The one writer for every AI request outside the Content Brief, so a
+     * client that does not go through this class (the vision client) still
+     * shows up in Usages (#1589).
+     *
+     * @since 2.22.1 Split out of log_ai_usage().
+     *
+     * @param int         $user_id      User the usage is recorded against.
+     * @param string      $action       Feature label shown in Usage Breakdown.
+     * @param int         $tokens_used  Tokens the provider reported.
+     * @param string      $provider     Provider slug.
+     * @param string|null $actual_model Model the request used.
+     * @param string|null $raw_response Raw AI response for debugging.
+     * @return void
+     */
+    public static function record_usage(int $user_id, string $action, int $tokens_used, string $provider, ?string $actual_model = null, ?string $raw_response = null): void {
         global $wpdb;
 
         $table_name = $wpdb->prefix . 'thinkrank_ai_usage';
@@ -1729,7 +1757,7 @@ class Manager {
                 'user_id' => $user_id,
                 'action' => $action,
                 'tokens_used' => $tokens_used,
-                'provider' => $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE),
+                'provider' => $provider,
                 'metadata' => !empty($metadata) ? wp_json_encode($metadata) : null,
                 'created_at' => current_time('mysql'),
             ],

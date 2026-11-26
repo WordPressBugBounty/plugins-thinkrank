@@ -65,6 +65,11 @@ const PerformanceTab = ({
 	const [isLoadingDiagnostics, setIsLoadingDiagnostics] = useState(false);
 	const [diagnosticsError, setDiagnosticsError] = useState(null);
 
+	// Opportunities and diagnostics are per-device reports. The ref lets a
+	// response that comes back after the device changed see that it is stale.
+	const deviceTypeRef = useRef(deviceType);
+	deviceTypeRef.current = deviceType;
+
 	/**
 	 * Build API context
 	 */
@@ -85,19 +90,43 @@ const PerformanceTab = ({
 		setDiagnostics,
 		setIsLoadingDiagnostics,
 		setDiagnosticsError,
+		isCurrentDevice: (device) => deviceTypeRef.current === device,
 	});
 
 	const loadPerformanceData = () => apiLoadPerformanceData(getApiContext());
 	// Explicit refresh: bust the browser-side cache first, otherwise the
-	// long-TTL cached monitor response would be served right back.
+	// long-TTL cached monitor response would be served right back. The open
+	// section keeps its report in its own state, so reload that too.
 	const refreshPerformanceData = () => {
 		purgeApiCache();
+		if (activeSubSection === 'seo-performance') {
+			loadOpportunities();
+		} else if (activeSubSection === 'recommendations') {
+			loadDiagnostics();
+		} else if (activeSubSection === 'monitoring') {
+			loadHistoricalData(historicalPeriod);
+		}
 		return loadPerformanceData();
 	};
 	const loadHistoricalData = (period) =>
 		apiLoadHistoricalData(getApiContext(), period);
 	const loadOpportunities = () => apiLoadOpportunities(getApiContext());
 	const loadDiagnostics = () => apiLoadDiagnostics(getApiContext());
+
+	// Switching device drops the other device's opportunities and diagnostics,
+	// so their sections load the new device's report when opened next.
+	const changeDeviceType = (nextDevice) => {
+		if (nextDevice === deviceType) {
+			return;
+		}
+		setOpportunities([]);
+		setOpportunitiesError(null);
+		setIsLoadingOpportunities(false);
+		setDiagnostics([]);
+		setDiagnosticsError(null);
+		setIsLoadingDiagnostics(false);
+		setDeviceType(nextDevice);
+	};
 
 	/**
 	 * Render content based on active sub-section
@@ -288,7 +317,7 @@ const PerformanceTab = ({
 					<CWVSection
 						performanceData={performanceData}
 						deviceType={deviceType}
-						setDeviceType={setDeviceType}
+						setDeviceType={changeDeviceType}
 						isLoading={isLoading}
 						onNavigate={onNavigate}
 						onRefresh={refreshPerformanceData}
@@ -333,7 +362,7 @@ const PerformanceTab = ({
 					<CWVSection
 						performanceData={performanceData}
 						deviceType={deviceType}
-						setDeviceType={setDeviceType}
+						setDeviceType={changeDeviceType}
 						isLoading={isLoading}
 						onNavigate={onNavigate}
 						onRefresh={refreshPerformanceData}

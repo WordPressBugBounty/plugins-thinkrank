@@ -75,6 +75,14 @@ class Agent_Accessibility {
     private const BUTTON_INPUT_TYPES = ['button', 'submit', 'reset', 'image'];
 
     /**
+     * Ids a collapsed disclosure button (`aria-expanded="false"`) names in
+     * its `aria-controls`, for the document being analysed.
+     *
+     * @var array<string, bool>
+     */
+    private static array $collapsed_ids = [];
+
+    /**
      * Analyse one rendered document.
      *
      * @since 2.21.3
@@ -109,6 +117,8 @@ class Agent_Accessibility {
         $xpath = new \DOMXPath($document);
         $ids   = self::element_ids($xpath);
 
+        self::$collapsed_ids = self::collapsed_ids($xpath);
+
         $unnamed     = [];
         $hidden      = [];
         $dangling    = [];
@@ -130,7 +140,12 @@ class Agent_Accessibility {
             }
 
             if (self::is_hidden_from_tree($element)) {
-                $hidden[] = self::describe($element);
+                // Hidden content the keyboard cannot reach is correct markup
+                // (W3C ACT rule 6cfa84). Only a control a keyboard user can
+                // land on, with nothing read out, is the defect.
+                if (self::is_keyboard_reachable($element)) {
+                    $hidden[] = self::describe($element);
+                }
 
                 // An element the tree cannot see has no accessible name by
                 // definition. Reporting it twice would make one defect look
@@ -142,6 +157,8 @@ class Agent_Accessibility {
                 $unnamed[] = self::describe($element);
             }
         }
+
+        self::$collapsed_ids = [];
 
         return [
             'unnamed'     => array_slice($unnamed, 0, self::PER_PAGE_LIMIT),
@@ -394,10 +411,10 @@ class Agent_Accessibility {
      * here: it is how nearly every menu, modal and dropdown on the web starts
      * out, and those are interactive elements that do need names.
      *
-     * The same goes for a dialog or drawer that is merely closed. Hiding a
-     * closed dialog with aria-hidden is correct markup, and it is shown when
-     * opened, so its controls are not hidden from an agent in any way a site
-     * could fix. Only a hidden ancestor that never toggles counts.
+     * The same goes for a dialog, drawer or collapsed submenu that is merely
+     * closed. Hiding it with aria-hidden is correct markup, and it is shown
+     * when opened, so its controls are not hidden from an agent in any way a
+     * site could fix. Only a hidden ancestor that never toggles counts.
      *
      * @param \DOMElement $element Element to test.
      * @return bool
@@ -445,7 +462,138 @@ class Agent_Accessibility {
             return true;
         }
 
-        return $node->hasAttribute('data-wp-bind--aria-hidden') || $node->hasAttribute('data-wp-bind--hidden');
+        if ($node->hasAttribute('data-wp-bind--aria-hidden') || $node->hasAttribute('data-wp-bind--hidden')) {
+            return true;
+        }
+
+        return self::is_collapsed_disclosure($node);
+    }
+
+    /**
+     * Whether a hidden element is the panel of a disclosure that says it is
+     * closed (#1604).
+     *
+     * A navigation submenu hides its links with aria-hidden while its button
+     * carries `aria-expanded="false"`, and opening it flips both. The button
+     * names the panel with `aria-controls`, or, as most themes write menus,
+     * sits right before it: it is the panel's previous element sibling, or
+     * inside that sibling. A button that says it is open does not count, because
+     * an open panel that stays aria-hidden is exactly the defect, and neither
+     * does one whose aria-controls names something else.
+     *
+     * @since 2.22.1
+     *
+     * @param \DOMElement $node Hidden element.
+     * @return bool
+     */
+    private static function is_collapsed_disclosure(\DOMElement $node): bool {
+        $id = trim($node->getAttribute('id'));
+
+        if ('' !== $id && isset(self::$collapsed_ids[$id])) {
+            return true;
+        }
+
+        // phpcs:disable WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOMNode's own property name.
+        $sibling = $node->previousSibling;
+        while (null !== $sibling && !$sibling instanceof \DOMElement) {
+            $sibling = $sibling->previousSibling;
+        }
+        // phpcs:enable WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
+
+        if (!$sibling instanceof \DOMElement) {
+            return false;
+        }
+
+        $toggles = [$sibling];
+        foreach ($sibling->getElementsByTagName('*') as $descendant) {
+            $toggles[] = $descendant;
+        }
+
+        foreach ($toggles as $toggle) {
+            if ('false' === strtolower(trim($toggle->getAttribute('aria-expanded')))
+                && '' === trim($toggle->getAttribute('aria-controls'))
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The ids collapsed disclosure buttons control.
+     *
+     * @since 2.22.1
+     *
+     * @param \DOMXPath $xpath Document xpath.
+     * @return array<string, bool>
+     */
+    private static function collapsed_ids(\DOMXPath $xpath): array {
+        $ids   = [];
+        $nodes = $xpath->query('//*[@aria-controls and @aria-expanded]');
+
+        if (false === $nodes) {
+            return $ids;
+        }
+
+        foreach ($nodes as $node) {
+            if (!$node instanceof \DOMElement
+                || 'false' !== strtolower(trim($node->getAttribute('aria-expanded')))
+            ) {
+                continue;
+            }
+
+            foreach (preg_split('/\s+/', trim($node->getAttribute('aria-controls'))) ?: [] as $controlled) {
+                if ('' !== $controlled) {
+                    $ids[$controlled] = true;
+                }
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Whether a keyboard user can Tab to the element.
+     *
+     * Static HTML cannot see the site's stylesheet, so only what the markup
+     * itself says is read: a negative tabindex, `disabled`, `inert`, or an
+     * inline `display:none` / `visibility:hidden` on the element or an
+     * ancestor. Anything else is taken as reachable, so a real defect is not
+     * waved through; the finding's wording says this cannot be confirmed
+     * without a browser.
+     *
+     * @since 2.22.1
+     *
+     * @param \DOMElement $element Interactive element.
+     * @return bool
+     */
+    private static function is_keyboard_reachable(\DOMElement $element): bool {
+        $tabindex = trim($element->getAttribute('tabindex'));
+
+        if ('' !== $tabindex && is_numeric($tabindex) && (int) $tabindex < 0) {
+            return false;
+        }
+
+        if ($element->hasAttribute('disabled')
+            && in_array(strtolower($element->nodeName), ['button', 'input'], true)
+        ) {
+            return false;
+        }
+
+        for ($node = $element; $node instanceof \DOMElement; $node = $node->parentNode) {
+            if ($node->hasAttribute('inert')) {
+                return false;
+            }
+
+            $style = strtolower((string) preg_replace('/\s+/', '', $node->getAttribute('style')));
+
+            if (preg_match('/(?:^|;)(?:display:none|visibility:hidden)(?:!important)?(?:;|$)/', $style)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

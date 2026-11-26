@@ -130,6 +130,26 @@ class Analytics_Manager {
     public const DASHBOARD_CACHE_PREFIX = 'thinkrank_analytics_dashboard_v5_';
 
     /**
+     * Transient prefix, suffixed with the date range, that is set while a
+     * cached dashboard payload carries a GA4 `traffic_error`. Until it
+     * expires, a cache hit serves the payload as it is; after it, the hit
+     * asks for the GA4 half again (#1565).
+     *
+     * @since 2.22.1
+     * @var string
+     */
+    private const TRAFFIC_RETRY_PREFIX = 'thinkrank_dashboard_traffic_retry_';
+
+    /**
+     * Seconds between those retries, so a GA4 outage costs one request per
+     * range every few minutes rather than one per dashboard load.
+     *
+     * @since 2.22.1
+     * @var int
+     */
+    private const TRAFFIC_RETRY_AFTER = 600;
+
+    /**
      * Transient prefix for the cached SEO opportunities payload, suffixed
      * with the date range. Prefixed for the same reason as the dashboard's.
      *
@@ -754,6 +774,8 @@ class Analytics_Manager {
             if (!has_filter('thinkrank_analytics_dashboard_data')) {
                 $cached_data['traffic'] = [];
                 unset($cached_data['traffic_error']);
+            } elseif (!empty($cached_data['traffic_error'])) {
+                $cached_data = $this->retry_cached_traffic($cached_data, $date_range);
             }
 
             return $cached_data;
@@ -845,8 +867,10 @@ class Analytics_Manager {
          * The free plugin fills only the Search Console half. `traffic` stays
          * an empty array here: GA4 is a ThinkRank Pro feature, and Pro fills
          * it (and `traffic_error` when GA4 fails) through this filter
-         * (#1115). Runs on a cache miss only; whatever it adds is cached with
-         * the rest of the payload, and an error payload is never cached.
+         * (#1115). Runs on a cache miss, and again on a cache hit whose GA4
+         * half failed, with that payload's Search Console half (#1565).
+         * Whatever it adds is cached with the rest of the payload, and an
+         * error payload is never cached.
          *
          * @since 2.17.1
          *
@@ -864,6 +888,13 @@ class Analytics_Manager {
         // Core Web Vitals are deliberately NOT part of this cache (see below).
         if (empty($dashboard_data['error'])) {
             set_transient($cache_key, $dashboard_data, $this->cache_duration);
+
+            // GA4 failed while Search Console did not. The Search Console
+            // half stays cached; the GA4 half is asked for again on a later
+            // cache hit, once this pause is over (#1565).
+            if (!empty($dashboard_data['traffic_error'])) {
+                set_transient(self::TRAFFIC_RETRY_PREFIX . $date_range, 1, self::TRAFFIC_RETRY_AFTER);
+            }
         }
 
         // Merge Core Web Vitals from their own short-lived cache after the
@@ -871,6 +902,88 @@ class Analytics_Manager {
         $dashboard_data['core_web_vitals'] = $this->get_dashboard_core_web_vitals();
 
         return $dashboard_data;
+    }
+
+    /**
+     * Ask for the GA4 half of a cached payload again after it failed.
+     *
+     * A temporary GA4 failure on a cache miss was cached with the rest of a
+     * good payload, so Traffic Overview stayed empty, and the email report
+     * dropped its Site traffic section, for the cache's whole day after
+     * Google recovered. Now a cache hit re-runs only the dashboard filter,
+     * on the cached Search Console half, at most once per retry pause. On
+     * success the payload is cached again for the time it had left, so the
+     * Search Console half does not outlive its own expiry.
+     *
+     * @since 2.22.1
+     *
+     * @param array  $cached_data Cached payload carrying `traffic_error`.
+     * @param string $date_range  Date range, e.g. "30d".
+     * @return array The payload to serve.
+     */
+    private function retry_cached_traffic(array $cached_data, string $date_range): array {
+        $pause = self::TRAFFIC_RETRY_PREFIX . $date_range;
+        if (false !== get_transient($pause)) {
+            return $cached_data;
+        }
+
+        // Paused first, so concurrent loads do not all call Google, and a
+        // retry that fails again waits a full pause before the next one.
+        set_transient($pause, 1, self::TRAFFIC_RETRY_AFTER);
+
+        $retry            = $cached_data;
+        $retry['traffic'] = [];
+        unset($retry['traffic_error'], $retry['core_web_vitals']);
+
+        /** This filter is documented in includes/seo/class-analytics-manager.php */
+        $filtered = apply_filters('thinkrank_analytics_dashboard_data', $retry, $date_range);
+
+        if (!is_array($filtered) || !empty($filtered['traffic_error']) || !empty($filtered['error'])) {
+            return $cached_data;
+        }
+
+        delete_transient($pause);
+
+        $remaining = $this->cache_seconds_left($cached_data);
+        if ($remaining > 0) {
+            set_transient(self::DASHBOARD_CACHE_PREFIX . $date_range, $filtered, $remaining);
+        }
+
+        // Core Web Vitals were merged onto this cache hit before the retry and
+        // are kept out of the cached payload, so put them back on what this
+        // load serves. Without it the load that recovered GA4 showed an empty
+        // Core Web Vitals card.
+        if (array_key_exists('core_web_vitals', $cached_data)) {
+            $filtered['core_web_vitals'] = $cached_data['core_web_vitals'];
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * Seconds a cached dashboard payload has left, from its `last_updated`.
+     *
+     * @since 2.22.1
+     *
+     * @param array $cached_data Cached payload.
+     * @return int Zero when it is already due, or its age cannot be read.
+     */
+    private function cache_seconds_left(array $cached_data): int {
+        $updated = isset($cached_data['last_updated']) && is_string($cached_data['last_updated'])
+            ? $cached_data['last_updated']
+            : '';
+
+        try {
+            $built = ('' !== $updated) ? new \DateTimeImmutable($updated, wp_timezone()) : null;
+        } catch (\Exception $e) {
+            $built = null;
+        }
+
+        if (null === $built) {
+            return 0;
+        }
+
+        return max(0, (int) $this->cache_duration - (time() - $built->getTimestamp()));
     }
 
     /**

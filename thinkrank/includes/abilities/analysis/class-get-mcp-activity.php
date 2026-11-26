@@ -103,7 +103,7 @@ class Get_Mcp_Activity extends Ability_Base {
 			'properties' => [
 				'entries'        => [
 					'type'        => 'array',
-					'description' => __( 'Log entries, newest first. kind is write, plan, repeat, revert or read (plan: a write tool answered with a plan for the person to confirm and changed nothing; repeat: a confirmed call sent again after its change was already saved, which changed nothing); result is ok, error or denied; before and after hold only the keys the call changed; reverted_by is the id of the revert that undid an entry, 0 if none.', 'thinkrank' ),
+					'description' => __( 'Log entries, newest first. kind is write, plan, repeat, revert, read or token (plan: a write tool answered with a plan for the person to confirm and changed nothing; repeat: a confirmed call sent again after its change was already saved, which changed nothing; token: the token endpoint withdrew a connection over a replayed refresh token, result denied, or retried a renewal whose answer was lost, result ok); result is ok, error or denied; before and after hold only the keys the call changed; reverted_by is the id of the revert that undid an entry, 0 if none.', 'thinkrank' ),
 					'items'       => [
 						'type'                 => 'object',
 						'additionalProperties' => true,

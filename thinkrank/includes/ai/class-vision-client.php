@@ -89,11 +89,48 @@ class Vision_Client {
     private const FIELDS_COMPATIBLE_MAX_TOKENS = 1000;
 
     /**
+     * Usage Breakdown label for an alt text request.
+     *
+     * @since 2.22.1
+     */
+    public const USAGE_ACTION = 'Image Alt Text';
+
+    /**
+     * Usage Breakdown labels for an alt text request that also writes a
+     * caption and/or a description, keyed by the fields asked for.
+     *
+     * @since 2.22.1
+     * @var array<string, string>
+     */
+    public const USAGE_ACTION_FIELDS = [
+        'caption'             => 'Image Alt Text and Caption',
+        'description'         => 'Image Alt Text and Description',
+        'caption,description' => 'Image Alt Text, Caption and Description',
+    ];
+
+    /**
      * Settings accessor.
      *
      * @var Settings
      */
     private Settings $settings;
+
+    /**
+     * Tokens the provider reported for the request in flight, or null while no
+     * reply has come back. Set by post(), read by ask() to log the usage.
+     *
+     * @since 2.22.1
+     * @var int|null
+     */
+    private ?int $reply_tokens = null;
+
+    /**
+     * Model the request in flight was sent to.
+     *
+     * @since 2.22.1
+     * @var string
+     */
+    private string $request_model = '';
 
     /**
      * Constructor.
@@ -207,15 +244,105 @@ class Vision_Client {
         }
 
         return $this->parse_fields(
-            $this->ask($attachment_id, $this->build_fields_prompt($context, $fields), self::FIELDS_COMPATIBLE_MAX_TOKENS),
+            $this->ask($attachment_id, $this->build_fields_prompt($context, $fields), self::FIELDS_COMPATIBLE_MAX_TOKENS, self::USAGE_ACTION_FIELDS[implode(',', $fields)] ?? self::USAGE_ACTION),
             $fields
         );
     }
 
     /**
-     * Send one image and an instruction to the configured provider.
+     * Send one image and an instruction, and log the request to AI usage.
+     *
+     * Every answered request writes one usage row, so image alt text, captions
+     * and descriptions show up in Usages next to the text features (#1589).
+     * The row is written even when the answer is then refused (a refusal, an
+     * empty reply), because the provider billed for it all the same. A request
+     * that never got an answer (no key, a transport error, an HTTP error)
+     * writes nothing.
      *
      * @since 2.21.2 Split out of describe_attachment().
+     * @since 2.22.1 Logs the request to AI usage.
+     *
+     * @param int    $attachment_id         Attachment to describe.
+     * @param string $prompt                Instruction.
+     * @param int    $compatible_max_tokens Output cap for an OpenAI-compatible endpoint.
+     * @param string $action                Usage Breakdown label for the request.
+     * @return string The provider's raw answer.
+     * @throws \Exception When the provider is unusable or the call fails.
+     */
+    private function ask(int $attachment_id, string $prompt, int $compatible_max_tokens = 300, string $action = self::USAGE_ACTION): string {
+        $this->reply_tokens  = null;
+        $this->request_model = '';
+        $text                = null;
+
+        try {
+            $text = $this->send($attachment_id, $prompt, $compatible_max_tokens);
+
+            return $text;
+        } finally {
+            if (null !== $this->reply_tokens) {
+                $this->log_usage($action, $text);
+            }
+        }
+    }
+
+    /**
+     * Write the usage row for the request that just came back.
+     *
+     * Logging must never change the outcome of the request, so a failure here
+     * is swallowed.
+     *
+     * @since 2.22.1
+     *
+     * @param string      $action Usage Breakdown label.
+     * @param string|null $text   The provider's answer, when one was read.
+     * @return void
+     */
+    private function log_usage(string $action, ?string $text): void {
+        try {
+            Manager::record_usage(
+                get_current_user_id(),
+                $action,
+                (int) $this->reply_tokens,
+                (string) $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE),
+                '' !== $this->request_model ? $this->request_model : null,
+                (null !== $text && '' !== $text) ? $text : null
+            );
+        } catch (\Throwable $e) {
+            unset($e);
+        }
+    }
+
+    /**
+     * Tokens a provider reply reports, in any of the three shapes.
+     *
+     * OpenAI and OpenAI-compatible servers send `usage.total_tokens`,
+     * Anthropic sends `usage.input_tokens` and `usage.output_tokens`, and
+     * Gemini sends `usageMetadata.totalTokenCount`. A server that reports
+     * nothing counts as 0, so the request is still counted.
+     *
+     * @since 2.22.1
+     *
+     * @param array $response Decoded provider response.
+     * @return int
+     */
+    private static function tokens_used(array $response): int {
+        $usage = is_array($response['usage'] ?? null) ? $response['usage'] : [];
+
+        if (isset($usage['total_tokens'])) {
+            return (int) $usage['total_tokens'];
+        }
+
+        if (isset($usage['input_tokens']) || isset($usage['output_tokens'])) {
+            return (int) ($usage['input_tokens'] ?? 0) + (int) ($usage['output_tokens'] ?? 0);
+        }
+
+        return (int) ($response['usageMetadata']['totalTokenCount'] ?? 0);
+    }
+
+    /**
+     * Send one image and an instruction to the configured provider.
+     *
+     * @since 2.22.1 Split out of ask().
      *
      * @param int    $attachment_id         Attachment to describe.
      * @param string $prompt                Instruction.
@@ -223,7 +350,7 @@ class Vision_Client {
      * @return string The provider's raw answer.
      * @throws \Exception When the provider is unusable or the call fails.
      */
-    private function ask(int $attachment_id, string $prompt, int $compatible_max_tokens = 300): string {
+    private function send(int $attachment_id, string $prompt, int $compatible_max_tokens): string {
         $provider = (string) $this->settings->get('ai_provider', Settings::AI_PROVIDER_NONE);
         $models   = self::capable_providers();
 
@@ -249,9 +376,11 @@ class Vision_Client {
                 throw new \Exception(esc_html__('The image file could not be read, or is larger than the provider allows.', 'thinkrank'));
             }
 
+            $this->request_model = trim((string) $this->settings->get('openai_compatible_model', ''));
+
             return $this->call_openai(
                 (string) $this->settings->get('openai_compatible_api_key', ''),
-                trim((string) $this->settings->get('openai_compatible_model', '')),
+                $this->request_model,
                 $prompt,
                 $image,
                 (string) $this->settings->get('openai_compatible_base_url', ''),
@@ -277,7 +406,8 @@ class Vision_Client {
             throw new \Exception(esc_html__('The image file could not be read, or is larger than the provider allows.', 'thinkrank'));
         }
 
-        $model = (string) $this->settings->get('ai_vision_model', $models[$provider]);
+        $model               = (string) $this->settings->get('ai_vision_model', $models[$provider]);
+        $this->request_model = $model;
 
         switch ($provider) {
             case 'openai':
@@ -748,7 +878,12 @@ class Vision_Client {
             throw new \Exception(esc_html(sprintf('Vision API error (%d): %s', $status, (string) $message)));
         }
 
-        return is_array($data) ? $data : [];
+        $data = is_array($data) ? $data : [];
+
+        // The provider answered, so the request is billed: ask() logs it.
+        $this->reply_tokens = self::tokens_used($data);
+
+        return $data;
     }
 
     /**

@@ -23,6 +23,9 @@
  *   gets one row with result `denied`, read or write.
  * - Reads are counted, not logged: one row per client per day whose `calls`
  *   goes up. An agent paging through 5,000 posts adds one row, not 5,000.
+ * - The token endpoint adds a kind `token` row (tool `token-refresh`) when a
+ *   replayed refresh token withdraws a connection (result `denied`) and when
+ *   a renewal whose answer was lost is retried (result `ok`).
  *
  * Logging can never break a call. Every database touch is guarded, and a
  * site whose table has not been created yet simply records nothing.
@@ -552,6 +555,80 @@ final class Mcp_Audit {
 			self::facets_saw( (string) ( $row['client_key'] ?? '' ), (string) ( $row['tool'] ?? '' ) );
 		}
 		return $ok ? (int) $wpdb->insert_id : 0;
+	}
+
+	/**
+	 * Log a replayed refresh token, which withdrew every token of its grant.
+	 *
+	 * @since 2.22.1
+	 *
+	 * @param string $client_id The application the token was issued to.
+	 * @return void
+	 */
+	public static function record_refresh_reused( string $client_id ): void {
+		self::record_token_event(
+			$client_id,
+			'denied',
+			__( 'This refresh token had already been replaced. Every token from this connection was withdrawn, and the app has to connect again.', 'thinkrank' )
+		);
+	}
+
+	/**
+	 * Log a renewal whose answer was lost being retried.
+	 *
+	 * @since 2.22.1
+	 *
+	 * @param string $client_id The application the token was issued to.
+	 * @return void
+	 */
+	public static function record_refresh_retried( string $client_id ): void {
+		self::record_token_event(
+			$client_id,
+			'ok',
+			__( 'A renewal whose answer was lost was retried, and a new pair of tokens was issued.', 'thinkrank' )
+		);
+	}
+
+	/**
+	 * Write one `token` row for something the token endpoint did.
+	 *
+	 * The token endpoint runs with no MCP session, so the client fields are
+	 * set here instead of read through base_row(). The client's name comes
+	 * from its registration, which outlives the tokens a replay withdrew. The
+	 * row holds no token, only the client, the IP and the sentence. Logging
+	 * can never change the token answer.
+	 *
+	 * @since 2.22.1
+	 *
+	 * @param string $client_id OAuth client id.
+	 * @param string $result    `ok` or `denied`.
+	 * @param string $message   What happened, for the Activity log.
+	 * @return void
+	 */
+	public static function record_token_event( string $client_id, string $result, string $message ): void {
+		try {
+			$now = time();
+
+			self::insert(
+				[
+					'ts'            => gmdate( 'Y-m-d H:i:s', $now ),
+					'day'           => gmdate( 'Y-m-d', $now ),
+					'kind'          => 'token',
+					'result'        => $result,
+					'client_kind'   => Mcp_Session::OAUTH,
+					'client_key'    => substr( $client_id, 0, 100 ),
+					'client_name'   => substr( Mcp_OAuth::client_name( $client_id ), 0, 191 ),
+					'user_id'       => 0,
+					'tool'          => 'token-refresh',
+					'input_summary' => Mcp_Audit_Snapshot::summary( [ 'grant_type' => 'refresh_token' ] ),
+					'duration_ms'   => 0,
+					'ip'            => self::client_ip(),
+					'message'       => substr( $message, 0, 255 ),
+				]
+			);
+		} catch ( \Throwable $e ) {
+			self::debug( $e );
+		}
 	}
 
 	/**
@@ -1143,6 +1220,11 @@ final class Mcp_Audit {
 	public static function init(): void {
 		add_action( self::PRUNE_HOOK, [ self::class, 'prune' ] );
 		add_action( self::PRUNE_CONTINUE_HOOK, [ self::class, 'prune' ] );
+		// A replayed refresh token withdraws a whole connection, and a lost
+		// renewal is retried. Both happen at the token endpoint, outside any
+		// tool call, so they get rows of their own (#1617).
+		add_action( 'thinkrank_mcp_refresh_reused', [ self::class, 'record_refresh_reused' ] );
+		add_action( 'thinkrank_mcp_refresh_retried', [ self::class, 'record_refresh_retried' ] );
 		if ( ! wp_next_scheduled( self::PRUNE_HOOK ) ) {
 			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::PRUNE_HOOK );
 		}

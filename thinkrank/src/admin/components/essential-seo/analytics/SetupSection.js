@@ -17,6 +17,8 @@ import {
 	__experimentalText as Text,
 } from '@wordpress/components';
 
+import { googleConnectIncludesGa4 } from '../googleConnectCopy';
+
 /**
  * SetupSection Component
  *
@@ -44,13 +46,19 @@ const SetupSection = ({ onNavigate }) => (
 				<div className="thinkrank-space-y-md">
 					<div>
 						<h4 className="thinkrank-mb-1 thinkrank-text-primary">
-							{__('1. Configure API Keys', 'thinkrank')}
+							{__('1. Connect Google', 'thinkrank')}
 						</h4>
 						<Text variant="muted">
-							{__(
-								'Add your Google Analytics, Search Console, and PageSpeed API keys in the ',
-								'thinkrank'
-							)}
+							{/* GA4 is Pro only (#1584). */}
+							{googleConnectIncludesGa4()
+								? __(
+										'Connect your Google account for Search Console, Google Analytics, and PageSpeed in the ',
+										'thinkrank'
+									)
+								: __(
+										'Connect your Google account for Search Console and PageSpeed in the ',
+										'thinkrank'
+									)}
 							<Button
 								variant="link"
 								onClick={() => {

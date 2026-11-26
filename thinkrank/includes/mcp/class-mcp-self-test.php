@@ -92,9 +92,11 @@ final class Mcp_Self_Test {
 	/**
 	 * Where an affected site owner is sent for the workaround list. The plugin
 	 * cannot fix an edge block, so the failing check hands over the diagnostic
-	 * and the host-side options instead.
+	 * and the host-side options instead. This is the MCP doc's Troubleshooting
+	 * section, which covers a host refusing AI clients; move it if a dedicated
+	 * hosting page is ever published.
 	 */
-	private const HOSTING_DOC_URL = 'https://thinkrank.ai/docs/mcp/hosting-compatibility/';
+	private const HOSTING_DOC_URL = 'https://thinkrank.ai/docs/ai-tools/mcp-server/#troubleshooting';
 
 	/**
 	 * Option holding the last verdict, so the MCP screen can show it on load

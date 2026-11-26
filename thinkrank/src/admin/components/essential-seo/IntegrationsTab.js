@@ -29,6 +29,10 @@ import FormField from '../common/FormField';
 import ConnectGoogleButton from './ConnectGoogleButton';
 import SearchConsoleSettings from './SearchConsoleSettings';
 import ProGatedTab from '../pro/ProGatedTab';
+import {
+	googleConnectCopy,
+	googleConnectIncludesGa4,
+} from './googleConnectCopy';
 import ProTeaser from '../pro/ProTeaser';
 import { GoogleAnalyticsIllustration } from '../pro/pro-teaser-illustrations';
 import logger from '../../../shared/utils/logger';
@@ -723,6 +727,9 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 			/>
 		);
 
+		// GA4 comes with the connection only on licensed Pro (#1584).
+		const connectCopy = googleConnectCopy(googleConnectIncludesGa4());
+
 		return (
 			<div className="thinkrank-tab-content">
 				{/* Google Services Integration Workflow */}
@@ -868,18 +875,11 @@ const IntegrationsTab = ({ activeSubSection = 'google-services' }) => {
 									)}
 								</h3>
 								<p className="tr-m-0 tr-text-sm tr-text-tertiary tr-leading-relaxed">
-									{__(
-										'Connect your Google account to unlock Search Console, Analytics 4, and PageSpeed insights, all surfaced in your dashboards.',
-										'thinkrank'
-									)}
+									{connectCopy.description}
 								</p>
 							</div>
 							<ul className="tr-m-0 tr-p-0 tr-list-none tr-flex tr-flex-wrap tr-justify-center tr-gap-x-5 tr-gap-y-2">
-								{[
-									__('Search Console data', 'thinkrank'),
-									__('GA4 metrics', 'thinkrank'),
-									__('PageSpeed insights', 'thinkrank'),
-								].map((perk) => (
+								{connectCopy.perks.map((perk) => (
 									<li
 										key={perk}
 										className="tr-flex tr-items-center tr-gap-1.5 tr-text-sm tr-text-secondary"

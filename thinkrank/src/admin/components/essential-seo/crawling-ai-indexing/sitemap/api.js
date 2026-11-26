@@ -11,6 +11,37 @@ import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 
 /**
+ * The URL of a sitemap document's styled HTML view (#1606).
+ *
+ * Mirrors `Sitemap_Stylesheet::view_url()`: a query string on the home URL,
+ * so it answers on subdirectory installs and with Plain permalinks, and only
+ * for a bare `*.xml` file name.
+ *
+ * @param {string} sitemapUrl Sitemap URL or path, e.g. `/sitemap_index.xml`.
+ * @param {string} homeUrl    The site's home URL.
+ * @return {string} View URL, or '' when the name is not a sitemap file.
+ */
+export const styledViewUrl = (sitemapUrl, homeUrl) => {
+	const name = String(sitemapUrl || '')
+		.split(/[?#]/)[0]
+		.split('/')
+		.pop();
+
+	if (!/^[A-Za-z0-9_-]+\.xml$/.test(name) || !homeUrl) {
+		return '';
+	}
+
+	const base = String(homeUrl).replace(/\/+$/, '') + '/';
+
+	return (
+		base +
+		(base.includes('?') ? '&' : '?') +
+		'thinkrank_sitemap_view=' +
+		name
+	);
+};
+
+/**
  * The rows the last build published nothing for, as a type => reason map.
  *
  * The server names them by URL with a `reason` ('empty' or 'excluded'), but,
